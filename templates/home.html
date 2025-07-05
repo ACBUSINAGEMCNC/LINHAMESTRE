@@ -1,0 +1,161 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ACB Usinagem CNC - Sistema de Controle de Produção</title>
+    <!-- Bootstrap CSS -->
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css">
+    <!-- Font Awesome -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+    <!-- Google Fonts - Poppins -->
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700&display=swap">
+    <!-- Custom CSS -->
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/custom.css') }}">
+    <style>
+        .hero-section {
+            background: linear-gradient(135deg, #0d6efd 0%, #0b5ed7 100%);
+            color: white;
+            padding: 3rem 0;
+            margin-bottom: 2rem;
+            border-radius: var(--border-radius);
+        }
+        
+        .hero-title {
+            font-weight: 700;
+            margin-bottom: 1rem;
+        }
+        
+        .hero-subtitle {
+            font-weight: 300;
+            margin-bottom: 2rem;
+            opacity: 0.9;
+        }
+        
+        .feature-card {
+            height: 100%;
+            transition: transform 0.3s, box-shadow 0.3s;
+        }
+        
+        .feature-card:hover {
+            transform: translateY(-10px);
+        }
+        
+        .feature-icon {
+            font-size: 2.5rem;
+            margin-bottom: 1.25rem;
+            color: var(--primary-color);
+        }
+    </style>
+</head>
+<body>
+    {% extends "base.html" %}
+    
+    {% block content %}
+    <!-- Hero Section -->
+    <div class="hero-section text-center">
+        <div class="container">
+            <h1 class="hero-title display-4">Sistema de Controle de Produção</h1>
+            <p class="hero-subtitle lead">Gerencie pedidos, acompanhe a produção e controle o estoque de forma eficiente</p>
+        </div>
+    </div>
+
+    <!-- Main Features -->
+    <div class="container">
+        <div class="row g-4">
+            <div class="col-md-4">
+                <div class="card feature-card h-100 text-center">
+                    <div class="card-body">
+                        <i class="fas fa-clipboard-list feature-icon"></i>
+                        <h5 class="card-title">Pedidos</h5>
+                        <p class="card-text">Gerenciamento completo de pedidos de produção, desde a entrada até a entrega.</p>
+                        <a href="/pedidos" class="btn btn-primary btn-icon">
+                            <i class="fas fa-arrow-right"></i> Acessar Pedidos
+                        </a>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="col-md-4">
+                <div class="card feature-card h-100 text-center">
+                    <div class="card-body">
+                        <i class="fas fa-database feature-icon"></i>
+                        <h5 class="card-title">Cadastros</h5>
+                        <p class="card-text">Cadastros de itens, materiais, trabalhos e clientes para sua operação.</p>
+                        <div class="d-grid gap-2">
+                            <a href="/itens" class="btn btn-outline-primary btn-sm btn-icon">
+                                <i class="fas fa-boxes"></i> Itens
+                            </a>
+                            <a href="/materiais" class="btn btn-outline-primary btn-sm btn-icon">
+                                <i class="fas fa-tools"></i> Materiais
+                            </a>
+                            <a href="/trabalhos" class="btn btn-outline-primary btn-sm btn-icon">
+                                <i class="fas fa-tasks"></i> Trabalhos
+                            </a>
+                            <a href="/clientes" class="btn btn-outline-primary btn-sm btn-icon">
+                                <i class="fas fa-users"></i> Clientes
+                            </a>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="col-md-4">
+                <div class="card feature-card h-100 text-center">
+                    <div class="card-body">
+                        <i class="fas fa-box feature-icon"></i>
+                        <h5 class="card-title">Pedidos de Materiais</h5>
+                        <p class="card-text">Geração e controle de pedidos de materiais para sua produção.</p>
+                        <a href="/pedidos-material" class="btn btn-primary btn-icon">
+                            <i class="fas fa-arrow-right"></i> Acessar Pedidos de Materiais
+                        </a>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="col-md-6">
+                <div class="card feature-card h-100 text-center">
+                    <div class="card-body">
+                        <i class="fas fa-columns feature-icon"></i>
+                        <h5 class="card-title">Kanban ACB</h5>
+                        <p class="card-text">Visualize e gerencie o fluxo de produção com o quadro Kanban interativo.</p>
+                        <p class="card-text text-muted small">Acompanhe o status de cada ordem de serviço, movimente entre etapas e visualize tempos estimados.</p>
+                        <a href="/kanban" class="btn btn-primary btn-icon">
+                            <i class="fas fa-arrow-right"></i> Acessar Kanban
+                        </a>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="col-md-6">
+                <div class="card feature-card h-100 text-center">
+                    <div class="card-body">
+                        <i class="fas fa-warehouse feature-icon"></i>
+                        <h5 class="card-title">Estoque</h5>
+                        <p class="card-text">Controle completo do estoque de materiais com entradas, saídas e histórico.</p>
+                        <p class="card-text text-muted small">Registre movimentações, consulte saldos atuais e acompanhe o histórico de cada material.</p>
+                        <a href="/estoque" class="btn btn-primary btn-icon">
+                            <i class="fas fa-arrow-right"></i> Acessar Estoque
+                        </a>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    {% endblock %}
+
+    {% block page_scripts %}
+    <script>
+        // Animação de entrada para os cards
+        document.addEventListener('DOMContentLoaded', function() {
+            const cards = document.querySelectorAll('.feature-card');
+            cards.forEach((card, index) => {
+                setTimeout(() => {
+                    card.classList.add('fade-in');
+                }, 100 * index);
+            });
+        });
+    </script>
+    {% endblock %}
+</body>
+</html>

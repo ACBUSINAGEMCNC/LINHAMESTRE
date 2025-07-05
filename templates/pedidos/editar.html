@@ -1,0 +1,203 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Editar Pedido - ACB Usinagem CNC</title>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+    <link href="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/css/select2.min.css" rel="stylesheet" />
+</head>
+<body>
+    <nav class="navbar navbar-expand-lg navbar-dark bg-primary">
+        <div class="container">
+            <a class="navbar-brand" href="/">ACB Usinagem CNC</a>
+            <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav">
+                <span class="navbar-toggler-icon"></span>
+            </button>
+            <div class="collapse navbar-collapse" id="navbarNav">
+                <ul class="navbar-nav">
+                    <li class="nav-item">
+                        <a class="nav-link" href="/"><i class="fas fa-home"></i> Home</a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link" href="/pedidos"><i class="fas fa-clipboard-list"></i> Pedidos</a>
+                    </li>
+                </ul>
+            </div>
+        </div>
+    </nav>
+
+    <div class="container py-4">
+        <div class="d-flex justify-content-between align-items-center mb-4">
+            <h1>Editar Pedido</h1>
+            <a href="/pedidos" class="btn btn-secondary">
+                <i class="fas fa-arrow-left"></i> Voltar
+            </a>
+        </div>
+
+        {% if pedido.cancelado %}
+        <div class="card mb-4 border-danger">
+            <div class="card-header bg-danger text-white">
+                <h5 class="mb-0"><i class="fas fa-ban me-2"></i> Pedido Cancelado</h5>
+            </div>
+            <div class="card-body">
+                <div class="row mb-3">
+                    <div class="col-md-6">
+                        <p><strong>Cancelado por:</strong> {{ pedido.cancelado_por }}</p>
+                    </div>
+                    <div class="col-md-6">
+                        <p><strong>Data do cancelamento:</strong> {{ pedido.data_cancelamento.strftime('%d/%m/%Y %H:%M') if pedido.data_cancelamento else 'N/A' }}</p>
+                    </div>
+                </div>
+                <div class="mb-3">
+                    <p><strong>Motivo do cancelamento:</strong></p>
+                    <div class="p-3 bg-light rounded">{{ pedido.motivo_cancelamento }}</div>
+                </div>
+            </div>
+        </div>
+        {% endif %}
+        
+        <div class="card">
+            <div class="card-body">
+                <form method="POST" action="/pedidos/editar/{{ pedido.id }}">
+                    <div class="row mb-3">
+                        <div class="col-md-6">
+                            <label for="cliente_id" class="form-label">Cliente</label>
+                            <select class="form-select select2" id="cliente_id" name="cliente_id" required>
+                                <option value="">Selecione um cliente</option>
+                                {% for cliente in clientes %}
+                                <option value="{{ cliente.id }}" {% if cliente.id == pedido.cliente_id %}selected{% endif %}>{{ cliente.nome }}</option>
+                                {% endfor %}
+                            </select>
+                        </div>
+                        <div class="col-md-6">
+                            <label for="unidade_entrega_id" class="form-label">Unidade de Entrega</label>
+                            <select class="form-select" id="unidade_entrega_id" name="unidade_entrega_id" required>
+                                <option value="">Selecione uma unidade</option>
+                                {% for unidade in unidades %}
+                                <option value="{{ unidade.id }}" {% if unidade.id == pedido.unidade_entrega_id %}selected{% endif %}>{{ unidade.nome }}</option>
+                                {% endfor %}
+                            </select>
+                        </div>
+                    </div>
+
+                    <div class="row mb-3">
+                        <div class="col-md-6">
+                            <label for="item_select" class="form-label">Item</label>
+                            <div class="form-check mb-2">
+                                <input class="form-check-input" type="radio" name="tipo_item" id="item_cadastrado" value="cadastrado" {% if pedido.item_id %}checked{% endif %}>
+                                <label class="form-check-label" for="item_cadastrado">
+                                    Item Cadastrado
+                                </label>
+                            </div>
+                            <div class="form-check mb-2">
+                                <input class="form-check-input" type="radio" name="tipo_item" id="item_sem_cadastro" value="sem_cadastro" {% if pedido.nome_item %}checked{% endif %}>
+                                <label class="form-check-label" for="item_sem_cadastro">
+                                    Item Sem Cadastro
+                                </label>
+                            </div>
+                            
+                            <div id="div_item_cadastrado" {% if not pedido.item_id %}style="display: none;"{% endif %}>
+                                <select class="form-select select2" id="item_id" name="item_id">
+                                    <option value="">Selecione um item</option>
+                                    {% for item in itens %}
+                                    <option value="{{ item.id }}" {% if item.id == pedido.item_id %}selected{% endif %}>{{ item.codigo_acb }} - {{ item.nome }}</option>
+                                    {% endfor %}
+                                </select>
+                            </div>
+                            
+                            <div id="div_item_sem_cadastro" {% if not pedido.nome_item %}style="display: none;"{% endif %}>
+                                <input type="text" class="form-control" id="nome_item" name="nome_item" placeholder="Nome do item" value="{{ pedido.nome_item or '' }}">
+                            </div>
+                        </div>
+                        <div class="col-md-6">
+                            <label for="quantidade" class="form-label">Quantidade</label>
+                            <input type="number" class="form-control" id="quantidade" name="quantidade" min="1" value="{{ pedido.quantidade }}" required>
+                        </div>
+                    </div>
+
+                    <div class="row mb-3">
+                        <div class="col-md-6">
+                            <label for="data_entrada" class="form-label">Data de Entrada</label>
+                            <input type="date" class="form-control" id="data_entrada" name="data_entrada" value="{{ pedido.data_entrada.strftime('%Y-%m-%d') }}" required>
+                        </div>
+                        <div class="col-md-6">
+                            <label for="previsao_entrega" class="form-label">Previsão de Entrega</label>
+                            <input type="date" class="form-control" id="previsao_entrega" name="previsao_entrega" value="{{ pedido.previsao_entrega.strftime('%Y-%m-%d') if pedido.previsao_entrega else '' }}">
+                        </div>
+                    </div>
+
+                    <div class="row mb-3">
+                        <div class="col-md-6">
+                            <label for="numero_pedido" class="form-label">Número do Pedido</label>
+                            <input type="text" class="form-control" id="numero_pedido" name="numero_pedido" value="{{ pedido.numero_pedido or '' }}">
+                        </div>
+                        <div class="col-md-6">
+                            <label for="numero_oc" class="form-label">Número da OC</label>
+                            <input type="text" class="form-control" id="numero_oc" name="numero_oc" value="{{ pedido.numero_oc or '' }}" {% if pedido.numero_oc %}readonly{% endif %}>
+                            {% if pedido.numero_oc %}
+                            <div class="form-text text-muted">Este pedido já está associado a uma Ordem de Serviço.</div>
+                            {% endif %}
+                        </div>
+                    </div>
+
+                    <div class="mb-3">
+                        <label for="descricao" class="form-label">Descrição</label>
+                        <textarea class="form-control" id="descricao" name="descricao" rows="3">{{ pedido.descricao or '' }}</textarea>
+                    </div>
+
+                    <div class="d-grid">
+                        <button type="submit" class="btn btn-primary">
+                            <i class="fas fa-save"></i> Salvar Pedido
+                        </button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/js/select2.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    <script>
+        $(document).ready(function() {
+            $('.select2').select2({
+                width: '100%'
+            });
+            
+            // Mostrar/ocultar campos com base no tipo de item
+            $('input[name="tipo_item"]').change(function() {
+                const tipo = $(this).val();
+                
+                if (tipo === 'cadastrado') {
+                    $('#div_item_cadastrado').show();
+                    $('#div_item_sem_cadastro').hide();
+                    $('#nome_item').val('');
+                } else {
+                    $('#div_item_cadastrado').hide();
+                    $('#div_item_sem_cadastro').show();
+                    $('#item_id').val('').trigger('change');
+                }
+            });
+            
+            // Carregar unidades quando o cliente for selecionado
+            $('#cliente_id').change(function() {
+                const clienteId = $(this).val();
+                
+                if (clienteId) {
+                    $.getJSON(`/api/unidades/${clienteId}`, function(data) {
+                        const unidadeSelect = $('#unidade_entrega_id');
+                        unidadeSelect.empty();
+                        unidadeSelect.append('<option value="">Selecione uma unidade</option>');
+                        
+                        $.each(data, function(index, unidade) {
+                            unidadeSelect.append(`<option value="${unidade.id}">${unidade.nome}</option>`);
+                        });
+                    });
+                }
+            });
+        });
+    </script>
+</body>
+</html>

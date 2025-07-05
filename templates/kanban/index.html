@@ -1,0 +1,557 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Kanban - ACB Usinagem CNC</title>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+    <script src="https://cdn.jsdelivr.net/npm/sortablejs@1.15.1/Sortable.min.js"></script>
+    <link rel="stylesheet" href="/static/css/kanban-sortable.css">
+    <style>
+        body {
+            background-color: #f0f2f5;
+        }
+        .kanban-container {
+            display: flex;
+            overflow-x: auto;
+            padding: 1rem 0;
+            min-height: calc(100vh - 150px);
+        }
+        .kanban-column {
+            min-width: 280px;
+            max-width: 280px;
+            margin-right: 1rem;
+            background-color: #ebecf0;
+            border-radius: 0.5rem;
+            display: flex;
+            flex-direction: column;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.12);
+        }
+        .kanban-column-header {
+            padding: 0.75rem;
+            border-top-left-radius: 0.5rem;
+            border-top-right-radius: 0.5rem;
+            font-weight: bold;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        .kanban-column-body {
+            padding: 0.75rem;
+            flex-grow: 1;
+            overflow-y: auto;
+            max-height: calc(100vh - 220px);
+        }
+        .kanban-card {
+            background-color: white;
+            border-radius: 0.25rem;
+            padding: 0.75rem;
+            margin-bottom: 0.75rem;
+            box-shadow: 0 1px 2px rgba(0,0,0,0.15);
+            cursor: default;
+            transition: transform 0.15s ease, box-shadow 0.15s ease;
+            /* Prevenir seleção de texto durante o arrasto */
+            -webkit-user-select: none;
+            -moz-user-select: none;
+            -ms-user-select: none;
+            user-select: none;
+            position: relative;
+        }
+        .kanban-card:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 2px 5px rgba(0,0,0,0.2);
+        }
+        .kanban-card-header {
+            font-weight: bold;
+            margin-bottom: 0.5rem;
+            display: flex;
+            justify-content: space-between;
+        }
+        .kanban-card-body {
+            font-size: 0.875rem;
+        }
+        .kanban-card-footer {
+            display: flex;
+            justify-content: space-between;
+            margin-top: 0.5rem;
+            font-size: 0.75rem;
+            color: #6c757d;
+        }
+        .column-counter {
+            background-color: #6c757d;
+            color: white;
+            border-radius: 50%;
+            width: 24px;
+            height: 24px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 0.75rem;
+        }
+        .column-stats {
+            font-size: 0.75rem;
+            color: #6c757d;
+            margin-top: 5px;
+        }
+        .column-time {
+            background-color: #17a2b8;
+            color: white;
+            padding: 2px 5px;
+            border-radius: 3px;
+            margin-right: 5px;
+        }
+        .column-quantity {
+            background-color: #28a745;
+            color: white;
+            padding: 2px 5px;
+            border-radius: 3px;
+        }
+        .item-badge {
+            display: inline-block;
+            padding: 0.25rem 0.5rem;
+            font-size: 0.75rem;
+            font-weight: 600;
+            border-radius: 0.25rem;
+            margin-bottom: 0.25rem;
+            background-color: #e9ecef;
+            color: #495057;
+        }
+        .modal-xl {
+            max-width: 90%;
+        }
+        .card-actions {
+            display: flex;
+            gap: 5px;
+            margin-top: 8px;
+        }
+        .card-actions .btn {
+            padding: 0.25rem 0.5rem;
+            font-size: 0.75rem;
+        }
+        .item-quantity {
+            font-weight: bold;
+            color: #0d6efd;
+        }
+        .drag-handle {
+            cursor: grab;
+            color: #adb5bd;
+            padding: 2px 5px;
+            border-radius: 3px;
+            margin-right: 5px;
+        }
+        .drag-handle:hover {
+            background-color: #f0f0f0;
+        }
+        .drag-handle:active {
+            cursor: grabbing;
+        }
+        /* Estilos para o Sortable.js */
+        .sortable-ghost {
+            opacity: 0.4;
+            background-color: #c8ebfb;
+            box-shadow: 0 0 10px rgba(0,0,0,0.2);
+        }
+        .sortable-chosen {
+            box-shadow: 0 5px 15px rgba(0,0,0,0.2);
+            transform: scale(1.02);
+            z-index: 100;
+        }
+        .sortable-drag {
+            opacity: 0.8;
+            transform: rotate(1deg);
+        }
+        .tempo-total {
+            font-weight: bold;
+            color: #17a2b8;
+            margin-top: 5px;
+            font-size: 0.8rem;
+        }
+        .dropdown-menu {
+            max-height: 300px;
+            overflow-y: auto;
+        }
+    </style>
+</head>
+<body>
+    <nav class="navbar navbar-expand-lg navbar-dark bg-primary">
+        <div class="container-fluid">
+            <a class="navbar-brand" href="/">ACB Usinagem CNC</a>
+            <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav">
+                <span class="navbar-toggler-icon"></span>
+            </button>
+            <div class="collapse navbar-collapse" id="navbarNav">
+                <ul class="navbar-nav">
+                    <li class="nav-item">
+                        <a class="nav-link" href="/"><i class="fas fa-home"></i> Home</a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link active" href="/kanban"><i class="fas fa-columns"></i> Kanban</a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link" href="/registros-mensais"><i class="fas fa-archive"></i> Registros Mensais</a>
+                    </li>
+                </ul>
+            </div>
+        </div>
+    </nav>
+
+    <div class="container-fluid py-3">
+        <h1 class="mb-4">Kanban ACB</h1>
+        
+        <div class="kanban-container">
+            {% for lista in listas %}
+            <div class="kanban-column" id="column-{{ lista|lower|replace(' ', '-') }}">
+                <div class="kanban-column-header">
+                    <span>{{ lista }}</span>
+                    <span class="column-counter">{{ ordens[lista]|length }}</span>
+                </div>
+                <div class="column-stats">
+                    {% set horas = (tempos_listas[lista] // 3600) %}
+                    {% set minutos = ((tempos_listas[lista] % 3600) // 60) %}
+                    {% set segundos = (tempos_listas[lista] % 60) %}
+                    <span class="column-time"><i class="fas fa-clock"></i> 
+                        {% if horas > 0 %}
+                            {{ horas }}h {{ minutos }}:{{ segundos }}
+                        {% else %}
+                            {{ minutos }}:{{ segundos }}
+                        {% endif %}
+                    </span>
+                    <span class="column-quantity"><i class="fas fa-cubes"></i> {{ quantidades_listas[lista] }}</span>
+                </div>
+                <div class="kanban-column-body" data-lista="{{ lista }}">
+                    {% for ordem in ordens[lista] %}
+                    <div class="kanban-card" data-ordem-id="{{ ordem.id }}">
+                        <div class="kanban-card-header">
+                            <div class="drag-handle" onclick="event.stopPropagation()">
+                                <i class="fas fa-grip-lines"></i>
+                            </div>
+                            {% if ordem.pedidos and ordem.pedidos[0].pedido.item and ordem.pedidos[0].pedido.item.imagem_path %}
+                                <img src="{{ ordem.pedidos[0].pedido.item.imagem_path }}" width="32" height="32" class="rounded me-2" alt="Imagem do item">
+                            {% endif %}
+                            <span class="card-title" data-ordem-id="{{ ordem.id }}">{{ ordem.numero }}</span>
+                            <div class="d-flex">
+                                <div class="dropdown me-2">
+                                    <button class="btn btn-sm btn-outline-secondary dropdown-toggle" type="button" 
+                                            id="dropdownMenuButton{{ ordem.id }}" data-bs-toggle="dropdown" 
+                                            aria-expanded="false" onclick="event.stopPropagation()">
+                                        <i class="fas fa-ellipsis-v"></i>
+                                    </button>
+                                    <ul class="dropdown-menu dropdown-menu-end" aria-labelledby="dropdownMenuButton{{ ordem.id }}">
+                                        {% for lista_destino in listas %}
+                                            {% if lista_destino != lista %}
+                                                <li><a class="dropdown-item btn-mover" href="#" data-ordem-id="{{ ordem.id }}" data-lista-destino="{{ lista_destino }}">Mover para {{ lista_destino }}</a></li>
+                                            {% endif %}
+                                        {% endfor %}
+                                    </ul>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="kanban-card-body">
+                            {% if ordem.pedidos %}
+                                {% set total_items = 0 %}
+                                {% set total_qty = 0 %}
+                                {% set grouped_items = {} %}
+                                {% set tem_desenho = false %}
+                                {% set tem_programas = false %}
+                                {% set pedido_primeiro = None %}
+                                
+                                {% for pedido_os in ordem.pedidos %}
+                                    {% if loop.index == 1 %}
+                                        {% set pedido_primeiro = pedido_os %}
+                                    {% endif %}
+                                    
+                                    {% set item_key = pedido_os.pedido.item_id if pedido_os.pedido.item_id else pedido_os.pedido.nome_item %}
+                                    {% set item_name = pedido_os.pedido.item.codigo_acb ~ ' - ' ~ pedido_os.pedido.item.nome if pedido_os.pedido.item_id else pedido_os.pedido.nome_item %}
+                                    
+                                    {% if pedido_os.pedido.item and pedido_os.pedido.item.desenho_path %}
+                                        {% set tem_desenho = true %}
+                                    {% endif %}
+                                    
+                                    {% if pedido_os.pedido.item and pedido_os.pedido.item.arquivos_cnc %}
+                                        {% set tem_programas = true %}
+                                    {% endif %}
+                                    
+                                    {% if item_key in grouped_items %}
+                                        {% set _ = grouped_items[item_key].update({
+                                            'total_qty': grouped_items[item_key].total_qty 
+                                                          + pedido_os.pedido.quantidade
+                                        }) %}
+                                    {% else %}
+                                        {% set _ = grouped_items.update({
+                                            item_key: {
+                                                'name': item_name,
+                                                'total_qty': pedido_os.pedido.quantidade,
+                                                'item': pedido_os.pedido.item if pedido_os.pedido.item_id else None
+                                            }
+                                        }) %}
+                                    {% endif %}
+                                    {% set total_items = total_items + 1 %}
+                                    {% set total_qty   = total_qty   + pedido_os.pedido.quantidade %}
+                                {% endfor %}
+                        
+                                <div class="mb-2">
+                                    <span class="item-badge bg-info text-white">
+                                        <i class="fas fa-cubes"></i> {{ total_items }} itens
+                                    </span>
+                                    <span class="item-badge bg-success text-white">
+                                        <i class="fas fa-hashtag"></i> {{ total_qty }} peças
+                                    </span>
+                                </div>
+                        
+                                {% for item_key, item_data in grouped_items.items() %}
+                                    {% if loop.index <= 2 %}
+                                        <div class="text-truncate">
+                                            <small>
+                                                {{ item_data.name }}
+                                                <span class="item-quantity">
+                                                    ({{ item_data.total_qty }})
+                                                </span>
+                                            </small>
+                                        </div>
+                                    {% elif grouped_items|length > 2 and loop.index == 3 %}
+                                        <div class="text-muted">
+                                            <small>+ {{ grouped_items|length - 2 }} mais itens...</small>
+                                        </div>
+                                    {% endif %}
+                                {% endfor %}
+                        
+                                <div class="tempo-total">
+                                    <i class="fas fa-clock"></i>
+                                    Tempo total: {{ ordem.tempo_total_producao }}
+                                </div>
+                                
+                                <!-- Ícones de documentos disponíveis -->
+                                <div class="document-icons mt-2">
+                                    {% if tem_desenho %}
+                                    <span class="document-icon pdf-icon toggle-pdf" data-container-id="pdf-container-{{ ordem.id }}">
+                                        <i class="fas fa-file-pdf"></i>
+                                        <small class="ms-1">Desenho</small>
+                                    </span>
+                                    {% endif %}
+                                    
+                                    {% if tem_programas %}
+                                    <span class="document-icon cnc-icon toggle-cnc" data-container-id="cnc-container-{{ ordem.id }}">
+                                        <i class="fas fa-file-code"></i>
+                                        <small class="ms-1">Programas</small>
+                                    </span>
+                                    {% endif %}
+                                </div>
+                                
+                                <!-- Container de desenho (oculto por padrão) -->
+                                {% if tem_desenho and pedido_primeiro and pedido_primeiro.pedido.item.desenho_path %}
+                                <div id="pdf-container-{{ ordem.id }}" class="document-container pdf-container">
+                                    <div class="mb-2">
+                                        <strong>Desenho do Item:</strong>
+                                    </div>
+                                    <a href="{{ pedido_primeiro.pedido.item.desenho_path }}" class="file-link" target="_blank">
+                                        <i class="fas fa-file-pdf pdf-icon"></i>
+                                        Visualizar PDF
+                                    </a>
+                                </div>
+                                {% endif %}
+                                
+                                <!-- Container de programas CNC (oculto por padrão) -->
+                                {% if tem_programas %}
+                                <div id="cnc-container-{{ ordem.id }}" class="document-container cnc-container">
+                                    <div class="mb-2">
+                                        <strong>Programas CNC:</strong>
+                                    </div>
+                                    {% for item_key, item_data in grouped_items.items() %}
+                                        {% if item_data.item and item_data.item.arquivos_cnc %}
+                                            {% for arquivo in item_data.item.arquivos_cnc %}
+                                                <a href="/arquivos/cnc/{{ arquivo.arquivo_path }}" class="file-link" download>
+                                                    <i class="fas fa-file-code cnc-icon"></i>
+                                                    {{ arquivo.nome_original }}
+                                                </a>
+                                            {% endfor %}
+                                        {% endif %}
+                                    {% endfor %}
+                                </div>
+                                {% endif %}
+                        
+                            {% else %}
+                                <div class="text-muted"><small>Sem pedidos</small></div>
+                            {% endif %}
+                        </div>
+                    </div>
+                    {% endfor %}
+                </div>
+            </div>
+            {% endfor %}
+        </div>
+
+    <!-- Modal para detalhes do card -->
+    <div class="modal fade" id="cardDetailsModal" tabindex="-1" aria-hidden="true">
+        <div class="modal-dialog modal-xl modal-dialog-scrollable">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">Detalhes da Ordem de Serviço</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="text-center">
+                        <div class="spinner-border text-primary" role="status">
+                            <span class="visually-hidden">Carregando...</span>
+                        </div>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Fechar</button>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Scripts do Bootstrap e JavaScript customizado -->
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    <script src="/static/js/kanban-sortable.js"></script>
+    <script>
+        function moverOrdem(ordemId, listaDestino) {
+            fetch('/kanban/mover', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/x-www-form-urlencoded',
+                },
+                body: `ordem_id=${ordemId}&nova_lista=${listaDestino}`
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    // Mostrar mensagem de sucesso
+                    alert(data.message);
+                    // Recarregar a página para atualizar
+                    window.location.reload();
+                }
+            });
+        }
+        
+        function openCardDetails(ordemId) {
+            const modal = new bootstrap.Modal(document.getElementById('cardDetailsModal'));
+            modal.show();
+            
+            // Carregar os detalhes do card via AJAX
+            fetch(`/kanban/detalhes/${ordemId}`)
+                .then(response => response.text())
+                .then(html => {
+                    document.querySelector('#cardDetailsModal .modal-body').innerHTML = html;
+                    
+                    // Inicializar os elementos do formulário dentro do modal
+                    document.querySelectorAll('#cardDetailsModal .btn-salvar-tempo').forEach(btn => {
+                        btn.addEventListener('click', function() {
+                            const form = this.closest('form');
+                            const formData = new FormData(form);
+                            
+                            fetch('/kanban/atualizar-tempo-real', {
+                                method: 'POST',
+                                body: formData
+                            })
+                            .then(response => response.json())
+                            .then(data => {
+                                if (data.success) {
+                                    // Atualizar apenas a parte relevante do modal
+                                    openCardDetails(ordemId);
+                                }
+                            });
+                        });
+                    });
+                });
+        }
+        
+        function finalizarOS(ordemId) {
+            if (confirm('Deseja finalizar esta Ordem de Serviço? Ela será movida para o registro mensal.')) {
+                fetch('/kanban/finalizar', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/x-www-form-urlencoded',
+                    },
+                    body: `ordem_id=${ordemId}`
+                })
+                .then(response => response.json())
+                .then(data => {
+                    if (data.success) {
+                        // Fechar o modal e recarregar a página
+                        bootstrap.Modal.getInstance(document.getElementById('cardDetailsModal')).hide();
+                        window.location.reload();
+                    }
+                });
+            }
+        }
+        
+        // Função para mostrar/ocultar contêiner de documentos (PDF/CNC)
+        function toggleDocContainer(element, containerId) {
+            const container = document.getElementById(containerId);
+            if (!container) return;
+            
+            // Verificar se está visível ou oculto com getComputedStyle
+            const computedStyle = window.getComputedStyle(container);
+            const isHidden = computedStyle.display === 'none';
+            
+            // Alternar visibilidade
+            if (isHidden) {
+                // Mostrar o container
+                container.style.cssText = 'display: block !important';
+                element.classList.add('active');
+            } else {
+                // Esconder o container
+                container.style.cssText = 'display: none !important';
+                element.classList.remove('active');
+            }
+            
+            // Prevenir propagação de eventos
+            event.stopPropagation();
+            return false;
+        }
+        
+        // Função para inicializar todos os eventos nos cartões
+        function initializeKanbanEvents() {
+            console.log('Inicializando eventos do Kanban');
+            
+            // Eventos para abrir detalhes do card
+            document.querySelectorAll('.card-title').forEach(function(element) {
+                element.addEventListener('click', function(e) {
+                    e.stopPropagation();
+                    const ordemId = this.dataset.ordemId;
+                    openCardDetails(ordemId);
+                });
+            });
+            
+            // Eventos para toggle de documentos PDF e CNC
+            document.querySelectorAll('.toggle-pdf, .toggle-cnc').forEach(function(element) {
+                element.addEventListener('click', function(e) {
+                    e.stopPropagation();
+                    const containerId = this.dataset.containerId;
+                    console.log('Toggle container:', containerId);
+                    toggleDocContainer(this, containerId);
+                });
+            });
+            
+            // Eventos para mover ordens entre listas
+            document.querySelectorAll('.btn-mover').forEach(function(element) {
+                element.addEventListener('click', function(e) {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    const ordemId = this.dataset.ordemId;
+                    const listaDestino = this.dataset.listaDestino;
+                    moverOrdem(ordemId, listaDestino);
+                });
+            });
+            
+            // Marcar os cartões como inicializados
+            document.querySelectorAll('.kanban-card').forEach(function(card) {
+                card.classList.add('events-initialized');
+            });
+        }
+        
+        // Inicializar eventos após o carregamento do documento
+        document.addEventListener('DOMContentLoaded', function() {
+            initializeKanbanEvents();
+            
+            // Também inicializar novamente quando o Sortable terminar uma operação de arrasto
+            document.addEventListener('sortable-drop-complete', function() {
+                setTimeout(initializeKanbanEvents, 100);
+            });
+        });
+    </script>
+</body>
+</html>

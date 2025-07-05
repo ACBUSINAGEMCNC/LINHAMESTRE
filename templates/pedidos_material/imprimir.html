@@ -1,0 +1,139 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Pedido de Material {{ pedido.numero }} - ACB Usinagem CNC</title>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css">
+    <style>
+        @media print {
+            body {
+                padding: 0;
+                margin: 0;
+            }
+            .no-print {
+                display: none;
+            }
+            .page-break {
+                page-break-after: always;
+            }
+            .container {
+                width: 100%;
+                max-width: 100%;
+                padding: 0;
+                margin: 0;
+            }
+        }
+        .header {
+            border-bottom: 2px solid #000;
+            padding-bottom: 10px;
+            margin-bottom: 20px;
+        }
+        .logo {
+            max-height: 80px;
+        }
+        .pedido-info {
+            border: 1px solid #ddd;
+            padding: 15px;
+            margin-bottom: 20px;
+            border-radius: 5px;
+        }
+        .item-table {
+            margin-top: 20px;
+        }
+        .footer {
+            margin-top: 50px;
+            border-top: 1px solid #ddd;
+            padding-top: 10px;
+            font-size: 0.8rem;
+        }
+    </style>
+</head>
+<body>
+    <div class="container mt-4">
+        <div class="no-print mb-3">
+            <button class="btn btn-primary" onclick="window.print()">Imprimir</button>
+            <a href="/pedidos-material" class="btn btn-secondary">Voltar</a>
+        </div>
+        
+        <div class="header d-flex justify-content-between align-items-center">
+            <div>
+                <h1>Pedido de Material</h1>
+                <h2>{{ pedido.numero }}</h2>
+            </div>
+            <div class="text-end">
+                <img src="/static/logo.svg" alt="ACB Usinagem CNC" class="logo">
+                <div>ACB Usinagem CNC</div>
+                <div>CNPJ: XX.XXX.XXX/0001-XX</div>
+            </div>
+        </div>
+        
+        <div class="pedido-info">
+            <div class="row">
+                <div class="col-md-6">
+                    <p><strong>Data de Criação:</strong> {{ pedido.data_criacao.strftime('%d/%m/%Y') }}</p>
+                </div>
+                <div class="col-md-6">
+                    <p><strong>Código de Barras:</strong> *{{ pedido.numero }}*</p>
+                </div>
+            </div>
+        </div>
+        
+        <h3>Materiais</h3>
+        
+        <div class="table-responsive">
+            <table class="table table-striped table-bordered">
+                <thead>
+                    <tr>
+                        <th>Material</th>
+                        <th>Tipo</th>
+                        <th>Dimensões</th>
+                        <th>Comprimento (m)</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for item in pedido.itens %}
+                    {% set material = Material.query.get(item.material_id) %}
+                    <tr>
+                        <td>{{ material.nome }}</td>
+                        <td>{{ material.tipo }}</td>
+                        <td>
+                            {% if material.tipo == 'redondo' %}
+                                Ø {{ material.diametro }}mm
+                            {% elif material.tipo == 'quadrado' %}
+                                {{ material.lado }}mm
+                            {% elif material.tipo == 'retangulo' %}
+                                {{ material.largura }}x{{ material.altura }}mm
+                            {% else %}
+                                -
+                            {% endif %}
+                        </td>
+                        <td>{{ item.comprimento / 1000.0 }}</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        
+        <div class="mt-5">
+            <div class="row">
+                <div class="col-md-6">
+                    <div class="border-top pt-3 mt-5">
+                        <p>Solicitado por: ___________________________</p>
+                    </div>
+                </div>
+                <div class="col-md-6">
+                    <div class="border-top pt-3 mt-5">
+                        <p>Aprovado por: ___________________________</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <div class="footer text-center">
+            <p>Documento gerado em {{ now().strftime('%d/%m/%Y %H:%M:%S') }}</p>
+            <p>ACB Usinagem CNC - Todos os direitos reservados</p>
+        </div>
+    </div>
+</body>
+</html>

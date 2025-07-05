@@ -1,0 +1,937 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Editar Item - ACB Usinagem CNC</title>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+</head>
+<body>
+    <nav class="navbar navbar-expand-lg navbar-dark bg-primary">
+        <div class="container">
+            <a class="navbar-brand" href="/">ACB Usinagem CNC</a>
+            <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav">
+                <span class="navbar-toggler-icon"></span>
+            </button>
+            <div class="collapse navbar-collapse" id="navbarNav">
+                <ul class="navbar-nav">
+                    <li class="nav-item">
+                        <a class="nav-link" href="/"><i class="fas fa-home"></i> Home</a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link" href="/itens"><i class="fas fa-boxes"></i> Itens</a>
+                    </li>
+                </ul>
+            </div>
+        </div>
+    </nav>
+
+    <div class="container py-4">
+        <div class="d-flex justify-content-between align-items-center mb-4">
+            <h1>Editar Item</h1>
+            <a href="/itens" class="btn btn-secondary">
+                <i class="fas fa-arrow-left"></i> Voltar
+            </a>
+        </div>
+
+        <div class="card">
+            <div class="card-body">
+                <form method="POST" action="/itens/editar/{{ item.id }}" enctype="multipart/form-data">
+                    <div class="row mb-3">
+                        <div class="col-md-6">
+                            <label for="nome" class="form-label">Nome do Item</label>
+                            <input type="text" class="form-control" id="nome" name="nome" value="{{ item.nome }}" required>
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label">Código ACB</label>
+                            <input type="text" class="form-control" value="{{ item.codigo_acb }}" disabled>
+                        </div>
+                    </div>
+
+                    <h4 class="mt-4 mb-3">Materiais Utilizados</h4>
+                    <div class="card mb-4">
+                        <div class="card-body">
+                            <div class="row mb-3">
+                                <div class="col-md-5">
+                                    <label for="material_select" class="form-label">Material</label>
+                                    <select class="form-select" id="material_select">
+                                        <option value="">Selecione um material</option>
+                                        {% for material in materiais %}
+                                        <option value="{{ material.id }}" 
+                                                data-nome="{{ material.nome }}"
+                                                data-tipo="{{ material.tipo }}"
+                                                data-especifico="{{ material.especifico }}">
+                                            {{ material.nome }}
+                                        </option>
+                                        {% endfor %}
+                                    </select>
+                                </div>
+                                <div class="col-md-3">
+                                    <label for="material_comprimento" class="form-label">Comprimento (mm)</label>
+                                    <input type="number" class="form-control" id="material_comprimento" step="0.01" min="0">
+                                </div>
+                                <div class="col-md-2">
+                                    <label for="material_quantidade" class="form-label">Quantidade</label>
+                                    <input type="number" class="form-control" id="material_quantidade" value="1" min="1">
+                                </div>
+                                <div class="col-md-2">
+                                    <label class="form-label d-block">&nbsp;</label>
+                                    <button type="button" class="btn btn-success w-100" id="btn_adicionar_material">
+                                        <i class="fas fa-plus"></i> Adicionar
+                                    </button>
+                                </div>
+                            </div>
+                            
+                            <div class="table-responsive">
+                                <table class="table table-striped" id="tabela_materiais">
+                                    <thead>
+                                        <tr>
+                                            <th>Material</th>
+                                            <th>Tipo</th>
+                                            <th>Comprimento</th>
+                                            <th>Quantidade</th>
+                                            <th>Ações</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        <!-- Materiais serão adicionados aqui via JavaScript -->
+                                    </tbody>
+                                </table>
+                            </div>
+                            <input type="hidden" name="materiais" id="materiais_json" value="[]">
+                        </div>
+                    </div>
+
+                    <h4 class="mt-4 mb-3">Operações</h4>
+                    <div class="card mb-4">
+                        <div class="card-body">
+                            <div class="row mb-3">
+                                <div class="col-md-4">
+                                    <label for="trabalho_select" class="form-label">Tipo de Trabalho</label>
+                                    <select class="form-select" id="trabalho_select">
+                                        <option value="">Selecione um trabalho</option>
+                                        {% for trabalho in trabalhos %}
+                                        <option value="{{ trabalho.id }}" data-nome="{{ trabalho.nome }}">
+                                            {{ trabalho.nome }}
+                                        </option>
+                                        {% endfor %}
+                                    </select>
+                                </div>
+                                <div class="col-md-3">
+                                    <label for="tempo_setup" class="form-label">Tempo de Setup (segundos)</label>
+                                    <input type="number" class="form-control" id="tempo_setup" min="0">
+                                </div>
+                                <div class="col-md-3">
+                                    <label for="tempo_peca" class="form-label">Tempo por Peça (segundos)</label>
+                                    <input type="number" class="form-control" id="tempo_peca" min="0">
+                                </div>
+                                <div class="col-md-2">
+                                    <label class="form-label d-block">&nbsp;</label>
+                                    <button type="button" class="btn btn-success w-100" id="btn_adicionar_trabalho">
+                                        <i class="fas fa-plus"></i> Adicionar
+                                    </button>
+                                </div>
+                            </div>
+                            
+                            <div class="table-responsive">
+                                <table class="table table-striped" id="tabela_trabalhos">
+                                    <thead>
+                                        <tr>
+                                            <th>Tipo de Trabalho</th>
+                                            <th>Tempo de Setup</th>
+                                            <th>Tempo por Peça</th>
+                                            <th>Ações</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        <!-- Trabalhos serão adicionados aqui via JavaScript -->
+                                    </tbody>
+                                </table>
+                            </div>
+                            <input type="hidden" name="trabalhos" id="trabalhos_json" value="[]">
+                        </div>
+                    </div>
+
+                    <h4 class="mt-4 mb-3">Arquivos</h4>
+                    <div class="card mb-4">
+                        <div class="card-body">
+                            <div class="row mb-3">
+                                <div class="col-md-4">
+                                    <label for="desenho_tecnico" class="form-label">Desenho Técnico (PDF)</label>
+                                    <input type="file" class="form-control" id="desenho_tecnico" name="desenho_tecnico" accept=".pdf">
+                                    {% if item.desenho_tecnico %}
+                                    <div class="mt-2">
+                                        <a href="/uploads/{{ item.desenho_tecnico }}" target="_blank" class="btn btn-sm btn-info">
+                                            <i class="fas fa-file-pdf"></i> Ver desenho atual
+                                        </a>
+                                    </div>
+                                    {% endif %}
+                                </div>
+                                <div class="col-md-4">
+                                    <label for="imagem" class="form-label">Imagem do Item</label>
+                                    <input type="file" class="form-control" id="imagem" name="imagem" accept="image/*">
+                                    {% if item.imagem %}
+                                    <div class="mt-2">
+                                        <a href="/uploads/{{ item.imagem }}" target="_blank" class="btn btn-sm btn-info">
+                                            <i class="fas fa-image"></i> Ver imagem atual
+                                        </a>
+                                    </div>
+                                    {% endif %}
+                                </div>
+                                <div class="col-md-4">
+                                    <label for="instrucoes_trabalho" class="form-label">Instruções de Trabalho (PDF)</label>
+                                    <input type="file" class="form-control" id="instrucoes_trabalho" name="instrucoes_trabalho" accept=".pdf">
+                                    {% if item.instrucoes_trabalho %}
+                                    <div class="mt-2">
+                                        <a href="/uploads/{{ item.instrucoes_trabalho }}" target="_blank" class="btn btn-sm btn-info">
+                                            <i class="fas fa-file-pdf"></i> Ver instruções atuais
+                                        </a>
+                                    </div>
+                                    {% endif %}
+                                </div>
+                            </div>
+                            <div class="card mb-4 border-primary">
+                                <div class="card-header bg-primary text-white">
+                                    <h5 class="mb-0"><i class="fas fa-file-code"></i> Programas CNC</h5>
+                                </div>
+                                <div class="card-body">
+                                    <h6 class="card-subtitle mb-3">Adicionar arquivos de programa CNC para este item:</h6>
+                                    <div class="row">
+                                        <div class="col-md-4 mb-3">
+                                            <label for="cnc_arquivo" class="form-label">Selecionar arquivo</label>
+                                            <input type="file" class="form-control" id="cnc_arquivo" accept=".txt,.nc">
+                                        </div>
+                                        <div class="col-md-4 mb-3">
+                                            <label for="cnc_nome" class="form-label">Nome do programa</label>
+                                            <input type="text" class="form-control" id="cnc_nome" placeholder="Nome do programa">
+                                        </div>
+                                        <div class="col-md-4 mb-3">
+                                            <label for="cnc_maquina" class="form-label">Máquina</label>
+                                            <input type="text" class="form-control" id="cnc_maquina" placeholder="Ex: Máquina X">
+                                        </div>
+                                    </div>
+                                    <div class="mb-3">
+                                        <button type="button" class="btn btn-primary" id="adicionar_programa">
+                                            <i class="fas fa-plus"></i> Adicionar Programa
+                                        </button>
+                                        <button type="button" class="btn btn-success" id="enviar_programas" disabled>
+                                            <i class="fas fa-upload"></i> Enviar Programas
+                                        </button>
+                                    </div>
+                                    
+                                    <!-- Lista de arquivos a serem enviados -->
+                                    <div id="lista_programas" class="mt-3">
+                                        <h6>Novos programas a enviar:</h6>
+                                        <ul class="list-group" id="programas_adicionados"></ul>
+                                    </div>
+                                    
+                                    <!-- Campos ocultos para armazenar dados dos arquivos -->
+                                    <div id="cnc_files_container"></div>
+                                    
+                                    <!-- Programas CNC existentes -->
+                                    {% if item.arquivos_cnc %}
+                                    <div class="mt-4">
+                                        <h6 class="card-subtitle mb-2">Programas CNC Cadastrados:</h6>
+                                        <div class="list-group">
+                                            {% for arquivo in item.arquivos_cnc %}
+                                            <div class="list-group-item list-group-item-action flex-column align-items-start">
+                                                <div class="d-flex w-100 justify-content-between">
+                                                    <h6 class="mb-1">{{ arquivo.nome_arquivo }}</h6>
+                                                    <small>{{ arquivo.data_criacao.strftime('%d/%m/%Y %H:%M') }}</small>
+                                                </div>
+                                                <p class="mb-1">Máquina: {{ arquivo.maquina }}</p>
+                                                <small>Adicionado por: {{ arquivo.criador.nome }}</small>
+                                                <div class="mt-2">
+                                                    <a href="{{ url_for('itens.download_arquivo_cnc', arquivo_id=arquivo.id) }}" class="btn btn-sm btn-success">
+                                                        <i class="fas fa-download"></i> Baixar
+                                                    </a>
+                                                    <a href="{{ url_for('itens.remover_arquivo_cnc', item_id=item.id, arquivo_id=arquivo.id) }}" 
+                                                       class="btn btn-sm btn-danger" 
+                                                       onclick="return confirm('Tem certeza que deseja remover este arquivo?');">
+                                                        <i class="fas fa-trash"></i> Remover
+                                                    </a>
+                                                </div>
+                                            </div>
+                                            {% endfor %}
+                                        </div>
+                                    </div>
+                                    {% endif %}
+                                </div>
+                            </div>
+                            
+                            <!-- JavaScript para manipulação dos arquivos CNC -->
+                            <script>
+                                document.addEventListener('DOMContentLoaded', function() {
+                                    const btnAdicionar = document.getElementById('adicionar_programa');
+                                    const btnEnviar = document.getElementById('enviar_programas');
+                                    const listaProgramas = document.getElementById('programas_adicionados');
+                                    const filesContainer = document.getElementById('cnc_files_container');
+                                    const inputArquivo = document.getElementById('cnc_arquivo');
+                                    const inputNome = document.getElementById('cnc_nome');
+                                    const inputMaquina = document.getElementById('cnc_maquina');
+                                    let contadorArquivos = 0;
+                                    
+                                    // Função para verificar se há arquivos na lista e atualizar o botão de envio
+                                    function atualizarBotaoEnviar() {
+                                        const temArquivos = filesContainer.querySelectorAll('input[type="file"]').length > 0;
+                                        btnEnviar.disabled = !temArquivos;
+                                        if (temArquivos) {
+                                            document.getElementById('lista_programas').style.display = 'block';
+                                        } else {
+                                            document.getElementById('lista_programas').style.display = 'none';
+                                        }
+                                    }
+                                    
+                                    // Inicializar a visualização
+                                    atualizarBotaoEnviar();
+                                    
+                                    btnAdicionar.addEventListener('click', function() {
+                                        // Verificar se um arquivo foi selecionado
+                                        if (!inputArquivo.files || inputArquivo.files.length === 0) {
+                                            alert('Por favor, selecione um arquivo.');
+                                            return;
+                                        }
+                                        
+                                        // Verificar se nome e máquina foram preenchidos
+                                        if (!inputNome.value.trim()) {
+                                            alert('Por favor, insira um nome para o programa.');
+                                            return;
+                                        }
+                                        
+                                        if (!inputMaquina.value.trim()) {
+                                            alert('Por favor, especifique a máquina.');
+                                            return;
+                                        }
+                                        
+                                        const arquivo = inputArquivo.files[0];
+                                        const nome = inputNome.value.trim();
+                                        const maquina = inputMaquina.value.trim();
+                                        const dataHora = new Date().toLocaleString();
+                                        const arquivoId = 'cnc_' + contadorArquivos++;
+                                        
+                                        // Criar item na lista visual
+                                        const listItem = document.createElement('li');
+                                        listItem.className = 'list-group-item d-flex justify-content-between align-items-center';
+                                        listItem.dataset.id = arquivoId;
+                                        
+                                        listItem.innerHTML = `
+                                            <div>
+                                                <strong>${nome}</strong> (${arquivo.name})<br>
+                                                <small>Máquina: ${maquina} | Adicionado: ${dataHora}</small>
+                                            </div>
+                                            <button type="button" class="btn btn-sm btn-danger remover-programa" data-id="${arquivoId}">
+                                                <i class="fas fa-trash"></i> Remover
+                                            </button>
+                                        `;
+                                        
+                                        listaProgramas.appendChild(listItem);
+                                        
+                                        // Criar DataTransfer para clonar o arquivo
+                                        const dataTransfer = new DataTransfer();
+                                        dataTransfer.items.add(arquivo);
+                                        
+                                        // Adicionar campos ocultos para o formulário
+                                        const fileInput = document.createElement('input');
+                                        fileInput.type = 'file';
+                                        fileInput.id = arquivoId;
+                                        fileInput.name = 'cnc_files[]';
+                                        fileInput.style.display = 'none';
+                                        fileInput.files = dataTransfer.files;
+                                        
+                                        const nomeInput = document.createElement('input');
+                                        nomeInput.type = 'hidden';
+                                        nomeInput.name = 'cnc_nomes[]';
+                                        nomeInput.value = nome;
+                                        
+                                        const maquinaInput = document.createElement('input');
+                                        maquinaInput.type = 'hidden';
+                                        maquinaInput.name = 'cnc_maquinas[]';
+                                        maquinaInput.value = maquina;
+                                        
+                                        filesContainer.appendChild(fileInput);
+                                        filesContainer.appendChild(nomeInput);
+                                        filesContainer.appendChild(maquinaInput);
+                                        
+                                        // Atualizar botão de envio
+                                        atualizarBotaoEnviar();
+                                        
+                                        // Limpar campos após adicionar
+                                        inputArquivo.value = '';
+                                        inputNome.value = '';
+                                        inputMaquina.value = '';
+                                    });
+                                    
+                                    // Botão de enviar programas - envio via AJAX
+                                    btnEnviar.addEventListener('click', function() {
+                                        const files = filesContainer.querySelectorAll('input[type="file"]');
+                                        if (files.length === 0) {
+                                            alert('Nenhum arquivo para enviar.');
+                                            return;
+                                        }
+                                        
+                                        // Criar formulário dinâmico para envio
+                                        const formData = new FormData();
+                                        
+                                        // Adicionar todos os arquivos e metadados
+                                        const nomes = filesContainer.querySelectorAll('input[name="cnc_nomes[]"]');
+                                        const maquinas = filesContainer.querySelectorAll('input[name="cnc_maquinas[]"]');
+                                        
+                                        for (let i = 0; i < files.length; i++) {
+                                            formData.append('cnc_files[]', files[i].files[0]);
+                                            formData.append('cnc_nomes[]', nomes[i].value);
+                                            formData.append('cnc_maquinas[]', maquinas[i].value);
+                                        }
+                                        
+                                        // Desabilitar o botão durante o envio
+                                        btnEnviar.disabled = true;
+                                        btnEnviar.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Enviando...';
+                                        
+                                        // Enviar via fetch API
+                                        fetch('/itens/{{ item.id }}/adicionar-arquivo-cnc', {
+                                            method: 'POST',
+                                            body: formData
+                                        })
+                                        .then(response => {
+                                            if (!response.ok) {
+                                                throw new Error('Erro no envio');
+                                            }
+                                            return response.text();
+                                        })
+                                        .then(() => {
+                                            // Limpar lista e container após sucesso
+                                            listaProgramas.innerHTML = '';
+                                            filesContainer.innerHTML = '';
+                                            atualizarBotaoEnviar();
+                                            
+                                            // Recarregar a página para mostrar os arquivos novos
+                                            location.reload();
+                                        })
+                                        .catch(error => {
+                                            console.error('Erro:', error);
+                                            alert('Erro ao enviar arquivos. Tente novamente.');
+                                            btnEnviar.disabled = false;
+                                            btnEnviar.innerHTML = '<i class="fas fa-upload"></i> Enviar Programas';
+                                        });
+                                    });
+                                    
+                                    // Delegação de eventos para botões de remover
+                                    document.addEventListener('click', function(event) {
+                                        if (event.target.classList.contains('remover-programa') || 
+                                            event.target.parentElement.classList.contains('remover-programa')) {
+                                            
+                                            const button = event.target.classList.contains('remover-programa') ? 
+                                                          event.target : event.target.parentElement;
+                                            const arquivoId = button.dataset.id;
+                                            
+                                            // Remover da lista visual
+                                            const listItem = document.querySelector(`li[data-id="${arquivoId}"]`);
+                                            if (listItem) listItem.remove();
+                                            
+                                            // Remover campos ocultos
+                                            const fileInput = document.getElementById(arquivoId);
+                                            if (fileInput) fileInput.remove();
+                                            
+                                            // Remover inputs relacionados pelo índice
+                                            const inputs = filesContainer.querySelectorAll(`input[name="cnc_nomes[]"], input[name="cnc_maquinas[]"]`);
+                                            const index = Array.from(filesContainer.querySelectorAll(`input[type="file"]`)).indexOf(fileInput);
+                                            
+                                            if (index !== -1) {
+                                                const nomeInput = filesContainer.querySelectorAll('input[name="cnc_nomes[]"]')[index];
+                                                const maquinaInput = filesContainer.querySelectorAll('input[name="cnc_maquinas[]"]')[index];
+                                                
+                                                if (nomeInput) nomeInput.remove();
+                                                if (maquinaInput) maquinaInput.remove();
+                                            }
+                                            
+                                            // Atualizar botão de envio
+                                            atualizarBotaoEnviar();
+                                        }
+                                    });
+                                });
+                            </script>
+                        </div>
+                    </div>
+
+                    <h4 class="mt-4 mb-3">Instruções de Produção</h4>
+                    <div class="card mb-4">
+                        <div class="card-body">
+                            <div class="row mb-3">
+                                <div class="col-md-3">
+                                    <div class="form-check form-switch">
+                                        <input class="form-check-input" type="checkbox" id="tempera" name="tempera" {% if item.tempera %}checked{% endif %}>
+                                        <label class="form-check-label" for="tempera">Têmpera</label>
+                                    </div>
+                                </div>
+                                <div class="col-md-3">
+                                    <label for="tipo_tempera" class="form-label">Tipo de Têmpera</label>
+                                    <select class="form-select" id="tipo_tempera" name="tipo_tempera" {% if not item.tempera %}disabled{% endif %}>
+                                        <option value="">Selecione</option>
+                                        <option value="3º" {% if item.tipo_tempera == "3º" %}selected{% endif %}>3º</option>
+                                        <option value="indução" {% if item.tipo_tempera == "indução" %}selected{% endif %}>Indução</option>
+                                        <option value="forno" {% if item.tipo_tempera == "forno" %}selected{% endif %}>Forno</option>
+                                    </select>
+                                </div>
+                                <div class="col-md-3">
+                                    <div class="form-check form-switch">
+                                        <input class="form-check-input" type="checkbox" id="retifica" name="retifica" {% if item.retifica %}checked{% endif %}>
+                                        <label class="form-check-label" for="retifica">Retífica</label>
+                                    </div>
+                                </div>
+                                <div class="col-md-3">
+                                    <div class="form-check form-switch">
+                                        <input class="form-check-input" type="checkbox" id="oleo_protetivo" name="oleo_protetivo" {% if item.oleo_protetivo %}checked{% endif %}>
+                                        <label class="form-check-label" for="oleo_protetivo">Óleo Protetivo</label>
+                                    </div>
+                                </div>
+                            </div>
+                            
+                            <div class="row mb-3">
+                                <div class="col-md-3">
+                                    <div class="form-check form-switch">
+                                        <input class="form-check-input" type="checkbox" id="pintura" name="pintura" {% if item.pintura %}checked{% endif %}>
+                                        <label class="form-check-label" for="pintura">Pintura</label>
+                                    </div>
+                                </div>
+                                <div class="col-md-3">
+                                    <label for="tipo_pintura" class="form-label">Tipo de Pintura</label>
+                                    <input type="text" class="form-control" id="tipo_pintura" name="tipo_pintura" value="{{ item.tipo_pintura }}" {% if not item.pintura %}disabled{% endif %}>
+                                </div>
+                                <div class="col-md-3">
+                                    <label for="cor_pintura" class="form-label">Cor</label>
+                                    <input type="text" class="form-control" id="cor_pintura" name="cor_pintura" value="{{ item.cor_pintura }}" {% if not item.pintura %}disabled{% endif %}>
+                                </div>
+                                <div class="col-md-3">
+                                    <label for="tipo_embalagem" class="form-label">Tipo de Embalagem</label>
+                                    <select class="form-select" id="tipo_embalagem" name="tipo_embalagem">
+                                        <option value="">Selecione</option>
+                                        <option value="caixa" {% if item.tipo_embalagem == "caixa" %}selected{% endif %}>Caixa</option>
+                                        <option value="pallet" {% if item.tipo_embalagem == "pallet" %}selected{% endif %}>Pallet</option>
+                                        <option value="volume" {% if item.tipo_embalagem == "volume" %}selected{% endif %}>Volume</option>
+                                    </select>
+                                </div>
+                            </div>
+                            
+                            <div class="row mb-3">
+                                <div class="col-md-3">
+                                    <div class="form-check form-switch">
+                                        <input class="form-check-input" type="checkbox" id="zincagem" name="zincagem" {% if item.zincagem %}checked{% endif %}>
+                                        <label class="form-check-label" for="zincagem">Zincagem</label>
+                                    </div>
+                                </div>
+                                <div class="col-md-3">
+                                    <label for="tipo_zincagem" class="form-label">Tipo de Zincagem</label>
+                                    <select class="form-select" id="tipo_zincagem" name="tipo_zincagem" {% if not item.zincagem %}disabled{% endif %}>
+                                        <option value="">Selecione</option>
+                                        <option value="amarela" {% if item.tipo_zincagem == "amarela" %}selected{% endif %}>Amarela</option>
+                                        <option value="branca" {% if item.tipo_zincagem == "branca" %}selected{% endif %}>Branca</option>
+                                        <option value="preta" {% if item.tipo_zincagem == "preta" %}selected{% endif %}>Preta</option>
+                                    </select>
+                                </div>
+                            </div>
+
+                            <div class="row">
+                                <div class="col-md-3">
+                                    <label for="peso" class="form-label">Peso da Peça Pronta (kg)</label>
+                                    <input type="number" class="form-control" id="peso" name="peso" step="0.001" min="0" value="{{ item.peso or 0 }}">
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="d-grid">
+                        <button type="submit" class="btn btn-primary">
+                            <i class="fas fa-save"></i> Salvar Alterações
+                        </button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    <script>
+        $(document).ready(function() {
+            // Arrays para armazenar materiais e trabalhos
+            let materiais = [];
+            let trabalhos = [];
+            
+            // Carregar materiais e trabalhos existentes
+            try {
+                const materiaisJson = '{{ item_materiais|safe }}';
+                if (materiaisJson) {
+                    materiais = JSON.parse(materiaisJson);
+                }
+                
+                const trabalhosJson = '{{ item_trabalhos|safe }}';
+                if (trabalhosJson) {
+                    trabalhos = JSON.parse(trabalhosJson);
+                }
+                
+                // Atualizar tabelas
+                atualizarTabelaMateriais();
+                atualizarTabelaTrabalhos();
+            } catch (e) {
+                console.error("Erro ao carregar dados existentes:", e);
+            }
+            
+            // Adicionar material à tabela
+            $('#btn_adicionar_material').click(function() {
+                const materialId = $('#material_select').val();
+                if (!materialId) {
+                    alert('Selecione um material');
+                    return;
+                }
+                
+                const materialNome = $('#material_select option:selected').data('nome');
+                const materialTipo = $('#material_select option:selected').data('tipo');
+                const materialEspecifico = $('#material_select option:selected').data('especifico');
+                const comprimento = $('#material_comprimento').val();
+                const quantidade = $('#material_quantidade').val();
+                
+                if (!materialEspecifico && (!comprimento || comprimento <= 0)) {
+                    alert('Informe um comprimento válido');
+                    return;
+                }
+                
+                if (!quantidade || quantidade <= 0) {
+                    alert('Informe uma quantidade válida');
+                    return;
+                }
+                
+                // Adicionar à array
+                const material = {
+                    id: materialId,
+                    nome: materialNome,
+                    tipo: materialTipo,
+                    comprimento: comprimento,
+                    quantidade: quantidade
+                };
+                
+                materiais.push(material);
+                
+                // Atualizar tabela
+                atualizarTabelaMateriais();
+                
+                // Limpar campos
+                $('#material_select').val('');
+                $('#material_comprimento').val('');
+                $('#material_quantidade').val('1');
+            });
+            
+            // Adicionar trabalho à tabela
+            $('#btn_adicionar_trabalho').click(function() {
+                const trabalhoId = $('#trabalho_select').val();
+                if (!trabalhoId) {
+                    alert('Selecione um tipo de trabalho');
+                    return;
+                }
+                
+                const trabalhoNome = $('#trabalho_select option:selected').data('nome');
+                const tempoSetup = $('#tempo_setup').val();
+                const tempoPeca = $('#tempo_peca').val();
+                
+                if (!tempoSetup || tempoSetup < 0) {
+                    alert('Informe um tempo de setup válido');
+                    return;
+                }
+                
+                if (!tempoPeca || tempoPeca < 0) {
+                    alert('Informe um tempo por peça válido');
+                    return;
+                }
+                
+                // Adicionar à array
+                const trabalho = {
+                    id: trabalhoId,
+                    nome: trabalhoNome,
+                    tempo_setup: tempoSetup,
+                    tempo_peca: tempoPeca
+                };
+                
+                trabalhos.push(trabalho);
+                
+                // Atualizar tabela
+                atualizarTabelaTrabalhos();
+                
+                // Limpar campos
+                $('#trabalho_select').val('');
+                $('#tempo_setup').val('');
+                $('#tempo_peca').val('');
+            });
+            
+            // Função para atualizar a tabela de materiais
+            function atualizarTabelaMateriais() {
+                const tbody = $('#tabela_materiais tbody');
+                tbody.empty();
+                
+                materiais.forEach((material, index) => {
+                    tbody.append(`
+                        <tr>
+                            <td>${material.nome}</td>
+                            <td>${material.tipo}</td>
+                            <td>${material.comprimento || 'N/A'}</td>
+                            <td>${material.quantidade}</td>
+                            <td>
+                                <button type="button" class="btn btn-sm btn-danger btn-remover-material" data-index="${index}">
+                                    <i class="fas fa-trash"></i>
+                                </button>
+                            </td>
+                        </tr>
+                    `);
+                });
+                
+                // Atualizar campo hidden
+                $('#materiais_json').val(JSON.stringify(materiais));
+            }
+            
+            // Função para atualizar a tabela de trabalhos
+            function atualizarTabelaTrabalhos() {
+                const tbody = $('#tabela_trabalhos tbody');
+                tbody.empty();
+                
+                trabalhos.forEach((trabalho, index) => {
+                    tbody.append(`
+                        <tr>
+                            <td>${trabalho.nome}</td>
+                            <td>${trabalho.tempo_setup} segundos</td>
+                            <td>${trabalho.tempo_peca} segundos</td>
+                            <td>
+                                <button type="button" class="btn btn-sm btn-danger btn-remover-trabalho" data-index="${index}">
+                                    <i class="fas fa-trash"></i>
+                                </button>
+                            </td>
+                        </tr>
+                    `);
+                });
+                
+                // Atualizar campo hidden
+                $('#trabalhos_json').val(JSON.stringify(trabalhos));
+            }
+            
+            // Remover material
+            $(document).on('click', '.btn-remover-material', function() {
+                const index = $(this).data('index');
+                materiais.splice(index, 1);
+                atualizarTabelaMateriais();
+            });
+            
+            // Remover trabalho
+            $(document).on('click', '.btn-remover-trabalho', function() {
+                const index = $(this).data('index');
+                trabalhos.splice(index, 1);
+                atualizarTabelaTrabalhos();
+            });
+            
+            // Habilitar/desabilitar campos de têmpera
+            $('#tempera').change(function() {
+                $('#tipo_tempera').prop('disabled', !this.checked);
+                if (!this.checked) {
+                    $('#tipo_tempera').val('');
+                }
+            });
+            
+            // Habilitar/desabilitar campos de pintura
+            $('#pintura').change(function() {
+                $('#tipo_pintura').prop('disabled', !this.checked);
+                $('#cor_pintura').prop('disabled', !this.checked);
+                if (!this.checked) {
+                    $('#tipo_pintura').val('');
+                    $('#cor_pintura').val('');
+                }
+            });
+
+            // Habilitar/desabilitar campos de zincagem
+            $('#zincagem').change(function() {
+                $('#tipo_zincagem').prop('disabled', !this.checked);
+                if (!this.checked) {
+                    $('#tipo_zincagem').val('');
+                }
+            });
+        });
+    </script>
+    
+    <!-- Bloco de scripts para drag & drop, toggle do PDF e visualização de programas -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/Sortable/1.14.0/Sortable.min.js"></script>
+    <style>
+        /* Evitar seleção de texto */
+        .kanban-card, .kanban-card * {
+            -webkit-user-select: none;
+            -moz-user-select: none;
+            -ms-user-select: none;
+            user-select: none;
+        }
+        
+        /* Estilo para o item sendo arrastado - similar ao Trello */
+        .sortable-ghost {
+            opacity: 0.4;
+            background: #c8ebfb;
+            box-shadow: 0 0 10px rgba(0,0,0,0.2);
+        }
+        
+        /* Estilo para o espaço onde o item pode ser solto */
+        .sortable-chosen {
+            box-shadow: 0 5px 15px rgba(0,0,0,0.2);
+            transform: scale(1.02);
+            z-index: 100;
+        }
+        
+        /* Estilo para o contêiner durante a operação de arrastar */
+        .sortable-drag {
+            opacity: 0.8;
+        }
+        
+        /* Animação de transição para os cartões */
+        .kanban-card {
+            transition: transform 0.2s ease, box-shadow 0.2s ease;
+            cursor: grab;
+            padding: 8px;
+            margin-bottom: 8px;
+            border-radius: 4px;
+            background-color: white;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.12);
+        }
+        
+        /* Efeito de hover nos cartões */
+        .kanban-card:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 3px 6px rgba(0,0,0,0.15);
+        }
+        
+        /* Estilo para a alça/handle usada para arrastar */
+        .drag-handle {
+            cursor: grab;
+            padding: 5px;
+            border-radius: 3px;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+        }
+        
+        .drag-handle:hover {
+            background-color: #f0f0f0;
+        }
+        
+        .drag-handle::before {
+            content: "\2630"; /* Ícone de menu hamburger com unicode */
+            font-size: 18px;
+            color: #888;
+        }
+    </style>
+    <script>
+    document.addEventListener('DOMContentLoaded', function() {
+        var list = document.getElementById('kanban-list');
+        if(list) {
+            // Aplica a ordem salva anteriormente (se existir)
+            var savedOrder = localStorage.getItem('kanban_order');
+            if(savedOrder) {
+                try {
+                    var orderMap = JSON.parse(savedOrder);
+                    // Reorganiza os elementos baseado na ordem salva
+                    var items = Array.from(list.children);
+                    items.sort(function(a, b) {
+                        var indexA = orderMap[a.dataset.id] || 999999;
+                        var indexB = orderMap[b.dataset.id] || 999999;
+                        return indexA - indexB;
+                    });
+                    // Remove todos os elementos
+                    while (list.firstChild) {
+                        list.removeChild(list.firstChild);
+                    }
+                    // Adiciona na nova ordem
+                    items.forEach(function(item) {
+                        list.appendChild(item);
+                    });
+                } catch(e) {
+                    console.error('Erro ao restaurar ordem:', e);
+                }
+            }
+            
+            // Adicionar alças de arrasto a cada cartão
+            document.querySelectorAll('.kanban-card').forEach(function(card) {
+                if (!card.querySelector('.drag-handle')) {
+                    var handle = document.createElement('div');
+                    handle.className = 'drag-handle';
+                    card.insertBefore(handle, card.firstChild);
+                }
+            });
+            
+            // Configura o Sortable com opções melhoradas estilo Trello
+            new Sortable(list, {
+                animation: 150,
+                easing: "cubic-bezier(0.2, 1, 0.1, 1)", // Easing mais suave
+                delay: 0, // Sem delay para resposta imediata
+                delayOnTouchOnly: false, // Desativa o delay em toque
+                touchStartThreshold: 1, // Aumenta a sensibilidade
+                direction: 'vertical', // Garantir que o movimento seja vertical
+                dragClass: "sortable-drag",
+                ghostClass: "sortable-ghost",
+                chosenClass: "sortable-chosen",
+                handle: '.drag-handle', // Usa a alça como único ponto de arrasto
+                forceFallback: true, // Força o fallback para melhor controle
+                fallbackClass: "sortable-fallback",
+                fallbackOnBody: true, // Coloca o elemento fantasma no body
+                swapThreshold: 0.65, // Facilita a troca
+                scroll: true, // Permitir rolagem automática
+                scrollSensitivity: 100, // Maior sensibilidade de rolagem
+                scrollSpeed: 40, // Velocidade de rolagem mais rápida
+                preventOnFilter: true, // Previne eventos padrão em itens filtrados
+                filter: '.filtered', // Classe para elementos não arrastáveis
+                draggable: '.kanban-card', // Permite arrastar apenas os cartões
+                disableTouch: false, // Habilita toque
+                invertSwap: true, // Facilita a troca de elementos
+                
+                onStart: function(evt) {
+                    document.body.style.cursor = 'grabbing';
+                },
+                
+                onEnd: function(evt) {
+                    document.body.style.cursor = 'default';
+                    
+                    // Salva a nova ordem no localStorage
+                    var orderedIds = Array.from(list.children).map(function(card) {
+                        return card.dataset.id;
+                    });
+                    
+                    // Cria um mapa de ID -> posição
+                    var orderMap = {};
+                    orderedIds.forEach(function(id, index) {
+                        orderMap[id] = index;
+                    });
+                    
+                    // Salva no localStorage
+                    localStorage.setItem('kanban_order', JSON.stringify(orderMap));
+                    
+                    // Notifica o servidor (apenas para log)
+                    fetch('/itens/atualizar_ordem', {
+                        method: 'POST',
+                        headers: {'Content-Type': 'application/json'},
+                        body: JSON.stringify({ids: orderedIds})
+                    }).then(response => response.json()).then(data => {
+                        console.log('Ordem atualizada localmente', data);
+                    });
+                }
+            });
+        }
+        document.querySelectorAll('.pdf-toggle').forEach(function(btn){
+             btn.addEventListener('click', function(){
+                 var pdfContainer = this.closest('.card').querySelector('.pdf-container');
+                 if(pdfContainer){
+                     if(pdfContainer.style.display === 'none' || pdfContainer.style.display === ''){
+                         pdfContainer.style.display = 'block';
+                     } else {
+                         pdfContainer.style.display = 'none';
+                     }
+                 }
+             });
+        });
+        document.querySelectorAll('.visualizar-programas').forEach(function(btn){
+             btn.addEventListener('click', function(){
+                 window.location.href = '/itens/programas/' + this.dataset.itemid;
+             });
+        });
+    });
+    </script>
+</body>
+</html>

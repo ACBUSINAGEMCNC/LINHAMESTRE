@@ -1,0 +1,94 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Desenhos OS {{ ordem.numero }} - ACB Usinagem CNC</title>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css">
+    <style>
+        @media print {
+            body {
+                padding: 0;
+                margin: 0;
+            }
+            .no-print {
+                display: none;
+            }
+            .page-break {
+                page-break-after: always;
+            }
+            .container {
+                width: 100%;
+                max-width: 100%;
+                padding: 0;
+                margin: 0;
+            }
+        }
+        .header {
+            border-bottom: 2px solid #000;
+            padding-bottom: 10px;
+            margin-bottom: 20px;
+        }
+        .desenho-container {
+            margin-bottom: 30px;
+            border: 1px solid #ddd;
+            padding: 15px;
+            border-radius: 5px;
+        }
+        .desenho-img {
+            max-width: 100%;
+            height: auto;
+            display: block;
+            margin: 0 auto;
+        }
+        .footer {
+            margin-top: 50px;
+            border-top: 1px solid #ddd;
+            padding-top: 10px;
+            font-size: 0.8rem;
+        }
+    </style>
+</head>
+<body>
+    <div class="container mt-4">
+        <div class="no-print mb-3">
+            <button class="btn btn-primary" onclick="window.print()">Imprimir</button>
+            <a href="/kanban" class="btn btn-secondary">Voltar</a>
+        </div>
+        
+        <div class="header d-flex justify-content-between align-items-center">
+            <div>
+                <h1>Desenhos Técnicos</h1>
+                <h2>OS {{ ordem.numero }}</h2>
+            </div>
+            <div class="text-end">
+                <div>Data: {{ now().strftime('%d/%m/%Y') }}</div>
+                <div>ACB Usinagem CNC</div>
+            </div>
+        </div>
+        
+        {% for pedido_os in ordem.pedidos %}
+        <div class="desenho-container page-break">
+            <h3>{{ pedido_os.pedido.item.codigo_acb }} - {{ pedido_os.pedido.item.nome }}</h3>
+            <p><strong>Cliente:</strong> {{ pedido_os.pedido.cliente.nome }} - {{ pedido_os.pedido.unidade_entrega.nome }}</p>
+            <p><strong>Quantidade:</strong> {{ pedido_os.pedido.quantidade }}</p>
+            
+            {% if pedido_os.pedido.item.desenho_tecnico %}
+            <div class="text-center mt-4">
+                <img src="/uploads/{{ pedido_os.pedido.item.desenho_tecnico }}" alt="Desenho Técnico" class="desenho-img">
+            </div>
+            {% else %}
+            <div class="alert alert-warning">
+                Desenho técnico não disponível para este item.
+            </div>
+            {% endif %}
+        </div>
+        {% endfor %}
+        
+        <div class="footer text-center">
+            <p>Documento gerado em {{ now().strftime('%d/%m/%Y %H:%M:%S') }}</p>
+            <p>ACB Usinagem CNC - Todos os direitos reservados</p>
+        </div>
+    </div>
+</body>
+</html>

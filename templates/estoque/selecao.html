@@ -1,0 +1,110 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Seleção de Estoque - ACB Usinagem CNC</title>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+    <style>
+        body {
+            background-color: #f8f9fa;
+        }
+        .card-estoque {
+            transition: transform 0.3s, box-shadow 0.3s;
+            margin-bottom: 20px;
+            height: 100%;
+        }
+        .card-estoque:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 10px 20px rgba(0,0,0,0.1);
+        }
+        .card-icon {
+            font-size: 4rem;
+            margin-bottom: 1rem;
+            color: #0d6efd;
+        }
+        .card-materiais .card-icon {
+            color: #0d6efd;
+        }
+        .card-pecas .card-icon {
+            color: #198754;
+        }
+        .card-body {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            text-align: center;
+            padding: 2rem;
+        }
+        .btn-acessar {
+            margin-top: 1rem;
+        }
+    </style>
+</head>
+<body>
+    <nav class="navbar navbar-expand-lg navbar-dark bg-primary">
+        <div class="container">
+            <a class="navbar-brand" href="/">ACB Usinagem CNC</a>
+            <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav">
+                <span class="navbar-toggler-icon"></span>
+            </button>
+            <div class="collapse navbar-collapse" id="navbarNav">
+                <ul class="navbar-nav">
+                    <li class="nav-item">
+                        <a class="nav-link" href="/"><i class="fas fa-home"></i> Home</a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link active" href="/estoque-selecao"><i class="fas fa-warehouse"></i> Estoque</a>
+                    </li>
+                </ul>
+            </div>
+        </div>
+    </nav>
+
+    <div class="container py-5">
+        <div class="row mb-4">
+            <div class="col-12">
+                <h1 class="text-center">Selecione o Tipo de Estoque</h1>
+                <p class="text-center text-muted">Escolha qual tipo de estoque você deseja acessar</p>
+            </div>
+        </div>
+
+        <div class="row justify-content-center">
+            <div class="col-md-5">
+                <div class="card card-estoque card-materiais">
+                    <div class="card-body">
+                        <div class="card-icon">
+                            <i class="fas fa-tools"></i>
+                        </div>
+                        <h3 class="card-title">Estoque de Materiais</h3>
+                        <p class="card-text">Gerencie o estoque de matérias-primas, barras, chapas e outros materiais utilizados na produção.</p>
+                        <a href="/estoque-materiais" class="btn btn-primary btn-lg btn-acessar">
+                            <i class="fas fa-arrow-right"></i> Acessar
+                        </a>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="col-md-5">
+                <div class="card card-estoque card-pecas">
+                    <div class="card-body">
+                        <div class="card-icon">
+                            <i class="fas fa-boxes"></i>
+                        </div>
+                        <h3 class="card-title">Estoque de Peças</h3>
+                        <p class="card-text">Gerencie o estoque de peças acabadas, componentes e produtos finalizados prontos para entrega.</p>
+                        <a href="/estoque-pecas" class="btn btn-success btn-lg btn-acessar">
+                            <i class="fas fa-arrow-right"></i> Acessar
+                        </a>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+</body>
+</html>

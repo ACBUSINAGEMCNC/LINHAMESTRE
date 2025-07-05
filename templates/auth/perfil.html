@@ -1,0 +1,141 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Meu Perfil - ACB Usinagem CNC</title>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+</head>
+<body>
+    {% include 'base.html' %}
+
+    <div class="container py-4">
+        <div class="d-flex justify-content-between align-items-center mb-4">
+            <h1>Meu Perfil</h1>
+            <a href="{{ url_for('main.index') }}" class="btn btn-secondary">
+                <i class="fas fa-arrow-left"></i> Voltar
+            </a>
+        </div>
+
+        {% with messages = get_flashed_messages(with_categories=true) %}
+            {% if messages %}
+                {% for category, message in messages %}
+                    <div class="alert alert-{{ category }} alert-dismissible fade show" role="alert">
+                        {{ message }}
+                        <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Fechar"></button>
+                    </div>
+                {% endfor %}
+            {% endif %}
+        {% endwith %}
+
+        <div class="row">
+            <div class="col-md-4">
+                <div class="card mb-4">
+                    <div class="card-header bg-primary text-white">
+                        <h5 class="mb-0"><i class="fas fa-user-circle me-2"></i>Informações do Usuário</h5>
+                    </div>
+                    <div class="card-body">
+                        <div class="mb-3">
+                            <label class="fw-bold">Nome:</label>
+                            <p>{{ usuario.nome }}</p>
+                        </div>
+                        <div class="mb-3">
+                            <label class="fw-bold">Email:</label>
+                            <p>{{ usuario.email }}</p>
+                        </div>
+                        <div class="mb-3">
+                            <label class="fw-bold">Nível de Acesso:</label>
+                            <p>
+                                {% if usuario.nivel_acesso == 'admin' %}
+                                    <span class="badge bg-danger">Administrador</span>
+                                {% else %}
+                                    <span class="badge bg-primary">Usuário</span>
+                                {% endif %}
+                            </p>
+                        </div>
+                        <div class="mb-3">
+                            <label class="fw-bold">Permissões:</label>
+                            <p>
+                                {% if usuario.nivel_acesso == 'admin' %}
+                                    <span class="badge bg-secondary">Acesso Total</span>
+                                {% else %}
+                                    {% if usuario.acesso_kanban %}
+                                        <span class="badge bg-info">Kanban</span>
+                                    {% endif %}
+                                    {% if usuario.acesso_estoque %}
+                                        <span class="badge bg-success">Estoque</span>
+                                    {% endif %}
+                                    {% if usuario.acesso_pedidos %}
+                                        <span class="badge bg-warning">Pedidos</span>
+                                    {% endif %}
+                                    {% if usuario.acesso_cadastros %}
+                                        <span class="badge bg-dark">Cadastros</span>
+                                    {% endif %}
+                                    {% if usuario.pode_finalizar_os %}
+                                        <span class="badge bg-danger">Finalizar OS</span>
+                                    {% endif %}
+                                {% endif %}
+                            </p>
+                        </div>
+                        <div class="mb-3">
+                            <label class="fw-bold">Último Acesso:</label>
+                            <p>
+                                {% if usuario.ultimo_acesso %}
+                                    {{ usuario.ultimo_acesso.strftime('%d/%m/%Y %H:%M') }}
+                                {% else %}
+                                    Nunca acessou
+                                {% endif %}
+                            </p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-8">
+                <div class="card">
+                    <div class="card-header bg-primary text-white">
+                        <h5 class="mb-0"><i class="fas fa-edit me-2"></i>Atualizar Informações</h5>
+                    </div>
+                    <div class="card-body">
+                        <form method="POST" action="{{ url_for('auth.perfil') }}">
+                            <div class="row mb-3">
+                                <div class="col-md-6">
+                                    <label for="nome" class="form-label">Nome</label>
+                                    <input type="text" class="form-control" id="nome" name="nome" value="{{ usuario.nome }}" required>
+                                </div>
+                                <div class="col-md-6">
+                                    <label for="email" class="form-label">Email</label>
+                                    <input type="email" class="form-control" id="email" name="email" value="{{ usuario.email }}" required>
+                                </div>
+                            </div>
+                            
+                            <hr>
+                            <h5>Alterar Senha</h5>
+                            <div class="row mb-3">
+                                <div class="col-md-6">
+                                    <label for="senha_atual" class="form-label">Senha Atual</label>
+                                    <input type="password" class="form-control" id="senha_atual" name="senha_atual">
+                                </div>
+                                <div class="col-md-6">
+                                    <label for="nova_senha" class="form-label">Nova Senha</label>
+                                    <input type="password" class="form-control" id="nova_senha" name="nova_senha">
+                                </div>
+                            </div>
+                            <small class="text-muted">Deixe os campos de senha em branco se não desejar alterá-la</small>
+                            
+                            <div class="d-grid gap-2 d-md-flex justify-content-md-end mt-4">
+                                <button type="submit" class="btn btn-primary">
+                                    <i class="fas fa-save"></i> Salvar Alterações
+                                </button>
+                            </div>
+                        </form>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+</body>
+</html>
