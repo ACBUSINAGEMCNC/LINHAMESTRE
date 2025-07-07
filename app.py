@@ -1,6 +1,7 @@
 import os
 import sys
 import datetime
+import subprocess
 import sqlite3
 from flask import Flask, render_template, redirect, url_for, flash, request, session, send_file
 from flask_sqlalchemy import SQLAlchemy
@@ -13,22 +14,27 @@ basedir = os.path.abspath(os.path.dirname(__file__))
 WRITABLE_DIR = '/tmp' if os.getenv('VERCEL') else basedir
 
 def verificar_inicializar_banco():
-    """Verifica se o banco de dados existe e contém todas as tabelas necessárias.
-    Se não existir ou faltar alguma tabela, executa o script de inicialização."""
-    # Se DATABASE_URL estiver definido e for SQLite, extrair caminho do arquivo;
-    # caso contrário, usar diretório adequado
-    db_uri_env = os.getenv('DATABASE_URL')
-    if db_uri_env and db_uri_env.startswith('sqlite:///'):
-        db_path = db_uri_env.replace('sqlite:///','').split('?')[0]
-    else:
-        db_path = os.path.join(WRITABLE_DIR, 'database.db')
+    """Verifica se o banco de dados existe e o inicializa se necessário."""
+    database_url = os.getenv('DATABASE_URL', '')
     
-    # Verificar se o banco de dados existe
-    if not os.path.exists(db_path):
-        print("Banco de dados não encontrado. Inicializando...")
-        exec(open(os.path.join(basedir, 'init_db.py')).read())
+    # Se for PostgreSQL (Supabase), não precisa verificar arquivo local
+    if database_url.startswith('postgresql://'):
+        print("Usando PostgreSQL (Supabase) - inicializando tabelas se necessário...")
+        subprocess.run([sys.executable, 'init_db.py'], check=True)
+        print("Tabelas PostgreSQL verificadas/criadas com sucesso.")
         return
     
+    # Para SQLite, verificar se arquivo existe
+    db_dir = os.getenv('DB_DIR', os.path.dirname(os.path.abspath(__file__)))
+    db_path = os.path.join(db_dir, 'acb_usinagem.db')
+    
+    if not os.path.exists(db_path):
+        print(f"Banco de dados SQLite não encontrado em {db_path}. Inicializando...")
+        subprocess.run([sys.executable, 'init_db.py'], check=True)
+        print("Banco de dados SQLite inicializado com sucesso.")
+    else:
+        print(f"Banco de dados SQLite verificado: {db_path}")
+        
     # Verificar se todas as tabelas necessárias existem
     try:
         conn = sqlite3.connect(db_path)
@@ -78,7 +84,8 @@ def verificar_inicializar_banco():
             exec(open(os.path.join(basedir, 'init_db.py')).read())
         else:
             print("Banco de dados verificado: todas as tabelas necessárias estão presentes.")
-            conn.close()
+        print(f"Tipo de banco: {'PostgreSQL' if os.getenv('DATABASE_URL', '').startswith('postgresql://') else 'SQLite'}")
+        conn.close()
     except Exception as e:
         print(f"Erro ao verificar o banco de dados: {e}")
         print("Reinicializando o banco de dados...")
@@ -93,9 +100,15 @@ def create_app():
     
     app = Flask(__name__)
     app.config['SECRET_KEY'] = os.getenv('SECRET_KEY', 'acbusinagem2023')
-    # Utilizar DATABASE_URL do ambiente se existir, senão SQLite local (ou /tmp em serverless)
-    default_sqlite_path = os.path.join(WRITABLE_DIR, 'database.db')
-    app.config['SQLALCHEMY_DATABASE_URI'] = os.getenv('DATABASE_URL', f'sqlite:///{default_sqlite_path}')
+    # Configurar DATABASE_URL: PostgreSQL (produção) ou SQLite (desenvolvimento/temporário)
+    database_url = os.getenv('DATABASE_URL')
+    if not database_url:
+        # Fallback para SQLite local em desenvolvimento
+        default_sqlite_path = os.path.join(WRITABLE_DIR, 'database.db')
+        database_url = f'sqlite:///{default_sqlite_path}'
+    
+    app.config['SQLALCHEMY_DATABASE_URI'] = database_url
+    print(f"Usando banco: {'PostgreSQL (Supabase)' if database_url.startswith('postgresql://') else 'SQLite'}")
     app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
     app.config['UPLOAD_FOLDER_DESENHOS'] = os.path.join(basedir, 'uploads/desenhos')
     app.config['UPLOAD_FOLDER_INSTRUCOES'] = os.path.join(basedir, 'uploads/instrucoes')
@@ -124,7 +137,8 @@ def create_app():
     
     with app.app_context():
         db.create_all()
-        print("Tabelas SQLAlchemy criadas/verificadas com sucesso.")
+        db_type = 'PostgreSQL (Supabase)' if app.config['SQLALCHEMY_DATABASE_URI'].startswith('postgresql://') else 'SQLite'
+        print(f"Tabelas {db_type} criadas/verificadas com sucesso.")
         
         # Garantir que o usuário admin existe (especialmente importante no Vercel)
         from models import Usuario
@@ -145,9 +159,9 @@ def create_app():
             )
             db.session.add(admin_user)
             db.session.commit()
-            print("Usuário admin criado via SQLAlchemy.")
+            print(f"Usuário admin criado no banco {db_type}.")
         else:
-            print("Usuário admin já existe via SQLAlchemy.")
+            print(f"Usuário admin já existe no banco {db_type}.")
     
     # Registrar blueprints
     from routes.clientes import clientes

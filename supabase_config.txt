@@ -1,0 +1,23 @@
+# CONFIGURAÇÃO SUPABASE - COPIE PARA .env
+
+# 1. Crie sua conta no Supabase: https://supabase.com/
+# 2. Crie um novo projeto: acb-usinagem-kanban
+# 3. Região: South America (São Paulo)
+# 4. Anote a senha do banco!
+# 5. Vá em Settings → Database → Connection String
+# 6. Copie a URI e substitua [YOUR-PASSWORD] pela sua senha
+
+# EXEMPLO DE .env PARA PRODUÇÃO (SUPABASE):
+SECRET_KEY=qS2XGZk3q9u8Vt6mN1a5Dh4R0wCy7LpB
+DATABASE_URL=postgresql://postgres:[SUA-SENHA]@db.[SEU-PROJETO].supabase.co:5432/postgres
+FLASK_ENV=production
+
+# EXEMPLO DE .env PARA DESENVOLVIMENTO LOCAL (SQLITE):
+# SECRET_KEY=qS2XGZk3q9u8Vt6mN1a5Dh4R0wCy7LpB
+# DATABASE_URL=sqlite:///database.db
+# FLASK_ENV=development
+
+# INSTRUÇÕES:
+# 1. Copie este arquivo para .env
+# 2. Substitua [SUA-SENHA] e [SEU-PROJETO] pelos valores reais do Supabase
+# 3. Para desenvolvimento local, use a versão SQLite comentada
