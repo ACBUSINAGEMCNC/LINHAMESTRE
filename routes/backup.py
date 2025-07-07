@@ -34,7 +34,10 @@ def _criar_zip(arquivo_destino: str, db_path: str):
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 BACKUP_DIR = os.path.join(BASE_DIR, 'backups')
 UPLOADS_DIR = os.path.join(BASE_DIR, 'uploads')
-os.makedirs(BACKUP_DIR, exist_ok=True)
+try:
+    os.makedirs(BACKUP_DIR, exist_ok=True)
+except (PermissionError, OSError):
+    pass  # Ignorar erros de permissão ou sistema de arquivos somente leitura
 
 @backup.route('/backups')
 @login_required
