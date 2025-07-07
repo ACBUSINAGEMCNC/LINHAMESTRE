@@ -29,12 +29,20 @@ class Config:
     
     @staticmethod
     def init_app(app):
-        # Criar diretórios de upload se não existirem
-        os.makedirs(Config.UPLOAD_FOLDER, exist_ok=True)
-        os.makedirs(Config.UPLOAD_DESENHOS, exist_ok=True)
-        os.makedirs(Config.UPLOAD_IMAGENS, exist_ok=True)
-        os.makedirs(Config.UPLOAD_INSTRUCOES, exist_ok=True)
-        os.makedirs('static', exist_ok=True)
+        # Criar diretórios de upload se possível (ignorar erros em ambiente somente leitura)
+        for path in [
+            Config.UPLOAD_FOLDER,
+            Config.UPLOAD_DESENHOS,
+            Config.UPLOAD_IMAGENS,
+            Config.UPLOAD_INSTRUCOES,
+            'static'
+        ]:
+            try:
+                os.makedirs(path, exist_ok=True)
+            except PermissionError:
+                # Em ambientes serverless (ex.: Vercel) o sistema de arquivos é somente leitura
+                # exceto /tmp. Ignoramos a falha pois uploads não são persistentes lá.
+                pass
         
         # Adicionar context processor para data atual
         @app.context_processor
