@@ -92,7 +92,7 @@ def create_app():
     verificar_inicializar_banco()
     
     app = Flask(__name__)
-    app.config['SECRET_KEY'] = 'acbusinagem2023'
+    app.config['SECRET_KEY'] = os.getenv('SECRET_KEY', 'acbusinagem2023')
     # Utilizar DATABASE_URL do ambiente se existir, senão SQLite local (ou /tmp em serverless)
     default_sqlite_path = os.path.join(WRITABLE_DIR, 'database.db')
     app.config['SQLALCHEMY_DATABASE_URI'] = os.getenv('DATABASE_URL', f'sqlite:///{default_sqlite_path}')
@@ -122,13 +122,32 @@ def create_app():
     from models import db
     db.init_app(app)
     
-    # Criar todas as tabelas se não existirem
     with app.app_context():
-        try:
-            db.create_all()
-            print("Tabelas SQLAlchemy criadas/verificadas com sucesso.")
-        except Exception as e:
-            print(f"Erro ao criar tabelas SQLAlchemy: {e}")
+        db.create_all()
+        print("Tabelas SQLAlchemy criadas/verificadas com sucesso.")
+        
+        # Garantir que o usuário admin existe (especialmente importante no Vercel)
+        from models import Usuario
+        from werkzeug.security import generate_password_hash
+        
+        admin_user = Usuario.query.filter_by(email='admin@acbusinagem.com.br').first()
+        if not admin_user:
+            admin_user = Usuario(
+                nome='Administrador',
+                email='admin@acbusinagem.com.br',
+                senha_hash=generate_password_hash('admin123'),
+                nivel_acesso='admin',
+                acesso_pedidos=True,
+                acesso_kanban=True,
+                acesso_estoque=True,
+                acesso_cadastros=True,
+                pode_finalizar_os=True
+            )
+            db.session.add(admin_user)
+            db.session.commit()
+            print("Usuário admin criado via SQLAlchemy.")
+        else:
+            print("Usuário admin já existe via SQLAlchemy.")
     
     # Registrar blueprints
     from routes.clientes import clientes
