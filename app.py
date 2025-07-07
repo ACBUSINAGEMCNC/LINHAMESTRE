@@ -9,11 +9,19 @@ from werkzeug.utils import secure_filename
 
 # Configuração do banco de dados
 basedir = os.path.abspath(os.path.dirname(__file__))
+# Diretório gravável em ambientes serverless (Vercel). Somente /tmp é permitido.
+WRITABLE_DIR = '/tmp' if os.getenv('VERCEL') else basedir
 
 def verificar_inicializar_banco():
     """Verifica se o banco de dados existe e contém todas as tabelas necessárias.
     Se não existir ou faltar alguma tabela, executa o script de inicialização."""
-    db_path = os.path.join(basedir, 'database.db')
+    # Se DATABASE_URL estiver definido e for SQLite, extrair caminho do arquivo;
+    # caso contrário, usar diretório adequado
+    db_uri_env = os.getenv('DATABASE_URL')
+    if db_uri_env and db_uri_env.startswith('sqlite:///'):
+        db_path = db_uri_env.replace('sqlite:///','').split('?')[0]
+    else:
+        db_path = os.path.join(WRITABLE_DIR, 'database.db')
     
     # Verificar se o banco de dados existe
     if not os.path.exists(db_path):
@@ -83,7 +91,9 @@ def create_app():
     
     app = Flask(__name__)
     app.config['SECRET_KEY'] = 'acbusinagem2023'
-    app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///' + os.path.join(basedir, 'database.db')
+    # Utilizar DATABASE_URL do ambiente se existir, senão SQLite local (ou /tmp em serverless)
+    default_sqlite_path = os.path.join(WRITABLE_DIR, 'database.db')
+    app.config['SQLALCHEMY_DATABASE_URI'] = os.getenv('DATABASE_URL', f'sqlite:///{default_sqlite_path}')
     app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
     app.config['UPLOAD_FOLDER_DESENHOS'] = os.path.join(basedir, 'uploads/desenhos')
     app.config['UPLOAD_FOLDER_INSTRUCOES'] = os.path.join(basedir, 'uploads/instrucoes')
