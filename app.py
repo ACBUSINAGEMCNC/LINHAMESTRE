@@ -123,6 +123,7 @@ def create_app():
     from routes.auth import auth
     from routes.backup import backup
     from routes.main import main
+    from routes.folhas_processo import folhas_processo
     
     app.register_blueprint(clientes)
     app.register_blueprint(materiais)
@@ -138,6 +139,7 @@ def create_app():
     app.register_blueprint(auth)
     app.register_blueprint(backup)
     app.register_blueprint(main)
+    app.register_blueprint(folhas_processo)
     
     # Adicionar contexto global para templates
     @app.context_processor

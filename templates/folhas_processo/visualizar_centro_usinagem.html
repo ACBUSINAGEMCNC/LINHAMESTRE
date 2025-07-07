@@ -1,0 +1,247 @@
+{% extends "base.html" %}
+
+{% block title %}Visualizar Folha - Centro de Usinagem{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+    <div class="row">
+        <div class="col-12">
+            <div class="card shadow-sm">
+                <div class="card-header bg-info text-white d-flex justify-content-between align-items-center">
+                    <div>
+                        <h4 class="mb-0">
+                            <i class="fas fa-eye me-2"></i>
+                            Folha de Processo - Centro de Usinagem
+                        </h4>
+                        <small class="opacity-75">{{ item.codigo_acb }} - {{ item.nome }} | Versão {{ folha.versao }}</small>
+                    </div>
+                    <div>
+                        <a href="{{ url_for('folhas_processo.historico_folhas', item_id=item.id) }}" class="btn btn-outline-light btn-sm">
+                            <i class="fas fa-history"></i> Histórico
+                        </a>
+                        <a href="{{ url_for('folhas_processo.listar_folhas', item_id=item.id) }}" class="btn btn-outline-light btn-sm">
+                            <i class="fas fa-arrow-left"></i> Voltar
+                        </a>
+                    </div>
+                </div>
+
+                <div class="card-body">
+                    <!-- Informações Gerais -->
+                    <div class="row mb-4">
+                        <div class="col-md-6">
+                            <div class="card bg-light">
+                                <div class="card-header py-2">
+                                    <strong>Informações da Folha</strong>
+                                </div>
+                                <div class="card-body">
+                                    <div class="row mb-2">
+                                        <div class="col-sm-4"><strong>Versão:</strong></div>
+                                        <div class="col-sm-8">{{ folha.versao }}</div>
+                                    </div>
+                                    <div class="row mb-2">
+                                        <div class="col-sm-4"><strong>Status:</strong></div>
+                                        <div class="col-sm-8">
+                                            <span class="badge bg-{{ 'success' if folha.ativo else 'secondary' }}">
+                                                {{ 'ATIVA' if folha.ativo else 'INATIVA' }}
+                                            </span>
+                                        </div>
+                                    </div>
+                                    <div class="row mb-2">
+                                        <div class="col-sm-4"><strong>Criado por:</strong></div>
+                                        <div class="col-sm-8">{{ folha.criado_por }}</div>
+                                    </div>
+                                    <div class="row mb-2">
+                                        <div class="col-sm-4"><strong>Data:</strong></div>
+                                        <div class="col-sm-8">{{ folha.data_criacao.strftime('%d/%m/%Y %H:%M') }}</div>
+                                    </div>
+                                    {% if folha.responsavel %}
+                                    <div class="row mb-2">
+                                        <div class="col-sm-4"><strong>Responsável:</strong></div>
+                                        <div class="col-sm-8">{{ folha.responsavel }}</div>
+                                    </div>
+                                    {% endif %}
+                                </div>
+                            </div>
+                        </div>
+                        <div class="col-md-6">
+                            {% if folha.observacoes %}
+                            <div class="card bg-light">
+                                <div class="card-header py-2">
+                                    <strong>Observações</strong>
+                                </div>
+                                <div class="card-body">
+                                    {{ folha.observacoes }}
+                                </div>
+                            </div>
+                            {% endif %}
+                        </div>
+                    </div>
+
+                    {% if folha_especifica %}
+                    <!-- Dados Específicos do Centro de Usinagem -->
+                    <div class="row">
+                        <div class="col-12">
+                            <div class="card">
+                                <div class="card-header bg-primary text-white">
+                                    <h5 class="mb-0">
+                                        <i class="fas fa-industry me-2"></i>
+                                        Dados do Processo - Centro de Usinagem
+                                    </h5>
+                                </div>
+                                <div class="card-body">
+                                    <div class="row">
+                                        <!-- Informações Básicas -->
+                                        <div class="col-md-6 mb-3">
+                                            <h6 class="border-bottom pb-2">Informações Básicas</h6>
+                                            <div class="row mb-2">
+                                                <div class="col-sm-5"><strong>Código Item:</strong></div>
+                                                <div class="col-sm-7">{{ folha_especifica.codigo_item or '-' }}</div>
+                                            </div>
+                                            <div class="row mb-2">
+                                                <div class="col-sm-5"><strong>Nome Peça:</strong></div>
+                                                <div class="col-sm-7">{{ folha_especifica.nome_peca or '-' }}</div>
+                                            </div>
+                                            <div class="row mb-2">
+                                                <div class="col-sm-5"><strong>Responsável Técnico:</strong></div>
+                                                <div class="col-sm-7">{{ folha_especifica.responsavel_tecnico or '-' }}</div>
+                                            </div>
+                                        </div>
+
+                                        <!-- Setup e Fixação -->
+                                        <div class="col-md-6 mb-3">
+                                            <h6 class="border-bottom pb-2">Setup e Fixação</h6>
+                                            <div class="row mb-2">
+                                                <div class="col-sm-5"><strong>Dispositivo:</strong></div>
+                                                <div class="col-sm-7">{{ folha_especifica.dispositivo_fixacao or '-' }}</div>
+                                            </div>
+                                            <div class="row mb-2">
+                                                <div class="col-sm-5"><strong>Zero Peça:</strong></div>
+                                                <div class="col-sm-7">{{ folha_especifica.zero_peca or '-' }}</div>
+                                            </div>
+                                        </div>
+                                    </div>
+
+                                    <div class="row">
+                                        <!-- Ferramentas -->
+                                        <div class="col-12 mb-3">
+                                            <h6 class="border-bottom pb-2">Ferramentas</h6>
+                                            <div class="table-responsive">
+                                                <table class="table table-sm table-bordered">
+                                                    <thead class="table-light">
+                                                        <tr>
+                                                            <th>T#</th>
+                                                            <th>Descrição</th>
+                                                            <th>Diâmetro</th>
+                                                            <th>Comprimento</th>
+                                                            <th>Observações</th>
+                                                        </tr>
+                                                    </thead>
+                                                    <tbody>
+                                                        {% for i in range(1, 11) %}
+                                                            {% set tool_desc = folha_especifica['ferramenta_' + i|string + '_descricao'] %}
+                                                            {% set tool_diam = folha_especifica['ferramenta_' + i|string + '_diametro'] %}
+                                                            {% set tool_comp = folha_especifica['ferramenta_' + i|string + '_comprimento'] %}
+                                                            {% set tool_obs = folha_especifica['ferramenta_' + i|string + '_observacoes'] %}
+                                                            {% if tool_desc or tool_diam or tool_comp %}
+                                                            <tr>
+                                                                <td><strong>T{{ i }}</strong></td>
+                                                                <td>{{ tool_desc or '-' }}</td>
+                                                                <td>{{ tool_diam or '-' }}</td>
+                                                                <td>{{ tool_comp or '-' }}</td>
+                                                                <td>{{ tool_obs or '-' }}</td>
+                                                            </tr>
+                                                            {% endif %}
+                                                        {% endfor %}
+                                                    </tbody>
+                                                </table>
+                                            </div>
+                                        </div>
+                                    </div>
+
+                                    <div class="row">
+                                        <!-- Operações -->
+                                        <div class="col-12 mb-3">
+                                            <h6 class="border-bottom pb-2">Sequência de Operações</h6>
+                                            <div class="table-responsive">
+                                                <table class="table table-sm table-bordered">
+                                                    <thead class="table-light">
+                                                        <tr>
+                                                            <th>Op.</th>
+                                                            <th>Descrição</th>
+                                                            <th>Ferramenta</th>
+                                                            <th>Velocidade</th>
+                                                            <th>Avanço</th>
+                                                            <th>Prof. Corte</th>
+                                                        </tr>
+                                                    </thead>
+                                                    <tbody>
+                                                        {% for i in range(1, 11) %}
+                                                            {% set op_desc = folha_especifica['operacao_' + i|string + '_descricao'] %}
+                                                            {% set op_tool = folha_especifica['operacao_' + i|string + '_ferramenta'] %}
+                                                            {% set op_vel = folha_especifica['operacao_' + i|string + '_velocidade'] %}
+                                                            {% set op_avanc = folha_especifica['operacao_' + i|string + '_avanco'] %}
+                                                            {% set op_prof = folha_especifica['operacao_' + i|string + '_profundidade'] %}
+                                                            {% if op_desc %}
+                                                            <tr>
+                                                                <td><strong>{{ i }}</strong></td>
+                                                                <td>{{ op_desc }}</td>
+                                                                <td>{{ op_tool or '-' }}</td>
+                                                                <td>{{ op_vel or '-' }}</td>
+                                                                <td>{{ op_avanc or '-' }}</td>
+                                                                <td>{{ op_prof or '-' }}</td>
+                                                            </tr>
+                                                            {% endif %}
+                                                        {% endfor %}
+                                                    </tbody>
+                                                </table>
+                                            </div>
+                                        </div>
+                                    </div>
+
+                                    <!-- Observações Técnicas -->
+                                    {% if folha_especifica.observacoes_tecnicas %}
+                                    <div class="row">
+                                        <div class="col-12">
+                                            <h6 class="border-bottom pb-2">Observações Técnicas</h6>
+                                            <div class="bg-light p-3 rounded">
+                                                {{ folha_especifica.observacoes_tecnicas }}
+                                            </div>
+                                        </div>
+                                    </div>
+                                    {% endif %}
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    {% endif %}
+
+                    <!-- Ações -->
+                    <div class="row mt-4">
+                        <div class="col-12">
+                            <div class="d-flex gap-2 justify-content-center">
+                                {% if folha.ativo %}
+                                    <a href="{{ url_for('folhas_processo.editar_folha', folha_id=folha.id) }}" class="btn btn-success">
+                                        <i class="fas fa-edit"></i> Editar Folha Ativa
+                                    </a>
+                                {% else %}
+                                    <a href="{{ url_for('folhas_processo.criar_nova_versao', folha_id=folha.id) }}" 
+                                       class="btn btn-warning"
+                                       onclick="return confirm('Criar nova versão baseada na v{{ folha.versao }}?')">
+                                        <i class="fas fa-copy"></i> Criar Nova Versão
+                                    </a>
+                                {% endif %}
+                                <button type="button" class="btn btn-secondary" onclick="window.print()">
+                                    <i class="fas fa-print"></i> Imprimir
+                                </button>
+                                <a href="{{ url_for('folhas_processo.historico_folhas', item_id=item.id) }}" class="btn btn-info">
+                                    <i class="fas fa-history"></i> Ver Histórico
+                                </a>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

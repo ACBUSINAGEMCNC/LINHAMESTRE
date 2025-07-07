@@ -6,12 +6,34 @@ import os
 import subprocess
 import shutil
 import tempfile
+import zipfile
 import glob
 
 backup = Blueprint('backup', __name__)
 
+
+def _criar_zip(arquivo_destino: str, db_path: str):
+    """Gera um ZIP contendo o banco de dados e a pasta uploads."""
+    with tempfile.TemporaryDirectory() as tmpdir:
+        # Banco
+        tmp_db = os.path.join(tmpdir, os.path.basename(db_path))
+        shutil.copy2(db_path, tmp_db)
+        # Uploads
+        if os.path.exists(UPLOADS_DIR):
+            shutil.copytree(UPLOADS_DIR, os.path.join(tmpdir, 'uploads'))
+                # Compacta
+        with zipfile.ZipFile(arquivo_destino, 'w', zipfile.ZIP_DEFLATED) as zipf:
+            for root, _, files in os.walk(tmpdir):
+                for f in files:
+                    abs_path = os.path.join(root, f)
+                    rel_path = os.path.relpath(abs_path, tmpdir)
+                    zipf.write(abs_path, rel_path)
+
+
 # Diretório para armazenar os backups
-BACKUP_DIR = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'backups')
+BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+BACKUP_DIR = os.path.join(BASE_DIR, 'backups')
+UPLOADS_DIR = os.path.join(BASE_DIR, 'uploads')
 os.makedirs(BACKUP_DIR, exist_ok=True)
 
 @backup.route('/backups')
@@ -31,7 +53,7 @@ def criar_backup():
     
     # Gerar nome do arquivo de backup
     timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
-    nome_arquivo = f"backup_{timestamp}.sqlite"
+    nome_arquivo = f"backup_{timestamp}.zip"
     caminho_arquivo = os.path.join(BACKUP_DIR, nome_arquivo)
     
     # Obter caminho do banco de dados atual
@@ -42,8 +64,8 @@ def criar_backup():
         db_path = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), db_uri)
     
     try:
-        # Criar cópia do banco de dados
-        shutil.copy2(db_path, caminho_arquivo)
+        # Criar arquivo ZIP contendo banco de dados e uploads
+        _criar_zip(caminho_arquivo, db_path)
         
         # Registrar backup no banco de dados
         tamanho = os.path.getsize(caminho_arquivo)
@@ -93,8 +115,24 @@ def restaurar_backup(backup_id):
         db.session.close()
         db.engine.dispose()
         
-        # Restaurar o backup
-        shutil.copy2(caminho_backup, db_path)
+        if caminho_backup.endswith('.zip'):
+            with tempfile.TemporaryDirectory() as tmpdir:
+                # Extrai zip
+                with zipfile.ZipFile(caminho_backup, 'r') as zipf:
+                    zipf.extractall(tmpdir)
+                # Restaura DB
+                extracted_db = os.path.join(tmpdir, os.path.basename(db_path))
+                shutil.copy2(extracted_db, db_path)
+                # Restaura uploads
+                extracted_uploads = os.path.join(tmpdir, 'uploads')
+                if os.path.exists(extracted_uploads):
+                    # Copiar conteúdo, preservando estrutura
+                    if os.path.exists(UPLOADS_DIR):
+                        shutil.rmtree(UPLOADS_DIR)
+                    shutil.copytree(extracted_uploads, UPLOADS_DIR)
+        else:
+            # backup antigo apenas do banco
+            shutil.copy2(caminho_backup, db_path)
         
         flash('Backup restaurado com sucesso! Por favor, reinicie a aplicação.', 'success')
     except Exception as e:
@@ -225,7 +263,7 @@ def criar_backup_automatico():
     try:
         # Gerar nome do arquivo de backup
         timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
-        nome_arquivo = f"backup_auto_{timestamp}.sqlite"
+        nome_arquivo = f"backup_auto_{timestamp}.zip"
         caminho_arquivo = os.path.join(BACKUP_DIR, nome_arquivo)
         
         # Obter caminho do banco de dados atual
@@ -235,8 +273,8 @@ def criar_backup_automatico():
         else:
             db_path = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), db_uri)
         
-        # Criar cópia do banco de dados
-        shutil.copy2(db_path, caminho_arquivo)
+        # Criar arquivo ZIP contendo banco de dados e uploads
+        _criar_zip(caminho_arquivo, db_path)
         
         # Registrar backup no banco de dados
         tamanho = os.path.getsize(caminho_arquivo)

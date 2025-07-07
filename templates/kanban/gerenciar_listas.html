@@ -1,0 +1,307 @@
+{% extends "base.html" %}
+
+{% block title %}Gerenciar Listas Kanban{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+    <div class="row">
+        <div class="col-12">
+            <div class="d-flex justify-content-between align-items-center mb-4">
+                <h2><i class="fas fa-columns"></i> Gerenciar Listas Kanban</h2>
+                <div>
+                    <a href="{{ url_for('kanban.index') }}" class="btn btn-secondary">
+                        <i class="fas fa-arrow-left"></i> Voltar ao Kanban
+                    </a>
+                    <button type="button" class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#modalNovaLista">
+                        <i class="fas fa-plus"></i> Nova Lista
+                    </button>
+                </div>
+            </div>
+
+            <!-- Lista de Listas Kanban -->
+            <div class="card">
+                <div class="card-header">
+                    <h5 class="mb-0">
+                        <i class="fas fa-list"></i> Listas Kanban
+                        <small class="text-muted">({{ listas|length }} listas)</small>
+                    </h5>
+                </div>
+                <div class="card-body">
+                    {% if listas %}
+                        <div class="alert alert-info">
+                            <i class="fas fa-info-circle"></i>
+                            <strong>Dica:</strong> Arraste as listas para reordenar. As listas inativas não aparecem no quadro Kanban.
+                        </div>
+                        
+                        <div id="listas-sortable" class="list-group">
+                            {% for lista in listas %}
+                            <div class="list-group-item d-flex justify-content-between align-items-center {% if lista.nome in ['Entrada', 'Expedição'] %}locked{% endif %}" data-id="{{ lista.id }}">
+                                <div class="d-flex align-items-center">
+                                    {% if lista.nome not in ['Entrada', 'Expedição'] %}
+                                    <i class="fas fa-grip-vertical text-muted me-3" style="cursor: move;"></i>
+                                    {% else %}
+                                    <i class="fas fa-lock text-muted me-3" title="Lista protegida"></i>
+                                    {% endif %}
+                                    <div class="me-3">
+                                        <span class="badge rounded-pill" style="background-color: {{ lista.cor }}; color: white;">
+                                            {{ lista.ordem }}
+                                        </span>
+                                    </div>
+                                    <div>
+                                        <h6 class="mb-1">
+                                            {{ lista.nome }}
+                                            {% if not lista.ativa %}
+                                                <span class="badge bg-secondary">Inativa</span>
+                                            {% endif %}
+                                        </h6>
+                                        <small class="text-muted">
+                                            {% if lista.tipo_servico %}
+                                                <i class="fas fa-cog"></i> {{ lista.tipo_servico }}
+                                            {% else %}
+                                                <i class="fas fa-question-circle"></i> Tipo não definido
+                                            {% endif %}
+                                            | Criada em {{ lista.data_criacao.strftime('%d/%m/%Y') }}
+                                        </small>
+                                    </div>
+                                </div>
+                                {% if lista.nome not in ['Entrada', 'Expedição'] %}
+                                <div class="btn-group">
+                                    <button type="button" class="btn btn-sm btn-outline-primary" 
+                                            onclick="editarLista({{ lista.id }}, '{{ lista.nome }}', '{{ lista.tipo_servico or '' }}', '{{ lista.cor }}', {{ lista.ativa|lower }})">
+                                        <i class="fas fa-edit"></i>
+                                    </button>
+                                    <button type="button" class="btn btn-sm btn-outline-danger" 
+                                            onclick="confirmarExclusao({{ lista.id }}, '{{ lista.nome }}')">
+                                        <i class="fas fa-trash"></i>
+                                    </button>
+                                </div>
+                                {% endif %}
+                            </div>
+                            {% endfor %}
+                        </div>
+                    {% else %}
+                        <div class="text-center py-5">
+                            <i class="fas fa-columns fa-3x text-muted mb-3"></i>
+                            <h5 class="text-muted">Nenhuma lista cadastrada</h5>
+                            <p class="text-muted">Clique em "Nova Lista" para começar</p>
+                        </div>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Modal Nova Lista -->
+<div class="modal fade" id="modalNovaLista" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">
+                    <i class="fas fa-plus"></i> Nova Lista Kanban
+                </h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <form method="POST" action="{{ url_for('kanban.criar_lista') }}">
+                <div class="modal-body">
+                    <div class="mb-3">
+                        <label for="nome" class="form-label">Nome da Lista *</label>
+                        <input type="text" class="form-control" id="nome" name="nome" required maxlength="100">
+                    </div>
+                    <div class="mb-3">
+                        <label for="tipo_servico" class="form-label">Tipo de Serviço</label>
+                        <select class="form-select" id="tipo_servico" name="tipo_servico">
+                            <option value="">Selecione um tipo</option>
+                            {% for tipo in tipos_servico %}
+                                <option value="{{ tipo }}">{{ tipo }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <div class="mb-3">
+                        <label for="cor" class="form-label">Cor da Lista</label>
+                        <input type="color" class="form-control form-control-color" id="cor" name="cor" value="#6c757d">
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
+                    <button type="submit" class="btn btn-primary">
+                        <i class="fas fa-save"></i> Criar Lista
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<!-- Modal Editar Lista -->
+<div class="modal fade" id="modalEditarLista" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">
+                    <i class="fas fa-edit"></i> Editar Lista Kanban
+                </h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <form method="POST" id="formEditarLista">
+                <div class="modal-body">
+                    <div class="mb-3">
+                        <label for="edit_nome" class="form-label">Nome da Lista *</label>
+                        <input type="text" class="form-control" id="edit_nome" name="nome" required maxlength="100">
+                    </div>
+                    <div class="mb-3">
+                        <label for="edit_tipo_servico" class="form-label">Tipo de Serviço</label>
+                        <select class="form-select" id="edit_tipo_servico" name="tipo_servico">
+                            <option value="">Selecione um tipo</option>
+                            {% for tipo in tipos_servico %}
+                                <option value="{{ tipo }}">{{ tipo }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <div class="mb-3">
+                        <label for="edit_cor" class="form-label">Cor da Lista</label>
+                        <input type="color" class="form-control form-control-color" id="edit_cor" name="cor">
+                    </div>
+                    <div class="mb-3">
+                        <div class="form-check">
+                            <input class="form-check-input" type="checkbox" id="edit_ativa" name="ativa">
+                            <label class="form-check-label" for="edit_ativa">
+                                Lista ativa (aparece no quadro Kanban)
+                            </label>
+                        </div>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
+                    <button type="submit" class="btn btn-primary">
+                        <i class="fas fa-save"></i> Salvar Alterações
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<!-- Modal Confirmar Exclusão -->
+<div class="modal fade" id="modalConfirmarExclusao" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title text-danger">
+                    <i class="fas fa-exclamation-triangle"></i> Confirmar Exclusão
+                </h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <p>Tem certeza que deseja excluir a lista <strong id="nomeListaExcluir"></strong>?</p>
+                <p class="text-muted">Esta ação não pode ser desfeita.</p>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
+                <form method="POST" id="formExcluirLista" style="display: inline;">
+                    <button type="submit" class="btn btn-danger">
+                        <i class="fas fa-trash"></i> Excluir Lista
+                    </button>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/sortablejs@1.15.0/Sortable.min.js"></script>
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    // Inicializar Sortable para reordenação
+    const sortable = Sortable.create(document.getElementById('listas-sortable'), {
+        filter: '.locked',
+        handle: '.fa-grip-vertical',
+        animation: 150,
+        onEnd: function(evt) {
+            const ordem = Array.from(evt.to.children).map(item => item.dataset.id);
+            
+            fetch('{{ url_for("kanban.reordenar_listas") }}', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({ ordem: ordem })
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    // Atualizar badges de ordem
+                    evt.to.querySelectorAll('.badge').forEach((badge, index) => {
+                        badge.textContent = index + 1;
+                    });
+                    
+                    // Mostrar mensagem de sucesso
+                    showToast('success', data.message);
+                } else {
+                    showToast('error', data.message);
+                    // Reverter ordem em caso de erro
+                    location.reload();
+                }
+            })
+            .catch(error => {
+                console.error('Erro:', error);
+                showToast('error', 'Erro ao reordenar listas');
+                location.reload();
+            });
+        }
+    });
+});
+
+function editarLista(id, nome, tipoServico, cor, ativa) {
+    document.getElementById('edit_nome').value = nome;
+    document.getElementById('edit_tipo_servico').value = tipoServico;
+    document.getElementById('edit_cor').value = cor;
+    document.getElementById('edit_ativa').checked = ativa;
+    document.getElementById('formEditarLista').action = `{{ url_for('kanban.editar_lista', lista_id=0) }}`.replace('0', id);
+    
+    new bootstrap.Modal(document.getElementById('modalEditarLista')).show();
+}
+
+function confirmarExclusao(id, nome) {
+    document.getElementById('nomeListaExcluir').textContent = nome;
+    document.getElementById('formExcluirLista').action = `{{ url_for('kanban.excluir_lista', lista_id=0) }}`.replace('0', id);
+    
+    new bootstrap.Modal(document.getElementById('modalConfirmarExclusao')).show();
+}
+
+function showToast(type, message) {
+    // Criar toast dinamicamente
+    const toastContainer = document.getElementById('toast-container') || createToastContainer();
+    const toastId = 'toast-' + Date.now();
+    const bgClass = type === 'success' ? 'bg-success' : 'bg-danger';
+    
+    const toastHtml = `
+        <div id="${toastId}" class="toast ${bgClass} text-white" role="alert">
+            <div class="toast-body">
+                <i class="fas fa-${type === 'success' ? 'check-circle' : 'exclamation-circle'}"></i>
+                ${message}
+            </div>
+        </div>
+    `;
+    
+    toastContainer.insertAdjacentHTML('beforeend', toastHtml);
+    
+    const toastElement = document.getElementById(toastId);
+    const toast = new bootstrap.Toast(toastElement);
+    toast.show();
+    
+    // Remover toast após ser ocultado
+    toastElement.addEventListener('hidden.bs.toast', function() {
+        toastElement.remove();
+    });
+}
+
+function createToastContainer() {
+    const container = document.createElement('div');
+    container.id = 'toast-container';
+    container.className = 'toast-container position-fixed top-0 end-0 p-3';
+    container.style.zIndex = '1055';
+    document.body.appendChild(container);
+    return container;
+}
+</script>
+{% endblock %}

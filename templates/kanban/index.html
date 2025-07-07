@@ -189,6 +189,9 @@
                         <a class="nav-link active" href="/kanban"><i class="fas fa-columns"></i> Kanban</a>
                     </li>
                     <li class="nav-item">
+                        <a class="nav-link" href="/listas"><i class="fas fa-cog"></i> Listas Kanban</a>
+                    </li>
+                    <li class="nav-item">
                         <a class="nav-link" href="/registros-mensais"><i class="fas fa-archive"></i> Registros Mensais</a>
                     </li>
                 </ul>
@@ -231,7 +234,8 @@
                             {% endif %}
                             <span class="card-title" data-ordem-id="{{ ordem.id }}">{{ ordem.numero }}</span>
                             <div class="d-flex">
-                                <div class="dropdown me-2">
+                                {% if lista != 'Expedição' %}
+                                    <div class="dropdown me-2">
                                     <button class="btn btn-sm btn-outline-secondary dropdown-toggle" type="button" 
                                             id="dropdownMenuButton{{ ordem.id }}" data-bs-toggle="dropdown" 
                                             aria-expanded="false" onclick="event.stopPropagation()">
@@ -239,13 +243,14 @@
                                     </button>
                                     <ul class="dropdown-menu dropdown-menu-end" aria-labelledby="dropdownMenuButton{{ ordem.id }}">
                                         {% for lista_destino in listas %}
-                                            {% if lista_destino != lista %}
+                                            {% if lista_destino != lista and lista_destino not in ['Entrada','Expedição'] %}
                                                 <li><a class="dropdown-item btn-mover" href="#" data-ordem-id="{{ ordem.id }}" data-lista-destino="{{ lista_destino }}">Mover para {{ lista_destino }}</a></li>
                                             {% endif %}
                                         {% endfor %}
                                     </ul>
                                 </div>
                             </div>
+                            {% endif %}
                         </div>
                         <div class="kanban-card-body">
                             {% if ordem.pedidos %}

@@ -1,0 +1,293 @@
+{% extends "base.html" %}
+
+{% block title %}Folha de Processo - Torno CNC - {{ item.codigo_acb }}{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+    <div class="row">
+        <div class="col-md-12">
+            <div class="card">
+                <div class="card-header bg-primary text-white">
+                    <div class="d-flex justify-content-between align-items-center">
+                        <h5 class="mb-0">🔧 Folha de Processo - Torno CNC</h5>
+                        <div class="btn-group">
+                            <button type="button" class="btn btn-success btn-sm" onclick="salvarFolha()">
+                                <i class="fas fa-save"></i> Salvar
+                            </button>
+                            <a href="{{ url_for('folhas_processo.listar_folhas', item_id=item.id) }}" class="btn btn-outline-light btn-sm">
+                                <i class="fas fa-arrow-left"></i> Voltar
+                            </a>
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="card-body">
+                    <form id="formFolhaProcesso" method="POST" action="{{ url_for('folhas_processo.salvar_folha', folha_id=folha.id) }}">
+                        <!-- Informações do Item -->
+                        <div class="row mb-4">
+                            <div class="col-md-12">
+                                <div class="card bg-light">
+                                    <div class="card-body">
+                                        <h6 class="card-title">📦 Informações do Item</h6>
+                                        <div class="row">
+                                            <div class="col-md-4">
+                                                <strong>Código ACB:</strong> {{ item.codigo_acb }}
+                                            </div>
+                                            <div class="col-md-4">
+                                                <strong>Nome:</strong> {{ item.nome }}
+                                            </div>
+                                            <div class="col-md-4">
+                                                <strong>Versão da Folha:</strong> v{{ folha.versao }}
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Dados Básicos -->
+                        <div class="row mb-4">
+                            <div class="col-md-6">
+                                <label for="responsavel" class="form-label">Responsável pela Folha</label>
+                                <input type="text" class="form-control" name="responsavel" id="responsavel" 
+                                       value="{{ folha.responsavel or '' }}">
+                            </div>
+                            <div class="col-md-3">
+                                <label for="quantidade" class="form-label">Quantidade</label>
+                                <input type="number" class="form-control" name="quantidade" id="quantidade" 
+                                       value="{{ folha_especifica.quantidade or '' }}" min="1">
+                            </div>
+                            <div class="col-md-3">
+                                <label for="responsavel_preenchimento" class="form-label">Responsável Preenchimento</label>
+                                <input type="text" class="form-control" name="responsavel_preenchimento" id="responsavel_preenchimento" 
+                                       value="{{ folha_especifica.responsavel_preenchimento or '' }}">
+                            </div>
+                        </div>
+
+                        <!-- Configuração da Máquina -->
+                        <div class="card mb-4">
+                            <div class="card-header">
+                                <h6 class="mb-0">⚙️ Configuração da Máquina</h6>
+                            </div>
+                            <div class="card-body">
+                                <div class="row">
+                                    <div class="col-md-6">
+                                        <label for="maquina_torno" class="form-label">Máquina/Torno</label>
+                                        <input type="text" class="form-control" name="maquina_torno" id="maquina_torno" 
+                                               value="{{ folha_especifica.maquina_torno or '' }}" 
+                                               placeholder="Ex: Torno CNC XYZ-500">
+                                    </div>
+                                    <div class="col-md-6">
+                                        <label for="tipo_fixacao" class="form-label">Tipo de Fixação</label>
+                                        <select class="form-select" name="tipo_fixacao" id="tipo_fixacao">
+                                            <option value="">Selecione...</option>
+                                            <option value="Placa 3 castanhas" {{ 'selected' if folha_especifica.tipo_fixacao == 'Placa 3 castanhas' }}>Placa 3 castanhas</option>
+                                            <option value="Placa 4 castanhas" {{ 'selected' if folha_especifica.tipo_fixacao == 'Placa 4 castanhas' }}>Placa 4 castanhas</option>
+                                            <option value="Contraponto" {{ 'selected' if folha_especifica.tipo_fixacao == 'Contraponto' }}>Contraponto</option>
+                                            <option value="Luneta" {{ 'selected' if folha_especifica.tipo_fixacao == 'Luneta' }}>Luneta</option>
+                                            <option value="Outro" {{ 'selected' if folha_especifica.tipo_fixacao == 'Outro' }}>Outro</option>
+                                        </select>
+                                    </div>
+                                </div>
+                                
+                                <div class="row mt-3">
+                                    <div class="col-md-6">
+                                        <label for="tipo_material" class="form-label">Tipo de Material</label>
+                                        <input type="text" class="form-control" name="tipo_material" id="tipo_material" 
+                                               value="{{ folha_especifica.tipo_material or '' }}" 
+                                               placeholder="Ex: Aço 1045, Alumínio 7075">
+                                    </div>
+                                    <div class="col-md-6">
+                                        <label for="programa_cnc" class="form-label">Programa CNC</label>
+                                        <input type="text" class="form-control" name="programa_cnc" id="programa_cnc" 
+                                               value="{{ folha_especifica.programa_cnc or '' }}" 
+                                               placeholder="Nome do programa ou número">
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Ferramentas e Operações -->
+                        <div class="card mb-4">
+                            <div class="card-header">
+                                <h6 class="mb-0">🔧 Ferramentas e Operações</h6>
+                            </div>
+                            <div class="card-body">
+                                <div class="row">
+                                    <div class="col-md-12 mb-3">
+                                        <label for="ferramentas_utilizadas" class="form-label">Ferramentas Utilizadas</label>
+                                        <textarea class="form-control" name="ferramentas_utilizadas" id="ferramentas_utilizadas" rows="3" 
+                                                  placeholder="Liste as ferramentas: bedames, facas, brocas, etc.">{{ folha_especifica.ferramentas_utilizadas or '' }}</textarea>
+                                    </div>
+                                </div>
+                                
+                                <div class="row">
+                                    <div class="col-md-12">
+                                        <label for="operacoes_previstas" class="form-label">Operações Previstas</label>
+                                        <textarea class="form-control" name="operacoes_previstas" id="operacoes_previstas" rows="4" 
+                                                  placeholder="Descreva a sequência de operações: facear, desbastar, tornear externo, etc.">{{ folha_especifica.operacoes_previstas or '' }}</textarea>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Dimensões Críticas -->
+                        <div class="card mb-4">
+                            <div class="card-header">
+                                <h6 class="mb-0">📏 Dimensões Críticas</h6>
+                            </div>
+                            <div class="card-body">
+                                <div class="row">
+                                    <div class="col-md-6">
+                                        <label for="diametros_criticos" class="form-label">Diâmetros Críticos</label>
+                                        <textarea class="form-control" name="diametros_criticos" id="diametros_criticos" rows="3" 
+                                                  placeholder="Ex: Ø25±0.02, Ø50+0.05/-0">{{ folha_especifica.diametros_criticos or '' }}</textarea>
+                                    </div>
+                                    <div class="col-md-6">
+                                        <label for="comprimentos_criticos" class="form-label">Comprimentos Críticos</label>
+                                        <textarea class="form-control" name="comprimentos_criticos" id="comprimentos_criticos" rows="3" 
+                                                  placeholder="Ex: 120±0.1, 25.5+0/-0.02">{{ folha_especifica.comprimentos_criticos or '' }}</textarea>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Parâmetros de Corte -->
+                        <div class="card mb-4">
+                            <div class="card-header">
+                                <h6 class="mb-0">⚡ Parâmetros de Corte</h6>
+                            </div>
+                            <div class="card-body">
+                                <div class="row">
+                                    <div class="col-md-6">
+                                        <label for="rpm_sugerido" class="form-label">RPM Sugerido</label>
+                                        <input type="text" class="form-control" name="rpm_sugerido" id="rpm_sugerido" 
+                                               value="{{ folha_especifica.rpm_sugerido or '' }}" 
+                                               placeholder="Ex: 1200, 800-1500">
+                                    </div>
+                                    <div class="col-md-6">
+                                        <label for="avanco_sugerido" class="form-label">Avanço Sugerido</label>
+                                        <input type="text" class="form-control" name="avanco_sugerido" id="avanco_sugerido" 
+                                               value="{{ folha_especifica.avanco_sugerido or '' }}" 
+                                               placeholder="Ex: 0.2 mm/rot, 0.1-0.3">
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Controle e Observações -->
+                        <div class="card mb-4">
+                            <div class="card-header">
+                                <h6 class="mb-0">📝 Controle e Observações</h6>
+                            </div>
+                            <div class="card-body">
+                                <div class="row">
+                                    <div class="col-md-12 mb-3">
+                                        <label for="ponto_controle_dimensional" class="form-label">Pontos de Controle Dimensional</label>
+                                        <textarea class="form-control" name="ponto_controle_dimensional" id="ponto_controle_dimensional" rows="3" 
+                                                  placeholder="Descreva os pontos onde fazer controle dimensional durante a usinagem">{{ folha_especifica.ponto_controle_dimensional or '' }}</textarea>
+                                    </div>
+                                </div>
+                                
+                                <div class="row">
+                                    <div class="col-md-6">
+                                        <label for="observacoes_tecnicas" class="form-label">Observações Técnicas</label>
+                                        <textarea class="form-control" name="observacoes_tecnicas" id="observacoes_tecnicas" rows="4" 
+                                                  placeholder="Observações importantes, cuidados especiais, etc.">{{ folha_especifica.observacoes_tecnicas or '' }}</textarea>
+                                    </div>
+                                    <div class="col-md-6">
+                                        <label for="observacoes" class="form-label">Observações Gerais</label>
+                                        <textarea class="form-control" name="observacoes" id="observacoes" rows="4" 
+                                                  placeholder="Observações gerais da folha">{{ folha.observacoes or '' }}</textarea>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+function salvarFolha() {
+    const form = document.getElementById('formFolhaProcesso');
+    const formData = new FormData(form);
+    
+    // Mostrar loading
+    const btnSalvar = event.target;
+    const textOriginal = btnSalvar.innerHTML;
+    btnSalvar.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Salvando...';
+    btnSalvar.disabled = true;
+    
+    fetch(form.action, {
+        method: 'POST',
+        body: formData,
+        headers: {
+            'X-Requested-With': 'XMLHttpRequest'
+        }
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            // Mostrar mensagem de sucesso
+            showToast('success', 'Folha de processo salva com sucesso!');
+        } else {
+            showToast('error', data.error || 'Erro ao salvar folha de processo');
+        }
+    })
+    .catch(error => {
+        console.error('Erro:', error);
+        showToast('error', 'Erro ao salvar folha de processo');
+    })
+    .finally(() => {
+        // Restaurar botão
+        btnSalvar.innerHTML = textOriginal;
+        btnSalvar.disabled = false;
+    });
+}
+
+function showToast(type, message) {
+    // Implementação simples de toast
+    const alertClass = type === 'success' ? 'alert-success' : 'alert-danger';
+    const alertHtml = `
+        <div class="alert ${alertClass} alert-dismissible fade show position-fixed" 
+             style="top: 20px; right: 20px; z-index: 9999; min-width: 300px;">
+            ${message}
+            <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+        </div>
+    `;
+    document.body.insertAdjacentHTML('beforeend', alertHtml);
+    
+    // Auto remover após 5s
+    setTimeout(() => {
+        const alert = document.querySelector('.alert:last-of-type');
+        if (alert) alert.remove();
+    }, 5000);
+}
+
+// Auto-save a cada 30 segundos
+setInterval(() => {
+    const form = document.getElementById('formFolhaProcesso');
+    const formData = new FormData(form);
+    
+    fetch(form.action, {
+        method: 'POST',
+        body: formData,
+        headers: {
+            'X-Requested-With': 'XMLHttpRequest'
+        }
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            console.log('Auto-save realizado com sucesso');
+        }
+    })
+    .catch(error => {
+        console.log('Erro no auto-save:', error);
+    });
+}, 30000); // 30 segundos
+</script>
+{% endblock %}

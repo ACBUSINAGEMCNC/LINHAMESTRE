@@ -1,0 +1,398 @@
+{% extends "base.html" %}
+
+{% block title %}Folha de Processo - Serviços Gerais - {{ item.codigo_acb }}{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+    <div class="row">
+        <div class="col-md-12">
+            <div class="card">
+                <div class="card-header bg-primary text-white">
+                    <div class="d-flex justify-content-between align-items-center">
+                        <h5 class="mb-0">🔨 Folha de Processo - Serviços Gerais</h5>
+                        <div class="btn-group">
+                            <button type="button" class="btn btn-success btn-sm" onclick="salvarFolha()">
+                                <i class="fas fa-save"></i> Salvar
+                            </button>
+                            <a href="{{ url_for('folhas_processo.listar_folhas', item_id=item.id) }}" class="btn btn-outline-light btn-sm">
+                                <i class="fas fa-arrow-left"></i> Voltar
+                            </a>
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="card-body">
+                    <form id="formFolhaProcesso" method="POST" action="{{ url_for('folhas_processo.salvar_folha', folha_id=folha.id) }}">
+                        <!-- Informações do Item -->
+                        <div class="row mb-4">
+                            <div class="col-md-12">
+                                <div class="card bg-light">
+                                    <div class="card-body">
+                                        <h6 class="card-title">📦 Informações do Item</h6>
+                                        <div class="row">
+                                            <div class="col-md-4">
+                                                <strong>Código ACB:</strong> {{ item.codigo_acb }}
+                                            </div>
+                                            <div class="col-md-4">
+                                                <strong>Nome:</strong> {{ item.nome }}
+                                            </div>
+                                            <div class="col-md-4">
+                                                <strong>Versão da Folha:</strong> v{{ folha.versao }}
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Dados Básicos -->
+                        <div class="row mb-4">
+                            <div class="col-md-6">
+                                <label for="responsavel" class="form-label">Responsável pela Folha</label>
+                                <input type="text" class="form-control" name="responsavel" id="responsavel" 
+                                       value="{{ folha.responsavel or '' }}">
+                            </div>
+                            <div class="col-md-6">
+                                <label for="operador_responsavel" class="form-label">Operador Responsável</label>
+                                <input type="text" class="form-control" name="operador_responsavel" id="operador_responsavel" 
+                                       value="{{ folha_especifica.operador_responsavel or '' }}">
+                            </div>
+                        </div>
+
+                        <!-- Processos Realizados -->
+                        <div class="card mb-4">
+                            <div class="card-header">
+                                <h6 class="mb-0">⚙️ Processos a Realizar</h6>
+                            </div>
+                            <div class="card-body">
+                                <div class="row">
+                                    <div class="col-md-4">
+                                        <div class="form-check form-switch mb-3">
+                                            <input class="form-check-input" type="checkbox" name="processo_rebarba" id="processo_rebarba" 
+                                                   {{ 'checked' if folha_especifica.processo_rebarba }}>
+                                            <label class="form-check-label" for="processo_rebarba">
+                                                <strong>🔧 Rebarba</strong><br>
+                                                <small class="text-muted">Remoção de rebarbas e acabamento</small>
+                                            </label>
+                                        </div>
+                                    </div>
+                                    <div class="col-md-4">
+                                        <div class="form-check form-switch mb-3">
+                                            <input class="form-check-input" type="checkbox" name="processo_lavagem" id="processo_lavagem" 
+                                                   {{ 'checked' if folha_especifica.processo_lavagem }}>
+                                            <label class="form-check-label" for="processo_lavagem">
+                                                <strong>🧽 Lavagem</strong><br>
+                                                <small class="text-muted">Limpeza e desengraxe da peça</small>
+                                            </label>
+                                        </div>
+                                    </div>
+                                    <div class="col-md-4">
+                                        <div class="form-check form-switch mb-3">
+                                            <input class="form-check-input" type="checkbox" name="processo_inspecao" id="processo_inspecao" 
+                                                   {{ 'checked' if folha_especifica.processo_inspecao }}>
+                                            <label class="form-check-label" for="processo_inspecao">
+                                                <strong>🔍 Inspeção</strong><br>
+                                                <small class="text-muted">Controle de qualidade e inspeção</small>
+                                            </label>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Ferramentas e Materiais -->
+                        <div class="card mb-4">
+                            <div class="card-header">
+                                <h6 class="mb-0">🔧 Ferramentas e Materiais</h6>
+                            </div>
+                            <div class="card-body">
+                                <div class="row">
+                                    <div class="col-md-12">
+                                        <label for="ferramentas_utilizadas" class="form-label">Ferramentas Utilizadas</label>
+                                        <textarea class="form-control" name="ferramentas_utilizadas" id="ferramentas_utilizadas" rows="4" 
+                                                  placeholder="Liste as ferramentas e materiais necessários:
+- Lima murça
+- Escova de aço
+- Desengraxante
+- Pano industrial
+- Instrumentos de medição
+etc.">{{ folha_especifica.ferramentas_utilizadas or '' }}</textarea>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Controle de Qualidade -->
+                        <div class="card mb-4">
+                            <div class="card-header">
+                                <h6 class="mb-0">🔍 Controle de Qualidade</h6>
+                            </div>
+                            <div class="card-body">
+                                <div class="row">
+                                    <div class="col-md-6">
+                                        <label for="padrao_qualidade" class="form-label">Padrão de Qualidade</label>
+                                        <select class="form-select" name="padrao_qualidade" id="padrao_qualidade">
+                                            <option value="">Selecione...</option>
+                                            <option value="Padrão" {{ 'selected' if folha_especifica.padrao_qualidade == 'Padrão' }}>Padrão</option>
+                                            <option value="Qualidade A" {{ 'selected' if folha_especifica.padrao_qualidade == 'Qualidade A' }}>Qualidade A</option>
+                                            <option value="Qualidade B" {{ 'selected' if folha_especifica.padrao_qualidade == 'Qualidade B' }}>Qualidade B</option>
+                                            <option value="Especial" {{ 'selected' if folha_especifica.padrao_qualidade == 'Especial' }}>Especial</option>
+                                        </select>
+                                    </div>
+                                    <div class="col-md-6">
+                                        <label for="itens_inspecionar" class="form-label">Itens a Inspecionar</label>
+                                        <textarea class="form-control" name="itens_inspecionar" id="itens_inspecionar" rows="3" 
+                                                  placeholder="Liste os itens que devem ser inspecionados">{{ folha_especifica.itens_inspecionar or '' }}</textarea>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Resultado da Inspeção -->
+                        <div class="card mb-4">
+                            <div class="card-header">
+                                <h6 class="mb-0">📋 Resultado da Inspeção</h6>
+                            </div>
+                            <div class="card-body">
+                                <div class="row">
+                                    <div class="col-md-6">
+                                        <label for="resultado_inspecao" class="form-label">Resultado da Inspeção</label>
+                                        <select class="form-select" name="resultado_inspecao" id="resultado_inspecao">
+                                            <option value="">Aguardando inspeção...</option>
+                                            <option value="Aprovado" {{ 'selected' if folha_especifica.resultado_inspecao == 'Aprovado' }}>✅ Aprovado</option>
+                                            <option value="Reprovado" {{ 'selected' if folha_especifica.resultado_inspecao == 'Reprovado' }}>❌ Reprovado</option>
+                                            <option value="Aprovado com ressalvas" {{ 'selected' if folha_especifica.resultado_inspecao == 'Aprovado com ressalvas' }}>⚠️ Aprovado com ressalvas</option>
+                                        </select>
+                                    </div>
+                                    <div class="col-md-6">
+                                        <label for="motivo_reprovacao" class="form-label">Motivo da Reprovação/Ressalvas</label>
+                                        <textarea class="form-control" name="motivo_reprovacao" id="motivo_reprovacao" rows="3" 
+                                                  placeholder="Descreva o motivo caso seja reprovado ou tenha ressalvas">{{ folha_especifica.motivo_reprovacao or '' }}</textarea>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Status dos Processos -->
+                        <div class="card mb-4">
+                            <div class="card-header">
+                                <h6 class="mb-0">📊 Status dos Processos</h6>
+                            </div>
+                            <div class="card-body">
+                                <div class="row">
+                                    <div class="col-md-4">
+                                        <div class="card text-center border-info">
+                                            <div class="card-body">
+                                                <h5 class="card-title text-info">🔧 Rebarba</h5>
+                                                <div class="form-check">
+                                                    <input class="form-check-input" type="radio" name="status_rebarba" id="rebarba_pendente" value="pendente">
+                                                    <label class="form-check-label" for="rebarba_pendente">Pendente</label>
+                                                </div>
+                                                <div class="form-check">
+                                                    <input class="form-check-input" type="radio" name="status_rebarba" id="rebarba_andamento" value="andamento">
+                                                    <label class="form-check-label" for="rebarba_andamento">Em andamento</label>
+                                                </div>
+                                                <div class="form-check">
+                                                    <input class="form-check-input" type="radio" name="status_rebarba" id="rebarba_concluido" value="concluido">
+                                                    <label class="form-check-label" for="rebarba_concluido">Concluído</label>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                    <div class="col-md-4">
+                                        <div class="card text-center border-success">
+                                            <div class="card-body">
+                                                <h5 class="card-title text-success">🧽 Lavagem</h5>
+                                                <div class="form-check">
+                                                    <input class="form-check-input" type="radio" name="status_lavagem" id="lavagem_pendente" value="pendente">
+                                                    <label class="form-check-label" for="lavagem_pendente">Pendente</label>
+                                                </div>
+                                                <div class="form-check">
+                                                    <input class="form-check-input" type="radio" name="status_lavagem" id="lavagem_andamento" value="andamento">
+                                                    <label class="form-check-label" for="lavagem_andamento">Em andamento</label>
+                                                </div>
+                                                <div class="form-check">
+                                                    <input class="form-check-input" type="radio" name="status_lavagem" id="lavagem_concluido" value="concluido">
+                                                    <label class="form-check-label" for="lavagem_concluido">Concluído</label>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                    <div class="col-md-4">
+                                        <div class="card text-center border-warning">
+                                            <div class="card-body">
+                                                <h5 class="card-title text-warning">🔍 Inspeção</h5>
+                                                <div class="form-check">
+                                                    <input class="form-check-input" type="radio" name="status_inspecao" id="inspecao_pendente" value="pendente">
+                                                    <label class="form-check-label" for="inspecao_pendente">Pendente</label>
+                                                </div>
+                                                <div class="form-check">
+                                                    <input class="form-check-input" type="radio" name="status_inspecao" id="inspecao_andamento" value="andamento">
+                                                    <label class="form-check-label" for="inspecao_andamento">Em andamento</label>
+                                                </div>
+                                                <div class="form-check">
+                                                    <input class="form-check-input" type="radio" name="status_inspecao" id="inspecao_concluido" value="concluido">
+                                                    <label class="form-check-label" for="inspecao_concluido">Concluído</label>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Observações Gerais -->
+                        <div class="card mb-4">
+                            <div class="card-header">
+                                <h6 class="mb-0">📝 Observações</h6>
+                            </div>
+                            <div class="card-body">
+                                <div class="row">
+                                    <div class="col-md-6">
+                                        <label for="observacoes_gerais" class="form-label">Observações dos Serviços</label>
+                                        <textarea class="form-control" name="observacoes_gerais" id="observacoes_gerais" rows="4" 
+                                                  placeholder="Observações específicas dos serviços realizados">{{ folha_especifica.observacoes_gerais or '' }}</textarea>
+                                    </div>
+                                    <div class="col-md-6">
+                                        <label for="observacoes" class="form-label">Observações Gerais da Folha</label>
+                                        <textarea class="form-control" name="observacoes" id="observacoes" rows="4" 
+                                                  placeholder="Observações gerais da folha">{{ folha.observacoes or '' }}</textarea>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Checklist Final -->
+                        <div class="card mb-4">
+                            <div class="card-header">
+                                <h6 class="mb-0">✅ Checklist Final</h6>
+                            </div>
+                            <div class="card-body">
+                                <div class="row">
+                                    <div class="col-md-6">
+                                        <div class="form-check mb-2">
+                                            <input class="form-check-input" type="checkbox" id="check_rebarba_ok">
+                                            <label class="form-check-label" for="check_rebarba_ok">
+                                                Rebarba removida adequadamente
+                                            </label>
+                                        </div>
+                                        <div class="form-check mb-2">
+                                            <input class="form-check-input" type="checkbox" id="check_lavagem_ok">
+                                            <label class="form-check-label" for="check_lavagem_ok">
+                                                Peça limpa e desengraxada
+                                            </label>
+                                        </div>
+                                        <div class="form-check mb-2">
+                                            <input class="form-check-input" type="checkbox" id="check_inspecao_ok">
+                                            <label class="form-check-label" for="check_inspecao_ok">
+                                                Inspeção dimensional realizada
+                                            </label>
+                                        </div>
+                                    </div>
+                                    <div class="col-md-6">
+                                        <div class="form-check mb-2">
+                                            <input class="form-check-input" type="checkbox" id="check_acabamento_ok">
+                                            <label class="form-check-label" for="check_acabamento_ok">
+                                                Acabamento superficial adequado
+                                            </label>
+                                        </div>
+                                        <div class="form-check mb-2">
+                                            <input class="form-check-input" type="checkbox" id="check_embalagem_ok">
+                                            <label class="form-check-label" for="check_embalagem_ok">
+                                                Peça embalada/protegida
+                                            </label>
+                                        </div>
+                                        <div class="form-check mb-2">
+                                            <input class="form-check-input" type="checkbox" id="check_liberado_ok">
+                                            <label class="form-check-label" for="check_liberado_ok">
+                                                Liberado para próxima etapa
+                                            </label>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+function salvarFolha() {
+    const form = document.getElementById('formFolhaProcesso');
+    const formData = new FormData(form);
+    
+    // Mostrar loading
+    const btnSalvar = event.target;
+    const textOriginal = btnSalvar.innerHTML;
+    btnSalvar.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Salvando...';
+    btnSalvar.disabled = true;
+    
+    fetch(form.action, {
+        method: 'POST',
+        body: formData,
+        headers: {
+            'X-Requested-With': 'XMLHttpRequest'
+        }
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            showToast('success', 'Folha de processo salva com sucesso!');
+        } else {
+            showToast('error', data.error || 'Erro ao salvar folha de processo');
+        }
+    })
+    .catch(error => {
+        console.error('Erro:', error);
+        showToast('error', 'Erro ao salvar folha de processo');
+    })
+    .finally(() => {
+        btnSalvar.innerHTML = textOriginal;
+        btnSalvar.disabled = false;
+    });
+}
+
+function showToast(type, message) {
+    const alertClass = type === 'success' ? 'alert-success' : 'alert-danger';
+    const alertHtml = `
+        <div class="alert ${alertClass} alert-dismissible fade show position-fixed" 
+             style="top: 20px; right: 20px; z-index: 9999; min-width: 300px;">
+            ${message}
+            <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+        </div>
+    `;
+    document.body.insertAdjacentHTML('beforeend', alertHtml);
+    
+    setTimeout(() => {
+        const alert = document.querySelector('.alert:last-of-type');
+        if (alert) alert.remove();
+    }, 5000);
+}
+
+// Auto-save a cada 30 segundos
+setInterval(() => {
+    const form = document.getElementById('formFolhaProcesso');
+    const formData = new FormData(form);
+    
+    fetch(form.action, {
+        method: 'POST',
+        body: formData,
+        headers: {
+            'X-Requested-With': 'XMLHttpRequest'
+        }
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            console.log('Auto-save realizado com sucesso');
+        }
+    })
+    .catch(error => {
+        console.log('Erro no auto-save:', error);
+    });
+}, 30000);
+</script>
+{% endblock %}

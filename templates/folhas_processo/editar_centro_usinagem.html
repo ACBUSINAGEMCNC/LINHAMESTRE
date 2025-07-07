@@ -1,0 +1,295 @@
+{% extends "base.html" %}
+
+{% block title %}Folha de Processo - Centro de Usinagem - {{ item.codigo_acb }}{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+    <div class="row">
+        <div class="col-md-12">
+            <div class="card">
+                <div class="card-header bg-primary text-white">
+                    <div class="d-flex justify-content-between align-items-center">
+                        <h5 class="mb-0">🏭 Folha de Processo - Centro de Usinagem</h5>
+                        <div class="btn-group">
+                            <button type="button" class="btn btn-success btn-sm" onclick="salvarFolha()">
+                                <i class="fas fa-save"></i> Salvar
+                            </button>
+                            <a href="{{ url_for('folhas_processo.listar_folhas', item_id=item.id) }}" class="btn btn-outline-light btn-sm">
+                                <i class="fas fa-arrow-left"></i> Voltar
+                            </a>
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="card-body">
+                    <form id="formFolhaProcesso" method="POST" action="{{ url_for('folhas_processo.salvar_folha', folha_id=folha.id) }}">
+                        <!-- Informações do Item -->
+                        <div class="row mb-4">
+                            <div class="col-md-12">
+                                <div class="card bg-light">
+                                    <div class="card-body">
+                                        <h6 class="card-title">📦 Informações do Item</h6>
+                                        <div class="row">
+                                            <div class="col-md-4">
+                                                <strong>Código ACB:</strong> {{ item.codigo_acb }}
+                                            </div>
+                                            <div class="col-md-4">
+                                                <strong>Nome:</strong> {{ item.nome }}
+                                            </div>
+                                            <div class="col-md-4">
+                                                <strong>Versão da Folha:</strong> v{{ folha.versao }}
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Dados Básicos -->
+                        <div class="row mb-4">
+                            <div class="col-md-6">
+                                <label for="responsavel" class="form-label">Responsável pela Folha</label>
+                                <input type="text" class="form-control" name="responsavel" id="responsavel" 
+                                       value="{{ folha.responsavel or '' }}">
+                            </div>
+                            <div class="col-md-3">
+                                <label for="quantidade" class="form-label">Quantidade</label>
+                                <input type="number" class="form-control" name="quantidade" id="quantidade" 
+                                       value="{{ folha_especifica.quantidade or '' }}" min="1">
+                            </div>
+                            <div class="col-md-3">
+                                <label for="responsavel_tecnico" class="form-label">Responsável Técnico</label>
+                                <input type="text" class="form-control" name="responsavel_tecnico" id="responsavel_tecnico" 
+                                       value="{{ folha_especifica.responsavel_tecnico or '' }}">
+                            </div>
+                        </div>
+
+                        <!-- Configuração da Máquina -->
+                        <div class="card mb-4">
+                            <div class="card-header">
+                                <h6 class="mb-0">🏭 Configuração do Centro de Usinagem</h6>
+                            </div>
+                            <div class="card-body">
+                                <div class="row">
+                                    <div class="col-md-6">
+                                        <label for="maquina_centro" class="form-label">Centro de Usinagem</label>
+                                        <input type="text" class="form-control" name="maquina_centro" id="maquina_centro" 
+                                               value="{{ folha_especifica.maquina_centro or '' }}" 
+                                               placeholder="Ex: Centro Vertical VMC-850">
+                                    </div>
+                                    <div class="col-md-6">
+                                        <label for="sistema_fixacao" class="form-label">Sistema de Fixação</label>
+                                        <select class="form-select" name="sistema_fixacao" id="sistema_fixacao">
+                                            <option value="">Selecione...</option>
+                                            <option value="Morsa" {{ 'selected' if folha_especifica.sistema_fixacao == 'Morsa' }}>Morsa</option>
+                                            <option value="Placa 4 castanhas" {{ 'selected' if folha_especifica.sistema_fixacao == 'Placa 4 castanhas' }}>Placa 4 castanhas</option>
+                                            <option value="Mesa divisora" {{ 'selected' if folha_especifica.sistema_fixacao == 'Mesa divisora' }}>Mesa divisora</option>
+                                            <option value="Dispositivo especial" {{ 'selected' if folha_especifica.sistema_fixacao == 'Dispositivo especial' }}>Dispositivo especial</option>
+                                            <option value="Grampos" {{ 'selected' if folha_especifica.sistema_fixacao == 'Grampos' }}>Grampos</option>
+                                        </select>
+                                    </div>
+                                </div>
+                                
+                                <div class="row mt-3">
+                                    <div class="col-md-6">
+                                        <label for="z_zero_origem" class="form-label">Z Zero - Origem</label>
+                                        <input type="text" class="form-control" name="z_zero_origem" id="z_zero_origem" 
+                                               value="{{ folha_especifica.z_zero_origem or '' }}" 
+                                               placeholder="Ex: Face superior da peça, Mesa da máquina">
+                                    </div>
+                                    <div class="col-md-6">
+                                        <label for="caminho_programa_cnc" class="form-label">Caminho/Nome do Programa</label>
+                                        <input type="text" class="form-control" name="caminho_programa_cnc" id="caminho_programa_cnc" 
+                                               value="{{ folha_especifica.caminho_programa_cnc or '' }}" 
+                                               placeholder="Ex: /Programs/ITEM123.nc">
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Lista de Ferramentas -->
+                        <div class="card mb-4">
+                            <div class="card-header">
+                                <h6 class="mb-0">🔧 Lista de Ferramentas</h6>
+                            </div>
+                            <div class="card-body">
+                                <div class="row">
+                                    <div class="col-md-12">
+                                        <label for="lista_ferramentas" class="form-label">Ferramentas Utilizadas</label>
+                                        <textarea class="form-control" name="lista_ferramentas" id="lista_ferramentas" rows="5" 
+                                                  placeholder="Liste as ferramentas com numeração:
+T01 - Fresa topo Ø10mm - HSS
+T02 - Broca Ø8mm - Metal duro
+T03 - Fresa desbaste Ø20mm
+etc.">{{ folha_especifica.lista_ferramentas or '' }}</textarea>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Operações -->
+                        <div class="card mb-4">
+                            <div class="card-header">
+                                <h6 class="mb-0">⚙️ Sequência de Operações</h6>
+                            </div>
+                            <div class="card-body">
+                                <div class="row">
+                                    <div class="col-md-12">
+                                        <label for="operacoes" class="form-label">Operações</label>
+                                        <textarea class="form-control" name="operacoes" id="operacoes" rows="6" 
+                                                  placeholder="Descreva a sequência de operações:
+OP10 - Fixar peça na morsa
+OP20 - Facear face superior (T01)
+OP30 - Furar Ø8mm profundidade 25mm (T02)
+OP40 - Fresar contorno externo (T03)
+etc.">{{ folha_especifica.operacoes or '' }}</textarea>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Pontos Críticos e Limitações -->
+                        <div class="card mb-4">
+                            <div class="card-header">
+                                <h6 class="mb-0">⚠️ Pontos Críticos e Limitações</h6>
+                            </div>
+                            <div class="card-body">
+                                <div class="row">
+                                    <div class="col-md-6">
+                                        <label for="ponto_critico_colisao" class="form-label">Pontos Críticos de Colisão</label>
+                                        <textarea class="form-control" name="ponto_critico_colisao" id="ponto_critico_colisao" rows="4" 
+                                                  placeholder="Descreva pontos onde pode haver colisão entre ferramenta, cabeçote e peça">{{ folha_especifica.ponto_critico_colisao or '' }}</textarea>
+                                    </div>
+                                    <div class="col-md-6">
+                                        <label for="limitacoes" class="form-label">Limitações da Máquina/Processo</label>
+                                        <textarea class="form-control" name="limitacoes" id="limitacoes" rows="4" 
+                                                  placeholder="Limitações de curso, potência, rotação, etc.">{{ folha_especifica.limitacoes or '' }}</textarea>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Tolerâncias e Controle -->
+                        <div class="card mb-4">
+                            <div class="card-header">
+                                <h6 class="mb-0">📏 Tolerâncias e Controle Dimensional</h6>
+                            </div>
+                            <div class="card-body">
+                                <div class="row">
+                                    <div class="col-md-12">
+                                        <label for="tolerancias_especificas" class="form-label">Tolerâncias Específicas</label>
+                                        <textarea class="form-control" name="tolerancias_especificas" id="tolerancias_especificas" rows="4" 
+                                                  placeholder="Descreva as tolerâncias críticas e pontos de controle:
+- Furo Ø8 H7 (+0.015/0)
+- Cota 25±0.05
+- Perpendicularismo 0.02 A|B
+etc.">{{ folha_especifica.tolerancias_especificas or '' }}</textarea>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Observações -->
+                        <div class="card mb-4">
+                            <div class="card-header">
+                                <h6 class="mb-0">📝 Observações</h6>
+                            </div>
+                            <div class="card-body">
+                                <div class="row">
+                                    <div class="col-md-6">
+                                        <label for="observacoes_engenharia" class="form-label">Observações de Engenharia</label>
+                                        <textarea class="form-control" name="observacoes_engenharia" id="observacoes_engenharia" rows="4" 
+                                                  placeholder="Observações técnicas, cuidados especiais, recomendações">{{ folha_especifica.observacoes_engenharia or '' }}</textarea>
+                                    </div>
+                                    <div class="col-md-6">
+                                        <label for="observacoes" class="form-label">Observações Gerais</label>
+                                        <textarea class="form-control" name="observacoes" id="observacoes" rows="4" 
+                                                  placeholder="Observações gerais da folha">{{ folha.observacoes or '' }}</textarea>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+function salvarFolha() {
+    const form = document.getElementById('formFolhaProcesso');
+    const formData = new FormData(form);
+    
+    // Mostrar loading
+    const btnSalvar = event.target;
+    const textOriginal = btnSalvar.innerHTML;
+    btnSalvar.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Salvando...';
+    btnSalvar.disabled = true;
+    
+    fetch(form.action, {
+        method: 'POST',
+        body: formData,
+        headers: {
+            'X-Requested-With': 'XMLHttpRequest'
+        }
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            showToast('success', 'Folha de processo salva com sucesso!');
+        } else {
+            showToast('error', data.error || 'Erro ao salvar folha de processo');
+        }
+    })
+    .catch(error => {
+        console.error('Erro:', error);
+        showToast('error', 'Erro ao salvar folha de processo');
+    })
+    .finally(() => {
+        btnSalvar.innerHTML = textOriginal;
+        btnSalvar.disabled = false;
+    });
+}
+
+function showToast(type, message) {
+    const alertClass = type === 'success' ? 'alert-success' : 'alert-danger';
+    const alertHtml = `
+        <div class="alert ${alertClass} alert-dismissible fade show position-fixed" 
+             style="top: 20px; right: 20px; z-index: 9999; min-width: 300px;">
+            ${message}
+            <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+        </div>
+    `;
+    document.body.insertAdjacentHTML('beforeend', alertHtml);
+    
+    setTimeout(() => {
+        const alert = document.querySelector('.alert:last-of-type');
+        if (alert) alert.remove();
+    }, 5000);
+}
+
+// Auto-save a cada 30 segundos
+setInterval(() => {
+    const form = document.getElementById('formFolhaProcesso');
+    const formData = new FormData(form);
+    
+    fetch(form.action, {
+        method: 'POST',
+        body: formData,
+        headers: {
+            'X-Requested-With': 'XMLHttpRequest'
+        }
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            console.log('Auto-save realizado com sucesso');
+        }
+    })
+    .catch(error => {
+        console.log('Erro no auto-save:', error);
+    });
+}, 30000);
+</script>
+{% endblock %}

@@ -394,3 +394,147 @@ class Backup(db.Model):
     
     def __repr__(self):
         return f'<Backup {self.nome_arquivo}>'
+
+# ====================
+# FOLHAS DE PROCESSO
+# ====================
+
+# Folha base para todos os tipos de processo
+class FolhaProcesso(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    item_id = db.Column(db.Integer, db.ForeignKey('item.id'), nullable=False)
+    tipo_processo = db.Column(db.String(30), nullable=False)  # 'torno_cnc', 'centro_usinagem', 'corte_serra', 'servicos_gerais'
+    versao = db.Column(db.Integer, default=1)
+    data_criacao = db.Column(db.DateTime, default=datetime.utcnow)
+    data_atualizacao = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    criado_por = db.Column(db.String(100))
+    responsavel = db.Column(db.String(100))
+    ativo = db.Column(db.Boolean, default=True)
+    observacoes = db.Column(db.Text)
+    
+    # Relacionamento com Item
+    item = relationship('Item', backref='folhas_processo')
+    
+    def __repr__(self):
+        return f'<FolhaProcesso {self.item_id}-{self.tipo_processo} v{self.versao}>'
+
+# Folha específica para Torno CNC
+class FolhaTornoCNC(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    folha_processo_id = db.Column(db.Integer, db.ForeignKey('folha_processo.id'), nullable=False)
+    
+    # Campos específicos do Torno CNC
+    codigo_item = db.Column(db.String(50))
+    nome_peca = db.Column(db.String(200))
+    quantidade = db.Column(db.Integer)
+    maquina_torno = db.Column(db.String(100))  # Máquina/torno designado
+    tipo_fixacao = db.Column(db.String(100))  # castanhas, luneta, flange
+    tipo_material = db.Column(db.String(100))
+    programa_cnc = db.Column(db.String(255))  # código ou caminho
+    ferramentas_utilizadas = db.Column(db.Text)
+    operacoes_previstas = db.Column(db.Text)  # desbaste, acabamento, furo, rosca, canal
+    diametros_criticos = db.Column(db.Text)
+    comprimentos_criticos = db.Column(db.Text)
+    rpm_sugerido = db.Column(db.String(50))
+    avanco_sugerido = db.Column(db.String(50))
+    ponto_controle_dimensional = db.Column(db.Text)
+    observacoes_tecnicas = db.Column(db.Text)
+    responsavel_preenchimento = db.Column(db.String(100))
+    
+    # Relacionamento
+    folha_processo = relationship('FolhaProcesso', backref='folha_torno_cnc')
+    
+    def __repr__(self):
+        return f'<FolhaTornoCNC {self.id}>'
+
+# Folha específica para Centro de Usinagem
+class FolhaCentroUsinagem(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    folha_processo_id = db.Column(db.Integer, db.ForeignKey('folha_processo.id'), nullable=False)
+    
+    # Campos específicos do Centro de Usinagem
+    codigo_item = db.Column(db.String(50))
+    nome_peca = db.Column(db.String(200))
+    quantidade = db.Column(db.Integer)
+    maquina_centro = db.Column(db.String(100))  # Máquina/centro designado
+    sistema_fixacao = db.Column(db.String(100))  # morsa, dispositivo, vácuo
+    z_zero_origem = db.Column(db.String(100))
+    lista_ferramentas = db.Column(db.Text)  # com posição no magazine
+    operacoes = db.Column(db.Text)  # faceamento, furação, rasgo, interpolação
+    caminho_programa_cnc = db.Column(db.String(255))
+    ponto_critico_colisao = db.Column(db.Text)
+    limitacoes = db.Column(db.Text)
+    tolerancias_especificas = db.Column(db.Text)
+    observacoes_engenharia = db.Column(db.Text)
+    responsavel_tecnico = db.Column(db.String(100))
+    
+    # Relacionamento
+    folha_processo = relationship('FolhaProcesso', backref='folha_centro_usinagem')
+    
+    def __repr__(self):
+        return f'<FolhaCentroUsinagem {self.id}>'
+
+# Folha específica para Corte e Serra
+class FolhaCorteSerraria(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    folha_processo_id = db.Column(db.Integer, db.ForeignKey('folha_processo.id'), nullable=False)
+    
+    # Campos específicos do Corte e Serra
+    codigo_item = db.Column(db.String(50))
+    nome_peca = db.Column(db.String(200))
+    quantidade_cortar = db.Column(db.Integer)
+    tipo_material = db.Column(db.String(100))
+    tipo_serra = db.Column(db.String(100))  # manual, fita, disco, automática
+    tamanho_bruto = db.Column(db.String(100))
+    tamanho_final_corte = db.Column(db.String(100))
+    perda_esperada = db.Column(db.String(50))
+    tolerancia_permitida = db.Column(db.String(50))
+    operador_responsavel = db.Column(db.String(100))
+    data_corte = db.Column(db.Date)
+    observacoes_corte = db.Column(db.Text)
+    
+    # Relacionamento
+    folha_processo = relationship('FolhaProcesso', backref='folha_corte_serraria')
+    
+    def __repr__(self):
+        return f'<FolhaCorteSerraria {self.id}>'
+
+# Folha específica para Serviços Gerais
+class FolhaServicosGerais(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    folha_processo_id = db.Column(db.Integer, db.ForeignKey('folha_processo.id'), nullable=False)
+    
+    # Campos específicos dos Serviços Gerais
+    codigo_item = db.Column(db.String(50))
+    nome_peca = db.Column(db.String(200))
+    processo_rebarba = db.Column(db.Boolean, default=False)
+    processo_lavagem = db.Column(db.Boolean, default=False)
+    processo_inspecao = db.Column(db.Boolean, default=False)
+    ferramentas_utilizadas = db.Column(db.Text)  # lima, esmeril, soprador
+    padrao_qualidade = db.Column(db.Text)  # sem rebarbas, sem arranhões, limpo
+    itens_inspecionar = db.Column(db.Text)
+    resultado_inspecao = db.Column(db.String(20))  # Aprovado/Reprovado
+    motivo_reprovacao = db.Column(db.Text)
+    operador_responsavel = db.Column(db.String(100))
+    observacoes_gerais = db.Column(db.Text)
+    
+    # Relacionamento
+    folha_processo = relationship('FolhaProcesso', backref='folha_servicos_gerais')
+    
+    def __repr__(self):
+        return f'<FolhaServicosGerais {self.id}>'
+
+# Modelo para listas Kanban configuráveis
+class KanbanLista(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    nome = db.Column(db.String(100), nullable=False, unique=True)
+    ordem = db.Column(db.Integer, nullable=False, default=0)
+    tipo_servico = db.Column(db.String(50))  # Serra, Torno CNC, Centro de Usinagem, Manual, Acabamento, etc.
+    ativa = db.Column(db.Boolean, default=True)
+    cor = db.Column(db.String(7), default='#6c757d')  # cor hexadecimal para a lista
+    tempo_medio_fila = db.Column(db.Integer, default=0)  # tempo médio em segundos
+    data_criacao = db.Column(db.DateTime, default=datetime.utcnow)
+    data_atualizacao = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    
+    def __repr__(self):
+        return f'<KanbanLista {self.nome}>'

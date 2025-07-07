@@ -71,23 +71,71 @@ def parse_json_field(form_data, field_name, default=None):
         return default or []
 
 def get_kanban_categories():
-    """Retorna as categorias de trabalho para o Kanban"""
-    return {
-        'Serra': ['Serra'],
-        'Torno CNC': ['Mazak', 'GLM240', 'Glory', 'Doosan', 'Tesla'],
-        'Centro de Usinagem': ['D800 / D800 Plus', 'Glory1000'],
-        'Manual': ['Torno Manual', 'Fresa Manual', 'Rebarbagem'],
-        'Acabamento': ['Solda', 'Têmpera', 'Retífica']
-    }
+    """Retorna as categorias de trabalho para o Kanban baseadas nas listas do banco"""
+    from models import KanbanLista
+    
+    # Obter listas ativas do banco
+    listas = KanbanLista.query.filter_by(ativa=True).order_by(KanbanLista.ordem).all()
+    
+    # Se não houver listas no banco, usar as categorias padrão como fallback
+    if not listas:
+        return {
+            'Serra': ['Serra'],
+            'Torno CNC': ['Mazak', 'GLM240', 'Glory', 'Doosan', 'Tesla'],
+            'Centro de Usinagem': ['D800 / D800 Plus', 'Glory1000'],
+            'Manual': ['Torno Manual', 'Fresa Manual', 'Rebarbagem'],
+            'Acabamento': ['Solda', 'Têmpera', 'Retífica']
+        }
+    
+    # Agrupar listas por tipo de serviço
+    categorias = {}
+    for lista in listas:
+        tipo = lista.tipo_servico or 'Outros'
+        if tipo not in categorias:
+            categorias[tipo] = []
+        categorias[tipo].append(lista.nome)
+    
+    return categorias
 
 def get_kanban_lists():
-    """Retorna as listas do Kanban"""
-    return [
-        'Entrada', 'Serra', 'Cortado a Distribuir', 'Mazak', 'GLM240', 'Glory',
-        'Doosan', 'Tesla', 'Torno Manual', 'Fresa Manual', 'Rebarbagem',
-        'Parada Próxima Etapa', 'D800 / D800 Plus', 'Glory1000', 'Montagem Modelo',
-        'Serviço Terceiro', 'Solda', 'Têmpera', 'Retífica', 'Expedição'
-    ]
+    """Retorna as listas ativas do Kanban garantindo que 'Entrada' seja a primeira e 'Expedição' a última."""
+    from models import KanbanLista
+    
+    PROTECTED = ['Entrada', 'Expedição']
+    
+    # Obter listas ativas do banco ordenadas por campo "ordem"
+    listas_db = KanbanLista.query.filter_by(ativa=True).order_by(KanbanLista.ordem).all()
+    nomes = [l.nome for l in listas_db]
+    
+    # Inserir protegidas se não estiverem nos resultados
+    if PROTECTED[0] not in nomes:
+        nomes.insert(0, PROTECTED[0])
+    if PROTECTED[1] not in nomes:
+        nomes.append(PROTECTED[1])
+    
+    # Garantir posição correta mesmo se já existirem em lugares errados
+    # Remove duplicatas mantendo ordem
+    vistos = set()
+    nomes = [n for n in nomes if not (n in vistos or vistos.add(n))]
+    
+    # Mover protegidas para extremidades
+    if PROTECTED[0] in nomes:
+        nomes.remove(PROTECTED[0])
+        nomes.insert(0, PROTECTED[0])
+    if PROTECTED[1] in nomes:
+        nomes.remove(PROTECTED[1])
+        nomes.append(PROTECTED[1])
+    
+    # Caso não haja listas no banco, retornar fallback padrão
+    if not listas_db:
+        return [
+            'Entrada', 'Serra', 'Cortado a Distribuir', 'Mazak', 'GLM240', 'Glory',
+            'Doosan', 'Tesla', 'Torno Manual', 'Fresa Manual', 'Rebarbagem',
+            'Parada Próxima Etapa', 'D800 / D800 Plus', 'Glory1000', 'Montagem Modelo',
+            'Serviço Terceiro', 'Solda', 'Têmpera', 'Retífica', 'Expedição'
+        ]
+    
+    return nomes
 
 from datetime import datetime
 

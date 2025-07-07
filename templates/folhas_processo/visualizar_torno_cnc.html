@@ -1,0 +1,241 @@
+{% extends "base.html" %}
+
+{% block title %}Visualizar Folha - Torno CNC{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+    <div class="row">
+        <div class="col-12">
+            <div class="card shadow-sm">
+                <div class="card-header bg-info text-white d-flex justify-content-between align-items-center">
+                    <div>
+                        <h4 class="mb-0">
+                            <i class="fas fa-eye me-2"></i>
+                            Folha de Processo - Torno CNC
+                        </h4>
+                        <small class="opacity-75">{{ item.codigo_acb }} - {{ item.nome }} | Versão {{ folha.versao }}</small>
+                    </div>
+                    <div>
+                        <a href="{{ url_for('folhas_processo.historico_folhas', item_id=item.id) }}" class="btn btn-outline-light btn-sm">
+                            <i class="fas fa-history"></i> Histórico
+                        </a>
+                        <a href="{{ url_for('folhas_processo.listar_folhas', item_id=item.id) }}" class="btn btn-outline-light btn-sm">
+                            <i class="fas fa-arrow-left"></i> Voltar
+                        </a>
+                    </div>
+                </div>
+
+                <div class="card-body">
+                    <!-- Informações Gerais -->
+                    <div class="row mb-4">
+                        <div class="col-md-6">
+                            <div class="card bg-light">
+                                <div class="card-header py-2">
+                                    <strong>Informações da Folha</strong>
+                                </div>
+                                <div class="card-body">
+                                    <div class="row mb-2">
+                                        <div class="col-sm-4"><strong>Versão:</strong></div>
+                                        <div class="col-sm-8">{{ folha.versao }}</div>
+                                    </div>
+                                    <div class="row mb-2">
+                                        <div class="col-sm-4"><strong>Status:</strong></div>
+                                        <div class="col-sm-8">
+                                            <span class="badge bg-{{ 'success' if folha.ativo else 'secondary' }}">
+                                                {{ 'ATIVA' if folha.ativo else 'INATIVA' }}
+                                            </span>
+                                        </div>
+                                    </div>
+                                    <div class="row mb-2">
+                                        <div class="col-sm-4"><strong>Criado por:</strong></div>
+                                        <div class="col-sm-8">{{ folha.criado_por }}</div>
+                                    </div>
+                                    <div class="row mb-2">
+                                        <div class="col-sm-4"><strong>Data:</strong></div>
+                                        <div class="col-sm-8">{{ folha.data_criacao.strftime('%d/%m/%Y %H:%M') }}</div>
+                                    </div>
+                                    {% if folha.responsavel %}
+                                    <div class="row mb-2">
+                                        <div class="col-sm-4"><strong>Responsável:</strong></div>
+                                        <div class="col-sm-8">{{ folha.responsavel }}</div>
+                                    </div>
+                                    {% endif %}
+                                </div>
+                            </div>
+                        </div>
+                        <div class="col-md-6">
+                            {% if folha.observacoes %}
+                            <div class="card bg-light">
+                                <div class="card-header py-2">
+                                    <strong>Observações</strong>
+                                </div>
+                                <div class="card-body">
+                                    {{ folha.observacoes }}
+                                </div>
+                            </div>
+                            {% endif %}
+                        </div>
+                    </div>
+
+                    {% if folha_especifica %}
+                    <!-- Dados Específicos do Torno CNC -->
+                    <div class="row">
+                        <div class="col-12">
+                            <div class="card">
+                                <div class="card-header bg-primary text-white">
+                                    <h5 class="mb-0">
+                                        <i class="fas fa-cog me-2"></i>
+                                        Dados do Processo - Torno CNC
+                                    </h5>
+                                </div>
+                                <div class="card-body">
+                                    <div class="row">
+                                        <!-- Informações Básicas -->
+                                        <div class="col-md-6 mb-3">
+                                            <h6 class="border-bottom pb-2">Informações Básicas</h6>
+                                            <div class="row mb-2">
+                                                <div class="col-sm-5"><strong>Código Item:</strong></div>
+                                                <div class="col-sm-7">{{ folha_especifica.codigo_item or '-' }}</div>
+                                            </div>
+                                            <div class="row mb-2">
+                                                <div class="col-sm-5"><strong>Nome Peça:</strong></div>
+                                                <div class="col-sm-7">{{ folha_especifica.nome_peca or '-' }}</div>
+                                            </div>
+                                            <div class="row mb-2">
+                                                <div class="col-sm-5"><strong>Revisão:</strong></div>
+                                                <div class="col-sm-7">{{ folha_especifica.revisao or '-' }}</div>
+                                            </div>
+                                            <div class="row mb-2">
+                                                <div class="col-sm-5"><strong>Responsável:</strong></div>
+                                                <div class="col-sm-7">{{ folha_especifica.responsavel_preenchimento or '-' }}</div>
+                                            </div>
+                                        </div>
+
+                                        <!-- Programa CNC -->
+                                        <div class="col-md-6 mb-3">
+                                            <h6 class="border-bottom pb-2">Programa CNC</h6>
+                                            <div class="row mb-2">
+                                                <div class="col-sm-5"><strong>Nº Programa:</strong></div>
+                                                <div class="col-sm-7">{{ folha_especifica.numero_programa or '-' }}</div>
+                                            </div>
+                                            <div class="row mb-2">
+                                                <div class="col-sm-5"><strong>Código Programa:</strong></div>
+                                                <div class="col-sm-7">{{ folha_especifica.codigo_programa or '-' }}</div>
+                                            </div>
+                                        </div>
+                                    </div>
+
+                                    <div class="row">
+                                        <!-- Ferramentas -->
+                                        <div class="col-md-6 mb-3">
+                                            <h6 class="border-bottom pb-2">Ferramentas</h6>
+                                            {% for i in range(1, 7) %}
+                                                {% set ferramenta = folha_especifica['ferramenta_' + i|string] %}
+                                                {% if ferramenta %}
+                                                <div class="row mb-1">
+                                                    <div class="col-sm-3"><strong>T{{ i }}:</strong></div>
+                                                    <div class="col-sm-9">{{ ferramenta }}</div>
+                                                </div>
+                                                {% endif %}
+                                            {% endfor %}
+                                        </div>
+
+                                        <!-- Dimensões Críticas -->
+                                        <div class="col-md-6 mb-3">
+                                            <h6 class="border-bottom pb-2">Dimensões Críticas</h6>
+                                            {% if folha_especifica.dimensao_critica_1 %}
+                                            <div class="row mb-1">
+                                                <div class="col-sm-3"><strong>Dim. 1:</strong></div>
+                                                <div class="col-sm-9">{{ folha_especifica.dimensao_critica_1 }}</div>
+                                            </div>
+                                            {% endif %}
+                                            {% if folha_especifica.dimensao_critica_2 %}
+                                            <div class="row mb-1">
+                                                <div class="col-sm-3"><strong>Dim. 2:</strong></div>
+                                                <div class="col-sm-9">{{ folha_especifica.dimensao_critica_2 }}</div>
+                                            </div>
+                                            {% endif %}
+                                            {% if folha_especifica.dimensao_critica_3 %}
+                                            <div class="row mb-1">
+                                                <div class="col-sm-3"><strong>Dim. 3:</strong></div>
+                                                <div class="col-sm-9">{{ folha_especifica.dimensao_critica_3 }}</div>
+                                            </div>
+                                            {% endif %}
+                                        </div>
+                                    </div>
+
+                                    <div class="row">
+                                        <!-- Parâmetros de Corte -->
+                                        <div class="col-md-6 mb-3">
+                                            <h6 class="border-bottom pb-2">Parâmetros de Corte</h6>
+                                            <div class="row mb-2">
+                                                <div class="col-sm-5"><strong>Velocidade:</strong></div>
+                                                <div class="col-sm-7">{{ folha_especifica.velocidade_corte or '-' }}</div>
+                                            </div>
+                                            <div class="row mb-2">
+                                                <div class="col-sm-5"><strong>Avanço:</strong></div>
+                                                <div class="col-sm-7">{{ folha_especifica.avanco or '-' }}</div>
+                                            </div>
+                                            <div class="row mb-2">
+                                                <div class="col-sm-5"><strong>Rotação:</strong></div>
+                                                <div class="col-sm-7">{{ folha_especifica.rotacao or '-' }}</div>
+                                            </div>
+                                            <div class="row mb-2">
+                                                <div class="col-sm-5"><strong>Refrigeração:</strong></div>
+                                                <div class="col-sm-7">{{ folha_especifica.refrigeracao or '-' }}</div>
+                                            </div>
+                                        </div>
+
+                                        <!-- Observações -->
+                                        <div class="col-md-6 mb-3">
+                                            <h6 class="border-bottom pb-2">Observações</h6>
+                                            {% if folha_especifica.observacoes_setup %}
+                                            <div class="mb-2">
+                                                <strong>Setup:</strong><br>
+                                                <small>{{ folha_especifica.observacoes_setup }}</small>
+                                            </div>
+                                            {% endif %}
+                                            {% if folha_especifica.observacoes_operacao %}
+                                            <div class="mb-2">
+                                                <strong>Operação:</strong><br>
+                                                <small>{{ folha_especifica.observacoes_operacao }}</small>
+                                            </div>
+                                            {% endif %}
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    {% endif %}
+
+                    <!-- Ações -->
+                    <div class="row mt-4">
+                        <div class="col-12">
+                            <div class="d-flex gap-2 justify-content-center">
+                                {% if folha.ativo %}
+                                    <a href="{{ url_for('folhas_processo.editar_folha', folha_id=folha.id) }}" class="btn btn-success">
+                                        <i class="fas fa-edit"></i> Editar Folha Ativa
+                                    </a>
+                                {% else %}
+                                    <a href="{{ url_for('folhas_processo.criar_nova_versao', folha_id=folha.id) }}" 
+                                       class="btn btn-warning"
+                                       onclick="return confirm('Criar nova versão baseada na v{{ folha.versao }}?')">
+                                        <i class="fas fa-copy"></i> Criar Nova Versão
+                                    </a>
+                                {% endif %}
+                                <button type="button" class="btn btn-secondary" onclick="window.print()">
+                                    <i class="fas fa-print"></i> Imprimir
+                                </button>
+                                <a href="{{ url_for('folhas_processo.historico_folhas', item_id=item.id) }}" class="btn btn-info">
+                                    <i class="fas fa-history"></i> Ver Histórico
+                                </a>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

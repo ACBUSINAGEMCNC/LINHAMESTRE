@@ -1,0 +1,156 @@
+{% extends "base.html" %}
+
+{% block title %}Folhas de Processo - {{ item.codigo_acb }} {% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+    <div class="row">
+        <div class="col-md-12">
+            <div class="card">
+                <div class="card-header bg-primary text-white">
+                    <div class="d-flex justify-content-between align-items-center">
+                        <h5 class="mb-0">📋 Folhas de Processo - {{ item.codigo_acb }} - {{ item.nome }}</h5>
+                        <div class="btn-group">
+                            <button type="button" class="btn btn-success btn-sm" data-bs-toggle="modal" data-bs-target="#modalCriarFolha">
+                                <i class="fas fa-plus"></i> Nova Folha
+                            </button>
+                            <a href="{{ url_for('folhas_processo.historico_folhas', item_id=item.id) }}" class="btn btn-outline-info btn-sm">
+                                <i class="fas fa-history"></i> Histórico de Versões
+                            </a>
+                            <a href="{{ url_for('itens.visualizar_item', item_id=item.id) }}" class="btn btn-outline-light btn-sm">
+                                <i class="fas fa-arrow-left"></i> Voltar ao Item
+                            </a>
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="card-body">
+                    {% if folhas %}
+                        <div class="row">
+                            {% for folha in folhas %}
+                            <div class="col-md-6 col-lg-4 mb-3">
+                                <div class="card h-100 border-{{ 'success' if folha.ativo else 'secondary' }}">
+                                    <div class="card-header bg-{{ 'success' if folha.ativo else 'secondary' }} bg-opacity-10">
+                                        <div class="d-flex justify-content-between align-items-center">
+                                            <h6 class="mb-0">
+                                                {% if folha.tipo_processo == 'torno_cnc' %}
+                                                    🔧 Torno CNC
+                                                {% elif folha.tipo_processo == 'centro_usinagem' %}
+                                                    🏭 Centro de Usinagem
+                                                {% elif folha.tipo_processo == 'corte_serra' %}
+                                                    ⚒️ Corte e Serra
+                                                {% elif folha.tipo_processo == 'servicos_gerais' %}
+                                                    🔨 Serviços Gerais
+                                                {% endif %}
+                                            </h6>
+                                            <span class="badge bg-{{ 'success' if folha.ativo else 'secondary' }}">
+                                                v{{ folha.versao }}
+                                                {% if folha.ativo %} - Ativa {% endif %}
+                                            </span>
+                                        </div>
+                                    </div>
+                                    
+                                    <div class="card-body">
+                                        <div class="mb-2">
+                                            <strong>Responsável:</strong><br>
+                                            <small class="text-muted">{{ folha.responsavel or 'Não definido' }}</small>
+                                        </div>
+                                        
+                                        <div class="mb-2">
+                                            <strong>Criado:</strong><br>
+                                            <small class="text-muted">{{ folha.data_criacao.strftime('%d/%m/%Y %H:%M') }}</small>
+                                        </div>
+                                        
+                                        {% if folha.data_atualizacao != folha.data_criacao %}
+                                        <div class="mb-2">
+                                            <strong>Atualizado:</strong><br>
+                                            <small class="text-muted">{{ folha.data_atualizacao.strftime('%d/%m/%Y %H:%M') }}</small>
+                                        </div>
+                                        {% endif %}
+                                        
+                                        {% if folha.observacoes %}
+                                        <div class="mb-2">
+                                            <strong>Observações:</strong><br>
+                                            <small class="text-muted">{{ folha.observacoes[:100] }}{% if folha.observacoes|length > 100 %}...{% endif %}</small>
+                                        </div>
+                                        {% endif %}
+                                    </div>
+                                    
+                                    <div class="card-footer">
+                                        <div class="btn-group w-100">
+                                            <a href="{{ url_for('folhas_processo.visualizar_folha', folha_id=folha.id) }}" 
+                                               class="btn btn-outline-primary btn-sm">
+                                                <i class="fas fa-eye"></i> Visualizar
+                                            </a>
+                                            {% if folha.ativo %}
+                                            <a href="{{ url_for('folhas_processo.editar_folha', folha_id=folha.id) }}" 
+                                               class="btn btn-outline-warning btn-sm">
+                                                <i class="fas fa-edit"></i> Editar
+                                            </a>
+                                            {% endif %}
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                            {% endfor %}
+                        </div>
+                    {% else %}
+                        <div class="text-center py-5">
+                            <i class="fas fa-clipboard-list fa-4x text-muted mb-3"></i>
+                            <h5 class="text-muted">Nenhuma folha de processo cadastrada</h5>
+                            <p class="text-muted">Clique em "Nova Folha" para criar a primeira folha de processo para este item.</p>
+                        </div>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Modal Criar Folha -->
+<div class="modal fade" id="modalCriarFolha" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <form method="POST" action="{{ url_for('folhas_processo.criar_folha') }}">
+                <div class="modal-header">
+                    <h5 class="modal-title">📋 Nova Folha de Processo</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                
+                <div class="modal-body">
+                    <input type="hidden" name="item_id" value="{{ item.id }}">
+                    
+                    <div class="mb-3">
+                        <label for="tipo_processo" class="form-label">Tipo de Processo *</label>
+                        <select class="form-select" name="tipo_processo" id="tipo_processo" required>
+                            <option value="">Selecione o tipo de processo...</option>
+                            <option value="torno_cnc">🔧 Torno CNC</option>
+                            <option value="centro_usinagem">🏭 Centro de Usinagem</option>
+                            <option value="corte_serra">⚒️ Corte e Serra</option>
+                            <option value="servicos_gerais">🔨 Serviços Gerais</option>
+                        </select>
+                    </div>
+                    
+                    <div class="mb-3">
+                        <label for="responsavel" class="form-label">Responsável</label>
+                        <input type="text" class="form-control" name="responsavel" id="responsavel" 
+                               value="{{ session.get('usuario_nome', '') }}">
+                    </div>
+                    
+                    <div class="mb-3">
+                        <label for="observacoes" class="form-label">Observações</label>
+                        <textarea class="form-control" name="observacoes" id="observacoes" rows="3"></textarea>
+                    </div>
+                </div>
+                
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
+                    <button type="submit" class="btn btn-success">
+                        <i class="fas fa-plus"></i> Criar Folha
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+{% endblock %}

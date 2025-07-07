@@ -14,15 +14,34 @@
                 <div class="card-body">
                     <div class="row">
                         <div class="col-md-12 mb-3">
-                            <div class="d-flex justify-content-end">
-                                <a href="/ordens-servico/imprimir/{{ ordem.id }}" class="btn btn-sm btn-outline-primary me-2" target="_blank">
+                            <div class="d-flex justify-content-end flex-wrap">
+                                <a href="/ordens-servico/imprimir/{{ ordem.id }}" class="btn btn-sm btn-outline-primary me-2 mb-1" target="_blank">
                                     <i class="fas fa-print"></i> Imprimir OS
                                 </a>
-                                <a href="/ordens-servico/imprimir-desenho/{{ ordem.id }}" class="btn btn-sm btn-outline-secondary me-2" target="_blank">
+                                <a href="/ordens-servico/imprimir-desenho/{{ ordem.id }}" class="btn btn-sm btn-outline-secondary me-2 mb-1" target="_blank">
                                     <i class="fas fa-drafting-compass"></i> Imprimir Desenhos
                                 </a>
+                                <div class="btn-group me-2 mb-1">
+                                    <button type="button" class="btn btn-sm btn-outline-info dropdown-toggle" data-bs-toggle="dropdown">
+                                        <i class="fas fa-clipboard-list"></i> Folhas de Processo
+                                    </button>
+                                    <ul class="dropdown-menu">
+                                        {% for pedido_os in ordem.pedidos %}
+                                            {% if pedido_os.pedido.item_id %}
+                                                <li>
+                                                    <a class="dropdown-item" href="{{ url_for('folhas_processo.listar_folhas', item_id=pedido_os.pedido.item_id) }}">
+                                                        <i class="fas fa-file-alt"></i> {{ pedido_os.pedido.item.codigo_acb }}
+                                                    </a>
+                                                </li>
+                                            {% endif %}
+                                        {% endfor %}
+                                        {% if not ordem.pedidos or not ordem.pedidos[0].pedido.item_id %}
+                                            <li><span class="dropdown-item-text text-muted">Nenhum item disponível</span></li>
+                                        {% endif %}
+                                    </ul>
+                                </div>
                                 {% if ordem.status == 'Expedição' %}
-                                <button type="button" class="btn btn-sm btn-success" onclick="finalizarOS('{{ ordem.id }}')">
+                                <button type="button" class="btn btn-sm btn-success mb-1" onclick="finalizarOS('{{ ordem.id }}')">
                                     <i class="fas fa-check-circle"></i> Finalizar OS
                                 </button>
                                 {% endif %}

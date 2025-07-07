@@ -31,6 +31,9 @@
         <div class="d-flex justify-content-between align-items-center mb-4">
             <h1>{{ item.codigo_acb }} - {{ item.nome }}</h1>
             <div>
+                <a href="{{ url_for('folhas_processo.listar_folhas', item_id=item.id) }}" class="btn btn-info me-2">
+                    <i class="fas fa-clipboard-list"></i> Folhas de Processo
+                </a>
                 <a href="/itens/editar/{{ item.id }}" class="btn btn-primary me-2">
                     <i class="fas fa-edit"></i> Editar
                 </a>

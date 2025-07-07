@@ -1,9 +1,12 @@
 from flask import Blueprint, render_template, request, redirect, url_for, flash, jsonify, session
-from models import db, Usuario, OrdemServico, Pedido, PedidoOrdemServico, Item, Trabalho, ItemTrabalho, RegistroMensal
+from models import db, Usuario, OrdemServico, Pedido, PedidoOrdemServico, Item, Trabalho, ItemTrabalho, RegistroMensal, KanbanLista
 from utils import validate_form_data, get_kanban_lists, get_kanban_categories, format_seconds_to_time
 from datetime import datetime
 
 kanban = Blueprint('kanban', __name__)
+
+# Listas Kanban que nunca podem ser removidas, renomeadas ou movimentadas
+PROTECTED_LISTS = ['Entrada', 'Expedição']
 
 # Verificação de permissão para todo o blueprint Kanban
 @kanban.before_request
@@ -186,3 +189,156 @@ def registros_mensais():
                           registros=registros, 
                           meses_disponiveis=meses_disponiveis,
                           mes_selecionado=mes_selecionado)
+
+# Rotas para gerenciar listas Kanban
+@kanban.route('/listas')
+def gerenciar_listas():
+    """Rota para gerenciar as listas Kanban"""
+    listas = KanbanLista.query.order_by(KanbanLista.ordem).all()
+    tipos_servico = ['Serra', 'Torno CNC', 'Centro de Usinagem', 'Manual', 'Acabamento', 'Terceiros', 'Outros']
+    return render_template('kanban/gerenciar_listas.html', listas=listas, tipos_servico=tipos_servico)
+
+@kanban.route('/listas/criar', methods=['POST'])
+def criar_lista():
+    # Impedir criar lista com nome protegido
+    if request.form['nome'].strip() in PROTECTED_LISTS:
+        flash('Não é permitido criar uma lista com este nome reservado.', 'danger')
+        return redirect(url_for('kanban.gerenciar_listas'))
+    """Rota para criar uma nova lista Kanban"""
+    errors = validate_form_data(request.form, ['nome'])
+    if errors:
+        flash('Erro: ' + ', '.join(errors), 'danger')
+        return redirect(url_for('kanban.gerenciar_listas'))
+    
+    nome = request.form['nome'].strip()
+    tipo_servico = request.form.get('tipo_servico', '')
+    cor = request.form.get('cor', '#6c757d')
+    
+    # Verificar se já existe uma lista com esse nome
+    if KanbanLista.query.filter_by(nome=nome).first():
+        flash(f'Já existe uma lista com o nome "{nome}"', 'danger')
+        return redirect(url_for('kanban.gerenciar_listas'))
+    
+    # Obter a próxima ordem
+    ultima_ordem = db.session.query(db.func.max(KanbanLista.ordem)).scalar() or 0
+    
+    nova_lista = KanbanLista(
+        nome=nome,
+        tipo_servico=tipo_servico,
+        cor=cor,
+        ordem=ultima_ordem + 1
+    )
+    
+    db.session.add(nova_lista)
+    db.session.commit()
+    
+    flash(f'Lista "{nome}" criada com sucesso!', 'success')
+    return redirect(url_for('kanban.gerenciar_listas'))
+
+@kanban.route('/listas/editar/<int:lista_id>', methods=['POST'])
+def editar_lista(lista_id):
+    lista = KanbanLista.query.get_or_404(lista_id)
+    # Bloquear edição se lista protegida
+    if lista.nome in PROTECTED_LISTS:
+        flash('Esta lista é protegida e não pode ser editada.', 'danger')
+        return redirect(url_for('kanban.gerenciar_listas'))
+    """Rota para editar uma lista Kanban"""
+    lista = KanbanLista.query.get_or_404(lista_id)
+    
+    errors = validate_form_data(request.form, ['nome'])
+    if errors:
+        flash('Erro: ' + ', '.join(errors), 'danger')
+        return redirect(url_for('kanban.gerenciar_listas'))
+    
+    nome = request.form['nome'].strip()
+    tipo_servico = request.form.get('tipo_servico', '')
+    cor = request.form.get('cor', '#6c757d')
+    ativa = 'ativa' in request.form
+    
+    # Verificar se já existe outra lista com esse nome
+    lista_existente = KanbanLista.query.filter_by(nome=nome).first()
+    if lista_existente and lista_existente.id != lista_id:
+        flash(f'Já existe uma lista com o nome "{nome}"', 'danger')
+        return redirect(url_for('kanban.gerenciar_listas'))
+    
+    lista.nome = nome
+    lista.tipo_servico = tipo_servico
+    lista.cor = cor
+    lista.ativa = ativa
+    lista.data_atualizacao = datetime.utcnow()
+    
+    db.session.commit()
+    
+    flash(f'Lista "{nome}" atualizada com sucesso!', 'success')
+    return redirect(url_for('kanban.gerenciar_listas'))
+
+@kanban.route('/listas/reordenar', methods=['POST'])
+def reordenar_listas():
+    """Rota para reordenar as listas Kanban, mantendo listas protegidas nas posições extremas"""
+    try:
+        ordem_ids = request.json.get('ordem', [])
+
+        # Garantir que posições extremas continuem protegidas
+        listas_db = {l.id: l for l in KanbanLista.query.filter(KanbanLista.id.in_(ordem_ids)).all()}
+        if not ordem_ids:
+            return jsonify({'success': False, 'message': 'Lista de ordem vazia.'})
+        # Verificar primeiro e último nome
+        first_name = listas_db[ordem_ids[0]].nome
+        last_name = listas_db[ordem_ids[-1]].nome
+        if first_name not in PROTECTED_LISTS or last_name not in PROTECTED_LISTS:
+            return jsonify({'success': False, 'message': 'Entrada deve permanecer primeiro e Expedição último.'})
+
+        for i, lista_id in enumerate(ordem_ids):
+            lista = listas_db.get(lista_id)
+            if lista:
+                # Impedir mudar ordem das protegidas (devem permanecer)
+                if lista.nome in PROTECTED_LISTS and ((i == 0 and lista.nome != 'Entrada') or (i == len(ordem_ids)-1 and lista.nome != 'Expedição')):
+                    return jsonify({'success': False, 'message': 'Não é permitido mover listas protegidas.'})
+                lista.ordem = i + 1
+                lista.data_atualizacao = datetime.utcnow()
+
+        db.session.commit()
+        return jsonify({'success': True, 'message': 'Ordem das listas atualizada com sucesso!'})
+
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({'success': False, 'message': f'Erro ao reordenar listas: {str(e)}'})
+    """Rota para reordenar as listas Kanban"""
+    try:
+        ordem_ids = request.json.get('ordem', [])
+        
+        for i, lista_id in enumerate(ordem_ids):
+            lista = KanbanLista.query.get(lista_id)
+            if lista:
+                lista.ordem = i + 1
+                lista.data_atualizacao = datetime.utcnow()
+        
+        db.session.commit()
+        return jsonify({'success': True, 'message': 'Ordem das listas atualizada com sucesso!'})
+    
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({'success': False, 'message': f'Erro ao reordenar listas: {str(e)}'})
+
+@kanban.route('/listas/excluir/<int:lista_id>', methods=['POST'])
+def excluir_lista(lista_id):
+    lista = KanbanLista.query.get_or_404(lista_id)
+    # Bloquear exclusão se lista protegida
+    if lista.nome in PROTECTED_LISTS:
+        flash('Esta lista é protegida e não pode ser excluída.', 'danger')
+        return redirect(url_for('kanban.gerenciar_listas'))
+    """Rota para excluir uma lista Kanban"""
+    lista = KanbanLista.query.get_or_404(lista_id)
+    
+    # Verificar se existem ordens de serviço nesta lista
+    ordens_na_lista = OrdemServico.query.filter_by(status=lista.nome).count()
+    if ordens_na_lista > 0:
+        flash(f'Não é possível excluir a lista "{lista.nome}" pois existem {ordens_na_lista} cartões nela.', 'danger')
+        return redirect(url_for('kanban.gerenciar_listas'))
+    
+    nome_lista = lista.nome
+    db.session.delete(lista)
+    db.session.commit()
+    
+    flash(f'Lista "{nome_lista}" excluída com sucesso!', 'success')
+    return redirect(url_for('kanban.gerenciar_listas'))

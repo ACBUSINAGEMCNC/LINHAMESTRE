@@ -1,0 +1,324 @@
+{% extends "base.html" %}
+
+{% block title %}Folha de Processo - Corte e Serra - {{ item.codigo_acb }}{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+    <div class="row">
+        <div class="col-md-12">
+            <div class="card">
+                <div class="card-header bg-primary text-white">
+                    <div class="d-flex justify-content-between align-items-center">
+                        <h5 class="mb-0">⚒️ Folha de Processo - Corte e Serra</h5>
+                        <div class="btn-group">
+                            <button type="button" class="btn btn-success btn-sm" onclick="salvarFolha()">
+                                <i class="fas fa-save"></i> Salvar
+                            </button>
+                            <a href="{{ url_for('folhas_processo.listar_folhas', item_id=item.id) }}" class="btn btn-outline-light btn-sm">
+                                <i class="fas fa-arrow-left"></i> Voltar
+                            </a>
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="card-body">
+                    <form id="formFolhaProcesso" method="POST" action="{{ url_for('folhas_processo.salvar_folha', folha_id=folha.id) }}">
+                        <!-- Informações do Item -->
+                        <div class="row mb-4">
+                            <div class="col-md-12">
+                                <div class="card bg-light">
+                                    <div class="card-body">
+                                        <h6 class="card-title">📦 Informações do Item</h6>
+                                        <div class="row">
+                                            <div class="col-md-4">
+                                                <strong>Código ACB:</strong> {{ item.codigo_acb }}
+                                            </div>
+                                            <div class="col-md-4">
+                                                <strong>Nome:</strong> {{ item.nome }}
+                                            </div>
+                                            <div class="col-md-4">
+                                                <strong>Versão da Folha:</strong> v{{ folha.versao }}
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Dados Básicos -->
+                        <div class="row mb-4">
+                            <div class="col-md-4">
+                                <label for="responsavel" class="form-label">Responsável pela Folha</label>
+                                <input type="text" class="form-control" name="responsavel" id="responsavel" 
+                                       value="{{ folha.responsavel or '' }}">
+                            </div>
+                            <div class="col-md-4">
+                                <label for="quantidade_cortar" class="form-label">Quantidade a Cortar</label>
+                                <input type="number" class="form-control" name="quantidade_cortar" id="quantidade_cortar" 
+                                       value="{{ folha_especifica.quantidade_cortar or '' }}" min="1">
+                            </div>
+                            <div class="col-md-4">
+                                <label for="operador_responsavel" class="form-label">Operador Responsável</label>
+                                <input type="text" class="form-control" name="operador_responsavel" id="operador_responsavel" 
+                                       value="{{ folha_especifica.operador_responsavel or '' }}">
+                            </div>
+                        </div>
+
+                        <!-- Material e Ferramentas -->
+                        <div class="card mb-4">
+                            <div class="card-header">
+                                <h6 class="mb-0">🔧 Material e Ferramentas</h6>
+                            </div>
+                            <div class="card-body">
+                                <div class="row">
+                                    <div class="col-md-6">
+                                        <label for="tipo_material" class="form-label">Tipo de Material</label>
+                                        <input type="text" class="form-control" name="tipo_material" id="tipo_material" 
+                                               value="{{ folha_especifica.tipo_material or '' }}" 
+                                               placeholder="Ex: Aço 1020, Alumínio 6061, Latão">
+                                    </div>
+                                    <div class="col-md-6">
+                                        <label for="tipo_serra" class="form-label">Tipo de Serra</label>
+                                        <select class="form-select" name="tipo_serra" id="tipo_serra">
+                                            <option value="">Selecione...</option>
+                                            <option value="Serra fita" {{ 'selected' if folha_especifica.tipo_serra == 'Serra fita' }}>Serra fita</option>
+                                            <option value="Serra circular" {{ 'selected' if folha_especifica.tipo_serra == 'Serra circular' }}>Serra circular</option>
+                                            <option value="Serra alternativa" {{ 'selected' if folha_especifica.tipo_serra == 'Serra alternativa' }}>Serra alternativa</option>
+                                            <option value="Policorte" {{ 'selected' if folha_especifica.tipo_serra == 'Policorte' }}>Policorte</option>
+                                            <option value="Serra de arco manual" {{ 'selected' if folha_especifica.tipo_serra == 'Serra de arco manual' }}>Serra de arco manual</option>
+                                        </select>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Dimensões do Corte -->
+                        <div class="card mb-4">
+                            <div class="card-header">
+                                <h6 class="mb-0">📏 Dimensões do Corte</h6>
+                            </div>
+                            <div class="card-body">
+                                <div class="row">
+                                    <div class="col-md-6">
+                                        <label for="tamanho_bruto" class="form-label">Tamanho Bruto (Material Original)</label>
+                                        <input type="text" class="form-control" name="tamanho_bruto" id="tamanho_bruto" 
+                                               value="{{ folha_especifica.tamanho_bruto or '' }}" 
+                                               placeholder="Ex: 50x30x200mm, Ø25x1000mm">
+                                    </div>
+                                    <div class="col-md-6">
+                                        <label for="tamanho_final_corte" class="form-label">Tamanho Final do Corte</label>
+                                        <input type="text" class="form-control" name="tamanho_final_corte" id="tamanho_final_corte" 
+                                               value="{{ folha_especifica.tamanho_final_corte or '' }}" 
+                                               placeholder="Ex: 48x28x180mm, Ø25x150mm">
+                                    </div>
+                                </div>
+                                
+                                <div class="row mt-3">
+                                    <div class="col-md-6">
+                                        <label for="perda_esperada" class="form-label">Perda Esperada (sangria)</label>
+                                        <input type="text" class="form-control" name="perda_esperada" id="perda_esperada" 
+                                               value="{{ folha_especifica.perda_esperada or '' }}" 
+                                               placeholder="Ex: 2-3mm por corte">
+                                    </div>
+                                    <div class="col-md-6">
+                                        <label for="tolerancia_permitida" class="form-label">Tolerância Permitida</label>
+                                        <input type="text" class="form-control" name="tolerancia_permitida" id="tolerancia_permitida" 
+                                               value="{{ folha_especifica.tolerancia_permitida or '' }}" 
+                                               placeholder="Ex: ±0.5mm, ±1mm">
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Programação do Corte -->
+                        <div class="card mb-4">
+                            <div class="card-header">
+                                <h6 class="mb-0">📅 Programação do Corte</h6>
+                            </div>
+                            <div class="card-body">
+                                <div class="row">
+                                    <div class="col-md-6">
+                                        <label for="data_corte" class="form-label">Data Prevista/Realizada</label>
+                                        <input type="date" class="form-control" name="data_corte" id="data_corte" 
+                                               value="{{ folha_especifica.data_corte.strftime('%Y-%m-%d') if folha_especifica.data_corte else '' }}">
+                                    </div>
+                                    <div class="col-md-6">
+                                        <label for="observacoes_corte" class="form-label">Observações do Corte</label>
+                                        <textarea class="form-control" name="observacoes_corte" id="observacoes_corte" rows="3" 
+                                                  placeholder="Observações específicas do processo de corte">{{ folha_especifica.observacoes_corte or '' }}</textarea>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Instruções e Cuidados -->
+                        <div class="card mb-4">
+                            <div class="card-header">
+                                <h6 class="mb-0">⚠️ Instruções e Cuidados</h6>
+                            </div>
+                            <div class="card-body">
+                                <div class="alert alert-info">
+                                    <h6 class="alert-heading">
+                                        <i class="fas fa-info-circle"></i> Instruções Importantes:
+                                    </h6>
+                                    <ul class="mb-0">
+                                        <li>Verificar o estado da lâmina antes do corte</li>
+                                        <li>Usar EPIs adequados (óculos, luvas, protetor auricular)</li>
+                                        <li>Fixar bem a peça antes do corte</li>
+                                        <li>Verificar medidas com instrumentos de medição</li>
+                                        <li>Remover rebarbas após o corte</li>
+                                    </ul>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Observações Gerais -->
+                        <div class="card mb-4">
+                            <div class="card-header">
+                                <h6 class="mb-0">📝 Observações Gerais</h6>
+                            </div>
+                            <div class="card-body">
+                                <div class="row">
+                                    <div class="col-md-12">
+                                        <label for="observacoes" class="form-label">Observações Gerais da Folha</label>
+                                        <textarea class="form-control" name="observacoes" id="observacoes" rows="4" 
+                                                  placeholder="Observações gerais, cuidados especiais, recomendações">{{ folha.observacoes or '' }}</textarea>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Checklist do Processo -->
+                        <div class="card mb-4">
+                            <div class="card-header">
+                                <h6 class="mb-0">✅ Checklist do Processo</h6>
+                            </div>
+                            <div class="card-body">
+                                <div class="row">
+                                    <div class="col-md-6">
+                                        <div class="form-check mb-2">
+                                            <input class="form-check-input" type="checkbox" id="check_material">
+                                            <label class="form-check-label" for="check_material">
+                                                Material conferido e adequado
+                                            </label>
+                                        </div>
+                                        <div class="form-check mb-2">
+                                            <input class="form-check-input" type="checkbox" id="check_medidas">
+                                            <label class="form-check-label" for="check_medidas">
+                                                Medidas conferidas no desenho
+                                            </label>
+                                        </div>
+                                        <div class="form-check mb-2">
+                                            <input class="form-check-input" type="checkbox" id="check_serra">
+                                            <label class="form-check-label" for="check_serra">
+                                                Serra/lâmina em bom estado
+                                            </label>
+                                        </div>
+                                    </div>
+                                    <div class="col-md-6">
+                                        <div class="form-check mb-2">
+                                            <input class="form-check-input" type="checkbox" id="check_fixacao">
+                                            <label class="form-check-label" for="check_fixacao">
+                                                Peça bem fixada
+                                            </label>
+                                        </div>
+                                        <div class="form-check mb-2">
+                                            <input class="form-check-input" type="checkbox" id="check_epi">
+                                            <label class="form-check-label" for="check_epi">
+                                                EPIs utilizados
+                                            </label>
+                                        </div>
+                                        <div class="form-check mb-2">
+                                            <input class="form-check-input" type="checkbox" id="check_medida_final">
+                                            <label class="form-check-label" for="check_medida_final">
+                                                Medidas finais conferidas
+                                            </label>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+function salvarFolha() {
+    const form = document.getElementById('formFolhaProcesso');
+    const formData = new FormData(form);
+    
+    // Mostrar loading
+    const btnSalvar = event.target;
+    const textOriginal = btnSalvar.innerHTML;
+    btnSalvar.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Salvando...';
+    btnSalvar.disabled = true;
+    
+    fetch(form.action, {
+        method: 'POST',
+        body: formData,
+        headers: {
+            'X-Requested-With': 'XMLHttpRequest'
+        }
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            showToast('success', 'Folha de processo salva com sucesso!');
+        } else {
+            showToast('error', data.error || 'Erro ao salvar folha de processo');
+        }
+    })
+    .catch(error => {
+        console.error('Erro:', error);
+        showToast('error', 'Erro ao salvar folha de processo');
+    })
+    .finally(() => {
+        btnSalvar.innerHTML = textOriginal;
+        btnSalvar.disabled = false;
+    });
+}
+
+function showToast(type, message) {
+    const alertClass = type === 'success' ? 'alert-success' : 'alert-danger';
+    const alertHtml = `
+        <div class="alert ${alertClass} alert-dismissible fade show position-fixed" 
+             style="top: 20px; right: 20px; z-index: 9999; min-width: 300px;">
+            ${message}
+            <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+        </div>
+    `;
+    document.body.insertAdjacentHTML('beforeend', alertHtml);
+    
+    setTimeout(() => {
+        const alert = document.querySelector('.alert:last-of-type');
+        if (alert) alert.remove();
+    }, 5000);
+}
+
+// Auto-save a cada 30 segundos
+setInterval(() => {
+    const form = document.getElementById('formFolhaProcesso');
+    const formData = new FormData(form);
+    
+    fetch(form.action, {
+        method: 'POST',
+        body: formData,
+        headers: {
+            'X-Requested-With': 'XMLHttpRequest'
+        }
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            console.log('Auto-save realizado com sucesso');
+        }
+    })
+    .catch(error => {
+        console.log('Erro no auto-save:', error);
+    });
+}, 30000);
+</script>
+{% endblock %}

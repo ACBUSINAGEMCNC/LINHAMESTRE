@@ -1,0 +1,60 @@
+/* Estilos específicos para impressão/PDF das páginas ACB Usinagem CNC */
+
+@media print {
+  /* Ocultar elementos de navegação, botões e itens de ação */
+  .no-print,
+  .btn,
+  .navbar,
+  nav,
+  footer,
+  .card-footer,
+  .btn-group,
+  .alert,
+  .toast-container {
+    display: none !important;
+  }
+
+  /* Ajustar layout geral */
+  body {
+    background: #fff !important;
+    color: #000 !important;
+    font-size: 11pt;
+    margin: 0;
+    padding: 0;
+  }
+
+  .container,
+  .container-fluid {
+    width: 100% !important;
+    max-width: 100% !important;
+    padding: 0 10mm !important; /* margem lateral para não cortar texto */
+  }
+
+  /* Cartões sem sombra/borda para economizar tinta e deixar limpo */
+  .card,
+  .kanban-card {
+    border: none !important;
+    box-shadow: none !important;
+    page-break-inside: avoid;
+  }
+
+  .card-body,
+  .card-header {
+    padding: 0.5rem 0 !important;
+  }
+
+  /* Tabelas com bordas sutis */
+  table {
+    width: 100%;
+    border-collapse: collapse !important;
+  }
+  th, td {
+    border: 1px solid #999 !important;
+    padding: 4px 6px !important;
+  }
+
+  /* Quebra de página após cada folha de processo se necessário */
+  .folha-processo-print {
+    page-break-after: always;
+  }
+}
