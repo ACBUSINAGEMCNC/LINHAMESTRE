@@ -6,8 +6,16 @@ from datetime import datetime
 print("Iniciando criação do banco de dados...")
 
 # Configuração do banco de dados
-basedir = os.path.abspath(os.path.dirname(__file__))
-db_path = os.path.join(basedir, 'database.db')
+# Diretório do banco: pode ser sobreposto via variável de ambiente (ex.: /tmp em Vercel)
+base_dir_default = os.path.abspath(os.path.dirname(__file__))
+DB_DIR = os.getenv('DB_DIR', base_dir_default)
+if not os.path.exists(DB_DIR):
+    try:
+        os.makedirs(DB_DIR, exist_ok=True)
+    except PermissionError:
+        pass  # ambiente read-only
+
+db_path = os.path.join(DB_DIR, 'database.db')
 
 # Criar conexão com o banco de dados
 conn = sqlite3.connect(db_path)

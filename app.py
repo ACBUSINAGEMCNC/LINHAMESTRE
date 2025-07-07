@@ -86,6 +86,8 @@ def verificar_inicializar_banco():
         exec(open(os.path.join(basedir, 'init_db.py')).read())
 
 def create_app():
+    # Definir diretório de banco gravável para init_db.py
+    os.environ['DB_DIR'] = WRITABLE_DIR
     # Verificar e inicializar o banco de dados antes de criar a aplicação
     verificar_inicializar_banco()
     
