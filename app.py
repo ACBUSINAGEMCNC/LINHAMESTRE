@@ -111,9 +111,12 @@ def create_app():
     ]:
         try:
             os.makedirs(path, exist_ok=True)
-        except PermissionError:
-            pass
-    os.makedirs(app.config['BACKUP_FOLDER'], exist_ok=True)
+        except (PermissionError, OSError):
+            pass  # Ignorar erros de permissão ou sistema de arquivos somente leitura
+    try:
+        os.makedirs(app.config['BACKUP_FOLDER'], exist_ok=True)
+    except (PermissionError, OSError):
+        pass  # Ignorar erros de permissão ou sistema de arquivos somente leitura
     
     # Inicializar SQLAlchemy
     from models import db
