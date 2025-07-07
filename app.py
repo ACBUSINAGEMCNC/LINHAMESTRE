@@ -103,9 +103,16 @@ def create_app():
     app.config['BACKUP_FOLDER'] = os.path.join(basedir, 'backups')
     
     # Garantir que as pastas de upload existam
-    os.makedirs(app.config['UPLOAD_FOLDER_DESENHOS'], exist_ok=True)
-    os.makedirs(app.config['UPLOAD_FOLDER_INSTRUCOES'], exist_ok=True)
-    os.makedirs(app.config['UPLOAD_FOLDER_IMAGENS'], exist_ok=True)
+    # Tentar criar pastas de upload se possível; ignorar em ambiente somente leitura
+    for path in [
+        app.config['UPLOAD_FOLDER_DESENHOS'],
+        app.config['UPLOAD_FOLDER_INSTRUCOES'],
+        app.config['UPLOAD_FOLDER_IMAGENS']
+    ]:
+        try:
+            os.makedirs(path, exist_ok=True)
+        except PermissionError:
+            pass
     os.makedirs(app.config['BACKUP_FOLDER'], exist_ok=True)
     
     # Inicializar SQLAlchemy
