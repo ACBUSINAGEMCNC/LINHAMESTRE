@@ -61,10 +61,16 @@ def upload_to_supabase(file, folder):
         original_filename = secure_filename(file.filename)
         file_ext = os.path.splitext(original_filename)[1]
         unique_id = str(uuid.uuid4())[:8]
-        filename = f"{folder}/{unique_id}_{original_filename}"
+        storage_path = f"{folder}/{unique_id}_{original_filename}"
         
         # Preparar a URL e cabeçalhos para a API do Supabase Storage
-        upload_url = f"{supabase_url}/storage/v1/object/{bucket}/{quote(filename)}"
+        # Formato correto da URL: {base_url}/storage/v1/object/{bucket_name}/{path}
+        upload_url = f"{supabase_url}/storage/v1/object/{bucket}/{quote(storage_path)}"
+        
+        # Logs mais visíveis
+        flash(f"[DEBUG] Tentando upload para: {upload_url}", 'info')
+        flash(f"[DEBUG] Bucket: {bucket}, Path: {storage_path}", 'info')
+        
         headers = {
             "apikey": supabase_key,
             "Authorization": f"Bearer {supabase_key}",
@@ -72,14 +78,34 @@ def upload_to_supabase(file, folder):
         }
         
         # Fazer upload do arquivo
-        response = requests.post(upload_url, headers=headers, data=file.read())
+        file_content = file.read()
+        flash(f"[DEBUG] Tamanho do arquivo: {len(file_content)} bytes", 'info')
+        
+        # Primeiro, verificar se o bucket existe
+        bucket_url = f"{supabase_url}/storage/v1/bucket/{bucket}"
+        bucket_response = requests.get(bucket_url, headers={"apikey": supabase_key, "Authorization": f"Bearer {supabase_key}"})
+        
+        if bucket_response.status_code != 200:
+            flash(f"[ERROR] Bucket '{bucket}' não existe ou sem acesso. Status: {bucket_response.status_code}", 'danger')
+            return None
+        
+        # Enviar como multipart/form-data
+        files = {'file': (storage_path, file_content, file.mimetype)}
+        # Remover Content-Type do header, pois o requests vai definir corretamente para multipart
+        headers_no_content = headers.copy()
+        headers_no_content.pop('Content-Type', None)
+        response = requests.post(upload_url, headers=headers_no_content, files=files)
+
+        # Logs da resposta
+        flash(f"[DEBUG] Status: {response.status_code}, Resposta: {response.text[:200]}", 'warning')
+        
         response.raise_for_status()
         
         # Retornar URL pública do arquivo
-        public_url = f"{supabase_url}/storage/v1/object/public/{bucket}/{filename}"
+        public_url = f"{supabase_url}/storage/v1/object/public/{bucket}/{storage_path}"
         
         # Guardar URL completa com prefixo para identificar que é um arquivo do Supabase
-        return f"supabase://{filename}"
+        return f"supabase://{storage_path}"
     except Exception as e:
         error_msg = f"Erro ao fazer upload para Supabase: {str(e)}"
         print(error_msg)
