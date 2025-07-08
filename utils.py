@@ -1,7 +1,10 @@
 import os
-from werkzeug.utils import secure_filename
-from flask import flash, current_app
 import json
+import uuid
+import requests
+from werkzeug.utils import secure_filename
+from flask import flash, current_app, request
+from urllib.parse import urlparse, quote
 
 def allowed_file(filename, allowed_extensions):
     """Verifica se o arquivo tem uma extensão permitida"""
@@ -9,8 +12,19 @@ def allowed_file(filename, allowed_extensions):
            filename.rsplit('.', 1)[1].lower() in allowed_extensions
 
 def save_file(file, folder):
-    """Salva um arquivo enviado no diretório especificado e retorna o caminho relativo"""
-    if file and file.filename:
+    """Salva um arquivo enviado no diretório local ou Supabase Storage e retorna o caminho/URL"""
+    if not file or not file.filename:
+        return None
+        
+    # Verifica se estamos em ambiente de produção (Vercel/serverless)
+    is_production = os.environ.get("VERCEL") or os.environ.get("AWS_LAMBDA_FUNCTION_NAME") 
+    use_supabase = os.environ.get('SUPABASE_URL') and os.environ.get('SUPABASE_KEY') and os.environ.get('SUPABASE_BUCKET')
+    
+    # Se estamos em produção OU configuração do Supabase está completa, usar Storage
+    if is_production or use_supabase:
+        return upload_to_supabase(file, folder)
+    else:
+        # Modo de desenvolvimento local - salvar em disco local
         filename = secure_filename(file.filename)
         
         # Usar a configuração correta baseada no tipo de pasta
@@ -30,7 +44,64 @@ def save_file(file, folder):
         filepath = os.path.join(upload_folder, filename)
         file.save(filepath)
         return os.path.join(folder, filename)
-    return None
+
+def upload_to_supabase(file, folder):
+    """Faz upload de um arquivo para o Supabase Storage"""
+    try:
+        # Obter configurações do Supabase do ambiente
+        supabase_url = os.environ.get('SUPABASE_URL')
+        supabase_key = os.environ.get('SUPABASE_KEY')
+        bucket = os.environ.get('SUPABASE_BUCKET', 'uploads')
+        
+        if not all([supabase_url, supabase_key]):
+            flash('Configuração do Supabase Storage incompleta. Upload não realizado.', 'danger')
+            return None
+        
+        # Gerar um nome de arquivo único para evitar colisões
+        original_filename = secure_filename(file.filename)
+        file_ext = os.path.splitext(original_filename)[1]
+        unique_id = str(uuid.uuid4())[:8]
+        filename = f"{folder}/{unique_id}_{original_filename}"
+        
+        # Preparar a URL e cabeçalhos para a API do Supabase Storage
+        upload_url = f"{supabase_url}/storage/v1/object/{bucket}/{quote(filename)}"
+        headers = {
+            "apikey": supabase_key,
+            "Authorization": f"Bearer {supabase_key}",
+            "Content-Type": file.mimetype
+        }
+        
+        # Fazer upload do arquivo
+        response = requests.post(upload_url, headers=headers, data=file.read())
+        response.raise_for_status()
+        
+        # Retornar URL pública do arquivo
+        public_url = f"{supabase_url}/storage/v1/object/public/{bucket}/{filename}"
+        
+        # Guardar URL completa com prefixo para identificar que é um arquivo do Supabase
+        return f"supabase://{filename}"
+    except Exception as e:
+        error_msg = f"Erro ao fazer upload para Supabase: {str(e)}"
+        print(error_msg)
+        flash(error_msg, 'danger')
+        return None
+
+def get_file_url(file_path):
+    """Converte um caminho de arquivo em URL, seja local ou do Supabase"""
+    if not file_path:
+        return None
+        
+    # Se for arquivo do Supabase Storage
+    if file_path.startswith('supabase://'):
+        bucket = os.environ.get('SUPABASE_BUCKET', 'uploads')
+        supabase_url = os.environ.get('SUPABASE_URL')
+        file_name = file_path.replace('supabase://', '')
+        
+        # Retornar URL pública do Supabase
+        return f"{supabase_url}/storage/v1/object/public/{bucket}/{file_name}"
+    else:
+        # Arquivo local - construir URL relativa
+        return f"/uploads/{file_path}"
 
 def generate_next_code(model, prefix, code_field, padding=5):
     """Gera o próximo código sequencial para um modelo"""

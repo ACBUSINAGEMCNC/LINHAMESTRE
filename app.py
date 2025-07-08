@@ -7,6 +7,10 @@ from flask import Flask, render_template, redirect, url_for, flash, request, ses
 from flask_sqlalchemy import SQLAlchemy
 from werkzeug.security import generate_password_hash, check_password_hash
 from werkzeug.utils import secure_filename
+from dotenv import load_dotenv
+
+# Carregar variáveis de ambiente do arquivo .env
+load_dotenv()
 
 # Configuração do banco de dados
 basedir = os.path.abspath(os.path.dirname(__file__))
