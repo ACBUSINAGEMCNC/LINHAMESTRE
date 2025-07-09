@@ -198,6 +198,14 @@ def create_app():
     app.register_blueprint(auth)
     app.register_blueprint(backup)
     app.register_blueprint(main)
+    
+    # Rota para redirecionar URLs Supabase
+    @app.route('/uploads/supabase://<path:file_path>')
+    def supabase_redirect(file_path):
+        from utils import get_file_url
+        url = get_file_url(f'supabase://{file_path}')
+        print(f"[DEBUG] Redirecionando acesso a arquivo Supabase: {url}")
+        return redirect(url, code=302)
     app.register_blueprint(folhas_processo)
     
     # Adicionar contexto global para templates

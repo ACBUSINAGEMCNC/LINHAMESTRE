@@ -19,9 +19,10 @@ def save_file(file, folder):
     # Verifica se estamos em ambiente de produção (Vercel/serverless)
     is_production = os.environ.get("VERCEL") or os.environ.get("AWS_LAMBDA_FUNCTION_NAME") 
     use_supabase = os.environ.get('SUPABASE_URL') and os.environ.get('SUPABASE_KEY') and os.environ.get('SUPABASE_BUCKET')
+    force_supabase = os.environ.get('FORCE_SUPABASE_STORAGE', '').lower() in ['true', '1', 'yes']
     
-    # Se estamos em produção OU configuração do Supabase está completa, usar Storage
-    if is_production or use_supabase:
+    # Se estamos em produção OU configuração do Supabase está completa OU forçado, usar Storage
+    if is_production or use_supabase or force_supabase:
         return upload_to_supabase(file, folder)
     else:
         # Modo de desenvolvimento local - salvar em disco local
@@ -46,71 +47,173 @@ def save_file(file, folder):
         return os.path.join(folder, filename)
 
 def upload_to_supabase(file, folder):
-    """Faz upload de um arquivo para o Supabase Storage"""
+    """Faz upload de um arquivo para o Supabase Storage usando a API Storage REST"""
     try:
+        import requests
+        import json
+        from urllib.parse import quote
+        
         # Obter configurações do Supabase do ambiente
         supabase_url = os.environ.get('SUPABASE_URL')
         supabase_key = os.environ.get('SUPABASE_KEY')
         bucket = os.environ.get('SUPABASE_BUCKET', 'uploads')
         
+        print(f"[DEBUG] Iniciando upload para Supabase. Bucket: {bucket}, Folder: {folder}")
+        print(f"[DEBUG] SUPABASE_URL: {'Definido' if supabase_url else 'Não definido'}")
+        print(f"[DEBUG] SUPABASE_KEY: {'Definido' if supabase_key else 'Não definido (truncado)'}")
+        print(f"[DEBUG] SUPABASE_KEY começa com: {supabase_key[:10]}... e termina com: ...{supabase_key[-10:]} (truncado)")
+        
         if not all([supabase_url, supabase_key]):
-            flash('Configuração do Supabase Storage incompleta. Upload não realizado.', 'danger')
+            error_msg = 'Configuração do Supabase Storage incompleta. Verifique as variáveis de ambiente SUPABASE_URL e SUPABASE_KEY.'
+            print(f"[ERROR] {error_msg}")
+            flash(error_msg, 'danger')
             return None
+            
+        # Remover possível barra no final da URL
+        if supabase_url.endswith('/'):
+            supabase_url = supabase_url[:-1]
+            
+        # Primeiro, verificar se o bucket existe
+        list_buckets_url = f"{supabase_url}/storage/v1/bucket"
+        print(f"[DEBUG] Verificando buckets disponíveis: {list_buckets_url}")
+        
+        headers = {
+            'Authorization': f'Bearer {supabase_key}',
+            'apikey': f'{supabase_key}',
+            'Content-Type': 'application/json'
+        }
+        
+        try:
+            bucket_response = requests.get(list_buckets_url, headers=headers)
+            print(f"[DEBUG] Status da verificação de buckets: {bucket_response.status_code}")
+            
+            if bucket_response.status_code != 200:
+                print(f"[ERROR] Falha ao listar buckets: {bucket_response.text}")
+                # Se não conseguirmos listar buckets, tentamos criar um
+                create_bucket_url = list_buckets_url
+                bucket_data = {
+                    'id': bucket,
+                    'name': bucket,
+                    'public': True
+                }
+                create_response = requests.post(
+                    create_bucket_url, 
+                    headers=headers, 
+                    data=json.dumps(bucket_data)
+                )
+                print(f"[DEBUG] Tentativa de criar bucket: {create_response.status_code} - {create_response.text}")
+        except Exception as e:
+            print(f"[ERROR] Erro ao verificar/criar bucket: {str(e)}")
         
         # Gerar um nome de arquivo único para evitar colisões
         original_filename = secure_filename(file.filename)
-        file_ext = os.path.splitext(original_filename)[1]
         unique_id = str(uuid.uuid4())[:8]
         storage_path = f"{folder}/{unique_id}_{original_filename}"
         
-        # Preparar a URL e cabeçalhos para a API do Supabase Storage
-        # Formato correto da URL: {base_url}/storage/v1/object/{bucket_name}/{path}
-        upload_url = f"{supabase_url}/storage/v1/object/{bucket}/{quote(storage_path)}"
+        print(f"[DEBUG] Arquivo original: {file.filename}, Nome seguro: {original_filename}, Caminho no storage: {storage_path}")
         
-        # Logs mais visíveis
-        flash(f"[DEBUG] Tentando upload para: {upload_url}", 'info')
-        flash(f"[DEBUG] Bucket: {bucket}, Path: {storage_path}", 'info')
-        
-        headers = {
-            "apikey": supabase_key,
-            "Authorization": f"Bearer {supabase_key}",
-            "Content-Type": file.mimetype
-        }
-        
-        # Fazer upload do arquivo
-        file_content = file.read()
-        flash(f"[DEBUG] Tamanho do arquivo: {len(file_content)} bytes", 'info')
-        
-        # Primeiro, verificar se o bucket existe
-        bucket_url = f"{supabase_url}/storage/v1/bucket/{bucket}"
-        bucket_response = requests.get(bucket_url, headers={"apikey": supabase_key, "Authorization": f"Bearer {supabase_key}"})
-        
-        if bucket_response.status_code != 200:
-            flash(f"[ERROR] Bucket '{bucket}' não existe ou sem acesso. Status: {bucket_response.status_code}", 'danger')
+        try:
+            # Reset do arquivo para leitura (pode ter sido lido anteriormente)
+            file.seek(0)
+            
+            # URL de upload do Supabase Storage REST API
+            upload_url = f"{supabase_url}/storage/v1/object/{bucket}/{quote(storage_path)}"
+            print(f"[DEBUG] URL de upload: {upload_url}")
+            
+            # Cabeçalhos para o upload
+            upload_headers = {
+                'Authorization': f'Bearer {supabase_key}',
+                'apikey': f'{supabase_key}'
+                # Não defina Content-Type aqui - o multipart/form-data será definido pelo requests
+            }
+            
+            # Preparar arquivo para upload
+            files = {
+                'file': (original_filename, file, file.mimetype or 'application/octet-stream')
+            }
+            
+            print(f"[DEBUG] Iniciando upload do arquivo para o bucket '{bucket}'...")
+            
+            # Fazer o upload via HTTP POST
+            response = requests.post(upload_url, headers=upload_headers, files=files)
+            
+            # Verificar se o upload foi bem-sucedido
+            print(f"[DEBUG] Resposta do upload: {response.status_code} {response.reason}")
+            print(f"[DEBUG] Resposta completa: {response.text}")
+            
+            if response.status_code in [200, 201]:
+                print(f"[DEBUG] Upload concluído com sucesso!")
+                
+                # Construir URL pública do arquivo
+                public_url = f"{supabase_url}/storage/v1/object/public/{bucket}/{quote(storage_path)}"
+                print(f"[DEBUG] URL pública do arquivo: {public_url}")
+                
+                # Retornar caminho do arquivo no formato supabase:// para referência futura
+                return f"supabase://{storage_path}"
+            else:
+                error_msg = f"Erro ao fazer upload para o Supabase: {response.status_code} {response.reason} - {response.text}"
+                print(f"[ERROR] {error_msg}")
+                flash(f"Erro no upload: {response.status_code} {response.reason}", 'danger')
+                return None
+                
+        except Exception as e:
+            error_msg = f"Erro ao fazer upload para o Supabase: {str(e)}"
+            print(f"[ERROR] {error_msg}")
+            flash(error_msg, 'danger')
             return None
-        
-        # Enviar como multipart/form-data
-        files = {'file': (storage_path, file_content, file.mimetype)}
-        # Remover Content-Type do header, pois o requests vai definir corretamente para multipart
-        headers_no_content = headers.copy()
-        headers_no_content.pop('Content-Type', None)
-        response = requests.post(upload_url, headers=headers_no_content, files=files)
-
-        # Logs da resposta
-        flash(f"[DEBUG] Status: {response.status_code}, Resposta: {response.text[:200]}", 'warning')
-        
-        response.raise_for_status()
-        
-        # Retornar URL pública do arquivo
-        public_url = f"{supabase_url}/storage/v1/object/public/{bucket}/{storage_path}"
-        
-        # Guardar URL completa com prefixo para identificar que é um arquivo do Supabase
-        return f"supabase://{storage_path}"
     except Exception as e:
         error_msg = f"Erro ao fazer upload para Supabase: {str(e)}"
         print(error_msg)
         flash(error_msg, 'danger')
         return None
+
+def test_supabase_auth():
+    """Testa a autenticação básica do Supabase com um endpoint simples"""
+    import requests
+    import os
+    import json
+    
+    supabase_url = os.environ.get('SUPABASE_URL')
+    supabase_key = os.environ.get('SUPABASE_KEY')
+    
+    print(f"[TESTE AUTH] URL: {supabase_url}")
+    print(f"[TESTE AUTH] Key (primeiros 10 caracteres): {supabase_key[:10]}...")
+    
+    if not all([supabase_url, supabase_key]):
+        return "Variáveis de ambiente não configuradas"
+    
+    # Cabeçalhos para autenticação
+    headers = {
+        'apikey': supabase_key,
+        'Authorization': f'Bearer {supabase_key}'
+    }
+    
+    # Tentar um endpoint básico que só requer autenticação
+    # 1. Primeiro tente um SELECT de alguma tabela existente
+    try:
+        test_url = f"{supabase_url}/rest/v1/usuario?select=id&limit=1"
+        print(f"[TESTE AUTH] Testando URL: {test_url}")
+        resp = requests.get(test_url, headers=headers)
+        print(f"[TESTE AUTH] Status: {resp.status_code}, Resposta: {resp.text}")
+        
+        if resp.status_code == 200:
+            return f"Autenticação OK! Status: {resp.status_code}"
+    except Exception as e:
+        print(f"[TESTE AUTH] Erro no teste 1: {str(e)}")
+    
+    # 2. Se falhar, tente versão do PostgreSQL via RPC
+    try:
+        test_url2 = f"{supabase_url}/rest/v1/rpc/version"
+        print(f"[TESTE AUTH] Testando URL alternativa: {test_url2}")
+        resp2 = requests.post(test_url2, headers=headers, json={})
+        print(f"[TESTE AUTH] Status: {resp2.status_code}, Resposta: {resp2.text}")
+        
+        if resp2.status_code == 200:
+            return f"Autenticação OK no endpoint RPC! Status: {resp2.status_code}"
+        else:
+            return f"Falha na autenticação: {resp2.status_code} {resp2.text}"
+    except Exception as e:
+        return f"Erro em ambos testes: {str(e)}"
 
 def get_file_url(file_path):
     """Converte um caminho de arquivo em URL, seja local ou do Supabase"""
@@ -123,8 +226,14 @@ def get_file_url(file_path):
         supabase_url = os.environ.get('SUPABASE_URL')
         file_name = file_path.replace('supabase://', '')
         
-        # Retornar URL pública do Supabase
-        return f"{supabase_url}/storage/v1/object/public/{bucket}/{file_name}"
+        # Remover possível barra no final da URL
+        if supabase_url and supabase_url.endswith('/'):
+            supabase_url = supabase_url[:-1]
+        
+        # Retornar URL pública direta do Supabase
+        public_url = f"{supabase_url}/storage/v1/object/public/{bucket}/{file_name}"
+        print(f"[DEBUG] URL pública de arquivo: {public_url}")
+        return public_url
     else:
         # Arquivo local - construir URL relativa
         return f"/uploads/{file_path}"
