@@ -1,0 +1,279 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{{ item.codigo_acb }} - {{ item.nome }} - ACB Usinagem CNC</title>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+</head>
+<body>
+    <nav class="navbar navbar-expand-lg navbar-dark bg-primary">
+        <div class="container">
+            <a class="navbar-brand" href="/">ACB Usinagem CNC</a>
+            <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav">
+                <span class="navbar-toggler-icon"></span>
+            </button>
+            <div class="collapse navbar-collapse" id="navbarNav">
+                <ul class="navbar-nav">
+                    <li class="nav-item">
+                        <a class="nav-link" href="/"><i class="fas fa-home"></i> Home</a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link" href="/itens"><i class="fas fa-cubes"></i> Itens</a>
+                    </li>
+                </ul>
+            </div>
+        </div>
+    </nav>
+
+    <div class="container py-4">
+        <div class="d-flex justify-content-between align-items-center mb-4">
+            <h1>{{ item.codigo_acb }} - {{ item.nome }}</h1>
+            <div>
+                <a href="{{ url_for('folhas_processo.listar_folhas', item_id=item.id) }}" class="btn btn-info me-2">
+                    <i class="fas fa-clipboard-list"></i> Folhas de Processo
+                </a>
+                <a href="/itens/editar/{{ item.id }}" class="btn btn-primary me-2">
+                    <i class="fas fa-edit"></i> Editar
+                </a>
+                <a href="/itens" class="btn btn-secondary">
+                    <i class="fas fa-arrow-left"></i> Voltar
+                </a>
+            </div>
+        </div>
+
+        <div class="row">
+            <div class="col-md-8">
+                <div class="card mb-4">
+                    <div class="card-header">
+                        <h5 class="mb-0">Informações Gerais</h5>
+                    </div>
+                    <div class="card-body">
+                        <div class="row mb-3">
+                            <div class="col-md-6">
+                                <p><strong>Código ACB:</strong> {{ item.codigo_acb }}</p>
+                            </div>
+                            <div class="col-md-6">
+                                <p><strong>Nome:</strong> {{ item.nome }}</p>
+                            </div>
+                        </div>
+                        <div class="row mb-3">
+                            <div class="col-md-6">
+                                <p><strong>Peso:</strong> {{ item.peso }} kg</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="card mb-4">
+                    <div class="card-header">
+                        <h5 class="mb-0">Processos</h5>
+                    </div>
+                    <div class="card-body">
+                        <div class="table-responsive">
+                            <table class="table table-bordered">
+                                <tbody>
+                                    <tr>
+                                        <th width="20%">Têmpera:</th>
+                                        <td>
+                                            {% if item.tempera %}
+                                                <span class="badge bg-success">Sim</span>
+                                                {% if item.tipo_tempera %}
+                                                    - {{ item.tipo_tempera }}
+                                                {% endif %}
+                                            {% else %}
+                                                <span class="badge bg-secondary">Não</span>
+                                            {% endif %}
+                                        </td>
+                                        <th width="20%">Retífica:</th>
+                                        <td>
+                                            {% if item.retifica %}
+                                                <span class="badge bg-success">Sim</span>
+                                            {% else %}
+                                                <span class="badge bg-secondary">Não</span>
+                                            {% endif %}
+                                        </td>
+                                    </tr>
+                                    <tr>
+                                        <th>Pintura:</th>
+                                        <td>
+                                            {% if item.pintura %}
+                                                <span class="badge bg-success">Sim</span>
+                                                {% if item.tipo_pintura or item.cor_pintura %}
+                                                    - {{ item.tipo_pintura }} {{ item.cor_pintura }}
+                                                {% endif %}
+                                            {% else %}
+                                                <span class="badge bg-secondary">Não</span>
+                                            {% endif %}
+                                        </td>
+                                        <th>Óleo Protetivo:</th>
+                                        <td>
+                                            {% if item.oleo_protetivo %}
+                                                <span class="badge bg-success">Sim</span>
+                                            {% else %}
+                                                <span class="badge bg-secondary">Não</span>
+                                            {% endif %}
+                                        </td>
+                                    </tr>
+                                    <tr>
+                                        <th>Zincagem:</th>
+                                        <td>
+                                            {% if item.zincagem %}
+                                                <span class="badge bg-success">Sim</span>
+                                                {% if item.tipo_zincagem %}
+                                                    - {{ item.tipo_zincagem }}
+                                                {% endif %}
+                                            {% else %}
+                                                <span class="badge bg-secondary">Não</span>
+                                            {% endif %}
+                                        </td>
+                                        <th>Embalagem:</th>
+                                        <td>{{ item.tipo_embalagem or 'Não especificado' }}</td>
+                                    </tr>
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="card mb-4">
+                    <div class="card-header">
+                        <h5 class="mb-0">Materiais</h5>
+                    </div>
+                    <div class="card-body">
+                        {% if item.materiais %}
+                        <div class="table-responsive">
+                            <table class="table table-striped">
+                                <thead>
+                                    <tr>
+                                        <th>Material</th>
+                                        <th>Tipo</th>
+                                        <th>Comprimento</th>
+                                        <th>Quantidade</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {% for item_material in item.materiais %}
+                                    <tr>
+                                        <td>{{ item_material.material.nome }}</td>
+                                        <td>{{ item_material.material.tipo }}</td>
+                                        <td>{{ item_material.comprimento }} mm</td>
+                                        <td>{{ item_material.quantidade }}</td>
+                                    </tr>
+                                    {% endfor %}
+                                </tbody>
+                            </table>
+                        </div>
+                        {% else %}
+                        <p class="text-muted">Nenhum material cadastrado para este item.</p>
+                        {% endif %}
+                    </div>
+                </div>
+
+                <div class="card mb-4">
+                    <div class="card-header">
+                        <h5 class="mb-0">Operações de Trabalho</h5>
+                    </div>
+                    <div class="card-body">
+                        {% if item.trabalhos %}
+                        <div class="table-responsive">
+                            <table class="table table-striped">
+                                <thead>
+                                    <tr>
+                                        <th>Trabalho</th>
+                                        <th>Categoria</th>
+                                        <th>Tempo de Setup</th>
+                                        <th>Tempo por Peça</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {% for item_trabalho in item.trabalhos %}
+                                    <tr>
+                                        <td>{{ item_trabalho.trabalho.nome }}</td>
+                                        <td>{{ item_trabalho.trabalho.categoria }}</td>
+                                        <td>{{ item_trabalho.tempo_setup // 60 }} minutos</td>
+                                        <td>{{ item_trabalho.tempo_peca // 60 }} minutos</td>
+                                    </tr>
+                                    {% endfor %}
+                                </tbody>
+                            </table>
+                        </div>
+                        {% else %}
+                        <p class="text-muted">Nenhuma operação de trabalho cadastrada para este item.</p>
+                        {% endif %}
+                    </div>
+                </div>
+            </div>
+
+            <div class="col-md-4">
+                <div class="card mb-4">
+                    <div class="card-header">
+                        <h5 class="mb-0">Arquivos</h5>
+                    </div>
+                    <div class="card-body">
+                        {% if item.desenho_tecnico %}
+                        <div class="mb-3">
+                            <h6>Desenho Técnico</h6>
+                            <a href="/uploads/{{ item.desenho_tecnico }}" class="btn btn-sm btn-outline-primary" target="_blank">
+                                <i class="fas fa-file-pdf"></i> Visualizar Desenho
+                            </a>
+                        </div>
+                        {% endif %}
+
+                        {% if item.imagem %}
+                        <div class="mb-3">
+                            <h6>Imagem</h6>
+                            <img src="/uploads/{{ item.imagem }}" class="img-fluid rounded mb-2" alt="{{ item.nome }}">
+                            <a href="/uploads/{{ item.imagem }}" class="btn btn-sm btn-outline-primary" target="_blank">
+                                <i class="fas fa-image"></i> Visualizar Imagem
+                            </a>
+                        </div>
+                        {% endif %}
+
+                        {% if item.instrucoes_trabalho %}
+                        <div class="mb-3">
+                            <h6>Instruções de Trabalho</h6>
+                            <a href="/uploads/{{ item.instrucoes_trabalho }}" class="btn btn-sm btn-outline-primary" target="_blank">
+                                <i class="fas fa-file-alt"></i> Visualizar Instruções
+                            </a>
+                        </div>
+                        {% endif %}
+
+                        {% if not item.desenho_tecnico and not item.imagem and not item.instrucoes_trabalho %}
+                        <p class="text-muted">Nenhum arquivo cadastrado para este item.</p>
+                        {% endif %}
+                    </div>
+                </div>
+
+                <div class="card mb-4">
+                    <div class="card-header">
+                        <h5 class="mb-0">Pedidos Relacionados</h5>
+                    </div>
+                    <div class="card-body">
+                        {% if item.pedidos %}
+                        <div class="list-group">
+                            {% for pedido in item.pedidos %}
+                            <a href="/pedidos/editar/{{ pedido.id }}" class="list-group-item list-group-item-action">
+                                <div class="d-flex w-100 justify-content-between">
+                                    <h6 class="mb-1">{{ pedido.cliente.nome }}</h6>
+                                    <small>{{ pedido.data_entrada.strftime('%d/%m/%Y') }}</small>
+                                </div>
+                                <p class="mb-1">Quantidade: {{ pedido.quantidade }}</p>
+                                <small>{{ pedido.numero_pedido or 'Sem número de pedido' }}</small>
+                            </a>
+                            {% endfor %}
+                        </div>
+                        {% else %}
+                        <p class="text-muted">Nenhum pedido relacionado a este item.</p>
+                        {% endif %}
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+</body>
+</html>

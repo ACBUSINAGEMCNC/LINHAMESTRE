@@ -1,0 +1,552 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Kanban - ACB Usinagem</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+</head>
+<body>
+    <nav class="navbar navbar-expand-lg navbar-dark bg-dark">
+        <div class="container-fluid">
+            <a class="navbar-brand" href="/">
+                <i class="fas fa-industry"></i> ACB Usinagem - Kanban
+            </a>
+            <div class="navbar-nav ms-auto">
+                <a class="nav-link active" href="/">
+                    <i class="fas fa-columns"></i> Kanban
+                </a>
+                <a class="nav-link" href="/apontamento/dashboard">
+                    <i class="fas fa-chart-line"></i> Dashboard
+                </a>
+                <a class="nav-link" href="/apontamento/operadores">
+                    <i class="fas fa-users"></i> Operadores
+                </a>
+                <a class="nav-link" href="/apontamento/relatorios">
+                    <i class="fas fa-chart-bar"></i> Relatórios
+                </a>
+            </div>
+        </div>
+    </nav>
+
+    <div class="container-fluid mt-4">
+        <div class="row">
+            <div class="col-12">
+                <h1 class="h3 mb-4">
+                    <i class="fas fa-columns text-primary"></i>
+                    Quadro Kanban - Apontamentos de Produção
+                </h1>
+            </div>
+        </div>
+
+        <div class="row">
+            <!-- Coluna Entrada -->
+            <div class="col-md-2">
+                <div class="card">
+                    <div class="card-header bg-secondary text-white">
+                        <h5 class="card-title mb-0">
+                            <i class="fas fa-inbox"></i> Entrada
+                        </h5>
+                    </div>
+                    <div class="card-body kanban-column" data-status="Entrada">
+                        {% for ordem in ordens_servico %}
+                        {% if ordem.status == 'Entrada' %}
+                        <div class="card mb-3 kanban-card" data-ordem-id="{{ ordem.id }}">
+                            <div class="card-body">
+                                <h6 class="card-title">{{ ordem.numero }}</h6>
+                                <p class="card-text small">{{ ordem.descricao }}</p>
+                                <small class="text-muted">{{ ordem.cliente }}</small>
+                            </div>
+                        </div>
+                        {% endif %}
+                        {% endfor %}
+                    </div>
+                </div>
+            </div>
+
+            <!-- Coluna Aguardando -->
+            <div class="col-md-2">
+                <div class="card">
+                    <div class="card-header bg-warning text-dark">
+                        <h5 class="card-title mb-0">
+                            <i class="fas fa-clock"></i> Aguardando
+                        </h5>
+                    </div>
+                    <div class="card-body kanban-column" data-status="Aguardando">
+                        {% for ordem in ordens_servico %}
+                        {% if ordem.status == 'Aguardando' %}
+                        <div class="card mb-3 kanban-card" data-ordem-id="{{ ordem.id }}">
+                            <div class="card-body">
+                                <h6 class="card-title">{{ ordem.numero }}</h6>
+                                <p class="card-text small">{{ ordem.descricao }}</p>
+                                <small class="text-muted">{{ ordem.cliente }}</small>
+                                
+                                <!-- Status do Apontamento -->
+                                <div class="mt-2" id="status-{{ ordem.id }}">
+                                    <small class="text-info">Aguardando início</small>
+                                </div>
+                                
+                                <!-- Botões de Apontamento -->
+                                <div class="mt-2">
+                                    <div class="btn-group-vertical d-grid gap-1">
+                                        <button class="btn btn-outline-primary btn-sm" 
+                                                onclick="abrirModalApontamento('inicio_setup', {{ ordem.id }})">
+                                            <i class="fas fa-cog"></i> Iniciar Setup
+                                        </button>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        {% endif %}
+                        {% endfor %}
+                    </div>
+                </div>
+            </div>
+
+            <!-- Coluna Setup -->
+            <div class="col-md-2">
+                <div class="card">
+                    <div class="card-header bg-info text-white">
+                        <h5 class="card-title mb-0">
+                            <i class="fas fa-cog"></i> Setup
+                        </h5>
+                    </div>
+                    <div class="card-body kanban-column" data-status="Setup">
+                        {% for ordem in ordens_servico %}
+                        {% if ordem.status == 'Setup' %}
+                        <div class="card mb-3 kanban-card" data-ordem-id="{{ ordem.id }}">
+                            <div class="card-body">
+                                <h6 class="card-title">{{ ordem.numero }}</h6>
+                                <p class="card-text small">{{ ordem.descricao }}</p>
+                                <small class="text-muted">{{ ordem.cliente }}</small>
+                                
+                                <!-- Status do Apontamento -->
+                                <div class="mt-2" id="status-{{ ordem.id }}">
+                                    <small class="text-info">Setup em andamento</small>
+                                </div>
+                                
+                                <!-- Botões de Apontamento -->
+                                <div class="mt-2">
+                                    <div class="btn-group-vertical d-grid gap-1">
+                                        <button class="btn btn-outline-success btn-sm" 
+                                                onclick="abrirModalApontamento('fim_setup', {{ ordem.id }})">
+                                            <i class="fas fa-check"></i> Fim Setup
+                                        </button>
+                                        <button class="btn btn-outline-warning btn-sm" 
+                                                onclick="abrirModalApontamento('pausa', {{ ordem.id }})">
+                                            <i class="fas fa-pause"></i> Pausar
+                                        </button>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        {% endif %}
+                        {% endfor %}
+                    </div>
+                </div>
+            </div>
+
+            <!-- Coluna Em Produção -->
+            <div class="col-md-2">
+                <div class="card">
+                    <div class="card-header bg-success text-white">
+                        <h5 class="card-title mb-0">
+                            <i class="fas fa-play"></i> Em Produção
+                        </h5>
+                    </div>
+                    <div class="card-body kanban-column" data-status="Em Produção">
+                        {% for ordem in ordens_servico %}
+                        {% if ordem.status == 'Em Produção' %}
+                        <div class="card mb-3 kanban-card" data-ordem-id="{{ ordem.id }}">
+                            <div class="card-body">
+                                <h6 class="card-title">{{ ordem.numero }}</h6>
+                                <p class="card-text small">{{ ordem.descricao }}</p>
+                                <small class="text-muted">{{ ordem.cliente }}</small>
+                                
+                                <!-- Status do Apontamento -->
+                                <div class="mt-2" id="status-{{ ordem.id }}">
+                                    <small class="text-success">Produção em andamento</small>
+                                </div>
+                                
+                                <!-- Botões de Apontamento -->
+                                <div class="mt-2">
+                                    <div class="btn-group-vertical d-grid gap-1">
+                                        <button class="btn btn-outline-primary btn-sm" 
+                                                onclick="abrirModalApontamento('inicio_producao', {{ ordem.id }})">
+                                            <i class="fas fa-play"></i> Iniciar Produção
+                                        </button>
+                                        <button class="btn btn-outline-warning btn-sm" 
+                                                onclick="abrirModalApontamento('pausa', {{ ordem.id }})">
+                                            <i class="fas fa-pause"></i> Pausar
+                                        </button>
+                                        <button class="btn btn-outline-danger btn-sm" 
+                                                onclick="abrirModalApontamento('fim_producao', {{ ordem.id }})">
+                                            <i class="fas fa-stop"></i> Fim Produção
+                                        </button>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        {% endif %}
+                        {% endfor %}
+                    </div>
+                </div>
+            </div>
+
+            <!-- Coluna Pausado -->
+            <div class="col-md-2">
+                <div class="card">
+                    <div class="card-header bg-warning text-dark">
+                        <h5 class="card-title mb-0">
+                            <i class="fas fa-pause"></i> Pausado
+                        </h5>
+                    </div>
+                    <div class="card-body kanban-column" data-status="Pausado">
+                        {% for ordem in ordens_servico %}
+                        {% if ordem.status == 'Pausado' %}
+                        <div class="card mb-3 kanban-card" data-ordem-id="{{ ordem.id }}">
+                            <div class="card-body">
+                                <h6 class="card-title">{{ ordem.numero }}</h6>
+                                <p class="card-text small">{{ ordem.descricao }}</p>
+                                <small class="text-muted">{{ ordem.cliente }}</small>
+                                
+                                <!-- Status do Apontamento -->
+                                <div class="mt-2" id="status-{{ ordem.id }}">
+                                    <small class="text-warning">Pausado</small>
+                                </div>
+                                
+                                <!-- Botões de Apontamento -->
+                                <div class="mt-2">
+                                    <div class="btn-group-vertical d-grid gap-1">
+                                        <button class="btn btn-outline-success btn-sm" 
+                                                onclick="abrirModalApontamento('inicio_producao', {{ ordem.id }})">
+                                            <i class="fas fa-play"></i> Retomar
+                                        </button>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        {% endif %}
+                        {% endfor %}
+                    </div>
+                </div>
+            </div>
+
+            <!-- Coluna Expedição -->
+            <div class="col-md-2">
+                <div class="card">
+                    <div class="card-header bg-dark text-white">
+                        <h5 class="card-title mb-0">
+                            <i class="fas fa-shipping-fast"></i> Expedição
+                        </h5>
+                    </div>
+                    <div class="card-body kanban-column" data-status="Expedição">
+                        {% for ordem in ordens_servico %}
+                        {% if ordem.status == 'Expedição' %}
+                        <div class="card mb-3 kanban-card" data-ordem-id="{{ ordem.id }}">
+                            <div class="card-body">
+                                <h6 class="card-title">{{ ordem.numero }}</h6>
+                                <p class="card-text small">{{ ordem.descricao }}</p>
+                                <small class="text-muted">{{ ordem.cliente }}</small>
+                            </div>
+                        </div>
+                        {% endif %}
+                        {% endfor %}
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal de Apontamento -->
+    <div class="modal fade" id="modalApontamento" tabindex="-1">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title" id="modalApontamentoTitle">Apontamento de Produção</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <form id="formApontamento">
+                        <input type="hidden" id="ordemServicoId">
+                        <input type="hidden" id="tipoAcao">
+                        
+                        <!-- Código do Operador -->
+                        <div class="mb-3">
+                            <label for="codigoOperador" class="form-label">Código do Operador *</label>
+                            <input type="text" class="form-control" id="codigoOperador" maxlength="4" pattern="[0-9]{4}" placeholder="0000" required>
+                            <div class="form-text">Digite seu código de 4 dígitos</div>
+                            <div id="operadorInfo" class="mt-1"></div>
+                        </div>
+                        
+                        <!-- Tipo de Trabalho -->
+                        <div class="mb-3" id="divTipoTrabalho">
+                            <label for="tipoTrabalho" class="form-label">Tipo de Trabalho *</label>
+                            <select class="form-select" id="tipoTrabalho" required>
+                                <option value="">Selecione o tipo de trabalho</option>
+                            </select>
+                        </div>
+                        
+                        <!-- Quantidade -->
+                        <div class="mb-3" id="divQuantidade" style="display: none;">
+                            <label for="quantidade" class="form-label">Quantidade de Peças</label>
+                            <input type="number" class="form-control" id="quantidade" min="0" placeholder="0">
+                            <div class="form-text">Quantidade atual de peças produzidas</div>
+                        </div>
+                        
+                        <!-- Motivo da Parada -->
+                        <div class="mb-3" id="divMotivoParada" style="display: none;">
+                            <label for="motivoParada" class="form-label">Motivo da Parada *</label>
+                            <select class="form-select" id="motivoParada">
+                                <option value="">Selecione o motivo</option>
+                                <option value="Parada para café">Parada para café</option>
+                                <option value="Sem desenho">Sem desenho</option>
+                                <option value="Sem ferramenta">Sem ferramenta</option>
+                                <option value="Troca de ferramenta">Troca de ferramenta</option>
+                                <option value="Sem material">Sem material</option>
+                                <option value="Falha na operação">Falha na operação</option>
+                                <option value="Manutenção não programada">Manutenção não programada</option>
+                                <option value="Banheiro">Banheiro</option>
+                                <option value="Outros">Outros</option>
+                            </select>
+                        </div>
+                        
+                        <!-- Observações -->
+                        <div class="mb-3">
+                            <label for="observacoes" class="form-label">Observações</label>
+                            <textarea class="form-control" id="observacoes" rows="2" placeholder="Observações adicionais (opcional)"></textarea>
+                        </div>
+                    </form>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
+                    <button type="button" class="btn btn-primary" onclick="salvarApontamento()">Confirmar</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/js/bootstrap.bundle.min.js"></script>
+    <script>
+        let ordemAtualId = null;
+        let tipoAcaoAtual = null;
+        
+        function abrirModalApontamento(tipoAcao, ordemId) {
+            ordemAtualId = ordemId;
+            tipoAcaoAtual = tipoAcao;
+            
+            // Configurar o modal baseado no tipo de ação
+            configurarModalPorTipo(tipoAcao);
+            
+            // Limpar formulário
+            document.getElementById('formApontamento').reset();
+            document.getElementById('ordemServicoId').value = ordemId;
+            document.getElementById('tipoAcao').value = tipoAcao;
+            document.getElementById('operadorInfo').innerHTML = '';
+            
+            // Carregar tipos de trabalho para esta OS
+            carregarTiposTrabalho(ordemId);
+            
+            // Abrir modal
+            new bootstrap.Modal(document.getElementById('modalApontamento')).show();
+        }
+        
+        function configurarModalPorTipo(tipoAcao) {
+            const title = document.getElementById('modalApontamentoTitle');
+            const divQuantidade = document.getElementById('divQuantidade');
+            const divMotivoParada = document.getElementById('divMotivoParada');
+            const quantidade = document.getElementById('quantidade');
+            const motivoParada = document.getElementById('motivoParada');
+            
+            // Reset
+            divQuantidade.style.display = 'none';
+            divMotivoParada.style.display = 'none';
+            quantidade.required = false;
+            motivoParada.required = false;
+            
+            switch(tipoAcao) {
+                case 'inicio_setup':
+                    title.textContent = 'Iniciar Setup';
+                    break;
+                case 'fim_setup':
+                    title.textContent = 'Finalizar Setup';
+                    break;
+                case 'inicio_producao':
+                    title.textContent = 'Iniciar Produção';
+                    divQuantidade.style.display = 'block';
+                    quantidade.placeholder = 'Quantidade inicial (opcional)';
+                    break;
+                case 'pausa':
+                    title.textContent = 'Pausar Produção';
+                    divQuantidade.style.display = 'block';
+                    divMotivoParada.style.display = 'block';
+                    quantidade.required = true;
+                    motivoParada.required = true;
+                    quantidade.placeholder = 'Quantidade atual de peças';
+                    break;
+                case 'fim_producao':
+                    title.textContent = 'Finalizar Produção';
+                    divQuantidade.style.display = 'block';
+                    quantidade.required = true;
+                    quantidade.placeholder = 'Quantidade final produzida';
+                    break;
+            }
+        }
+        
+        function carregarTiposTrabalho(ordemId) {
+            fetch(`/apontamento/os/${ordemId}/tipos-trabalho`)
+                .then(response => response.json())
+                .then(data => {
+                    const select = document.getElementById('tipoTrabalho');
+                    select.innerHTML = '<option value="">Selecione o tipo de trabalho</option>';
+                    
+                    if (data.success) {
+                        data.tipos_trabalho.forEach(tipo => {
+                            const option = document.createElement('option');
+                            option.value = tipo.id;
+                            option.textContent = tipo.nome;
+                            select.appendChild(option);
+                        });
+                    } else {
+                        mostrarAlerta('Erro ao carregar tipos de trabalho: ' + data.message, 'error');
+                    }
+                })
+                .catch(error => {
+                    console.error('Erro:', error);
+                    mostrarAlerta('Erro ao carregar tipos de trabalho', 'error');
+                });
+        }
+        
+        // Validação do código do operador em tempo real
+        document.getElementById('codigoOperador').addEventListener('input', function(e) {
+            let value = e.target.value.replace(/\D/g, ''); // Apenas dígitos
+            if (value.length > 4) value = value.substr(0, 4);
+            e.target.value = value;
+            
+            if (value.length === 4) {
+                validarOperador(value);
+            } else {
+                document.getElementById('operadorInfo').innerHTML = '';
+            }
+        });
+        
+        function validarOperador(codigo) {
+            fetch('/apontamento/validar-codigo', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({ codigo: codigo })
+            })
+            .then(response => response.json())
+            .then(data => {
+                const infoDiv = document.getElementById('operadorInfo');
+                if (data.valid) {
+                    infoDiv.innerHTML = `<small class="text-success"><i class="fas fa-check"></i> ${data.message}</small>`;
+                } else {
+                    infoDiv.innerHTML = `<small class="text-danger"><i class="fas fa-times"></i> ${data.message}</small>`;
+                }
+            })
+            .catch(error => {
+                console.error('Erro:', error);
+            });
+        }
+        
+        function salvarApontamento() {
+            const form = document.getElementById('formApontamento');
+            if (!form.checkValidity()) {
+                form.reportValidity();
+                return;
+            }
+            
+            const dados = {
+                ordem_servico_id: document.getElementById('ordemServicoId').value,
+                tipo_acao: document.getElementById('tipoAcao').value,
+                codigo_operador: document.getElementById('codigoOperador').value,
+                item_trabalho_id: document.getElementById('tipoTrabalho').value,
+                quantidade: document.getElementById('quantidade').value || null,
+                motivo_parada: document.getElementById('motivoParada').value || null,
+                observacoes: document.getElementById('observacoes').value || null
+            };
+            
+            fetch('/apontamento/registrar', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify(dados)
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    mostrarAlerta(data.message, 'success');
+                    bootstrap.Modal.getInstance(document.getElementById('modalApontamento')).hide();
+                    // Atualizar status do cartão
+                    atualizarStatusCartao(ordemAtualId, data.status);
+                } else {
+                    mostrarAlerta(data.message, 'error');
+                }
+            })
+            .catch(error => {
+                console.error('Erro:', error);
+                mostrarAlerta('Erro ao registrar apontamento', 'error');
+            });
+        }
+        
+        function atualizarStatusCartao(ordemId, status) {
+            const statusElement = document.getElementById(`status-${ordemId}`);
+            if (statusElement) {
+                statusElement.innerHTML = `<small class="text-info">${status}</small>`;
+            }
+        }
+        
+        function mostrarAlerta(mensagem, tipo) {
+            const alertClass = tipo === 'success' ? 'alert-success' : 'alert-danger';
+            const alertHtml = `
+                <div class="alert ${alertClass} alert-dismissible fade show" role="alert">
+                    ${mensagem}
+                    <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+                </div>
+            `;
+            
+            const container = document.querySelector('.container-fluid');
+            container.insertAdjacentHTML('afterbegin', alertHtml);
+            
+            // Auto-remover após 5 segundos
+            setTimeout(() => {
+                const alert = container.querySelector('.alert');
+                if (alert) {
+                    alert.remove();
+                }
+            }, 5000);
+        }
+    </script>
+
+    <style>
+        .kanban-column {
+            min-height: 500px;
+            background-color: #f8f9fa;
+        }
+        
+        .kanban-card {
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+        
+        .kanban-card:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 8px rgba(0,0,0,0.1);
+        }
+        
+        .card-header {
+            font-weight: bold;
+        }
+        
+        .btn-group-vertical .btn {
+            font-size: 0.75rem;
+            padding: 0.25rem 0.5rem;
+        }
+    </style>
+</body>
+</html>

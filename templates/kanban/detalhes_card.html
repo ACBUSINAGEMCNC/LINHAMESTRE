@@ -1,0 +1,300 @@
+<div class="container-fluid p-0">
+    <div class="row mb-4">
+        <div class="col-md-12">
+            <div class="card">
+                <div class="card-header bg-primary text-white">
+                    <div class="d-flex justify-content-between align-items-center">
+                        <h5 class="mb-0">OS: {{ ordem.numero }}</h5>
+                        <div>
+                            <span class="badge bg-light text-dark">Criado: {{ ordem.data_criacao.strftime('%d/%m/%Y') }}</span>
+                            <span class="badge bg-info">Status: {{ ordem.status }}</span>
+                        </div>
+                    </div>
+                </div>
+                <div class="card-body">
+                    <div class="row">
+                        <div class="col-md-12 mb-3">
+                            <div class="d-flex justify-content-end flex-wrap">
+                                <a href="/ordens-servico/imprimir/{{ ordem.id }}" class="btn btn-sm btn-outline-primary me-2 mb-1" target="_blank">
+                                    <i class="fas fa-print"></i> Imprimir OS
+                                </a>
+                                <a href="/ordens-servico/imprimir-desenho/{{ ordem.id }}" class="btn btn-sm btn-outline-secondary me-2 mb-1" target="_blank">
+                                    <i class="fas fa-drafting-compass"></i> Imprimir Desenhos
+                                </a>
+                                <div class="btn-group me-2 mb-1">
+                                    <button type="button" class="btn btn-sm btn-outline-info dropdown-toggle" data-bs-toggle="dropdown">
+                                        <i class="fas fa-clipboard-list"></i> Folhas de Processo
+                                    </button>
+                                    <ul class="dropdown-menu">
+                                        {% for pedido_os in ordem.pedidos %}
+                                            {% if pedido_os.pedido.item_id %}
+                                                <li>
+                                                    <a class="dropdown-item" href="{{ url_for('folhas_processo.listar_folhas', item_id=pedido_os.pedido.item_id) }}">
+                                                        <i class="fas fa-file-alt"></i> {{ pedido_os.pedido.item.codigo_acb }}
+                                                    </a>
+                                                </li>
+                                            {% endif %}
+                                        {% endfor %}
+                                        {% if not ordem.pedidos or not ordem.pedidos[0].pedido.item_id %}
+                                            <li><span class="dropdown-item-text text-muted">Nenhum item disponível</span></li>
+                                        {% endif %}
+                                    </ul>
+                                </div>
+                                {% if ordem.status == 'Expedição' %}
+                                <button type="button" class="btn btn-sm btn-success mb-1" onclick="finalizarOS('{{ ordem.id }}')">
+                                    <i class="fas fa-check-circle"></i> Finalizar OS
+                                </button>
+                                {% endif %}
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="row">
+                        <div class="col-md-12">
+                            <h6 class="border-bottom pb-2 mb-3">Itens da OS</h6>
+                            
+                            {% set grouped_items = {} %}
+                            {% for pedido_os in ordem.pedidos %}
+                                {% set item_key = pedido_os.pedido.item_id if pedido_os.pedido.item_id else pedido_os.pedido.nome_item %}
+                                {% set item_name = pedido_os.pedido.item.codigo_acb ~ ' - ' ~ pedido_os.pedido.item.nome if pedido_os.pedido.item_id else pedido_os.pedido.nome_item %}
+                                
+                                {% if item_key in grouped_items %}
+                                    {% set _ = grouped_items[item_key].update({'total_qty': grouped_items[item_key].total_qty + pedido_os.pedido.quantidade}) %}
+                                    {% set _ = grouped_items[item_key].orders.append({
+                                        'pedido_id': pedido_os.pedido.id,
+                                        'cliente': pedido_os.pedido.cliente.nome,
+                                        'unidade': pedido_os.pedido.unidade_entrega.nome,
+                                        'quantidade': pedido_os.pedido.quantidade
+                                    }) %}
+                                {% else %}
+                                    {% set _ = grouped_items.update({
+                                        item_key: {
+                                            'name': item_name,
+                                            'total_qty': pedido_os.pedido.quantidade,
+                                            'item_id': pedido_os.pedido.item_id,
+                                            'orders': [{
+                                                'pedido_id': pedido_os.pedido.id,
+                                                'cliente': pedido_os.pedido.cliente.nome,
+                                                'unidade': pedido_os.pedido.unidade_entrega.nome,
+                                                'quantidade': pedido_os.pedido.quantidade
+                                            }]
+                                        }
+                                    }) %}
+                                {% endif %}
+                            {% endfor %}
+                            
+                            <div class="accordion" id="itemsAccordion">
+                                {% for item_key, item_data in grouped_items.items() %}
+                                <div class="accordion-item mb-3">
+                                    <h2 class="accordion-header" id="heading{{ loop.index }}">
+                                        <button class="accordion-button" type="button" data-bs-toggle="collapse" data-bs-target="#collapse{{ loop.index }}" aria-expanded="true" aria-controls="collapse{{ loop.index }}">
+                                            <div class="d-flex justify-content-between align-items-center w-100 me-3">
+                                                <span>{{ item_data.name }}</span>
+                                                <span class="badge bg-primary rounded-pill">{{ item_data.total_qty }} un.</span>
+                                            </div>
+                                        </button>
+                                    </h2>
+                                    <div id="collapse{{ loop.index }}" class="accordion-collapse collapse show" aria-labelledby="heading{{ loop.index }}">
+                                        <div class="accordion-body">
+                                            <div class="row mb-3">
+                                                <div class="col-md-12">
+                                                    <h6 class="text-muted">Detalhamento por Cliente:</h6>
+                                                    <div class="table-responsive">
+                                                        <table class="table table-sm table-bordered">
+                                                            <thead class="table-light">
+                                                                <tr>
+                                                                    <th>Cliente</th>
+                                                                    <th>Unidade</th>
+                                                                    <th>Quantidade</th>
+                                                                </tr>
+                                                            </thead>
+                                                            <tbody>
+                                                                {% for order in item_data.orders %}
+                                                                <tr>
+                                                                    <td>{{ order.cliente }}</td>
+                                                                    <td>{{ order.unidade }}</td>
+                                                                    <td>{{ order.quantidade }}</td>
+                                                                </tr>
+                                                                {% endfor %}
+                                                            </tbody>
+                                                        </table>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                            
+                                            {% if item_data.item_id %}
+                                                {% set item = Item.query.get(item_data.item_id) %}
+                                                
+                                                {% if item.desenho_tecnico %}
+                                                <div class="row mb-3">
+                                                    <div class="col-md-12">
+                                                        <h6 class="text-muted">Desenho Técnico:</h6>
+                                                        <div class="ratio ratio-16x9">
+                                                            <iframe src="/uploads/{{ item.desenho_tecnico }}" allowfullscreen></iframe>
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                                {% endif %}
+                                                
+                                                {% if item.trabalhos %}
+                                                <div class="row mb-3">
+                                                    <div class="col-md-12">
+                                                        <h6 class="text-muted">Operações de Trabalho:</h6>
+                                                        <div class="table-responsive">
+                                                            <table class="table table-sm table-bordered">
+                                                                <thead class="table-light">
+                                                                    <tr>
+                                                                        <th>Trabalho</th>
+                                                                        <th>Tempo de Setup</th>
+                                                                        <th>Tempo por Peça</th>
+                                                                        <th>Tempo Total Estimado</th>
+                                                                        <th>Tempo Real</th>
+                                                                        <th>Ações</th>
+                                                                    </tr>
+                                                                </thead>
+                                                                <tbody>
+                                                                    {% for item_trabalho in item.trabalhos %}
+                                                                    <tr>
+                                                                        <td>{{ item_trabalho.trabalho.nome }}</td>
+                                                                        <td>{{ item_trabalho.tempo_setup // 60 }} minutos</td>
+                                                                        <td>{{ item_trabalho.tempo_peca // 60 }} minutos</td>
+                                                                        <td>{{ (item_trabalho.tempo_setup + (item_trabalho.tempo_peca * item_data.total_qty)) // 60 }} minutos</td>
+                                                                        <td>
+                                                                            {% if item_trabalho.tempo_real %}
+                                                                                <span class="text-success">{{ item_trabalho.tempo_real // 60 }} minutos</span>
+                                                                            {% else %}
+                                                                                <span class="text-muted">Não registrado</span>
+                                                                            {% endif %}
+                                                                        </td>
+                                                                        <td>
+                                                                            <form method="POST" action="/kanban/atualizar-tempo-real" class="d-flex">
+                                                                                <input type="hidden" name="item_trabalho_id" value="{{ item_trabalho.id }}">
+                                                                                <input type="number" class="form-control form-control-sm me-2" name="tempo_real" placeholder="Tempo (s)" min="1" required>
+                                                                                <button type="button" class="btn btn-sm btn-primary btn-salvar-tempo">Salvar</button>
+                                                                            </form>
+                                                                        </td>
+                                                                    </tr>
+                                                                    {% endfor %}
+                                                                </tbody>
+                                                            </table>
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                                {% endif %}
+                                                
+                                                <div class="row">
+                                                    <div class="col-md-12">
+                                                        <h6 class="text-muted">Instruções de Produção:</h6>
+                                                        <div class="table-responsive">
+                                                            <table class="table table-sm table-bordered">
+                                                                <tbody>
+                                                                    <tr>
+                                                                        <th width="20%" class="table-light">Têmpera:</th>
+                                                                        <td>
+                                                                            {% if item.tempera %}
+                                                                                <span class="badge bg-success">Sim</span>
+                                                                                {% if item.tipo_tempera %}
+                                                                                    - {{ item.tipo_tempera }}
+                                                                                {% endif %}
+                                                                            {% else %}
+                                                                                <span class="badge bg-secondary">Não</span>
+                                                                            {% endif %}
+                                                                        </td>
+                                                                        <th width="20%" class="table-light">Retífica:</th>
+                                                                        <td>
+                                                                            {% if item.retifica %}
+                                                                                <span class="badge bg-success">Sim</span>
+                                                                            {% else %}
+                                                                                <span class="badge bg-secondary">Não</span>
+                                                                            {% endif %}
+                                                                        </td>
+                                                                    </tr>
+                                                                    <tr>
+                                                                        <th class="table-light">Pintura:</th>
+                                                                        <td>
+                                                                            {% if item.pintura %}
+                                                                                <span class="badge bg-success">Sim</span>
+                                                                                {% if item.tipo_pintura or item.cor_pintura %}
+                                                                                    - {{ item.tipo_pintura }} {{ item.cor_pintura }}
+                                                                                {% endif %}
+                                                                            {% else %}
+                                                                                <span class="badge bg-secondary">Não</span>
+                                                                            {% endif %}
+                                                                        </td>
+                                                                        <th class="table-light">Óleo Protetivo:</th>
+                                                                        <td>
+                                                                            {% if item.oleo_protetivo %}
+                                                                                <span class="badge bg-success">Sim</span>
+                                                                            {% else %}
+                                                                                <span class="badge bg-secondary">Não</span>
+                                                                            {% endif %}
+                                                                        </td>
+                                                                    </tr>
+                                                                    <tr>
+                                                                        <th class="table-light">Zincagem:</th>
+                                                                        <td>
+                                                                            {% if item.zincagem %}
+                                                                                <span class="badge bg-success">Sim</span>
+                                                                                {% if item.tipo_zincagem %}
+                                                                                    - {{ item.tipo_zincagem }}
+                                                                                {% endif %}
+                                                                            {% else %}
+                                                                                <span class="badge bg-secondary">Não</span>
+                                                                            {% endif %}
+                                                                        </td>
+                                                                        <th class="table-light">Embalagem:</th>
+                                                                        <td>{{ item.tipo_embalagem or 'Não especificado' }}</td>
+                                                                    </tr>
+                                                                    <tr>
+                                                                        <th class="table-light">Peso da Peça:</th>
+                                                                        <td colspan="3">{{ item.peso }} kg</td>
+                                                                    </tr>
+                                                                </tbody>
+                                                            </table>
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                            {% endif %}
+                                        </div>
+                                    </div>
+                                </div>
+                                {% endfor %}
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <!-- Seção de Logs de Apontamento -->
+                    <div class="row mt-4">
+                        <div class="col-md-12">
+                            <div class="card">
+                                <div class="card-header bg-info text-white">
+                                    <h5 class="mb-0"><i class="fas fa-history"></i> Histórico de Apontamentos</h5>
+                                </div>
+                                <div class="card-body">
+                                    <div id="logs-apontamento-container-{{ ordem.id }}" class="logs-apontamento-container">
+                                        <div class="text-center">
+                                            <div class="spinner-border text-primary" role="status">
+                                                <span class="visually-hidden">Carregando logs...</span>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+// Carregar logs de apontamento quando o modal for aberto
+document.addEventListener('DOMContentLoaded', function() {
+    // Carregar logs de apontamento
+    const logsContainer = document.getElementById('logs-apontamento-container-{{ ordem.id }}');
+    if (logsContainer) {
+        carregarLogsApontamento('{{ ordem.id }}', logsContainer);
+    }
+});
+</script>

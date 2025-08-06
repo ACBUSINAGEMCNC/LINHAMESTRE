@@ -1,0 +1,120 @@
+{% extends "base.html" %}
+
+{% block title %}Histórico de Folhas - {{ item.nome }}{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+    <div class="row">
+        <div class="col-12">
+            <div class="card shadow-sm">
+                <div class="card-header bg-primary text-white d-flex justify-content-between align-items-center">
+                    <div>
+                        <h4 class="mb-0">
+                            <i class="fas fa-history me-2"></i>
+                            Histórico de Folhas de Processo
+                        </h4>
+                        <small class="opacity-75">{{ item.codigo_acb }} - {{ item.nome }}</small>
+                    </div>
+                    <div>
+                        <a href="{{ url_for('folhas_processo.listar_folhas', item_id=item.id) }}" class="btn btn-outline-light btn-sm">
+                            <i class="fas fa-arrow-left"></i> Voltar às Folhas
+                        </a>
+                        <a href="{{ url_for('itens.visualizar_item', item_id=item.id) }}" class="btn btn-outline-light btn-sm">
+                            <i class="fas fa-box"></i> Voltar ao Item
+                        </a>
+                    </div>
+                </div>
+
+                <div class="card-body">
+                    {% if not folhas_agrupadas %}
+                        <div class="text-center text-muted py-5">
+                            <i class="fas fa-clipboard-list fa-3x mb-3"></i>
+                            <p class="mb-0">Nenhuma folha de processo encontrada para este item.</p>
+                        </div>
+                    {% else %}
+                        {% for tipo_processo, folhas in folhas_agrupadas.items() %}
+                            <div class="mb-4">
+                                <h5 class="border-bottom pb-2 mb-3">
+                                    <i class="fas fa-cog me-2"></i>
+                                    {{ tipo_processo.replace('_', ' ').title() }}
+                                </h5>
+
+                                <div class="row">
+                                    {% for folha in folhas %}
+                                        <div class="col-md-6 col-lg-4 mb-3">
+                                            <div class="card border-{{ 'success' if folha.ativo else 'secondary' }} h-100">
+                                                <div class="card-header p-2 {{ 'bg-success' if folha.ativo else 'bg-secondary' }} text-white">
+                                                    <div class="d-flex justify-content-between align-items-center">
+                                                        <small class="mb-0 fw-bold">
+                                                            Versão {{ folha.versao }}
+                                                            {% if folha.ativo %}
+                                                                <span class="badge bg-light text-dark ms-1">ATIVA</span>
+                                                            {% endif %}
+                                                        </small>
+                                                        <small>{{ folha.data_criacao.strftime('%d/%m/%Y') }}</small>
+                                                    </div>
+                                                </div>
+                                                <div class="card-body p-3">
+                                                    <div class="mb-2">
+                                                        <small class="text-muted">Criado por:</small><br>
+                                                        <strong>{{ folha.criado_por }}</strong>
+                                                    </div>
+                                                    
+                                                    {% if folha.responsavel %}
+                                                        <div class="mb-2">
+                                                            <small class="text-muted">Responsável:</small><br>
+                                                            <strong>{{ folha.responsavel }}</strong>
+                                                        </div>
+                                                    {% endif %}
+
+                                                    {% if folha.observacoes %}
+                                                        <div class="mb-3">
+                                                            <small class="text-muted">Observações:</small><br>
+                                                            <small class="text-dark">{{ folha.observacoes[:100] }}{% if folha.observacoes|length > 100 %}...{% endif %}</small>
+                                                        </div>
+                                                    {% endif %}
+
+                                                    <div class="d-flex gap-1 flex-wrap">
+                                                        <a href="{{ url_for('folhas_processo.visualizar_folha', folha_id=folha.id) }}" 
+                                                           class="btn btn-outline-primary btn-sm">
+                                                            <i class="fas fa-eye"></i> Visualizar
+                                                        </a>
+                                                        
+                                                        {% if folha.ativo %}
+                                                            <a href="{{ url_for('folhas_processo.editar_folha', folha_id=folha.id) }}" 
+                                                               class="btn btn-outline-success btn-sm">
+                                                                <i class="fas fa-edit"></i> Editar
+                                                            </a>
+                                                        {% else %}
+                                                            <a href="{{ url_for('folhas_processo.criar_nova_versao', folha_id=folha.id) }}" 
+                                                               class="btn btn-outline-warning btn-sm"
+                                                               onclick="return confirm('Criar nova versão baseada na v{{ folha.versao }}?')">
+                                                                <i class="fas fa-copy"></i> Nova Versão
+                                                            </a>
+                                                        {% endif %}
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    {% endfor %}
+                                </div>
+                            </div>
+                        {% endfor %}
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Script para confirmações -->
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    // Adicionar tooltips aos botões
+    var tooltipTriggerList = [].slice.call(document.querySelectorAll('[data-bs-toggle="tooltip"]'));
+    var tooltipList = tooltipTriggerList.map(function (tooltipTriggerEl) {
+        return new bootstrap.Tooltip(tooltipTriggerEl);
+    });
+});
+</script>
+{% endblock %}

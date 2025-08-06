@@ -1,0 +1,37 @@
+# Python
+__pycache__/
+*.py[cod]
+*.pyc
+*.pyo
+*.pyd
+
+# Virtual environments
+.venv/
+
+# Environment variables/local configs
+.env
+config.py  # substitua por config_example.py e use variáveis de ambiente
+
+# Databases / backups / uploads
+*.sqlite
+*.db
+database.db
+backups/
+uploads/
+
+# Logs
+*.log
+
+# Node.js
+node_modules/
+
+# Build / dist / cache
+*.egg-info/
+.eggs/
+*.egg
+
+# OS / Editor
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/

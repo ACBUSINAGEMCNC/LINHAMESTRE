@@ -1,0 +1,463 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Cadastrar Item do Pedido - ACB Usinagem CNC</title>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+</head>
+<body>
+    <nav class="navbar navbar-expand-lg navbar-dark bg-primary">
+        <div class="container">
+            <a class="navbar-brand" href="/">ACB Usinagem CNC</a>
+            <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav">
+                <span class="navbar-toggler-icon"></span>
+            </button>
+            <div class="collapse navbar-collapse" id="navbarNav">
+                <ul class="navbar-nav">
+                    <li class="nav-item">
+                        <a class="nav-link" href="/"><i class="fas fa-home"></i> Home</a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link" href="/pedidos"><i class="fas fa-clipboard-list"></i> Pedidos</a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link" href="/itens"><i class="fas fa-boxes"></i> Itens</a>
+                    </li>
+                </ul>
+            </div>
+        </div>
+    </nav>
+
+    <div class="container py-4">
+        <div class="d-flex justify-content-between align-items-center mb-4">
+            <h1>Cadastrar Item do Pedido</h1>
+            <a href="/pedidos" class="btn btn-secondary">
+                <i class="fas fa-arrow-left"></i> Voltar
+            </a>
+        </div>
+
+        <div class="alert alert-info">
+            <i class="fas fa-info-circle"></i> Você está cadastrando o item <strong>"{{ pedido.nome_item }}"</strong> que foi utilizado em pedidos sem cadastro completo. Após o cadastro, todos os pedidos que usam este item serão atualizados automaticamente.
+        </div>
+
+        <div class="card">
+            <div class="card-body">
+                <form method="POST" action="/pedidos/cadastrar-item/{{ pedido.id }}" enctype="multipart/form-data">
+                    <div class="row mb-3">
+                        <div class="col-md-6">
+                            <label for="nome" class="form-label">Nome do Item</label>
+                            <input type="text" class="form-control" id="nome" name="nome" value="{{ pedido.nome_item }}" readonly>
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label">Código ACB</label>
+                            <input type="text" class="form-control" value="Gerado automaticamente" disabled>
+                        </div>
+                    </div>
+
+                    <h4 class="mt-4 mb-3">Materiais Utilizados</h4>
+                    <div class="card mb-4">
+                        <div class="card-body">
+                            <div class="row mb-3">
+                                <div class="col-md-5">
+                                    <label for="material_select" class="form-label">Material</label>
+                                    <select class="form-select" id="material_select">
+                                        <option value="">Selecione um material</option>
+                                        {% for material in materiais %}
+                                        <option value="{{ material.id }}" 
+                                                data-nome="{{ material.nome }}"
+                                                data-tipo="{{ material.tipo }}"
+                                                data-especifico="{{ material.especifico }}">
+                                            {{ material.nome }}
+                                        </option>
+                                        {% endfor %}
+                                    </select>
+                                </div>
+                                <div class="col-md-3">
+                                    <label for="material_comprimento" class="form-label">Comprimento (mm)</label>
+                                    <input type="number" class="form-control" id="material_comprimento" step="0.01" min="0">
+                                </div>
+                                <div class="col-md-2">
+                                    <label for="material_quantidade" class="form-label">Quantidade</label>
+                                    <input type="number" class="form-control" id="material_quantidade" value="1" min="1">
+                                </div>
+                                <div class="col-md-2">
+                                    <label class="form-label d-block">&nbsp;</label>
+                                    <button type="button" class="btn btn-success w-100" id="btn_adicionar_material">
+                                        <i class="fas fa-plus"></i> Adicionar
+                                    </button>
+                                </div>
+                            </div>
+                            
+                            <div class="table-responsive">
+                                <table class="table table-striped" id="tabela_materiais">
+                                    <thead>
+                                        <tr>
+                                            <th>Material</th>
+                                            <th>Tipo</th>
+                                            <th>Comprimento</th>
+                                            <th>Quantidade</th>
+                                            <th>Ações</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        <!-- Materiais serão adicionados aqui via JavaScript -->
+                                    </tbody>
+                                </table>
+                            </div>
+                            <input type="hidden" name="materiais" id="materiais_json" value="[]">
+                        </div>
+                    </div>
+
+                    <h4 class="mt-4 mb-3">Operações</h4>
+                    <div class="card mb-4">
+                        <div class="card-body">
+                            <div class="row mb-3">
+                                <div class="col-md-4">
+                                    <label for="trabalho_select" class="form-label">Tipo de Trabalho</label>
+                                    <select class="form-select" id="trabalho_select">
+                                        <option value="">Selecione um trabalho</option>
+                                        {% for trabalho in trabalhos %}
+                                        <option value="{{ trabalho.id }}" data-nome="{{ trabalho.nome }}">
+                                            {{ trabalho.nome }}
+                                        </option>
+                                        {% endfor %}
+                                    </select>
+                                </div>
+                                <div class="col-md-3">
+                                    <label for="tempo_setup" class="form-label">Tempo de Setup (segundos)</label>
+                                    <input type="number" class="form-control" id="tempo_setup" min="0">
+                                </div>
+                                <div class="col-md-3">
+                                    <label for="tempo_peca" class="form-label">Tempo por Peça (segundos)</label>
+                                    <input type="number" class="form-control" id="tempo_peca" min="0">
+                                </div>
+                                <div class="col-md-2">
+                                    <label class="form-label d-block">&nbsp;</label>
+                                    <button type="button" class="btn btn-success w-100" id="btn_adicionar_trabalho">
+                                        <i class="fas fa-plus"></i> Adicionar
+                                    </button>
+                                </div>
+                            </div>
+                            
+                            <div class="table-responsive">
+                                <table class="table table-striped" id="tabela_trabalhos">
+                                    <thead>
+                                        <tr>
+                                            <th>Tipo de Trabalho</th>
+                                            <th>Tempo de Setup</th>
+                                            <th>Tempo por Peça</th>
+                                            <th>Ações</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        <!-- Trabalhos serão adicionados aqui via JavaScript -->
+                                    </tbody>
+                                </table>
+                            </div>
+                            <input type="hidden" name="trabalhos" id="trabalhos_json" value="[]">
+                        </div>
+                    </div>
+
+                    <h4 class="mt-4 mb-3">Arquivos</h4>
+                    <div class="card mb-4">
+                        <div class="card-body">
+                            <div class="row mb-3">
+                                <div class="col-md-4">
+                                    <label for="desenho_tecnico" class="form-label">Desenho Técnico (PDF)</label>
+                                    <input type="file" class="form-control" id="desenho_tecnico" name="desenho_tecnico" accept=".pdf">
+                                </div>
+                                <div class="col-md-4">
+                                    <label for="imagem" class="form-label">Imagem do Item</label>
+                                    <input type="file" class="form-control" id="imagem" name="imagem" accept="image/*">
+                                </div>
+                                <div class="col-md-4">
+                                    <label for="instrucoes_trabalho" class="form-label">Instruções de Trabalho (PDF)</label>
+                                    <input type="file" class="form-control" id="instrucoes_trabalho" name="instrucoes_trabalho" accept=".pdf">
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <h4 class="mt-4 mb-3">Instruções de Produção</h4>
+                    <div class="card mb-4">
+                        <div class="card-body">
+                            <div class="row mb-3">
+                                <div class="col-md-3">
+                                    <div class="form-check form-switch">
+                                        <input class="form-check-input" type="checkbox" id="tempera" name="tempera">
+                                        <label class="form-check-label" for="tempera">Têmpera</label>
+                                    </div>
+                                </div>
+                                <div class="col-md-3">
+                                    <label for="tipo_tempera" class="form-label">Tipo de Têmpera</label>
+                                    <select class="form-select" id="tipo_tempera" name="tipo_tempera" disabled>
+                                        <option value="">Selecione</option>
+                                        <option value="3º">3º</option>
+                                        <option value="indução">Indução</option>
+                                        <option value="forno">Forno</option>
+                                    </select>
+                                </div>
+                                <div class="col-md-3">
+                                    <div class="form-check form-switch">
+                                        <input class="form-check-input" type="checkbox" id="retifica" name="retifica">
+                                        <label class="form-check-label" for="retifica">Retífica</label>
+                                    </div>
+                                </div>
+                                <div class="col-md-3">
+                                    <div class="form-check form-switch">
+                                        <input class="form-check-input" type="checkbox" id="oleo_protetivo" name="oleo_protetivo">
+                                        <label class="form-check-label" for="oleo_protetivo">Óleo Protetivo</label>
+                                    </div>
+                                </div>
+                            </div>
+                            
+                            <div class="row mb-3">
+                                <div class="col-md-3">
+                                    <div class="form-check form-switch">
+                                        <input class="form-check-input" type="checkbox" id="pintura" name="pintura">
+                                        <label class="form-check-label" for="pintura">Pintura</label>
+                                    </div>
+                                </div>
+                                <div class="col-md-3">
+                                    <label for="tipo_pintura" class="form-label">Tipo de Pintura</label>
+                                    <input type="text" class="form-control" id="tipo_pintura" name="tipo_pintura" disabled>
+                                </div>
+                                <div class="col-md-3">
+                                    <label for="cor_pintura" class="form-label">Cor</label>
+                                    <input type="text" class="form-control" id="cor_pintura" name="cor_pintura" disabled>
+                                </div>
+                                <div class="col-md-3">
+                                    <label for="tipo_embalagem" class="form-label">Tipo de Embalagem</label>
+                                    <select class="form-select" id="tipo_embalagem" name="tipo_embalagem">
+                                        <option value="">Selecione</option>
+                                        <option value="caixa">Caixa</option>
+                                        <option value="pallet">Pallet</option>
+                                        <option value="volume">Volume</option>
+                                    </select>
+                                </div>
+                            </div>
+                            
+                            <div class="row mb-3">
+                                <div class="col-md-3">
+                                    <div class="form-check form-switch">
+                                        <input class="form-check-input" type="checkbox" id="zincagem" name="zincagem">
+                                        <label class="form-check-label" for="zincagem">Zincagem</label>
+                                    </div>
+                                </div>
+                                <div class="col-md-3">
+                                    <label for="tipo_zincagem" class="form-label">Tipo de Zincagem</label>
+                                    <select class="form-select" id="tipo_zincagem" name="tipo_zincagem" disabled>
+                                        <option value="">Selecione</option>
+                                        <option value="amarela">Amarela</option>
+                                        <option value="branca">Branca</option>
+                                        <option value="preta">Preta</option>
+                                    </select>
+                                </div>
+                            </div>
+
+                            <div class="row">
+                                <div class="col-md-3">
+                                    <label for="peso" class="form-label">Peso da Peça Pronta (kg)</label>
+                                    <input type="number" class="form-control" id="peso" name="peso" step="0.001" min="0">
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="d-grid">
+                        <button type="submit" class="btn btn-primary">
+                            <i class="fas fa-save"></i> Cadastrar Item e Atualizar Pedidos
+                        </button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    <script>
+        $(document).ready(function() {
+            // Arrays para armazenar materiais e trabalhos
+            let materiais = [];
+            let trabalhos = [];
+            
+            // Adicionar material à tabela
+            $('#btn_adicionar_material').click(function() {
+                const materialId = $('#material_select').val();
+                if (!materialId) {
+                    alert('Selecione um material');
+                    return;
+                }
+                
+                const materialNome = $('#material_select option:selected').data('nome');
+                const materialTipo = $('#material_select option:selected').data('tipo');
+                const materialEspecifico = $('#material_select option:selected').data('especifico');
+                const comprimento = $('#material_comprimento').val();
+                const quantidade = $('#material_quantidade').val();
+                
+                if (!materialEspecifico && (!comprimento || comprimento <= 0)) {
+                    alert('Informe um comprimento válido');
+                    return;
+                }
+                
+                if (!quantidade || quantidade <= 0) {
+                    alert('Informe uma quantidade válida');
+                    return;
+                }
+                
+                // Adicionar à array
+                const material = {
+                    id: materialId,
+                    nome: materialNome,
+                    tipo: materialTipo,
+                    comprimento: comprimento,
+                    quantidade: quantidade
+                };
+                
+                materiais.push(material);
+                
+                // Atualizar tabela
+                atualizarTabelaMateriais();
+                
+                // Limpar campos
+                $('#material_select').val('');
+                $('#material_comprimento').val('');
+                $('#material_quantidade').val('1');
+            });
+            
+            // Adicionar trabalho à tabela
+            $('#btn_adicionar_trabalho').click(function() {
+                const trabalhoId = $('#trabalho_select').val();
+                if (!trabalhoId) {
+                    alert('Selecione um tipo de trabalho');
+                    return;
+                }
+                
+                const trabalhoNome = $('#trabalho_select option:selected').data('nome');
+                const tempoSetup = $('#tempo_setup').val();
+                const tempoPeca = $('#tempo_peca').val();
+                
+                if (!tempoSetup || tempoSetup < 0) {
+                    alert('Informe um tempo de setup válido');
+                    return;
+                }
+                
+                if (!tempoPeca || tempoPeca < 0) {
+                    alert('Informe um tempo por peça válido');
+                    return;
+                }
+                
+                // Adicionar à array
+                const trabalho = {
+                    id: trabalhoId,
+                    nome: trabalhoNome,
+                    tempo_setup: tempoSetup,
+                    tempo_peca: tempoPeca
+                };
+                
+                trabalhos.push(trabalho);
+                
+                // Atualizar tabela
+                atualizarTabelaTrabalhos();
+                
+                // Limpar campos
+                $('#trabalho_select').val('');
+                $('#tempo_setup').val('');
+                $('#tempo_peca').val('');
+            });
+            
+            // Função para atualizar a tabela de materiais
+            function atualizarTabelaMateriais() {
+                const tbody = $('#tabela_materiais tbody');
+                tbody.empty();
+                
+                materiais.forEach((material, index) => {
+                    tbody.append(`
+                        <tr>
+                            <td>${material.nome}</td>
+                            <td>${material.tipo}</td>
+                            <td>${material.comprimento || 'N/A'}</td>
+                            <td>${material.quantidade}</td>
+                            <td>
+                                <button type="button" class="btn btn-sm btn-danger btn-remover-material" data-index="${index}">
+                                    <i class="fas fa-trash"></i>
+                                </button>
+                            </td>
+                        </tr>
+                    `);
+                });
+                
+                // Atualizar campo hidden
+                $('#materiais_json').val(JSON.stringify(materiais));
+            }
+            
+            // Função para atualizar a tabela de trabalhos
+            function atualizarTabelaTrabalhos() {
+                const tbody = $('#tabela_trabalhos tbody');
+                tbody.empty();
+                
+                trabalhos.forEach((trabalho, index) => {
+                    tbody.append(`
+                        <tr>
+                            <td>${trabalho.nome}</td>
+                            <td>${trabalho.tempo_setup} segundos</td>
+                            <td>${trabalho.tempo_peca} segundos</td>
+                            <td>
+                                <button type="button" class="btn btn-sm btn-danger btn-remover-trabalho" data-index="${index}">
+                                    <i class="fas fa-trash"></i>
+                                </button>
+                            </td>
+                        </tr>
+                    `);
+                });
+                
+                // Atualizar campo hidden
+                $('#trabalhos_json').val(JSON.stringify(trabalhos));
+            }
+            
+            // Remover material
+            $(document).on('click', '.btn-remover-material', function() {
+                const index = $(this).data('index');
+                materiais.splice(index, 1);
+                atualizarTabelaMateriais();
+            });
+            
+            // Remover trabalho
+            $(document).on('click', '.btn-remover-trabalho', function() {
+                const index = $(this).data('index');
+                trabalhos.splice(index, 1);
+                atualizarTabelaTrabalhos();
+            });
+            
+            // Habilitar/desabilitar campos de têmpera
+            $('#tempera').change(function() {
+                $('#tipo_tempera').prop('disabled', !this.checked);
+                if (!this.checked) {
+                    $('#tipo_tempera').val('');
+                }
+            });
+            
+            // Habilitar/desabilitar campos de pintura
+            $('#pintura').change(function() {
+                $('#tipo_pintura').prop('disabled', !this.checked);
+                $('#cor_pintura').prop('disabled', !this.checked);
+                if (!this.checked) {
+                    $('#tipo_pintura').val('');
+                    $('#cor_pintura').val('');
+                }
+            });
+
+            // Habilitar/desabilitar campos de zincagem
+            $('#zincagem').change(function() {
+                $('#tipo_zincagem').prop('disabled', !this.checked);
+                if (!this.checked) {
+                    $('#tipo_zincagem').val('');
+                }
+            });
+        });
+    </script>
+</body>
+</html>

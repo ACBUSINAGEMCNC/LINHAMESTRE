@@ -1,0 +1,59 @@
+<!-- Modal de Confirmação -->
+<div class="modal fade" id="modalConfirmacao" tabindex="-1" aria-labelledby="modalConfirmacaoTitulo" aria-hidden="true">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="modalConfirmacaoTitulo">Confirmação</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Fechar"></button>
+            </div>
+            <div class="modal-body" id="modalConfirmacaoCorpo">
+                <!-- Conteúdo dinâmico será inserido aqui -->
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
+                <button type="button" class="btn btn-primary" id="btnConfirmarAcao">Confirmar</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+// Função de confirmação compatível com jQuery e Bootstrap 5
+function mostrarModalConfirmacao(mensagem, acaoConfirmada) {
+    // Definir a mensagem
+    if (typeof $ !== 'undefined') {
+        // Usando jQuery se disponível
+        $('#modalConfirmacaoCorpo').text(mensagem);
+        
+        // Remover eventos antigos e adicionar novo
+        $('#btnConfirmarAcao').off('click').on('click', function() {
+            acaoConfirmada();
+            $('#modalConfirmacao').modal('hide');
+        });
+        
+        // Mostrar o modal
+        $('#modalConfirmacao').modal('show');
+    } else {
+        // Usando JavaScript puro se jQuery não estiver disponível
+        document.getElementById('modalConfirmacaoCorpo').textContent = mensagem;
+        
+        // Remover eventos antigos e adicionar novo evento
+        const btnConfirmar = document.getElementById('btnConfirmarAcao');
+        const novoBtn = btnConfirmar.cloneNode(true);
+        btnConfirmar.parentNode.replaceChild(novoBtn, btnConfirmar);
+        
+        novoBtn.addEventListener('click', function() {
+            acaoConfirmada();
+            // Fechar usando a API do Bootstrap 5
+            const modalEl = document.getElementById('modalConfirmacao');
+            const modal = bootstrap.Modal.getInstance(modalEl) || new bootstrap.Modal(modalEl);
+            modal.hide();
+        });
+        
+        // Mostrar o modal usando a API do Bootstrap 5
+        const modalEl = document.getElementById('modalConfirmacao');
+        const modal = new bootstrap.Modal(modalEl);
+        modal.show();
+    }
+}
+</script>

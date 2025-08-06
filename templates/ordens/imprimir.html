@@ -1,0 +1,222 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Ordem de Serviço {{ ordem.numero }} - ACB Usinagem CNC</title>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css">
+    <style>
+        @media print {
+            body {
+                padding: 0;
+                margin: 0;
+            }
+            .no-print {
+                display: none;
+            }
+            .page-break {
+                page-break-after: always;
+            }
+            .container {
+                width: 100%;
+                max-width: 100%;
+                padding: 0;
+                margin: 0;
+            }
+        }
+        .header {
+            border-bottom: 2px solid #000;
+            padding-bottom: 10px;
+            margin-bottom: 20px;
+        }
+        .logo {
+            max-height: 80px;
+        }
+        .ordem-info {
+            border: 1px solid #ddd;
+            padding: 15px;
+            margin-bottom: 20px;
+            border-radius: 5px;
+        }
+        .item-table {
+            margin-top: 20px;
+        }
+        .footer {
+            margin-top: 50px;
+            border-top: 1px solid #ddd;
+            padding-top: 10px;
+            font-size: 0.8rem;
+        }
+        .trabalho-info {
+            margin-top: 20px;
+            border: 1px solid #ddd;
+            padding: 15px;
+            border-radius: 5px;
+        }
+        .trabalho-table th, .trabalho-table td {
+            padding: 8px;
+        }
+        .item-group {
+            background-color: #f8f9fa;
+            border: 1px solid #dee2e6;
+            border-radius: 5px;
+            padding: 15px;
+            margin-bottom: 20px;
+        }
+        .item-group-header {
+            font-size: 1.2rem;
+            font-weight: bold;
+            margin-bottom: 10px;
+            border-bottom: 1px solid #dee2e6;
+            padding-bottom: 10px;
+        }
+        .item-group-total {
+            font-size: 1.1rem;
+            font-weight: bold;
+            color: #0d6efd;
+            margin-bottom: 15px;
+        }
+        .item-breakdown {
+            background-color: #fff;
+            border: 1px solid #dee2e6;
+            border-radius: 5px;
+            padding: 10px;
+        }
+        .item-breakdown-title {
+            font-weight: bold;
+            margin-bottom: 10px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container mt-4">
+        <div class="no-print mb-3">
+            <button class="btn btn-primary" onclick="window.print()">Imprimir</button>
+            <a href="/kanban" class="btn btn-secondary">Voltar</a>
+        </div>
+        
+        <div class="header d-flex justify-content-between align-items-center">
+            <div>
+                <h1>Ordem de Serviço</h1>
+                <h2>{{ ordem.numero }}</h2>
+            </div>
+            <div class="text-end">
+                <img src="/static/logo.svg" alt="ACB Usinagem CNC" class="logo">
+                <div>ACB Usinagem CNC</div>
+                <div>CNPJ: XX.XXX.XXX/0001-XX</div>
+            </div>
+        </div>
+        
+        <div class="ordem-info">
+            <div class="row">
+                <div class="col-md-6">
+                    <p><strong>Data de Criação:</strong> {{ ordem.data_criacao.strftime('%d/%m/%Y') }}</p>
+                    <p><strong>Status:</strong> {{ ordem.status }}</p>
+                </div>
+                <div class="col-md-6">
+                    <p><strong>Código de Barras:</strong> *{{ ordem.numero }}*</p>
+                </div>
+            </div>
+        </div>
+        
+        <h3>Itens Agrupados</h3>
+        
+        {% set grouped_items = {} %}
+        {% for pedido_os in ordem.pedidos %}
+            {% set item_key = pedido_os.pedido.item_id if pedido_os.pedido.item_id else pedido_os.pedido.nome_item %}
+            {% set item_name = pedido_os.pedido.item.codigo_acb ~ ' - ' ~ pedido_os.pedido.item.nome if pedido_os.pedido.item_id else pedido_os.pedido.nome_item ~ ' (Sem cadastro)' %}
+            
+            {% if item_key in grouped_items %}
+                {% set _ = grouped_items[item_key].update({'total_qty': grouped_items[item_key].total_qty + pedido_os.pedido.quantidade}) %}
+                {% set _ = grouped_items[item_key].orders.append({
+                    'pedido_id': pedido_os.pedido.id,
+                    'cliente': pedido_os.pedido.cliente.nome,
+                    'unidade': pedido_os.pedido.unidade_entrega.nome,
+                    'quantidade': pedido_os.pedido.quantidade,
+                    'numero_pedido': pedido_os.pedido.numero_pedido
+                }) %}
+            {% else %}
+                {% set _ = grouped_items.update({
+                    item_key: {
+                        'name': item_name,
+                        'total_qty': pedido_os.pedido.quantidade,
+                        'item_id': pedido_os.pedido.item_id,
+                        'orders': [{
+                            'pedido_id': pedido_os.pedido.id,
+                            'cliente': pedido_os.pedido.cliente.nome,
+                            'unidade': pedido_os.pedido.unidade_entrega.nome,
+                            'quantidade': pedido_os.pedido.quantidade,
+                            'numero_pedido': pedido_os.pedido.numero_pedido
+                        }]
+                    }
+                }) %}
+            {% endif %}
+        {% endfor %}
+        
+        {% for item_key, item_data in grouped_items.items() %}
+        <div class="item-group">
+            <div class="item-group-header">{{ item_data.name }}</div>
+            <div class="item-group-total">Quantidade Total: {{ item_data.total_qty }}</div>
+            
+            <div class="item-breakdown">
+                <div class="item-breakdown-title">Detalhamento por Pedido:</div>
+                <table class="table table-sm table-bordered">
+                    <thead>
+                        <tr>
+                            <th>Cliente</th>
+                            <th>Unidade</th>
+                            <th>Quantidade</th>
+                            <th>Nº Pedido</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for order in item_data.orders %}
+                        <tr>
+                            <td>{{ order.cliente }}</td>
+                            <td>{{ order.unidade }}</td>
+                            <td>{{ order.quantidade }}</td>
+                            <td>{{ order.numero_pedido }}</td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+            
+            {% if item_data.item_id %}
+                {% set item = Item.query.get(item_data.item_id) %}
+                {% if item and item.trabalhos %}
+                <div class="trabalho-info mt-3">
+                    <h5>Trabalhos</h5>
+                    <table class="table table-sm table-bordered">
+                        <thead>
+                            <tr>
+                                <th>Trabalho</th>
+                                <th>Tempo de Setup</th>
+                                <th>Tempo por Peça</th>
+                                <th>Tempo Total Estimado</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for item_trabalho in item.trabalhos %}
+                            <tr>
+                                <td>{{ item_trabalho.trabalho.nome }}</td>
+                                <td>{{ item_trabalho.tempo_setup // 60 }} minutos</td>
+                                <td>{{ item_trabalho.tempo_peca // 60 }} minutos</td>
+                                <td>{{ (item_trabalho.tempo_setup + (item_trabalho.tempo_peca * item_data.total_qty)) // 60 }} minutos</td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+                {% endif %}
+            {% endif %}
+        </div>
+        {% endfor %}
+        
+        <div class="footer text-center">
+            <p>Documento gerado em {{ now().strftime('%d/%m/%Y %H:%M:%S') }}</p>
+            <p>ACB Usinagem CNC - Todos os direitos reservados</p>
+        </div>
+    </div>
+</body>
+</html>

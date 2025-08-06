@@ -1,0 +1,168 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Novo Material - ACB Usinagem CNC</title>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+</head>
+<body>
+    <nav class="navbar navbar-expand-lg navbar-dark bg-primary">
+        <div class="container">
+            <a class="navbar-brand" href="/">ACB Usinagem CNC</a>
+            <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav">
+                <span class="navbar-toggler-icon"></span>
+            </button>
+            <div class="collapse navbar-collapse" id="navbarNav">
+                <ul class="navbar-nav">
+                    <li class="nav-item">
+                        <a class="nav-link" href="/"><i class="fas fa-home"></i> Home</a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link" href="/materiais"><i class="fas fa-cubes"></i> Materiais</a>
+                    </li>
+                </ul>
+            </div>
+        </div>
+    </nav>
+
+    <div class="container py-4">
+        <div class="d-flex justify-content-between align-items-center mb-4">
+            <h1>Novo Material</h1>
+            <a href="/materiais" class="btn btn-secondary">
+                <i class="fas fa-arrow-left"></i> Voltar
+            </a>
+        </div>
+
+        <div class="card">
+            <div class="card-body">
+                <form method="POST" action="/materiais/novo">
+                    <div class="row mb-3">
+                        <div class="col-md-6">
+                            <label for="nome" class="form-label">Nome do Material</label>
+                            <input type="text" class="form-control" id="nome" name="nome" required>
+                        </div>
+                        <div class="col-md-6">
+                            <div class="form-check mt-4">
+                                <input class="form-check-input" type="checkbox" id="especifico" name="especifico">
+                                <label class="form-check-label" for="especifico">
+                                    Material Específico
+                                </label>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="row mb-3">
+                        <div class="col-md-6">
+                            <label for="tipo" class="form-label">Tipo</label>
+                            <select class="form-select" id="tipo" name="tipo" required>
+                                <option value="">Selecione</option>
+                                <option value="redondo">Redondo</option>
+                                <option value="quadrado">Quadrado</option>
+                                <option value="sextavado">Sextavado</option>
+                                <option value="tubo">Tubo</option>
+                                <option value="retangulo">Retângulo</option>
+                                <option value="chapa">Chapa</option>
+                                <option value="fundido">Fundido</option>
+                                <option value="blank">Blank Específico</option>
+                            </select>
+                        </div>
+                    </div>
+
+                    <div id="material-comum" class="mb-3">
+                        <div class="row mb-3">
+                            <div class="col-md-6">
+                                <label for="material" class="form-label">Material</label>
+                                <input type="text" class="form-control" id="material" name="material" placeholder="Ex: aço mecânico, inox, PP, PVC">
+                            </div>
+                            <div class="col-md-6">
+                                <label for="liga" class="form-label">Liga (opcional)</label>
+                                <input type="text" class="form-control" id="liga" name="liga" placeholder="Ex: 1045">
+                            </div>
+                        </div>
+                    </div>
+
+                    <div id="dimensoes">
+                        <h4 class="mb-3">Dimensões</h4>
+                        
+                        <div id="dim-redondo" class="row mb-3" style="display: none;">
+                            <div class="col-md-6">
+                                <label for="diametro" class="form-label">Diâmetro (mm)</label>
+                                <input type="number" class="form-control" id="diametro" name="diametro" step="0.01" min="0">
+                            </div>
+                        </div>
+                        
+                        <div id="dim-quadrado" class="row mb-3" style="display: none;">
+                            <div class="col-md-6">
+                                <label for="lado" class="form-label">Lado (mm)</label>
+                                <input type="number" class="form-control" id="lado" name="lado" step="0.01" min="0">
+                            </div>
+                        </div>
+                        
+                        <div id="dim-retangulo" class="row mb-3" style="display: none;">
+                            <div class="col-md-6">
+                                <label for="largura" class="form-label">Largura (mm)</label>
+                                <input type="number" class="form-control" id="largura" name="largura" step="0.01" min="0">
+                            </div>
+                            <div class="col-md-6">
+                                <label for="altura" class="form-label">Altura (mm)</label>
+                                <input type="number" class="form-control" id="altura" name="altura" step="0.01" min="0">
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="d-grid">
+                        <button type="submit" class="btn btn-primary">
+                            <i class="fas fa-save"></i> Salvar Material
+                        </button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    <script>
+        $(document).ready(function() {
+            // Mostrar/ocultar campos com base no tipo de material
+            $('#tipo').change(function() {
+                const tipo = $(this).val();
+                
+                // Ocultar todos os campos de dimensões
+                $('#dim-redondo, #dim-quadrado, #dim-retangulo').hide();
+                
+                // Mostrar campos específicos com base no tipo
+                if (tipo === 'redondo') {
+                    $('#dim-redondo').show();
+                } else if (tipo === 'quadrado' || tipo === 'sextavado') {
+                    $('#dim-quadrado').show();
+                } else if (tipo === 'retangulo') {
+                    $('#dim-retangulo').show();
+                }
+            });
+            
+            // Mostrar/ocultar campos com base no tipo de material (específico ou comum)
+            $('#especifico').change(function() {
+                if (this.checked) {
+                    $('#material-comum').hide();
+                    $('#dimensoes').hide();
+                } else {
+                    $('#material-comum').show();
+                    
+                    // Verificar se precisa mostrar dimensões com base no tipo
+                    const tipo = $('#tipo').val();
+                    if (tipo) {
+                        $('#dimensoes').show();
+                        $('#tipo').trigger('change');
+                    }
+                }
+            });
+            
+            // Inicializar
+            $('#especifico').trigger('change');
+        });
+    </script>
+</body>
+</html>
