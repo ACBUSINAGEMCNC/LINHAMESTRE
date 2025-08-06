@@ -8,6 +8,8 @@ Este sistema foi desenvolvido para gerenciar os processos de produção, estoque
 - Controle de pedidos e ordens de serviço
 - Gestão de estoque de materiais e peças
 - Kanban para acompanhamento de produção
+- Sistema de apontamento de produção com logs detalhados
+- Controle de tempo e quantidade produzida
 - Sistema de autenticação com diferentes níveis de acesso
 - Backup e restauração do banco de dados
 
