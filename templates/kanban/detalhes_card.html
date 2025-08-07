@@ -271,11 +271,13 @@
                                     <h5 class="mb-0"><i class="fas fa-history"></i> Histórico de Apontamentos</h5>
                                 </div>
                                 <div class="card-body">
+                                    <!-- Container de logs -->
                                     <div id="logs-apontamento-container-{{ ordem.id }}" class="logs-apontamento-container">
                                         <div class="text-center">
                                             <div class="spinner-border text-primary" role="status">
                                                 <span class="visually-hidden">Carregando logs...</span>
                                             </div>
+                                            <p class="mt-2">Carregando histórico de apontamentos...</p>
                                         </div>
                                     </div>
                                 </div>
@@ -289,12 +291,55 @@
 </div>
 
 <script>
-// Carregar logs de apontamento quando o modal for aberto
+// Carregar logs diretamente usando a função global carregarLogsManualmente
+window.addEventListener('load', function() {
+    console.log('Carregando logs diretamente para OS {{ ordem.id }}');
+    
+    // Usar setTimeout para garantir que o DOM está completamente carregado
+    setTimeout(function() {
+        if (typeof carregarLogsManualmente === 'function') {
+            console.log('Chamando carregarLogsManualmente para OS {{ ordem.id }}');
+            carregarLogsManualmente('{{ ordem.id }}');
+        } else {
+            console.error('Função carregarLogsManualmente não encontrada!');
+            
+            // Carregar logs diretamente se a função global não estiver disponível
+            const logsContainer = document.getElementById('logs-apontamento-container-{{ ordem.id }}');
+            if (logsContainer) {
+                fetch('/apontamento/os/{{ ordem.id }}/logs')
+                    .then(response => response.json())
+                    .then(data => {
+                        console.log('Dados recebidos diretamente:', data);
+                        
+                        if (data.logs && data.logs.length > 0) {
+                            let html = `<h5>Encontrados ${data.logs.length} registros</h5>`;
+                            html += '<ul class="list-group">';
+                            
+                            data.logs.forEach(log => {
+                                const data = new Date(log.data_hora).toLocaleString();
+                                html += `<li class="list-group-item">${data} - ${log.tipo_acao} - ${log.operador_nome || 'N/A'}</li>`;
+                            });
+                            
+                            html += '</ul>';
+                            logsContainer.innerHTML = html;
+                        } else {
+                            logsContainer.innerHTML = '<div class="alert alert-info">Nenhum registro encontrado.</div>';
+                        }
+                    })
+                    .catch(error => {
+                        console.error('Erro ao carregar logs diretamente:', error);
+                        logsContainer.innerHTML = `<div class="alert alert-danger">Erro ao carregar: ${error.message}</div>`;
+                    });
+            }
+        }
+    }, 500);
+});
+
+// Carregar logs imediatamente também
 document.addEventListener('DOMContentLoaded', function() {
-    // Carregar logs de apontamento
-    const logsContainer = document.getElementById('logs-apontamento-container-{{ ordem.id }}');
-    if (logsContainer) {
-        carregarLogsApontamento('{{ ordem.id }}', logsContainer);
+    console.log('DOMContentLoaded - Tentando carregar logs para OS {{ ordem.id }}');
+    if (typeof carregarLogsManualmente === 'function') {
+        carregarLogsManualmente('{{ ordem.id }}');
     }
 });
 </script>

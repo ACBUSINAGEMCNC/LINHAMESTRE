@@ -5,89 +5,173 @@
 
 // Função para carregar logs de apontamento para uma OS específica
 function carregarLogsApontamento(ordemId, container) {
-    // Limpar container
-    if (container) {
-        container.innerHTML = '<div class="spinner-border spinner-border-sm" role="status"></div> Carregando logs...';
+    console.log(`Iniciando carregamento de logs para OS ID: ${ordemId}`);
+    
+    // Verificar se o container existe
+    if (!container) {
+        console.error(`Container para logs da OS ${ordemId} não encontrado`);
+        return;
     }
     
-    fetch(`/apontamento/os/${ordemId}/logs`)
-        .then(response => response.json())
-        .then(data => {
-            if (container) {
-                if (data.logs && data.logs.length > 0) {
-                    // Construir HTML para exibição dos logs em uma tabela completa e detalhada
-                    let html = '<div class="logs-apontamento">';
-                    html += '<div class="table-responsive">';
-                    html += '<table class="table table-striped table-hover table-bordered">';
-                    html += '<thead class="table-primary">';
-                    html += '<tr>';
-                    html += '<th>Data/Hora</th>';
-                    html += '<th>Ação</th>';
-                    html += '<th>Operador</th>';
-                    html += '<th>Item</th>';
-                    html += '<th>Trabalho</th>';
-                    html += '<th>Quantidade</th>';
-                    html += '<th>Motivo Pausa</th>';
-                    html += '<th>Duração</th>';
-                    html += '</tr>';
-                    html += '</thead>';
-                    html += '<tbody>';
-                    
-                    data.logs.forEach(log => {
-                        // Calcular duração de três formas possíveis:
-                        // 1. Usando o campo tempo_decorrido se estiver disponível
-                        // 2. Calculando a partir de data_hora e data_fim se ambos estiverem disponíveis
-                        // 3. Exibindo '-' se não for possível calcular
-                        let duracao = '-';
-                        
-                        if (log.tempo_decorrido) {
-                            // Converter segundos para formato horas e minutos
-                            const horas = Math.floor(log.tempo_decorrido / 3600);
-                            const minutos = Math.floor((log.tempo_decorrido % 3600) / 60);
-                            duracao = `${horas}h ${minutos}min`;
-                        } else if (log.data_fim && log.data_hora) {
-                            const inicio = new Date(log.data_hora);
-                            const fim = new Date(log.data_fim);
-                            const diff = Math.abs(fim - inicio);
-                            const horas = Math.floor(diff / 3600000);
-                            const minutos = Math.floor((diff % 3600000) / 60000);
-                            duracao = `${horas}h ${minutos}min`;
-                        }
-                        
-                        html += '<tr>';
-                        html += `<td>${formatarDataHora(log.data_hora)}</td>`;
-                        html += `<td><span class="badge ${getBadgeClass(log.tipo_acao)}">${log.tipo_acao}</span></td>`;
-                        html += `<td>${log.operador_nome || ''} ${log.operador_codigo ? '(' + log.operador_codigo + ')' : ''}</td>`;
-                        html += `<td>${log.item_nome || '-'}</td>`;
-                        html += `<td>${log.trabalho_nome || '-'}</td>`;
-                        html += `<td>${log.quantidade !== null && log.quantidade !== undefined ? log.quantidade : '-'}</td>`;
-                        html += `<td>${log.motivo_pausa || '-'}</td>`;
-                        html += `<td>${duracao || '-'}</td>`;
-                        html += '</tr>';
-                    });
-                    
-                    html += '</tbody></table></div></div>';
-                    container.innerHTML = html;
-                    
-                    // Adicionar resumo estatístico
-                    const resumoHtml = criarResumoEstatistico(data.logs);
-                    if (resumoHtml) {
-                        container.insertAdjacentHTML('afterbegin', resumoHtml);
+    // Mostrar spinner de carregamento
+    container.innerHTML = `
+        <div class="text-center py-3">
+            <div class="spinner-border text-primary" role="status">
+                <span class="visually-hidden">Carregando logs...</span>
+            </div>
+            <p class="mt-2">Carregando histórico de apontamentos...</p>
+        </div>
+    `;
+    
+    // Verificar se o container está visível no DOM
+    console.log(`Dimensões do container:`, container.offsetWidth, container.offsetHeight);
+    console.log(`Container visível:`, container.offsetParent !== null);
+    console.log(`Container display:`, window.getComputedStyle(container).display);
+    console.log(`Container visibility:`, window.getComputedStyle(container).visibility);
+    
+    // URL da API
+    const url = `/apontamento/os/${ordemId}/logs`;
+    console.log(`Fazendo requisição para: ${url}`);
+    
+    // Fazer a requisição com timeout
+    const timeoutPromise = new Promise((_, reject) => {
+        setTimeout(() => reject(new Error('Tempo limite excedido')), 10000); // 10 segundos de timeout
+    });
+    
+    // Fazer a requisição com tratamento de erros aprimorado
+    Promise.race([
+        fetch(url),
+        timeoutPromise
+    ])
+    .then(response => {
+        if (!response.ok) {
+            throw new Error(`Erro HTTP: ${response.status} ${response.statusText}`);
+        }
+        console.log(`Resposta recebida da API para OS ${ordemId}`);
+        return response.json();
+    })
+    .then(data => {
+        console.log(`Dados recebidos para OS ${ordemId}:`, data);
+        
+        if (data.logs && Array.isArray(data.logs) && data.logs.length > 0) {
+            console.log(`Encontrados ${data.logs.length} registros de apontamento`);
+            
+            // Construir HTML para exibição dos logs em uma tabela completa e detalhada
+            let html = '<div class="logs-apontamento">';
+            html += '<div class="table-responsive">';
+            html += '<table class="table table-striped table-hover table-bordered">';
+            html += '<thead class="table-primary">';
+            html += '<tr>';
+            html += '<th>Data/Hora</th>';
+            html += '<th>Ação</th>';
+            html += '<th>Operador</th>';
+            html += '<th>Item</th>';
+            html += '<th>Trabalho</th>';
+            html += '<th>Quantidade</th>';
+            html += '<th>Motivo Pausa</th>';
+            html += '<th>Duração</th>';
+            html += '</tr>';
+            html += '</thead>';
+            html += '<tbody>';
+            
+            data.logs.forEach(log => {
+                // Calcular duração de três formas possíveis:
+                // 1. Usando o campo tempo_decorrido se estiver disponível
+                // 2. Calculando a partir de data_hora e data_fim se ambos estiverem disponíveis
+                // 3. Exibindo '-' se não for possível calcular
+                let duracao = '-';
+                
+                if (log.tempo_decorrido) {
+                    // Converter segundos para formato horas e minutos
+                    const horas = Math.floor(log.tempo_decorrido / 3600);
+                    const minutos = Math.floor((log.tempo_decorrido % 3600) / 60);
+                    duracao = `${horas}h ${minutos}min`;
+                } else if (log.data_fim && log.data_hora) {
+                    try {
+                        const inicio = new Date(log.data_hora);
+                        const fim = new Date(log.data_fim);
+                        const diff = Math.max(0, Math.abs(fim - inicio)); // Garantir que não seja negativo
+                        const horas = Math.floor(diff / 3600000);
+                        const minutos = Math.floor((diff % 3600000) / 60000);
+                        duracao = `${horas}h ${minutos}min`;
+                    } catch (e) {
+                        console.error('Erro ao calcular duração:', e);
+                        duracao = '-';
                     }
-                } else {
-                    container.innerHTML = '<div class="alert alert-info">Nenhum registro de apontamento encontrado para esta OS.</div>';
                 }
+                
+                // Formatar tipo de ação para exibição
+                const tipoAcaoFormatado = formatarTipoAcao(log.tipo_acao);
+                
+                html += '<tr>';
+                html += `<td>${formatarDataHora(log.data_hora)}</td>`;
+                html += `<td><span class="badge ${getBadgeClass(log.tipo_acao)}">${tipoAcaoFormatado}</span></td>`;
+                html += `<td>${log.operador_nome || ''} ${log.operador_codigo ? '(' + log.operador_codigo + ')' : ''}</td>`;
+                html += `<td>${log.item_nome || '-'}</td>`;
+                html += `<td>${log.trabalho_nome || '-'}</td>`;
+                html += `<td>${log.quantidade !== null && log.quantidade !== undefined ? log.quantidade : '-'}</td>`;
+                html += `<td>${log.motivo_pausa || '-'}</td>`;
+                html += `<td>${duracao || '-'}</td>`;
+                html += '</tr>';
+            });
+            
+            html += '</tbody></table></div></div>';
+            console.log(`HTML gerado para OS ${ordemId}:`, html.substring(0, 100) + '... (truncado)');
+            
+            // Verificar se o container ainda existe
+            if (!document.body.contains(container)) {
+                console.error(`Container para OS ${ordemId} não está mais no DOM`);
+                return;
             }
             
-            // Adicionar logs ao card na visualização Kanban
-            adicionarLogsAoCard(ordemId, data.logs);
-        })
-        .catch(error => {
-            console.error('Erro ao carregar logs de apontamento:', error);
-            if (container) {
-                container.innerHTML = '<div class="alert alert-danger">Erro ao carregar logs de apontamento. Tente novamente mais tarde.</div>';
+            // Inserir HTML no container
+            console.log(`Inserindo HTML no container para OS ${ordemId}`);
+            container.innerHTML = html;
+            
+            // Adicionar resumo estatístico
+            const resumoHtml = criarResumoEstatistico(data.logs);
+            if (resumoHtml) {
+                console.log(`Adicionando resumo estatístico para OS ${ordemId}`);
+                container.insertAdjacentHTML('afterbegin', resumoHtml);
             }
-        });
+            
+            console.log(`Histórico de apontamentos carregado com sucesso para OS ${ordemId}`);
+            
+            // Verificar se o HTML foi inserido corretamente
+            console.log(`Conteúdo atual do container para OS ${ordemId}:`, container.innerHTML.substring(0, 100) + '... (truncado)');
+        } else {
+            console.log(`Nenhum registro de apontamento encontrado para OS ${ordemId}`);
+            container.innerHTML = '<div class="alert alert-info">Nenhum registro de apontamento encontrado para esta OS.</div>';
+        }
+        
+        // Adicionar logs ao card na visualização Kanban (se necessário)
+        if (typeof adicionarLogsAoCard === 'function') {
+            adicionarLogsAoCard(ordemId, data.logs || []);
+        }
+    })
+    .catch(error => {
+        console.error(`Erro ao carregar logs de apontamento para OS ${ordemId}:`, error);
+        container.innerHTML = `
+            <div class="alert alert-danger">
+                <h5><i class="fas fa-exclamation-triangle"></i> Erro ao carregar histórico</h5>
+                <p>Não foi possível carregar o histórico de apontamentos. Erro: ${error.message}</p>
+                <button class="btn btn-sm btn-outline-primary mt-2" onclick="carregarLogsApontamento('${ordemId}', this.closest('.logs-apontamento-container'))">Tentar novamente</button>
+            </div>
+        `;
+    });
+}
+
+// Função auxiliar para formatar o tipo de ação
+function formatarTipoAcao(tipoAcao) {
+    const mapeamento = {
+        'inicio_setup': 'Início Setup',
+        'fim_setup': 'Fim Setup',
+        'inicio_producao': 'Início Produção',
+        'pausa': 'Pausa Produção',
+        'fim_producao': 'Fim Produção'
+    };
+    
+    return mapeamento[tipoAcao] || tipoAcao;
 }
 
 // Função para criar resumo estatístico dos logs

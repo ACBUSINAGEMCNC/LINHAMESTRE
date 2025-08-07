@@ -560,6 +560,51 @@
                             });
                         });
                     });
+                    
+                    // Carregar logs de apontamento automaticamente após o modal ser carregado
+                    console.log(`Carregando logs automaticamente para OS ${ordemId} após abertura do modal`);
+                    
+                    // Usar setTimeout para garantir que o DOM está completamente carregado
+                    setTimeout(function() {
+                        // Tentar carregar logs usando a função global
+                        if (typeof carregarLogsManualmente === 'function') {
+                            console.log(`Chamando carregarLogsManualmente para OS ${ordemId}`);
+                            carregarLogsManualmente(ordemId);
+                        } else {
+                            console.error('Função carregarLogsManualmente não encontrada!');
+                            
+                            // Carregar logs diretamente via fetch se a função global não estiver disponível
+                            const logsContainer = document.getElementById(`logs-apontamento-container-${ordemId}`);
+                            if (logsContainer) {
+                                fetch(`/apontamento/os/${ordemId}/logs`)
+                                    .then(response => response.json())
+                                    .then(data => {
+                                        console.log(`Dados recebidos diretamente para OS ${ordemId}:`, data);
+                                        
+                                        if (data.logs && data.logs.length > 0) {
+                                            let html = `<h5>Encontrados ${data.logs.length} registros</h5>`;
+                                            html += '<ul class="list-group">';
+                                            
+                                            data.logs.forEach(log => {
+                                                const dataHora = new Date(log.data_hora).toLocaleString();
+                                                html += `<li class="list-group-item">${dataHora} - ${log.tipo_acao} - ${log.operador_nome || 'N/A'}</li>`;
+                                            });
+                                            
+                                            html += '</ul>';
+                                            logsContainer.innerHTML = html;
+                                        } else {
+                                            logsContainer.innerHTML = '<div class="alert alert-info">Nenhum registro encontrado.</div>';
+                                        }
+                                    })
+                                    .catch(error => {
+                                        console.error(`Erro ao carregar logs diretamente para OS ${ordemId}:`, error);
+                                        logsContainer.innerHTML = `<div class="alert alert-danger">Erro ao carregar: ${error.message}</div>`;
+                                    });
+                            } else {
+                                console.error(`Container de logs não encontrado para OS ${ordemId}`);
+                            }
+                        }
+                    }, 500);
                 });
         }
         
@@ -740,6 +785,60 @@
     <!-- Scripts de Apontamento -->
     <script src="/static/js/apontamento-persistence.js"></script>
     <script src="/static/js/apontamento-logs.js"></script>
+    
+    <!-- Função global para carregar logs manualmente -->
+    <script>
+        // Função global para carregar logs manualmente (para debug)
+        function carregarLogsManualmente(ordemId) {
+            console.log(`Carregando logs manualmente para OS ${ordemId}`);
+            const logsContainer = document.getElementById(`logs-apontamento-container-${ordemId}`);
+            
+            if (!logsContainer) {
+                alert('Container de logs não encontrado!');
+                return;
+            }
+            
+            // Mostrar mensagem de carregamento
+            logsContainer.innerHTML = `
+                <div class="text-center py-3">
+                    <div class="spinner-border text-primary" role="status"></div>
+                    <p class="mt-2">Carregando histórico via botão manual...</p>
+                </div>
+            `;
+            
+            // Fazer a requisição diretamente
+            fetch(`/apontamento/os/${ordemId}/logs`)
+                .then(response => {
+                    if (!response.ok) {
+                        throw new Error(`Erro HTTP: ${response.status}`);
+                    }
+                    return response.json();
+                })
+                .then(data => {
+                    console.log('Dados recebidos:', data);
+                    
+                    if (data.logs && data.logs.length > 0) {
+                        // Construir HTML simples para exibição dos logs
+                        let html = `<h5>Encontrados ${data.logs.length} registros</h5>`;
+                        html += '<ul class="list-group">';
+                        
+                        data.logs.forEach(log => {
+                            const data = new Date(log.data_hora).toLocaleString();
+                            html += `<li class="list-group-item">${data} - ${log.tipo_acao} - ${log.operador_nome || 'N/A'}</li>`;
+                        });
+                        
+                        html += '</ul>';
+                        logsContainer.innerHTML = html;
+                    } else {
+                        logsContainer.innerHTML = '<div class="alert alert-info">Nenhum registro encontrado.</div>';
+                    }
+                })
+                .catch(error => {
+                    console.error('Erro:', error);
+                    logsContainer.innerHTML = `<div class="alert alert-danger">Erro ao carregar: ${error.message}</div>`;
+                });
+        }
+    </script>
     
     <!-- Script para Apontamentos -->
     <script>

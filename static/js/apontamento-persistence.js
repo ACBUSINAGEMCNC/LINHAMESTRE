@@ -316,12 +316,14 @@ function iniciarTimerApontamento(ordemId, statusClass, startTimeStr = null) {
     
     // Determinar o tempo de início
     const startTime = startTimeStr ? new Date(startTimeStr) : new Date();
+    const startTimestamp = startTime.getTime();
     
     // Salvar o tempo de início no localStorage para persistência local
     try {
         const timerData = JSON.parse(localStorage.getItem('apontamento_timers') || '{}');
         timerData[ordemId] = {
             startTime: startTime.toISOString(),
+            startTimestamp: startTimestamp, // Salvar como timestamp para evitar problemas de fuso
             statusClass: statusClass
         };
         localStorage.setItem('apontamento_timers', JSON.stringify(timerData));
@@ -329,9 +331,10 @@ function iniciarTimerApontamento(ordemId, statusClass, startTimeStr = null) {
         console.error('Erro ao salvar timer no localStorage:', e);
     }
     
-    // Iniciar novo timer
+    // Iniciar novo timer usando timestamp para evitar problemas de fuso horário
     timers[ordemId] = setInterval(() => {
-        const elapsedTime = Math.floor((new Date() - startTime) / 1000);
+        const currentTimestamp = new Date().getTime();
+        const elapsedTime = Math.max(0, Math.floor((currentTimestamp - startTimestamp) / 1000)); // Garantir que nunca seja negativo
         const hours = Math.floor(elapsedTime / 3600);
         const minutes = Math.floor((elapsedTime % 3600) / 60);
         const seconds = elapsedTime % 60;
