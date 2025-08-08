@@ -210,60 +210,39 @@
         let statusAtivos = [];
         let ultimosApontamentos = [];
 
-        // Carregar dados do dashboard
+        // Carregar dados do dashboard (API real)
         function carregarDados() {
-            console.log('Carregando dados do dashboard...');
+            console.log('Carregando dados do dashboard (API)...');
             
             // Mostrar loading
             document.getElementById('loading-status').style.display = 'block';
             document.getElementById('loading-apontamentos').style.display = 'block';
             document.getElementById('tabela-status').style.display = 'none';
             document.getElementById('sem-dados-status').style.display = 'none';
-            
-            // Simular dados para teste (substituir por chamada real da API)
-            setTimeout(() => {
-                // Dados simulados
-                statusAtivos = [
-                    {
-                        ordem_servico_id: 1,
-                        os_numero: 'OS-001',
-                        status_atual: 'Produção em andamento',
-                        operador_nome: 'João Silva',
-                        codigo_operador: '1234',
-                        trabalho_nome: 'Usinagem CNC',
-                        quantidade_atual: 5,
-                        inicio_trabalho_atual: '2024-01-04 08:30:00'
-                    },
-                    {
-                        ordem_servico_id: 2,
-                        os_numero: 'OS-002',
-                        status_atual: 'Setup em andamento',
-                        operador_nome: 'Maria Santos',
-                        codigo_operador: '5678',
-                        trabalho_nome: 'Torneamento',
-                        quantidade_atual: 0,
-                        inicio_trabalho_atual: '2024-01-04 09:15:00'
-                    }
-                ];
-                
-                ultimosApontamentos = [
-                    {
-                        os_numero: 'OS-001',
-                        tipo_acao: 'inicio_producao',
-                        operador_nome: 'João Silva',
-                        quantidade: 0,
-                        data_hora: '09:30'
-                    },
-                    {
-                        os_numero: 'OS-002',
-                        tipo_acao: 'inicio_setup',
-                        operador_nome: 'Maria Santos',
-                        data_hora: '09:15'
-                    }
-                ];
-                
+
+            const p1 = fetch('/apontamento/status-ativos')
+                .then(r => r.ok ? r.json() : Promise.reject(r))
+                .then(data => {
+                    statusAtivos = (data && data.status_ativos) ? data.status_ativos : [];
+                })
+                .catch(err => {
+                    console.error('Erro ao carregar status-ativos:', err);
+                    statusAtivos = [];
+                });
+
+            const p2 = fetch('/apontamento/ultimos-apontamentos')
+                .then(r => r.ok ? r.json() : Promise.reject(r))
+                .then(data => {
+                    ultimosApontamentos = (data && data.apontamentos) ? data.apontamentos : [];
+                })
+                .catch(err => {
+                    console.error('Erro ao carregar ultimos-apontamentos:', err);
+                    ultimosApontamentos = [];
+                });
+
+            Promise.all([p1, p2]).then(() => {
                 renderizarDashboard();
-            }, 1000);
+            });
         }
 
         function renderizarDashboard() {
@@ -289,17 +268,17 @@
                     
                     const row = document.createElement('tr');
                     row.innerHTML = `
-                        <td><strong>${status.os_numero}</strong></td>
-                        <td><span class="badge bg-${statusClass[status.status_atual] || 'secondary'}">${status.status_atual}</span></td>
+                        <td><strong>${status.os_numero || ('OS ' + (status.ordem_servico_id || ''))}</strong></td>
+                        <td><span class="badge bg-${statusClass[status.status_atual] || 'secondary'}">${status.status_atual || '-'}</span></td>
                         <td>
                             <div>
                                 <strong>${status.operador_nome || '-'}</strong><br>
-                                <small class="text-muted">${status.codigo_operador || ''}</small>
+                                <small class="text-muted">${status.operador_codigo || status.codigo_operador || ''}</small>
                             </div>
                         </td>
                         <td>${status.trabalho_nome || '-'}</td>
                         <td><span class="badge bg-light text-dark">${status.quantidade_atual || 0}</span></td>
-                        <td><small>${status.inicio_trabalho_atual ? new Date(status.inicio_trabalho_atual).toLocaleString('pt-BR') : '-'}</small></td>
+                        <td><small>${status.inicio_acao ? new Date(status.inicio_acao).toLocaleString('pt-BR') : '-'}</small></td>
                         <td>
                             <div class="btn-group btn-group-sm">
                                 <button class="btn btn-outline-primary btn-sm" onclick="verLogs(${status.ordem_servico_id})" title="Ver Logs">
@@ -340,6 +319,8 @@
                         'fim_producao': 'Fim de Produção'
                     };
                     
+                    const dataFormatada = apt.data_hora ? new Date(apt.data_hora).toLocaleString('pt-BR') : '-';
+                    
                     const item = document.createElement('div');
                     item.className = 'timeline-item mb-3';
                     item.innerHTML = `
@@ -350,14 +331,14 @@
                             <div class="timeline-content flex-grow-1">
                                 <div class="d-flex justify-content-between align-items-start">
                                     <div>
-                                        <h6 class="mb-1">${apt.os_numero}</h6>
+                                        <h6 class="mb-1">${apt.os_numero || ''}</h6>
                                         <p class="mb-1 text-muted small">${acaoNome[apt.tipo_acao] || apt.tipo_acao}</p>
                                         <p class="mb-0 small">
-                                            <strong>${apt.operador_nome}</strong>
+                                            <strong>${apt.operador_nome || '-'}</strong>
                                             ${apt.quantidade ? ` • ${apt.quantidade} pç` : ''}
                                         </p>
                                     </div>
-                                    <small class="text-muted">${apt.data_hora}</small>
+                                    <small class="text-muted">${dataFormatada}</small>
                                 </div>
                             </div>
                         </div>
@@ -389,46 +370,53 @@
             
             modal.show();
             
-            // Simular carregamento de logs
-            setTimeout(() => {
-                conteudo.innerHTML = `
-                    <div class="timeline">
+            // Carregar logs reais
+            fetch(`/apontamento/os/${ordemId}/logs`)
+                .then(r => r.ok ? r.json() : Promise.reject(r))
+                .then(data => {
+                    const logs = data && data.logs ? data.logs : [];
+                    if (logs.length === 0) {
+                        conteudo.innerHTML = `<p class="text-muted">Nenhum log encontrado.</p>`;
+                        return;
+                    }
+                    const iconMap = {
+                        'inicio_setup': 'cog',
+                        'fim_setup': 'check',
+                        'inicio_producao': 'play',
+                        'pausa': 'pause',
+                        'fim_producao': 'stop'
+                    };
+                    const acaoNome = {
+                        'inicio_setup': 'Início de Setup',
+                        'fim_setup': 'Fim de Setup',
+                        'inicio_producao': 'Início de Produção',
+                        'pausa': 'Pausa',
+                        'fim_producao': 'Fim de Produção'
+                    };
+                    const html = logs.map(l => {
+                        const dt = l.data_hora ? new Date(l.data_hora).toLocaleString('pt-BR') : '-';
+                        const qtd = (l.quantidade && Number(l.quantidade) > 0) ? ` • ${l.quantidade} pç` : '';
+                        const obs = l.motivo_pausa ? `<div class="small text-muted">Motivo: ${l.motivo_pausa}</div>` : '';
+                        return `
                         <div class="timeline-item mb-3">
                             <div class="d-flex">
                                 <div class="timeline-marker me-3">
-                                    <i class="fas fa-play text-primary"></i>
+                                    <i class="fas fa-${iconMap[l.tipo_acao] || 'circle'} text-primary"></i>
                                 </div>
-                                <div class="timeline-content flex-grow-1">
-                                    <div class="d-flex justify-content-between">
-                                        <div>
-                                            <h6 class="mb-1">Início de Produção</h6>
-                                            <p class="mb-1"><strong>João Silva</strong></p>
-                                            <p class="mb-1">Quantidade: 0</p>
-                                        </div>
-                                        <small class="text-muted">04/01/2024 09:30:00</small>
-                                    </div>
+                                <div class="timeline-content">
+                                    <h6 class="mb-1">${acaoNome[l.tipo_acao] || l.tipo_acao}</h6>
+                                    <p class="mb-0 small text-muted">Operador: ${l.operador_nome || '-'} • ${dt}${qtd}</p>
+                                    ${obs}
                                 </div>
                             </div>
-                        </div>
-                        <div class="timeline-item mb-3">
-                            <div class="d-flex">
-                                <div class="timeline-marker me-3">
-                                    <i class="fas fa-check text-primary"></i>
-                                </div>
-                                <div class="timeline-content flex-grow-1">
-                                    <div class="d-flex justify-content-between">
-                                        <div>
-                                            <h6 class="mb-1">Fim de Setup</h6>
-                                            <p class="mb-1"><strong>João Silva</strong></p>
-                                        </div>
-                                        <small class="text-muted">04/01/2024 09:00:00</small>
-                                    </div>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-                `;
-            }, 500);
+                        </div>`;
+                    }).join('');
+                    conteudo.innerHTML = `<div class="timeline">${html}</div>`;
+                })
+                .catch(err => {
+                    console.error('Erro ao carregar logs:', err);
+                    conteudo.innerHTML = `<p class="text-danger">Erro ao carregar logs.</p>`;
+                });
         }
 
         // Carregar dados ao inicializar

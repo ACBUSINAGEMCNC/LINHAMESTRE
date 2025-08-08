@@ -289,6 +289,17 @@ def status_ativos():
                     'ordem_id': status.ordem_servico_id,  # Mantido para compatibilidade com frontend
                     'status_atual': status.status_atual or 'Desconhecido'
                 }
+
+                # Buscar número/identificador da OS
+                try:
+                    if status.ordem_servico_id:
+                        os_obj = OrdemServico.query.get(status.ordem_servico_id)
+                        if os_obj:
+                            # Tente usar um campo de número/código se existir; caso não, use ID
+                            os_num = getattr(os_obj, 'numero', None) or getattr(os_obj, 'codigo', None) or f"OS-{os_obj.id}"
+                            status_info['os_numero'] = os_num
+                except Exception as e_os:
+                    print(f"[ERRO] Falha ao buscar numero da OS: {e_os}")
                 
                 # Buscar operador atual
                 try:
@@ -329,18 +340,67 @@ def status_ativos():
                     print(f"[ERRO] Falha ao buscar trabalho: {e_trab}")
                 
                 # Adicionar timestamp de início da ação
-                status_info['inicio_acao'] = status.inicio_acao.isoformat() if status.inicio_acao else None
+                status_info['inicio_acao'] = status.inicio_acao.isoformat() if getattr(status, 'inicio_acao', None) else None
                 
                 # Adicionar ao resultado
                 resultado['status_ativos'].append(status_info)
             except Exception as e_status:
-                print(f"[ERRO] Falha ao processar status {status.id}: {e_status}")
+                print(f"[ERRO] Falha ao montar status_info para status ID {getattr(status, 'id', None)}: {e_status}")
+                # Continua para o próximo status
+                continue
         
         print(f"[DEBUG] Status ativos formatados: {len(resultado['status_ativos'])}")
         return jsonify(resultado)
     except Exception as e:
         print(f"[ERRO FATAL] Falha ao buscar status ativos: {e}")
         return jsonify({'error': str(e), 'message': 'Falha ao buscar status ativos'}), 500
+
+@apontamento_bp.route('/ultimos-apontamentos', methods=['GET'])
+def ultimos_apontamentos_json():
+    """Retorna os últimos apontamentos (10) em formato JSON para o dashboard simples"""
+    try:
+        aponts = ApontamentoProducao.query.order_by(
+            ApontamentoProducao.data_hora.desc()
+        ).limit(10).all()
+
+        itens = []
+        for ap in aponts:
+            item = {
+                'id': ap.id,
+                'tipo_acao': ap.tipo_acao,
+                'data_hora': ap.data_hora.isoformat() if ap.data_hora else None,
+                'quantidade': ap.quantidade
+            }
+
+            # Operador
+            try:
+                if getattr(ap, 'operador_id', None):
+                    op = Usuario.query.get(ap.operador_id)
+                    if op:
+                        item['operador_nome'] = op.nome
+                elif getattr(ap, 'usuario_id', None):
+                    op = Usuario.query.get(ap.usuario_id)
+                    if op:
+                        item['operador_nome'] = op.nome
+            except Exception as e_op:
+                print(f"[ERRO] operador em ultimos_apontamentos: {e_op}")
+
+            # OS
+            try:
+                if getattr(ap, 'ordem_servico_id', None):
+                    os_obj = OrdemServico.query.get(ap.ordem_servico_id)
+                    if os_obj:
+                        os_num = getattr(os_obj, 'numero', None) or getattr(os_obj, 'codigo', None) or f"OS-{os_obj.id}"
+                        item['os_numero'] = os_num
+            except Exception as e_os:
+                print(f"[ERRO] OS em ultimos_apontamentos: {e_os}")
+
+            itens.append(item)
+
+        return jsonify({'success': True, 'apontamentos': itens})
+    except Exception as e:
+        print(f"[ERRO] Falha ao buscar ultimos apontamentos: {e}")
+        return jsonify({'success': False, 'message': str(e)}), 500
 
 @apontamento_bp.route('/dashboard')
 def dashboard():
@@ -358,22 +418,23 @@ def dashboard():
         
         # Adicionar informações detalhadas para cada status ativo
         for status in status_ativos:
-            # Buscar ordem, operador e item relacionados
-            if status.ordem_id:
-                status.ordem = OrdemServico.query.get(status.ordem_id)
-            
-            if status.operador_id:
-                status.operador = Usuario.query.get(status.operador_id)
-            
-            if status.item_atual_id:
+            # Precarregar relacionamentos conforme definidos no modelo
+            if status.ordem_servico_id and not getattr(status, 'ordem_servico', None):
+                status.ordem_servico = OrdemServico.query.get(status.ordem_servico_id)
+
+            # Operador atual usa o campo operador_atual_id/relacionamento operador_atual
+            if getattr(status, 'operador_atual_id', None) and not getattr(status, 'operador_atual', None):
+                status.operador_atual = Usuario.query.get(status.operador_atual_id)
+
+            if status.item_atual_id and not getattr(status, 'item_atual', None):
                 status.item_atual = Item.query.get(status.item_atual_id)
                 
-            if status.trabalho_atual_id:
+            if status.trabalho_atual_id and not getattr(status, 'trabalho_atual', None):
                 status.trabalho_atual = Trabalho.query.get(status.trabalho_atual_id)
                 
             # Buscar o último apontamento para este status
             ultimo_apontamento = ApontamentoProducao.query.filter_by(
-                ordem_id=status.ordem_id
+                ordem_servico_id=status.ordem_servico_id
             ).order_by(ApontamentoProducao.data_hora.desc()).first()
             
             if ultimo_apontamento:
@@ -381,24 +442,31 @@ def dashboard():
         
         # Adicionar informações detalhadas para cada apontamento
         for ap in ultimos_apontamentos:
-            if ap.operador_id:
+            if ap.operador_id and not getattr(ap, 'operador', None):
                 ap.operador = Usuario.query.get(ap.operador_id)
-            
-            if ap.ordem_id:
-                ap.ordem = OrdemServico.query.get(ap.ordem_id)
+
+            # Corrigir referência: usar ordem_servico_id e relacionamento ordem_servico
+            if ap.ordem_servico_id and not getattr(ap, 'ordem_servico', None):
+                ap.ordem_servico = OrdemServico.query.get(ap.ordem_servico_id)
                 
-            if ap.item_id:
+            if ap.item_id and not getattr(ap, 'item', None):
                 ap.item = Item.query.get(ap.item_id)
                 
-            if ap.trabalho_id:
+            if ap.trabalho_id and not getattr(ap, 'trabalho', None):
                 ap.trabalho = Trabalho.query.get(ap.trabalho_id)
         
         return render_template('apontamento/dashboard.html', 
                              status_ativos=status_ativos,
                              ultimos_apontamentos=ultimos_apontamentos)
     except Exception as e:
+        import traceback
+        print("[ERRO] Falha ao carregar /apontamento/dashboard:", e)
+        traceback.print_exc()
         flash(f'Erro ao carregar dashboard: {str(e)}', 'error')
-        return redirect(url_for('main.index'))
+        # Em caso de erro, renderizar página vazia para não redirecionar silenciosamente
+        return render_template('apontamento/dashboard.html', 
+                               status_ativos=[],
+                               ultimos_apontamentos=[])
         
 
 
