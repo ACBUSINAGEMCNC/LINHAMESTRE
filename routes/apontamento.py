@@ -1,6 +1,7 @@
 from flask import Blueprint, render_template, request, jsonify, flash, redirect, url_for, session
 from models import db, Usuario, ApontamentoProducao, StatusProducaoOS, OrdemServico, ItemTrabalho, PedidoOrdemServico, Pedido, Item, Trabalho
 from datetime import datetime
+from sqlalchemy.orm import joinedload
 import random
 import string
 
@@ -22,6 +23,43 @@ def listar_operadores():
     usuarios = Usuario.query.order_by(Usuario.nome).all()
     
     return render_template('apontamento/operadores.html', usuarios=usuarios)
+
+@apontamento_bp.route('/dashboard')
+def dashboard():
+    """Dashboard de apontamentos (ORM)"""
+    try:
+        # Status ativos (exclui finalizados), com relações carregadas
+        status_list = (
+            StatusProducaoOS.query.options(
+                joinedload(StatusProducaoOS.ordem_servico),
+                joinedload(StatusProducaoOS.operador_atual),
+                joinedload(StatusProducaoOS.trabalho_atual),
+                joinedload(StatusProducaoOS.item_atual)
+            )
+            .filter(StatusProducaoOS.status_atual != 'Finalizado')
+            .order_by(StatusProducaoOS.inicio_acao.desc())
+            .all()
+        )
+
+        # Últimos apontamentos com OS e operador
+        ultimos_apontamentos = (
+            ApontamentoProducao.query.options(
+                joinedload(ApontamentoProducao.ordem_servico),
+                joinedload(ApontamentoProducao.usuario)
+            )
+            .order_by(ApontamentoProducao.data_hora.desc())
+            .limit(10)
+            .all()
+        )
+
+        return render_template(
+            'apontamento/dashboard.html',
+            status_ativos=status_list,
+            ultimos_apontamentos=ultimos_apontamentos
+        )
+    except Exception as e:
+        flash(f'Erro ao carregar dashboard: {e}', 'error')
+        return render_template('apontamento/dashboard.html', status_ativos=[], ultimos_apontamentos=[])
 
 @apontamento_bp.route('/operadores/gerar-codigo/<int:usuario_id>', methods=['POST'])
 def gerar_codigo_operador(usuario_id):
@@ -339,6 +377,27 @@ def status_ativos():
                 except Exception as e_trab:
                     print(f"[ERRO] Falha ao buscar trabalho: {e_trab}")
                 
+                # Adicionar quantidade atual e última quantidade apontada para este item/trabalho
+                try:
+                    if hasattr(status, 'quantidade_atual'):
+                        status_info['quantidade_atual'] = status.quantidade_atual
+                    ultima_q = None
+                    if getattr(status, 'item_atual_id', None) and getattr(status, 'trabalho_atual_id', None):
+                        ultimo_ap = ApontamentoProducao.query.filter(
+                            ApontamentoProducao.ordem_servico_id == status.ordem_servico_id,
+                            ApontamentoProducao.item_id == status.item_atual_id,
+                            ApontamentoProducao.trabalho_id == status.trabalho_atual_id,
+                            ApontamentoProducao.quantidade != None
+                        ).order_by(ApontamentoProducao.data_hora.desc()).first()
+                        if ultimo_ap and ultimo_ap.quantidade is not None:
+                            ultima_q = int(ultimo_ap.quantidade)
+                    if ultima_q is None:
+                        if hasattr(status, 'quantidade_atual') and status.quantidade_atual is not None:
+                            ultima_q = int(status.quantidade_atual)
+                    status_info['ultima_quantidade'] = ultima_q if ultima_q is not None else 0
+                except Exception as e_q:
+                    print(f"[ERRO] Falha ao calcular ultima_quantidade: {e_q}")
+                
                 # Adicionar timestamp de início da ação
                 status_info['inicio_acao'] = status.inicio_acao.isoformat() if getattr(status, 'inicio_acao', None) else None
                 
@@ -354,245 +413,6 @@ def status_ativos():
     except Exception as e:
         print(f"[ERRO FATAL] Falha ao buscar status ativos: {e}")
         return jsonify({'error': str(e), 'message': 'Falha ao buscar status ativos'}), 500
-
-@apontamento_bp.route('/ultimos-apontamentos', methods=['GET'])
-def ultimos_apontamentos_json():
-    """Retorna os últimos apontamentos (10) em formato JSON para o dashboard simples"""
-    try:
-        aponts = ApontamentoProducao.query.order_by(
-            ApontamentoProducao.data_hora.desc()
-        ).limit(10).all()
-
-        itens = []
-        for ap in aponts:
-            item = {
-                'id': ap.id,
-                'tipo_acao': ap.tipo_acao,
-                'data_hora': ap.data_hora.isoformat() if ap.data_hora else None,
-                'quantidade': ap.quantidade
-            }
-
-            # Operador
-            try:
-                if getattr(ap, 'operador_id', None):
-                    op = Usuario.query.get(ap.operador_id)
-                    if op:
-                        item['operador_nome'] = op.nome
-                elif getattr(ap, 'usuario_id', None):
-                    op = Usuario.query.get(ap.usuario_id)
-                    if op:
-                        item['operador_nome'] = op.nome
-            except Exception as e_op:
-                print(f"[ERRO] operador em ultimos_apontamentos: {e_op}")
-
-            # OS
-            try:
-                if getattr(ap, 'ordem_servico_id', None):
-                    os_obj = OrdemServico.query.get(ap.ordem_servico_id)
-                    if os_obj:
-                        os_num = getattr(os_obj, 'numero', None) or getattr(os_obj, 'codigo', None) or f"OS-{os_obj.id}"
-                        item['os_numero'] = os_num
-            except Exception as e_os:
-                print(f"[ERRO] OS em ultimos_apontamentos: {e_os}")
-
-            itens.append(item)
-
-        return jsonify({'success': True, 'apontamentos': itens})
-    except Exception as e:
-        print(f"[ERRO] Falha ao buscar ultimos apontamentos: {e}")
-        return jsonify({'success': False, 'message': str(e)}), 500
-
-@apontamento_bp.route('/dashboard')
-def dashboard():
-    """Dashboard com cartões ativos e status de apontamento"""
-    try:
-        # Buscar todos os status ativos de produção
-        status_ativos = StatusProducaoOS.query.filter(
-            StatusProducaoOS.status_atual != 'Finalizado'
-        ).all()
-        
-        # Buscar últimos apontamentos
-        ultimos_apontamentos = ApontamentoProducao.query.order_by(
-            ApontamentoProducao.data_hora.desc()
-        ).limit(10).all()
-        
-        # Adicionar informações detalhadas para cada status ativo
-        for status in status_ativos:
-            # Precarregar relacionamentos conforme definidos no modelo
-            if status.ordem_servico_id and not getattr(status, 'ordem_servico', None):
-                status.ordem_servico = OrdemServico.query.get(status.ordem_servico_id)
-
-            # Operador atual usa o campo operador_atual_id/relacionamento operador_atual
-            if getattr(status, 'operador_atual_id', None) and not getattr(status, 'operador_atual', None):
-                status.operador_atual = Usuario.query.get(status.operador_atual_id)
-
-            if status.item_atual_id and not getattr(status, 'item_atual', None):
-                status.item_atual = Item.query.get(status.item_atual_id)
-                
-            if status.trabalho_atual_id and not getattr(status, 'trabalho_atual', None):
-                status.trabalho_atual = Trabalho.query.get(status.trabalho_atual_id)
-                
-            # Buscar o último apontamento para este status
-            ultimo_apontamento = ApontamentoProducao.query.filter_by(
-                ordem_servico_id=status.ordem_servico_id
-            ).order_by(ApontamentoProducao.data_hora.desc()).first()
-            
-            if ultimo_apontamento:
-                status.ultimo_apontamento = ultimo_apontamento
-        
-        # Adicionar informações detalhadas para cada apontamento
-        for ap in ultimos_apontamentos:
-            if ap.operador_id and not getattr(ap, 'operador', None):
-                ap.operador = Usuario.query.get(ap.operador_id)
-
-            # Corrigir referência: usar ordem_servico_id e relacionamento ordem_servico
-            if ap.ordem_servico_id and not getattr(ap, 'ordem_servico', None):
-                ap.ordem_servico = OrdemServico.query.get(ap.ordem_servico_id)
-                
-            if ap.item_id and not getattr(ap, 'item', None):
-                ap.item = Item.query.get(ap.item_id)
-                
-            if ap.trabalho_id and not getattr(ap, 'trabalho', None):
-                ap.trabalho = Trabalho.query.get(ap.trabalho_id)
-        
-        return render_template('apontamento/dashboard.html', 
-                             status_ativos=status_ativos,
-                             ultimos_apontamentos=ultimos_apontamentos)
-    except Exception as e:
-        import traceback
-        print("[ERRO] Falha ao carregar /apontamento/dashboard:", e)
-        traceback.print_exc()
-        flash(f'Erro ao carregar dashboard: {str(e)}', 'error')
-        # Em caso de erro, renderizar página vazia para não redirecionar silenciosamente
-        return render_template('apontamento/dashboard.html', 
-                               status_ativos=[],
-                               ultimos_apontamentos=[])
-        
-
-
-@apontamento_bp.route('/os/<int:ordem_id>/logs')
-def logs_apontamento(ordem_id):
-    """Retorna os logs de apontamento para uma OS específica"""
-    try:
-        # Buscar todos os apontamentos para a OS
-        print(f"[DEBUG] Buscando logs para OS {ordem_id}")
-        apontamentos = ApontamentoProducao.query.filter_by(ordem_servico_id=ordem_id).order_by(
-            ApontamentoProducao.data_hora.desc()
-        ).all()
-        
-        print(f"[DEBUG] Encontrados {len(apontamentos)} apontamentos")
-        
-        resultado = {
-            'logs': []
-        }
-        
-        # Formatar dados para JSON
-        for ap in apontamentos:
-            try:
-                data_hora_str = ''
-                if ap.data_hora:
-                    data_hora_str = ap.data_hora.strftime('%Y-%m-%dT%H:%M:%S')
-                
-                # Verificar se atributos existem antes de acessá-los (para compatibilidade com registros antigos)
-                motivo_pausa = ''
-                try:
-                    if hasattr(ap, 'motivo_pausa') and ap.motivo_pausa:
-                        motivo_pausa = ap.motivo_pausa
-                except Exception:
-                    pass
-                    
-                # Verificar data_fim para cálculo de duração
-                data_fim_str = ''
-                if hasattr(ap, 'data_fim') and ap.data_fim:
-                    data_fim_str = ap.data_fim.strftime('%Y-%m-%dT%H:%M:%S')
-                    
-                log = {
-                    'id': ap.id,
-                    'tipo_acao': ap.tipo_acao or '',
-                    'data_hora': data_hora_str,
-                    'data_fim': data_fim_str,
-                    'quantidade': ap.quantidade if hasattr(ap, 'quantidade') and ap.quantidade is not None else 0,
-                    'motivo_pausa': motivo_pausa,
-                    'operador_id': ap.operador_id if hasattr(ap, 'operador_id') else None,
-                    'operador_nome': None,
-                    'operador_codigo': None,
-                    'ordem_servico_id': ap.ordem_servico_id,
-                    'ordem_id': ap.ordem_servico_id,  # Mantendo ordem_id para compatibilidade
-                    'item_id': ap.item_id if hasattr(ap, 'item_id') else None,
-                    'item_nome': None,
-                    'trabalho_id': ap.trabalho_id if hasattr(ap, 'trabalho_id') else None,
-                    'trabalho_nome': None,
-                    'trabalho_descricao': None
-                }
-                
-                # Adicionar informações do operador, se existir
-                try:
-                    if hasattr(ap, 'operador_id') and ap.operador_id:
-                        try:
-                            operador = Usuario.query.get(ap.operador_id)
-                            if operador:
-                                log['operador_codigo'] = operador.codigo_operador
-                                log['operador_nome'] = operador.nome
-                        except Exception as e_op:
-                            print(f"[ERRO] Falha ao buscar operador {ap.operador_id}: {e_op}")
-                except Exception as e:
-                    print(f"[ERRO] Falha ao verificar operador para apontamento {ap.id}: {e}")
-                
-                # Adicionar informações do item, se existir
-                if ap.item_id:
-                    try:
-                        item = Item.query.get(ap.item_id)
-                        if item:
-                            log['item_nome'] = item.nome
-                    except Exception as e_item:
-                        print(f"[ERRO] Falha ao buscar item {ap.item_id}: {e_item}")
-                
-                # Adicionar informações do trabalho, se existir
-                if ap.trabalho_id:
-                    try:
-                        trabalho = Trabalho.query.get(ap.trabalho_id)
-                        if trabalho:
-                            log['trabalho_descricao'] = trabalho.descricao
-                    except Exception as e_trab:
-                        print(f"[ERRO] Falha ao buscar trabalho {ap.trabalho_id}: {e_trab}")
-                
-                resultado['logs'].append(log)
-            except Exception as e_log:
-                print(f"[ERRO] Falha ao processar apontamento {ap.id}: {e_log}")
-        
-        return jsonify(resultado)
-    except Exception as e:
-        print(f"[ERRO FATAL] Falha ao carregar logs: {str(e)}")
-        return jsonify({'error': str(e), 'message': 'Falha ao carregar logs de apontamento'}), 500
-
-@apontamento_bp.route('/os/<int:ordem_id>/tipos-trabalho')
-def tipos_trabalho_os(ordem_id):
-    """Retorna os tipos de trabalho disponíveis para uma OS"""
-    try:
-        # Buscar a ordem de serviço
-        ordem = OrdemServico.query.get_or_404(ordem_id)
-        
-        # Buscar os itens de trabalho associados à OS
-        itens_trabalho = ItemTrabalho.query.filter_by(ordem_servico_id=ordem_id).all()
-        
-        tipos_trabalho = []
-        for item in itens_trabalho:
-            tipos_trabalho.append({
-                'id': item.id,
-                'nome': item.nome or f'Item {item.id}',
-                'tempo_setup': item.tempo_setup,
-                'tempo_peca': item.tempo_peca
-            })
-        
-        return jsonify({
-            'success': True,
-            'tipos_trabalho': tipos_trabalho
-        })
-    except Exception as e:
-        return jsonify({
-            'success': False,
-            'message': f'Erro ao buscar tipos de trabalho: {str(e)}'
-        })
 
 @apontamento_bp.route('/registrar', methods=['POST'])
 def registrar_apontamento():
@@ -723,6 +543,37 @@ def registrar_apontamento():
                 'message': f'O tipo de trabalho "{trabalho.nome}" não está vinculado ao item "{item.codigo_acb}"'
             })
         
+        # Calcular última quantidade para validação do input de quantidade
+        ultima_quantidade = None
+        try:
+            if status_atual and hasattr(status_atual, 'quantidade_atual') and status_atual.quantidade_atual is not None:
+                ultima_quantidade = int(status_atual.quantidade_atual)
+            else:
+                ultimo_ap = ApontamentoProducao.query.filter(
+                    ApontamentoProducao.ordem_servico_id == dados['ordem_servico_id'],
+                    ApontamentoProducao.item_id == dados['item_id'],
+                    ApontamentoProducao.trabalho_id == dados['trabalho_id'],
+                    ApontamentoProducao.quantidade != None
+                ).order_by(ApontamentoProducao.data_hora.desc()).first()
+                if ultimo_ap and ultimo_ap.quantidade is not None:
+                    ultima_quantidade = int(ultimo_ap.quantidade)
+        except Exception as e_q:
+            print(f"[ERRO] Falha ao obter última quantidade para validação: {e_q}")
+        if ultima_quantidade is None:
+            ultima_quantidade = 0
+
+        # Validação de quantidade mínima quando informada (início produção, pausa e fim produção)
+        if dados.get('quantidade') is not None:
+            try:
+                qtd_informada = int(dados['quantidade'])
+            except Exception:
+                return jsonify({'success': False, 'message': 'Quantidade inválida'})
+            if qtd_informada < ultima_quantidade:
+                return jsonify({
+                    'success': False,
+                    'message': f'Quantidade informada ({qtd_informada}) menor que a última apontada ({ultima_quantidade}). Informe um valor maior ou igual.'
+                })
+
         # Validações específicas por tipo de ação
         tipo_acao = dados['tipo_acao']
         if tipo_acao == 'pausa':
@@ -730,6 +581,12 @@ def registrar_apontamento():
                 return jsonify({'success': False, 'message': 'Quantidade é obrigatória para pausas'})
             if not dados.get('motivo_parada'):
                 return jsonify({'success': False, 'message': 'Motivo da parada é obrigatório'})
+        
+        if tipo_acao == 'stop':
+            if not dados.get('quantidade'):
+                return jsonify({'success': False, 'message': 'Quantidade é obrigatória para stop'})
+            if not dados.get('motivo_parada'):
+                return jsonify({'success': False, 'message': 'Motivo da parada é obrigatório para stop'})
         
         if tipo_acao == 'fim_producao':
             if not dados.get('quantidade'):
@@ -773,6 +630,12 @@ def registrar_apontamento():
             if dados.get('quantidade'):
                 status_os.quantidade_atual = int(dados['quantidade'])
                 
+        elif tipo_acao == 'stop':
+            status_os.status_atual = 'Pausado'
+            status_os.motivo_parada = dados['motivo_parada']
+            if dados.get('quantidade'):
+                status_os.quantidade_atual = int(dados['quantidade'])
+                
         elif tipo_acao == 'fim_producao':
             status_os.status_atual = 'Finalizado'
             if dados.get('quantidade'):
@@ -784,12 +647,13 @@ def registrar_apontamento():
         data_fim = None
         apontamento_inicio = None
         
-        if tipo_acao in ['fim_setup', 'fim_producao', 'pausa']:
+        if tipo_acao in ['fim_setup', 'fim_producao', 'pausa', 'stop']:
             # Determinar qual tipo de início procurar
             tipo_inicio = {
                 'fim_setup': 'inicio_setup',
                 'fim_producao': 'inicio_producao',
-                'pausa': 'inicio_producao'
+                'pausa': 'inicio_producao',
+                'stop': 'inicio_producao'
             }.get(tipo_acao)
             
             # Buscar o último apontamento de início correspondente
@@ -834,13 +698,16 @@ def registrar_apontamento():
             'fim_setup': 'Fim de setup',
             'inicio_producao': 'Início de produção',
             'pausa': 'Pausa',
+            'stop': 'Stop',
             'fim_producao': 'Fim de produção'
         }.get(tipo_acao, tipo_acao)
         
         return jsonify({
             'success': True,
             'message': f'{acao_nome} registrado com sucesso!',
-            'status': status_os.status_atual
+            'status': status_os.status_atual,
+            'ultima_quantidade': int(status_os.quantidade_atual) if getattr(status_os, 'quantidade_atual', None) is not None else ultima_quantidade,
+            'quantidade_atual': int(status_os.quantidade_atual) if getattr(status_os, 'quantidade_atual', None) is not None else None
         })
         
     except Exception as e:
@@ -850,12 +717,9 @@ def registrar_apontamento():
             'message': f'Erro ao registrar apontamento: {str(e)}'
         })
 
-@apontamento_bp.route('/os/<int:os_id>/logs')
+@apontamento_bp.route('/os/<int:os_id>/logs/view')
 def logs_ordem_servico(os_id):
-    """Visualizar logs de apontamento de uma ordem de serviço"""
-    if 'user_id' not in session:
-        return redirect(url_for('auth.login'))
-    
+    """Visualizar logs de apontamento de uma ordem de serviço (HTML)"""
     ordem_servico = OrdemServico.query.get_or_404(os_id)
     
     # Buscar todos os apontamentos desta OS
@@ -889,6 +753,7 @@ def get_logs_ordem_servico(ordem_id):
                 'data_fim': apontamento.data_fim.isoformat() if hasattr(apontamento, 'data_fim') and apontamento.data_fim else None,
                 'quantidade': apontamento.quantidade,
                 'motivo_pausa': apontamento.motivo_parada if hasattr(apontamento, 'motivo_parada') else None,
+                'observacoes': apontamento.observacoes if hasattr(apontamento, 'observacoes') else None,
                 'tempo_decorrido': apontamento.tempo_decorrido,
                 'lista_kanban': apontamento.lista_kanban
             }

@@ -25,9 +25,30 @@ function carregarEstadoApontamentos() {
                     
                     console.log(`Restaurando status para OS ${ordemId}: ${statusAtual}`);
                     
-                    // Atualizar visualmente o card com o status atual
-                    // Usar a função atualizarStatusCartao do HTML que foi melhorada
-                    atualizarStatusCartao(ordemId, statusAtual);
+                    // Atualizar visual do card conforme status
+                    if (statusAtual === 'Pausado') {
+                        // Para STOP queremos que não haja status visível após reload
+                        if (typeof window.limparStatusCartao === 'function') {
+                            window.limparStatusCartao(ordemId);
+                        } else {
+                            // Fallback: remover indicadores básicos
+                            const card = document.querySelector(`.kanban-card[data-ordem-id="${ordemId}"]`);
+                            if (card) {
+                                card.classList.remove('status-setup', 'status-producao', 'status-pausado', 'status-finalizado', 'status-setup-concluido');
+                                const statusElement = card.querySelector('.status-apontamento');
+                                if (statusElement) statusElement.innerHTML = '';
+                            }
+                        }
+                    } else {
+                        // Para demais estados, atualizar normalmente
+                        atualizarStatusCartao(ordemId, statusAtual);
+                    }
+
+                    // Atualizar "Última qtd" no card, se disponível do backend
+                    if (typeof window.atualizarUltimaQuantidadeNoCard === 'function' &&
+                        Object.prototype.hasOwnProperty.call(status, 'ultima_quantidade')) {
+                        window.atualizarUltimaQuantidadeNoCard(ordemId, status.ultima_quantidade);
+                    }
                     
                     // Exibir indicador de operador no card
                     if (status.operador_nome) {
@@ -46,11 +67,17 @@ function carregarEstadoApontamentos() {
                         }
                     }
                     
-                    // Iniciar timer com o tempo real do backend
+                    // Iniciar timer com o tempo real do backend (apenas para status ativos)
                     if (status.inicio_acao && (status.status_atual === 'Setup em andamento' || 
-                                              status.status_atual === 'Produção em andamento' || 
-                                              status.status_atual === 'Pausado')) {
+                                              status.status_atual === 'Produção em andamento')) {
                         iniciarTimerApontamento(ordemId, status.status_atual, status.inicio_acao);
+                    } else {
+                        // Garantir que o timer esteja parado/oculto quando pausado/finalizado
+                        pararTimerApontamento(ordemId);
+                        const card = document.querySelector(`.kanban-card[data-ordem-id="${ordemId}"]`);
+                        const statusElement = card ? card.querySelector('.status-apontamento') : null;
+                        const timerElement = statusElement ? statusElement.querySelector(`#timer-${ordemId}`) : null;
+                        if (timerElement) timerElement.style.display = 'none';
                     }
                 });
                 
@@ -99,7 +126,8 @@ function atualizarStatusCartaoCompleto(ordemId, statusAtual) {
             break;
         case 'Produção em andamento':
             statusClass = 'status-producao';
-            botoesMostrar = ['pausa', 'fim_producao'];
+            // Exibir tanto pausa quanto stop durante a produção
+            botoesMostrar = ['pausa', 'stop'];
             break;
         case 'Pausado':
             statusClass = 'status-pausado';
@@ -179,8 +207,8 @@ function atualizarStatusCartaoCompleto(ordemId, statusAtual) {
         }
     }
     
-    // Se o status for ativo, iniciar o timer
-    if (statusClass === 'status-setup' || statusClass === 'status-producao' || statusClass === 'status-pausado') {
+    // Se o status for ativo, iniciar o timer (pausado não é ativo)
+    if (statusClass === 'status-setup' || statusClass === 'status-producao') {
         iniciarTimerApontamento(ordemId, statusClass);
     } else {
         // Se não for um status ativo, parar o timer e ocultar o elemento
@@ -261,7 +289,7 @@ function desabilitarBotoesOperadorDiferente(ordemId, operadorNome) {
     const botoesApontamento = card.querySelectorAll('.apontamento-btn');
     botoesApontamento.forEach(botao => {
         // Desabilitar botões que afetam o status (exceto início de setup/produção)
-        if (['fim_setup', 'pausa', 'fim_producao'].includes(botao.getAttribute('data-acao'))) {
+        if (['fim_setup', 'pausa', 'stop'].includes(botao.getAttribute('data-acao'))) {
             botao.disabled = true;
             botao.setAttribute('title', `Apenas ${operadorNome} pode modificar este apontamento`);
             botao.classList.add('btn-disabled');
@@ -361,3 +389,16 @@ document.addEventListener('DOMContentLoaded', function() {
     console.log('Inicializando sistema de persistência de apontamentos...');
     carregarEstadoApontamentos();
 });
+
+// Atualiza a "Última qtd" visível no card da OS
+window.atualizarUltimaQuantidadeNoCard = function(ordemId, ultimaQuantidade) {
+    try {
+        const span = document.getElementById(`ultima-qtd-${ordemId}`);
+        if (span) {
+            const valor = (ultimaQuantidade ?? 0);
+            span.textContent = Number.isFinite(Number(valor)) ? valor : '-';
+        }
+    } catch (e) {
+        console.warn('Não foi possível atualizar a última quantidade no card:', e);
+    }
+}

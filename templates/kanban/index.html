@@ -427,45 +427,63 @@
                         
                             {% else %}
                                 <div class="text-muted"><small>Sem pedidos</small></div>
-                            {% endif %}
-                            
+                             {% endif %}
+                             
+                            <!-- Última quantidade apontada -->
+                            <div class="ultima-quantidade mt-1">
+                                <small>Última qtd: <span id="ultima-qtd-{{ ordem.id }}">-</span></small>
+                            </div>
+
                             <!-- Botões de Apontamento -->
                             {% if acesso_kanban and lista not in ['Entrada', 'Expedição'] %}
                             <div class="apontamento-buttons mt-2 pt-2 border-top">
                                 <div class="row g-1">
+                                    <!-- Grupo Setup -->
                                     <div class="col-6">
-                                        <button class="btn btn-outline-primary btn-sm w-100" 
-                                                onclick="iniciarApontamentoSetup({{ ordem.id }});"
+                                        <button class="btn btn-outline-primary btn-sm w-100 apontamento-btn" 
+                                                data-acao="inicio_setup"
+                                                data-ordem-id="{{ ordem.id }}"
+                                                onclick="iniciarApontamentoSetup(this.dataset.ordemId);"
                                                 title="Iniciar Setup">
                                             <i class="fas fa-play"></i> Setup
                                         </button>
                                     </div>
                                     <div class="col-6">
-                                        <button class="btn btn-outline-success btn-sm w-100" 
-                                                onclick="iniciarApontamentoProducao({{ ordem.id }});"
-                                                title="Iniciar Produção">
-                                            <i class="fas fa-cogs"></i> Prod
-                                        </button>
-                                    </div>
-                                    <div class="col-4">
-                                        <button class="btn btn-outline-warning btn-sm w-100" 
-                                                onclick="pausarApontamento({{ ordem.id }});"
-                                                title="Pausar">
-                                            <i class="fas fa-pause"></i>
-                                        </button>
-                                    </div>
-                                    <div class="col-4">
-                                        <button class="btn btn-outline-info btn-sm w-100" 
-                                                onclick="finalizarSetup({{ ordem.id }});"
+                                        <button class="btn btn-outline-info btn-sm w-100 apontamento-btn" 
+                                                data-acao="fim_setup"
+                                                data-ordem-id="{{ ordem.id }}"
+                                                onclick="finalizarSetup(this.dataset.ordemId);"
                                                 title="Finalizar Setup">
-                                            <i class="fas fa-stop"></i>
+                                            <i class="fas fa-stop"></i> Fim Setup
                                         </button>
                                     </div>
-                                    <div class="col-4">
-                                        <button class="btn btn-outline-danger btn-sm w-100" 
-                                                onclick="finalizarProducao({{ ordem.id }});"
-                                                title="Finalizar Produção">
-                                            <i class="fas fa-flag-checkered"></i>
+
+                                    <!-- Grupo Produção -->
+                                    <div class="col-6">
+                                        <button class="btn btn-outline-success btn-sm w-100 apontamento-btn" 
+                                                data-acao="inicio_producao"
+                                                data-ordem-id="{{ ordem.id }}"
+                                                onclick="iniciarApontamentoProducao(this.dataset.ordemId);"
+                                                title="Iniciar Produção">
+                                            <i class="fas fa-cogs"></i> Produção
+                                        </button>
+                                    </div>
+                                    <div class="col-6">
+                                        <button class="btn btn-outline-warning btn-sm w-100 apontamento-btn" 
+                                                data-acao="pausa"
+                                                data-ordem-id="{{ ordem.id }}"
+                                                onclick="pausarApontamento(this.dataset.ordemId);"
+                                                title="Pausar produção">
+                                            <i class="fas fa-pause"></i> Pausa
+                                        </button>
+                                    </div>
+                                    <div class="col-12">
+                                        <button class="btn btn-outline-danger btn-sm w-100 apontamento-btn" 
+                                                data-acao="stop"
+                                                data-ordem-id="{{ ordem.id }}"
+                                                onclick="pararApontamento(this.dataset.ordemId);"
+                                                title="Stop (fim de turno / parada entre turnos)">
+                                            <i class="fas fa-stop"></i> Stop
                                         </button>
                                     </div>
                                 </div>
@@ -748,6 +766,7 @@
                             <label for="quantidade" class="form-label">Quantidade de Peças</label>
                             <input type="number" class="form-control" id="quantidade" min="0" placeholder="0">
                             <div class="form-text">Quantidade atual de peças produzidas</div>
+                            <div class="form-text" id="ultimaQuantidadeInfo"></div>
                         </div>
                         
                         <!-- Motivo da Parada (apenas para pausas) -->
@@ -849,46 +868,42 @@
         // Verificar se é uma ação de início (setup ou produção)
         const isInicioAcao = tipoAcao === 'inicio_setup' || tipoAcao === 'inicio_producao';
         
-        // Se for uma ação de início, verificar se já existe algum apontamento ativo
+        // Se for uma ação de início, verificar se já existe algum apontamento em andamento (setup/produção)
         if (isInicioAcao) {
-            // Verificar se há apontamentos ativos
             fetch('/apontamento/status-ativos')
                 .then(response => response.json())
                 .then(data => {
-                    if (data.status_ativos && data.status_ativos.length > 0) {
-                        // Verificar se algum dos apontamentos ativos é para esta OS
-                        const apontamentoAtivo = data.status_ativos.find(status => 
-                            status.ordem_servico_id === ordemId || status.ordem_id === ordemId);
-                            
-                        if (apontamentoAtivo) {
-                            // Já existe um apontamento ativo para esta OS, continuar normalmente
+                    const ativos = (data.status_ativos || []).filter(s =>
+                        s.status_atual === 'Setup em andamento' || s.status_atual === 'Produção em andamento'
+                    );
+                    if (ativos.length > 0) {
+                        const osIdNum = Number(ordemId);
+                        const ativoMesmaOS = ativos.find(s => Number(s.ordem_servico_id) === osIdNum || Number(s.ordem_id) === osIdNum);
+                        if (ativoMesmaOS) {
+                            // Há atividade em andamento nesta mesma OS, permitir (ex.: retomar fluxo)
                             prosseguirAbrirModal(tipoAcao, ordemId);
                         } else {
-                            // Existe um apontamento ativo para outra OS
-                            const osAtiva = data.status_ativos[0];
+                            // Existe atividade em andamento em outra OS -> bloquear
+                            const osAtiva = ativos[0];
                             const mensagem = `
                                 <div class="alert alert-warning">
                                     <h5><i class="fas fa-exclamation-triangle"></i> Atenção!</h5>
-                                    <p>Já existe um apontamento ativo para outra Ordem de Serviço:</p>
+                                    <p>Já existe um apontamento em andamento para outra Ordem de Serviço:</p>
                                     <ul>
                                         <li><strong>OS:</strong> ${osAtiva.ordem_servico_id}</li>
                                         <li><strong>Status:</strong> ${osAtiva.status_atual}</li>
                                         <li><strong>Operador:</strong> ${osAtiva.operador_nome || 'Não informado'}</li>
                                     </ul>
-                                    <p>Você precisa finalizar ou pausar o apontamento ativo antes de iniciar um novo.</p>
+                                    <p>Finalize ou pause o apontamento em andamento antes de iniciar um novo.</p>
                                 </div>
                             `;
-                            
-                            // Exibir modal de alerta
                             const alertModal = document.getElementById('alertModal') || criarModalAlerta();
                             const alertModalBody = alertModal.querySelector('.modal-body');
                             alertModalBody.innerHTML = mensagem;
-                            
-                            // Exibir o modal de alerta
                             new bootstrap.Modal(alertModal).show();
                         }
                     } else {
-                        // Não há apontamentos ativos, prosseguir normalmente
+                        // Não há atividades em andamento; pode iniciar
                         prosseguirAbrirModal(tipoAcao, ordemId);
                     }
                 })
@@ -986,6 +1001,14 @@
                 motivoParada.required = true;
                 quantidade.placeholder = 'Quantidade atual de peças';
                 break;
+            case 'stop':
+                title.textContent = 'Stop (Fim de turno / Parada entre turnos)';
+                divQuantidade.style.display = 'block';
+                divMotivoParada.style.display = 'block';
+                quantidade.required = true;
+                motivoParada.required = true;
+                quantidade.placeholder = 'Quantidade final no turno';
+                break;
             case 'fim_producao':
                 title.textContent = 'Finalizar Produção';
                 divQuantidade.style.display = 'block';
@@ -1066,7 +1089,92 @@
     document.getElementById('itemSelecao').addEventListener('change', function(e) {
         const itemId = e.target.value;
         carregarTiposTrabalhoItem(itemId);
+        // Limpar informação de última quantidade até que o tipo de trabalho seja selecionado
+        const info = document.getElementById('ultimaQuantidadeInfo');
+        if (info) info.textContent = '';
     });
+
+    // Quando o tipo de trabalho for selecionado, calcular/mostrar última quantidade
+    document.getElementById('tipoTrabalho').addEventListener('change', function(e) {
+        atualizarUltimaQuantidadeCampo();
+    });
+
+    // Cache simples em memória para última quantidade por OS/Item/Trabalho
+    const cacheUltimaQuantidade = new Map();
+
+    function chaveUltimaQuantidade(ordemId, itemId, trabalhoId) {
+        return `${ordemId}-${itemId}-${trabalhoId}`;
+    }
+
+    async function obterUltimaQuantidade(ordemId, itemId, trabalhoId) {
+        const chave = chaveUltimaQuantidade(ordemId, itemId, trabalhoId);
+        if (cacheUltimaQuantidade.has(chave)) {
+            return cacheUltimaQuantidade.get(chave);
+        }
+
+        // 1) Tentar via /apontamento/status-ativos (se houver status para esta OS)
+        try {
+            const resp = await fetch('/apontamento/status-ativos');
+            if (resp.ok) {
+                const data = await resp.json();
+                if (data.status_ativos && Array.isArray(data.status_ativos)) {
+                    const st = data.status_ativos.find(s => s.ordem_servico_id === ordemId && s.item_id === itemId && s.trabalho_id === trabalhoId);
+                    if (st && typeof st.ultima_quantidade !== 'undefined' && st.ultima_quantidade !== null) {
+                        cacheUltimaQuantidade.set(chave, parseInt(st.ultima_quantidade, 10));
+                        return cacheUltimaQuantidade.get(chave);
+                    }
+                }
+            }
+        } catch (e) {
+            console.warn('Falha ao consultar status-ativos para última quantidade:', e);
+        }
+
+        // 2) Consultar logs da OS e pegar a última quantidade para o item/trabalho
+        try {
+            const resp2 = await fetch(`/apontamento/os/${ordemId}/logs`);
+            if (resp2.ok) {
+                const data2 = await resp2.json();
+                if (data2.logs && Array.isArray(data2.logs)) {
+                    // logs já vêm ordenados desc por data_hora
+                    const log = data2.logs.find(l => l.item_id === itemId && l.trabalho_id === trabalhoId && l.quantidade !== null && typeof l.quantidade !== 'undefined');
+                    if (log) {
+                        cacheUltimaQuantidade.set(chave, parseInt(log.quantidade, 10));
+                        return cacheUltimaQuantidade.get(chave);
+                    }
+                }
+            }
+        } catch (e) {
+            console.warn('Falha ao consultar logs para última quantidade:', e);
+        }
+
+        // 3) Fallback: 0
+        cacheUltimaQuantidade.set(chave, 0);
+        return 0;
+    }
+
+    async function atualizarUltimaQuantidadeCampo() {
+        const ordemId = parseInt(document.getElementById('ordemServicoId').value, 10);
+        const itemId = parseInt(document.getElementById('itemSelecao').value, 10);
+        const trabalhoId = parseInt(document.getElementById('tipoTrabalho').value, 10);
+        const info = document.getElementById('ultimaQuantidadeInfo');
+        const qtdInput = document.getElementById('quantidade');
+        if (!ordemId || !itemId || !trabalhoId) {
+            if (info) info.textContent = '';
+            return;
+        }
+        try {
+            const ultimaQ = await obterUltimaQuantidade(ordemId, itemId, trabalhoId);
+            if (info) info.textContent = `Última quantidade apontada para este item/trabalho: ${ultimaQ}`;
+            if (qtdInput) {
+                qtdInput.min = Math.max(0, ultimaQ);
+                if (!qtdInput.placeholder || qtdInput.placeholder === '0' || qtdInput.placeholder === 'Quantidade final produzida' || qtdInput.placeholder === 'Quantidade atual de peças') {
+                    qtdInput.placeholder = `>= ${ultimaQ}`;
+                }
+            }
+        } catch (e) {
+            console.warn('Não foi possível atualizar última quantidade no campo:', e);
+        }
+    }
     
     // Validação do código do operador em tempo real
     document.getElementById('codigoOperador').addEventListener('input', function(e) {
@@ -1103,7 +1211,7 @@
         });
     }
     
-    function salvarApontamento() {
+    async function salvarApontamento() {
         const form = document.getElementById('formApontamento');
         if (!form.checkValidity()) {
             form.reportValidity();
@@ -1117,6 +1225,27 @@
             return;
         }
         
+        // Validar quantidade mínima no frontend em relação à última quantidade
+        const ordemId = document.getElementById('ordemServicoId').value;
+        const trabalhoId = document.getElementById('tipoTrabalho').value;
+        const tipoAcao = document.getElementById('tipoAcao').value;
+        const qtdStr = document.getElementById('quantidade').value;
+        if (qtdStr !== '' && qtdStr !== null) {
+            const qtdInformada = parseInt(qtdStr, 10);
+            if (!Number.isNaN(qtdInformada)) {
+                try {
+                    const ultimaQ = await obterUltimaQuantidade(parseInt(ordemId, 10), parseInt(itemId, 10), parseInt(trabalhoId, 10));
+                    if (typeof ultimaQ === 'number' && qtdInformada < ultimaQ) {
+                        mostrarAlerta(`Quantidade informada (${qtdInformada}) menor que a última apontada (${ultimaQ}). Informe um valor maior ou igual.`, 'error');
+                        return;
+                    }
+                } catch (e) {
+                    console.warn('Falha ao obter última quantidade para validação frontend:', e);
+                    // Em caso de falha, seguimos e deixamos o backend validar
+                }
+            }
+        }
+
         const dados = {
             ordem_servico_id: document.getElementById('ordemServicoId').value,
             item_id: itemId,
@@ -1140,8 +1269,18 @@
             if (data.success) {
                 mostrarAlerta(data.message, 'success');
                 bootstrap.Modal.getInstance(document.getElementById('modalApontamento')).hide();
-                // Atualizar status do cartão
-                atualizarStatusCartao(ordemAtualId, data.status);
+                // Atualizar visual conforme a ação
+                if (tipoAcaoAtual === 'stop') {
+                    // No STOP, remover qualquer status visual
+                    limparStatusCartao(ordemAtualId);
+                } else {
+                    // Para demais ações, atualizar status normalmente
+                    atualizarStatusCartao(ordemAtualId, data.status);
+                }
+                // Atualizar última quantidade exibida, se fornecida pelo backend
+                if (typeof window.atualizarUltimaQuantidadeNoCard === 'function' && 'ultima_quantidade' in data) {
+                    window.atualizarUltimaQuantidadeNoCard(ordemAtualId, data.ultima_quantidade);
+                }
             } else {
                 mostrarAlerta(data.message, 'error');
             }
@@ -1183,7 +1322,7 @@
                 statusClass = 'status-pausado';
                 bgClass = 'bg-warning';
                 statusText = 'Pausado';
-                isActiveStatus = true;
+                isActiveStatus = false; // Pausado não mantém timer ativo
                 break;
             case 'Setup concluído':
                 statusClass = 'status-setup-concluido';
@@ -1261,6 +1400,36 @@
             console.error('Erro ao salvar status no localStorage:', e);
         }
     }
+
+    // Remover completamente o status visual do card
+    function limparStatusCartao(ordemId) {
+        const card = document.querySelector(`.kanban-card[data-ordem-id="${ordemId}"]`);
+        if (!card) return;
+        // Remover classes de status
+        card.classList.remove('status-setup', 'status-producao', 'status-pausado', 'status-finalizado', 'status-setup-concluido');
+        // Limpar área de status
+        const statusElement = card.querySelector('.status-apontamento');
+        if (statusElement) {
+            // Parar e ocultar timer
+            if (typeof pararTimerApontamento === 'function') {
+                pararTimerApontamento(ordemId);
+            }
+            statusElement.innerHTML = '';
+        }
+        // Limpar espelho do modal, se estiver aberto
+        const modalStatusElement = document.getElementById(`status-modal-${ordemId}`);
+        if (modalStatusElement) {
+            modalStatusElement.innerHTML = '';
+        }
+        // Remover persistência local do status
+        try {
+            const statusData = JSON.parse(localStorage.getItem('apontamento_status') || '{}');
+            delete statusData[ordemId];
+            localStorage.setItem('apontamento_status', JSON.stringify(statusData));
+        } catch (e) {
+            console.error('Erro ao limpar status no localStorage:', e);
+        }
+    }
     
     function mostrarAlerta(mensagem, tipo) {
         const alertClass = tipo === 'success' ? 'alert-success' : 'alert-danger';
@@ -1294,6 +1463,10 @@
     
     function pausarApontamento(ordemId) {
         abrirModalApontamento('pausa', ordemId);
+    }
+    
+    function pararApontamento(ordemId) {
+        abrirModalApontamento('stop', ordemId);
     }
     
     function finalizarSetup(ordemId) {
