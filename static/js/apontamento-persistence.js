@@ -3,8 +3,133 @@
  * Garante que os apontamentos ativos não sejam perdidos ao recarregar a página
  */
 
+// Lock global para evitar execuções concorrentes
+let _carregandoEstado = false;
+
+// Coordenação de QPT: marcação de "toque recente" para evitar renders duplicados
+// Mantém um carimbo de tempo por OS sempre que a QPT for atualizada manualmente
+try { window.__qptTouch = window.__qptTouch || {}; } catch {}
+
+// Inicialização única: renderiza QPT a partir do cache/localStorage no carregamento
+try {
+    if (!window.__qptInitOnce) {
+        window.__qptInitOnce = true;
+        document.addEventListener('DOMContentLoaded', function() {
+            try {
+                const cards = document.querySelectorAll('.kanban-card[data-ordem-id]');
+                cards.forEach(card => {
+                    const idStr = card.getAttribute('data-ordem-id');
+                    const osId = parseInt(idStr, 10);
+                    if (!Number.isNaN(osId) && typeof window.atualizarQuantidadesPorTrabalho === 'function') {
+                        // Não limpa conteúdo; apenas tenta preencher via cache
+                        window.atualizarQuantidadesPorTrabalho(osId, []);
+                    }
+                });
+            } catch (e) { console.warn('Falha ao inicializar QPT via cache no load:', e); }
+        }, { once: true });
+    }
+} catch {}
+
+// Sincronização entre abas via localStorage
+try {
+    window.addEventListener('storage', function(ev) {
+        if (!ev) return;
+        const key = ev.key || '';
+        // Broadcast de novo apontamento/quantidade
+        if (key === 'apontamento_event') {
+            try {
+                const payload = JSON.parse(ev.newValue || 'null');
+                if (!payload || typeof payload !== 'object') return;
+                const osId = parseInt(payload.osId, 10);
+                if (!Number.isNaN(osId)) {
+                    // Atualizar cache QPT quando houver quantidade válida
+                    const qtdNum = Number.isFinite(Number(payload.quantidade)) ? Number(payload.quantidade) : null;
+                    if (qtdNum !== null && typeof window.atualizarQPTCacheEntrada === 'function') {
+                        window.atualizarQPTCacheEntrada(
+                            osId,
+                            payload.trabalhoId || null,
+                            payload.trabalhoNome || null,
+                            payload.itemCodigoBase || null,
+                            qtdNum
+                        );
+                    }
+                    // Forçar render imediato a partir do cache, respeitando o guard
+                    try {
+                        const c = document.getElementById(`qtd-por-trabalho-${osId}`);
+                        if (c && c.dataset) delete c.dataset.qptSig;
+                    } catch {}
+                    try {
+                        if (!(typeof shouldSkipQpt === 'function' && shouldSkipQpt(osId))) {
+                            if (typeof window.atualizarQuantidadesPorTrabalho === 'function') {
+                                window.atualizarQuantidadesPorTrabalho(osId, []);
+                            }
+                        }
+                        if (typeof window.markQptTouch === 'function') window.markQptTouch(osId);
+                    } catch {}
+                    // Não recarregar status aqui para evitar piscadas nos timers
+                }
+            } catch (e) { console.warn('Falha ao processar apontamento_event de outra aba:', e); }
+        }
+        // Broadcast genérico (atualizações diversas: qpt_update, stop, etc.)
+        if (key === 'apontamento_broadcast') {
+            try {
+                const payload = JSON.parse(ev.newValue || 'null');
+                if (!payload || typeof payload !== 'object') return;
+                const { type, osId } = payload;
+                const osNum = parseInt(osId, 10);
+                if (Number.isNaN(osNum)) return;
+                if (type === 'qpt_update') {
+                    // Reaproveita caminho do apontamento_event
+                    try {
+                        const c = document.getElementById(`qtd-por-trabalho-${osNum}`);
+                        if (c && c.dataset) delete c.dataset.qptSig;
+                    } catch {}
+                    try {
+                        if (!(typeof shouldSkipQpt === 'function' && shouldSkipQpt(osNum))) {
+                            if (typeof window.atualizarQuantidadesPorTrabalho === 'function') {
+                                window.atualizarQuantidadesPorTrabalho(osNum, []);
+                            }
+                        }
+                        if (typeof window.markQptTouch === 'function') window.markQptTouch(osNum);
+                    } catch {}
+                    // Não recarregar status neste tipo para evitar piscadas no cronômetro
+                } else if (type === 'stop') {
+                    // Limpa status visual e mantém QPT a partir do cache
+                    try { if (typeof window.recarregarEstadoApontamentos === 'function') window.recarregarEstadoApontamentos(); } catch {}
+                    try {
+                        const c = document.getElementById(`qtd-por-trabalho-${osNum}`);
+                        if (c && c.dataset) delete c.dataset.qptSig;
+                        if (!(typeof shouldSkipQpt === 'function' && shouldSkipQpt(osNum))) {
+                            if (typeof window.atualizarQuantidadesPorTrabalho === 'function') window.atualizarQuantidadesPorTrabalho(osNum, []);
+                        }
+                        if (typeof window.markQptTouch === 'function') window.markQptTouch(osNum);
+                    } catch {}
+                }
+            } catch (e) { console.warn('Falha ao processar apontamento_broadcast de outra aba:', e); }
+        }
+        // Alterações no snapshot de status local: recarregar estado para refletir STOP/PAUSA/etc
+        if (key === 'apontamento_status') {
+            try { if (typeof window.recarregarEstadoApontamentos === 'function') window.recarregarEstadoApontamentos(); } catch {}
+        }
+    });
+} catch (e) { console.warn('Falha ao registrar listener de storage para sincronização entre abas:', e); }
+function markQptTouch(osId) {
+    try { window.__qptTouch[osId] = Date.now(); } catch {}
+}
+function shouldSkipQpt(osId) {
+    try {
+        const t = (window.__qptTouch && window.__qptTouch[osId]) || 0;
+        return t && (Date.now() - t) < 1200; // 1,2s de tolerância para pular renders concorrentes
+    } catch { return false; }
+}
+
 // Função para carregar o estado dos apontamentos ao iniciar a página
 function carregarEstadoApontamentos() {
+    if (_carregandoEstado) {
+        console.debug('carregarEstadoApontamentos já em execução, ignorando chamada duplicada');
+        return;
+    }
+    _carregandoEstado = true;
     console.log('Carregando estado dos apontamentos...');
     // Verificar se há algum apontamento ativo no momento da recarga
     fetch('/apontamento/status-ativos')
@@ -16,40 +141,49 @@ function carregarEstadoApontamentos() {
         })
         .then(data => {
             // Para cada OS com status ativo, atualizar visualmente
-            if (data.status_ativos && data.status_ativos.length > 0) {
-                console.log(`Encontrados ${data.status_ativos.length} apontamentos ativos`); 
-                data.status_ativos.forEach(status => {
+            const ativos = Array.isArray(data.status_ativos) ? data.status_ativos : [];
+            const ativosIds = new Set();
+            if (ativos.length > 0) {
+                console.log(`Encontrados ${ativos.length} apontamentos ativos`); 
+                ativos.forEach(status => {
                     // Usar ordem_servico_id em vez de ordem_id (que não existe no modelo)
                     const ordemId = status.ordem_servico_id;
+                    if (ordemId != null) ativosIds.add(String(ordemId));
                     const statusAtual = status.status_atual;
                     
                     console.log(`Restaurando status para OS ${ordemId}: ${statusAtual}`);
                     
                     // Atualizar visual do card conforme status
-                    if (statusAtual === 'Pausado') {
-                        // Para STOP queremos que não haja status visível após reload
-                        if (typeof window.limparStatusCartao === 'function') {
-                            window.limparStatusCartao(ordemId);
-                        } else {
-                            // Fallback: remover indicadores básicos
-                            const card = document.querySelector(`.kanban-card[data-ordem-id="${ordemId}"]`);
-                            if (card) {
-                                card.classList.remove('status-setup', 'status-producao', 'status-pausado', 'status-finalizado', 'status-setup-concluido');
-                                const statusElement = card.querySelector('.status-apontamento');
-                                if (statusElement) statusElement.innerHTML = '';
-                            }
-                        }
-                    } else {
-                        // Para demais estados, atualizar normalmente
-                        atualizarStatusCartao(ordemId, statusAtual);
-                    }
+                    // Atualizar o status visual normalmente (inclusive Pausado)
+                    atualizarStatusCartao(ordemId, statusAtual);
 
                     // Atualizar "Última qtd" no card, se disponível do backend
                     if (typeof window.atualizarUltimaQuantidadeNoCard === 'function' &&
                         Object.prototype.hasOwnProperty.call(status, 'ultima_quantidade')) {
                         window.atualizarUltimaQuantidadeNoCard(ordemId, status.ultima_quantidade);
                     }
-                    
+
+                    // Quantidades por trabalho (lista lateral)
+                    try {
+                        if (!(typeof shouldSkipQpt === 'function' && shouldSkipQpt(ordemId))) {
+                            atualizarQuantidadesPorTrabalho(ordemId, Array.isArray(status.ativos_por_trabalho) ? status.ativos_por_trabalho : []);
+                            markQptTouch(ordemId); // Marcar toque recente
+                        }
+                    } catch (eUI) {
+                        console.warn('Falha ao atualizar UI de múltiplos/quantidades por trabalho:', eUI);
+                    }
+
+                    // Chips no status com (tipo de trabalho + timer) lado a lado
+                    try {
+                        if (Array.isArray(status.ativos_por_trabalho)) {
+                            renderizarChipsStatus(ordemId, status.ativos_por_trabalho);
+                        } else {
+                            renderizarChipsStatus(ordemId, []);
+                        }
+                    } catch (eChips) {
+                        console.warn('Falha ao renderizar chips de status:', eChips);
+                    }
+
                     // Exibir indicador de operador no card
                     if (status.operador_nome) {
                         adicionarIndicadorOperador(ordemId, status.operador_nome, status.operador_codigo);
@@ -67,31 +201,410 @@ function carregarEstadoApontamentos() {
                         }
                     }
                     
-                    // Iniciar timer com o tempo real do backend (apenas para status ativos)
-                    if (status.inicio_acao && (status.status_atual === 'Setup em andamento' || 
-                                              status.status_atual === 'Produção em andamento')) {
-                        iniciarTimerApontamento(ordemId, status.status_atual, status.inicio_acao);
-                    } else {
-                        // Garantir que o timer esteja parado/oculto quando pausado/finalizado
-                        pararTimerApontamento(ordemId);
-                        const card = document.querySelector(`.kanban-card[data-ordem-id="${ordemId}"]`);
-                        const statusElement = card ? card.querySelector('.status-apontamento') : null;
-                        const timerElement = statusElement ? statusElement.querySelector(`#timer-${ordemId}`) : null;
-                        if (timerElement) timerElement.style.display = 'none';
-                    }
                 });
                 
                 console.log('Estado dos apontamentos restaurado com sucesso!');
             } else {
                 console.log('Nenhum apontamento ativo encontrado.');
             }
+
+            // Garante QPT visível para OS sem ativo (renderiza via cache/LS)
+            try {
+                const cards = document.querySelectorAll('.kanban-card[data-ordem-id]');
+                cards.forEach(card => {
+                    const idStr = card.getAttribute('data-ordem-id');
+                    if (!ativosIds.has(String(idStr))) {
+                        const osId = parseInt(idStr, 10);
+                        if (!Number.isNaN(osId)) {
+                            if (!(typeof shouldSkipQpt === 'function' && shouldSkipQpt(osId))) {
+                                atualizarQuantidadesPorTrabalho(osId, []);
+                            }
+                        }
+                    }
+                });
+            } catch (eAll) {
+                console.warn('Falha ao garantir QPT para OS sem ativo:', eAll);
+            }
         })
         .catch(error => {
             console.error('Erro ao carregar estado dos apontamentos:', error);
             // Tentar novamente após 3 segundos em caso de falha
             setTimeout(carregarEstadoApontamentos, 3000);
+        })
+        .finally(() => {
+            _carregandoEstado = false;
         });
 }
+
+// Gerenciamento de timers por trabalho (independentes)
+const timersTrabalho = {}; // chave: `${ordemId}:${itemId}:${trabalhoId}` => intervalId
+
+function keyTrabalho(ordemId, itemId, trabalhoId) {
+    return `${ordemId}:${itemId}:${trabalhoId}`;
+}
+
+function iniciarTimerTrabalho(ordemId, itemId, trabalhoId, startTimeStr) {
+    const key = keyTrabalho(ordemId, itemId, trabalhoId);
+    // Limpar anterior, se existir
+    if (timersTrabalho[key]) {
+        clearInterval(timersTrabalho[key]);
+        delete timersTrabalho[key];
+    }
+    const el = document.getElementById(`timer-${ordemId}-${itemId}-${trabalhoId}`);
+    if (!el) return;
+    const startTs = startTimeStr ? new Date(startTimeStr).getTime() : Date.now();
+    // Atualização imediata
+    atualizarElementoTimer(el, startTs);
+    // Intervalo de 1s
+    timersTrabalho[key] = setInterval(() => atualizarElementoTimer(el, startTs), 1000);
+}
+
+function atualizarElementoTimer(el, startTs) {
+    const now = Date.now();
+    const elapsed = Math.max(0, Math.floor((now - startTs) / 1000));
+    const h = Math.floor(elapsed / 3600).toString().padStart(2, '0');
+    const m = Math.floor((elapsed % 3600) / 60).toString().padStart(2, '0');
+    const s = (elapsed % 60).toString().padStart(2, '0');
+    el.textContent = `${h}:${m}:${s}`;
+    el.style.display = 'inline-block';
+}
+
+function pararTimerTrabalho(ordemId, itemId, trabalhoId) {
+    const key = keyTrabalho(ordemId, itemId, trabalhoId);
+    if (timersTrabalho[key]) {
+        clearInterval(timersTrabalho[key]);
+        delete timersTrabalho[key];
+    }
+}
+
+function limparTimersTrabalhoDaOS(ordemId) {
+    const prefix = `${ordemId}:`;
+    Object.keys(timersTrabalho).forEach(k => {
+        if (k.startsWith(prefix)) {
+            clearInterval(timersTrabalho[k]);
+            delete timersTrabalho[k];
+        }
+    });
+}
+
+// Renderiza chips no status com tipo de trabalho + operador + timer
+function renderizarChipsStatus(ordemId, ativosLista) {
+    const card = document.querySelector(`.kanban-card[data-ordem-id="${ordemId}"]`);
+    if (!card) return;
+    const container = card.querySelector(`#status-${ordemId}`) || card.querySelector('.status-apontamento');
+    if (!container) return;
+    // Limpar timers anteriores dessa OS e conteúdo
+    limparTimersTrabalhoDaOS(ordemId);
+    container.innerHTML = '';
+    if (!Array.isArray(ativosLista) || ativosLista.length === 0) {
+        // Opcional: exibir aguardando
+        container.innerHTML = '<small class="text-muted">Aguardando apontamento</small>';
+        return;
+    }
+    const frags = [];
+    ativosLista.forEach(ap => {
+        const itemId = ap.item_id;
+        const trabId = ap.trabalho_id;
+        const trabNome = ap.trabalho_nome || `Trabalho #${trabId ?? '-'}`;
+        const inicio = ap.inicio_acao; // ISO string
+        const status = (ap.status || '').toLowerCase();
+        let chipClass = 'chip-producao';
+        if (status.includes('setup')) chipClass = 'chip-setup';
+        else if (status.includes('paus')) chipClass = 'chip-pausa';
+        const opCod = ap.operador_codigo ? `OP:${ap.operador_codigo}` : '';
+        const opNome = ap.operador_nome || '';
+        const opLine = (opCod || opNome) ? `<span class="chip-op small">${[opCod, opNome].filter(Boolean).join(' - ')}</span>` : '';
+        const motivoLine = chipClass === 'chip-pausa' && (ap.motivo_pausa || ap.motivo_parada)
+            ? `<span class="chip-motivo small">Motivo: ${ap.motivo_pausa || ap.motivo_parada}</span>`
+            : '';
+        frags.push(
+            `<span class="apontamento-chip ${chipClass}" data-item-id="${itemId}" data-trabalho-id="${trabId}">`
+          +   `<div class="chip-row">`
+          +     `<div class="chip-col">`
+          +       `<span class="chip-title small fw-semibold">${trabNome}</span>`
+          +        opLine
+          +        motivoLine
+          +     `</div>`
+          +     `<span class="apontamento-timer" id="timer-${ordemId}-${itemId}-${trabId}">00:00:00</span>`
+          +   `</div>`
+          + `</span>`
+        );
+        // Iniciar timer em seguida (após injetar DOM)
+        setTimeout(() => iniciarTimerTrabalho(ordemId, itemId, trabId, inicio), 0);
+    });
+    container.innerHTML = frags.join('');
+}
+
+// Renderiza a lista de quantidades por trabalho ativo no card
+function atualizarQuantidadesPorTrabalho(ordemId, ativosLista) {
+    const container = document.getElementById(`qtd-por-trabalho-${ordemId}`);
+    if (!container) return;
+
+    // Cache por OS para manter últimas quantidades por trabalho após primeiro apontamento
+    window.__cacheQtdTrabalho = window.__cacheQtdTrabalho || {}; // { [ordemId]: { enabled: true, items: { [key]: {trab,itemCod,qty} } } }
+    const store = window.__cacheQtdTrabalho;
+    if (!store[ordemId]) {
+        store[ordemId] = { enabled: false, items: {} };
+    }
+
+    // Debounce: ignorar chamadas "vazias" muito próximas (ex.: STOP imediato + tardio)
+    // para evitar re-renderizações concorrentes e duplicidade visual momentânea
+    window.__qptRenderLast = window.__qptRenderLast || {};
+    const isEmptyCall = !(Array.isArray(ativosLista) && ativosLista.length > 0);
+    if (isEmptyCall) {
+        const lastTs = window.__qptRenderLast[ordemId] || 0;
+        if (lastTs && (Date.now() - lastTs) < 400) {
+            try { console.debug('[QPT] debounce: ignorando render vazio recente', { ordemId }); } catch {}
+            return;
+        }
+    }
+
+    const current = store[ordemId];
+    try { console.debug('[QPT] atualizarQuantidadesPorTrabalho', { ordemId, recebidos: Array.isArray(ativosLista) ? ativosLista.length : 'n/a' }); } catch {}
+
+    // Persistência local para sobreviver a reloads
+    const LS_KEY = 'qpt_cache_v1';
+    let ls = {};
+    try {
+        ls = JSON.parse(localStorage.getItem(LS_KEY) || '{}');
+    } catch (e) {
+        ls = {};
+    }
+
+    // Se recebemos lista de ativos, atualizar o cache e habilitar a persistência visual
+    if (Array.isArray(ativosLista) && ativosLista.length > 0) {
+        current.enabled = true;
+        ativosLista.forEach(ap => {
+            const trabId = ap.trabalho_id ?? '-';
+            const itemCod = ap.item_codigo || '';
+            const key = `${trabId}:${itemCod}`;
+            const trab = ap.trabalho_nome || `Trabalho #${trabId}`;
+            const qtd = Number.isFinite(Number(ap.ultima_quantidade)) ? Number(ap.ultima_quantidade) : '-';
+            current.items[key] = { trab, itemCod, qty: qtd };
+        });
+        // Salvar no localStorage
+        try {
+            ls[ordemId] = current.items;
+            localStorage.setItem(LS_KEY, JSON.stringify(ls));
+        } catch (e) {
+            // Ignorar falhas de armazenamento
+        }
+    }
+
+    // Fallback: se não houver itens ainda, tentar carregar do localStorage
+    if ((!current.items || Object.keys(current.items).length === 0) && ls[ordemId]) {
+        current.items = ls[ordemId] || {};
+        if (Object.keys(current.items).length > 0) current.enabled = true;
+    }
+
+    // Renderização: se houver itens no cache, mostrar sempre (mesmo se enabled não estiver setado)
+    let entries = Object.values(current.items || {});
+    // Dedupe por (trab,itemCod) normalizados para evitar duplicidade visual
+    if (entries.length > 0) {
+        const dedup = new Map();
+        entries.forEach(e => {
+            // Normaliza trabalho removendo qualquer sufixo final entre parênteses (ex.: "Trabalho (ACB-00002)")
+            const trabKey = ((e.trab || '')
+                .toString()
+                .replace(/\s*\([^)]*\)\s*$/, '')
+                .trim()
+                .toLowerCase());
+            // Normaliza itemCod removendo parênteses e qualquer sufixo após traços variados (-, –, —)
+            const rawItem = (e.itemCod || '').toString().replace(/[()]/g, '').trim();
+            const itemKey = rawItem.replace(/\s*[-–—]\s*.*$/, '').trim().toLowerCase();
+            const k = `${trabKey}|${itemKey}`;
+            // Se houver conflito, preferir quantidade numérica mais recente
+            if (!dedup.has(k)) {
+                dedup.set(k, e);
+            } else {
+                const prev = dedup.get(k);
+                const n1 = Number(e.qty);
+                const n0 = Number(prev.qty);
+                const eIsNum = Number.isFinite(n1);
+                const pIsNum = Number.isFinite(n0);
+                if (eIsNum && !pIsNum) dedup.set(k, e);
+                else if (eIsNum && pIsNum && n1 !== n0) dedup.set(k, e);
+                else dedup.set(k, e); // manter o último
+            }
+        });
+        entries = Array.from(dedup.values());
+        // Regra extra: se houver (trab, item=empty) e também (mesmo trab, item!=empty), descartar o vazio
+        try {
+            const hasNonEmptyByTrab = new Set();
+            entries.forEach(e => {
+                const trabKey = ((e.trab || '').toString().replace(/\s*\([^)]*\)\s*$/, '').trim().toLowerCase());
+                const rawItem = (e.itemCod || '').toString().replace(/[()]/g, '').trim();
+                const itemKey = rawItem.replace(/\s*[-–—]\s*.*$/, '').trim().toLowerCase();
+                if (itemKey) hasNonEmptyByTrab.add(trabKey);
+            });
+            const before = entries.length;
+            entries = entries.filter(e => {
+                const trabKey = ((e.trab || '').toString().replace(/\s*\([^)]*\)\s*$/, '').trim().toLowerCase());
+                const rawItem = (e.itemCod || '').toString().replace(/[()]/g, '').trim();
+                const itemKey = rawItem.replace(/\s*[-–—]\s*.*$/, '').trim().toLowerCase();
+                if (!itemKey && hasNonEmptyByTrab.has(trabKey)) return false;
+                return true;
+            });
+            const after = entries.length;
+            if (after < before) { try { console.debug('[QPT] filtros aplicados: removidos itens sem código por trabalho'); } catch {} }
+        } catch {}
+        if (!current.enabled) current.enabled = true;
+        // Ordena por nome do trabalho e depois por item para consistência visual
+        entries.sort((a, b) => {
+            const t = (a.trab || '').localeCompare(b.trab || '');
+            if (t !== 0) return t;
+            const ia = ((a.itemCod || '')).localeCompare((b.itemCod || ''));
+            return ia;
+        });
+
+        // Assinatura de conteúdo para evitar re-render sem mudança
+        const signature = entries.map(e => {
+            const trabSig = ((e.trab || '')
+                .toString()
+                .replace(/\s*\([^)]*\)\s*$/, '')
+                .trim());
+            const rawItem = (e.itemCod || '').toString().replace(/[()]/g, '').trim();
+            const itemSig = rawItem.replace(/\s*[-–—]\s*.*$/, '').trim();
+            return `${trabSig}|${itemSig}=${e.qty ?? '-'}`;
+        }).join(';');
+        if (container.dataset && container.dataset.qptSig === signature) {
+            try { console.debug('[QPT] sem mudanças, evitando re-render', { ordemId }); } catch {}
+            // Atualiza timestamp de última tentativa para manter debounce funcional
+            try { window.__qptRenderLast[ordemId] = Date.now(); } catch {}
+            return;
+        }
+
+        // Persistir estrutura deduplicada no cache in-memory e no localStorage (para evitar duplicação futura)
+        try {
+            const canonical = {};
+            entries.forEach(e => {
+                const trabKey = (e.trab || '').toString().replace(/\s*\([^)]*\)\s*$/, '').trim().toLowerCase();
+                const rawItem = (e.itemCod || '').toString().replace(/[()]/g, '').trim();
+                const itemKey = rawItem.replace(/\s*[-–—]\s*.*$/, '').trim().toLowerCase();
+                const key = `${trabKey}|${itemKey}`;
+                canonical[key] = { trab: e.trab, itemCod: rawItem.replace(/\s*[-–—]\s*.*$/, '').trim(), qty: e.qty };
+            });
+            current.items = canonical;
+            const LS_KEY = 'qpt_cache_v1';
+            let ls2 = {};
+            try { ls2 = JSON.parse(localStorage.getItem(LS_KEY) || '{}'); } catch {}
+            ls2[String(ordemId)] = current.items;
+            try { localStorage.setItem(LS_KEY, JSON.stringify(ls2)); } catch {}
+        } catch (ePersist) { try { console.warn('[QPT] falha ao persistir dedupe', ePersist); } catch {} }
+
+        const linhas = [];
+        linhas.push('<div class="small text-muted">Quantidades por trabalho</div>');
+        linhas.push('<ul class="qpt-list list-unstyled mb-1">');
+        entries.forEach(e => {
+            const itemText = '';
+            const qty = (e.qty ?? '-')
+            const trabSafe = (e.trab || '').toString();
+            const itemSafe = (e.itemCod || '').toString();
+            linhas.push(
+                `<li class=\"qpt-item\" data-trab-nome=\"${trabSafe.replace(/\"/g, '&quot;')}\" data-item-cod=\"${itemSafe.replace(/\"/g, '&quot;')}\">`
+              +   `<span class=\"qpt-label\">${trabSafe}${itemText}</span>`
+              +   `<span class=\"badge rounded-pill bg-secondary qpt-qty\" title=\"Último apontamento\">${qty}</span>`
+              + `</li>`
+            );
+        });
+        linhas.push('</ul>');
+        const html = linhas.join('');
+        container.innerHTML = html;
+        if (container.dataset) container.dataset.qptSig = signature;
+        // Registrar timestamp da última renderização para suportar debounce
+        try { window.__qptRenderLast[ordemId] = Date.now(); } catch {}
+        try { console.debug('[QPT] renderizado via cache', { ordemId, itens: entries.length }); } catch {}
+        return;
+    }
+
+    // Sem dados atuais: não limpar o container para manter o último valor visível
+    // Caso seja o primeiro load e o container esteja vazio, opcionalmente poderíamos
+    // exibir um placeholder. Por ora, não alterar o conteúdo existente.
+}
+
+// Disponibilizar no escopo global
+try { window.atualizarQuantidadesPorTrabalho = atualizarQuantidadesPorTrabalho; } catch {}
+
+// Semear/atualizar cache de QPT a partir de um apontamento individual (ex: após registrar quantidade no modal)
+try {
+    window.atualizarQPTCacheEntrada = function(ordemId, trabalhoId, trabalhoNome, itemCod, quantidade) {
+        if (ordemId == null) return;
+        const osId = parseInt(ordemId, 10);
+        if (Number.isNaN(osId)) return;
+        const trabId = (trabalhoId ?? '').toString();
+        // Normaliza nome do trabalho: remove sufixo final entre parênteses (ficará o item no span ao lado)
+        const trabNome = (trabalhoNome && trabalhoNome.trim())
+            ? trabalhoNome.replace(/\s+/g, ' ').replace(/\s*\([^)]*\)\s*$/, '').trim()
+            : `Trabalho #${trabId}`;
+        // Normaliza item para somente o código base, sem sufixos ou parênteses (traços: -, –, —)
+        const item = ((itemCod ?? '')
+            .toString()
+            .replace(/[()]/g, '')
+            .replace(/\s*[-–—]\s*.*$/, '')
+            .trim());
+        const key = `${trabId}:${item}`;
+        // Determinar a quantidade final: preferir numérica informada; caso vazio, reaproveitar última do cache/LS
+        let qty;
+        if (Number.isFinite(Number(quantidade))) {
+            qty = Number(quantidade);
+        } else {
+            let prevQty = undefined;
+            // Buscar no cache em memória
+            try {
+                if (window.__cacheQtdTrabalho && window.__cacheQtdTrabalho[osId] && window.__cacheQtdTrabalho[osId].items) {
+                    const prev = window.__cacheQtdTrabalho[osId].items[key];
+                    if (prev && prev.qty !== undefined) prevQty = prev.qty;
+                }
+            } catch {}
+            // Buscar no localStorage
+            if (prevQty === undefined) {
+                try {
+                    const LS_KEY = 'qpt_cache_v1';
+                    const lsObj = JSON.parse(localStorage.getItem(LS_KEY) || '{}');
+                    const osEntry = lsObj[String(osId)];
+                    if (osEntry && osEntry[key] && osEntry[key].qty !== undefined) {
+                        prevQty = osEntry[key].qty;
+                    }
+                } catch {}
+            }
+            if (Number.isFinite(Number(prevQty))) qty = Number(prevQty);
+            else qty = '-';
+        }
+
+        window.__cacheQtdTrabalho = window.__cacheQtdTrabalho || {};
+        const store = window.__cacheQtdTrabalho;
+        if (!store[osId]) store[osId] = { enabled: false, items: {} };
+        const current = store[osId];
+        current.enabled = true;
+        current.items[key] = { trab: trabNome, itemCod: item, qty };
+        // Purga possível entrada anterior sem item para o mesmo trabalho
+        try {
+            Object.keys(current.items).forEach(k => {
+                if (k === `${trabId}:` || k === `${trabId}: `) delete current.items[k];
+            });
+        } catch {}
+
+        // Persistir em localStorage
+        const LS_KEY = 'qpt_cache_v1';
+        let ls = {};
+        try { ls = JSON.parse(localStorage.getItem(LS_KEY) || '{}'); } catch {}
+        ls[String(osId)] = current.items;
+        try { localStorage.setItem(LS_KEY, JSON.stringify(ls)); } catch {}
+
+        // Re-renderizar imediatamente usando fallback de cache
+        try {
+            // Limpar assinatura anterior para forçar re-render, se existir
+            try {
+                const container = document.getElementById(`qtd-por-trabalho-${osId}`);
+                if (container && container.dataset) delete container.dataset.qptSig;
+            } catch {}
+            atualizarQuantidadesPorTrabalho(osId, []);
+            // Marcar toque recente para evitar renders redundantes em seguida
+            try { markQptTouch(osId); } catch {}
+        } catch {}
+        try { console.debug('[QPT] cache semeado via entrada', { osId, trabId, item, qty }); } catch {}
+    }
+} catch {}
 
 // Função para atualizar completamente o status visual de um card
 function atualizarStatusCartaoCompleto(ordemId, statusAtual) {
@@ -384,11 +897,35 @@ function pararTimerApontamento(ordemId) {
 // Objeto para armazenar os timers ativos
 const timers = {};
 
-// Inicializar ao carregar a página
-document.addEventListener('DOMContentLoaded', function() {
+// Sistema de inicialização coordenada
+let _sistemaInicializado = false;
+
+function inicializarSistemaApontamentos() {
+    if (_sistemaInicializado) {
+        console.debug('Sistema de apontamentos já foi inicializado, ignorando');
+        return;
+    }
+    _sistemaInicializado = true;
+    
     console.log('Inicializando sistema de persistência de apontamentos...');
     carregarEstadoApontamentos();
+}
+
+// Inicializar ao carregar a página
+document.addEventListener('DOMContentLoaded', function() {
+    // Pequeno delay para evitar conflitos com outros scripts
+    setTimeout(inicializarSistemaApontamentos, 100);
 });
+
+// Expor função para inicialização manual
+window.inicializarSistemaApontamentos = inicializarSistemaApontamentos;
+
+// Expor função para recarregar estado a partir de outros scripts
+window.recarregarEstadoApontamentos = carregarEstadoApontamentos;
+
+// Expor utilitários de coordenação
+try { window.markQptTouch = markQptTouch; } catch {}
+try { window.shouldSkipQpt = shouldSkipQpt; } catch {}
 
 // Atualiza a "Última qtd" visível no card da OS
 window.atualizarUltimaQuantidadeNoCard = function(ordemId, ultimaQuantidade) {
