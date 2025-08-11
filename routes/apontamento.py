@@ -1,11 +1,32 @@
 from flask import Blueprint, render_template, request, jsonify, flash, redirect, url_for, session
 from models import db, Usuario, ApontamentoProducao, StatusProducaoOS, OrdemServico, ItemTrabalho, PedidoOrdemServico, Pedido, Item, Trabalho
-from datetime import datetime
+from datetime import datetime, timezone, timedelta
 from sqlalchemy.orm import joinedload
 import random
 import string
 
 apontamento_bp = Blueprint('apontamento', __name__)
+# Timezone helpers
+try:
+    from zoneinfo import ZoneInfo  # Python 3.9+
+    LOCAL_TZ = ZoneInfo("America/Sao_Paulo")
+except Exception:
+    # Fallback to fixed -03:00 (Brazil currently no DST)
+    LOCAL_TZ = timezone(timedelta(hours=-3))
+UTC = timezone.utc
+
+def to_brt_iso(dt):
+    """Convert a datetime to America/Sao_Paulo ISO string with offset.
+    Assumes naive datetimes are in UTC (as stored), then converts to local tz.
+    """
+    if not dt:
+        return None
+    if dt.tzinfo is None:
+        dt = dt.replace(tzinfo=UTC)
+    try:
+        return dt.astimezone(LOCAL_TZ).isoformat()
+    except Exception:
+        return dt.isoformat()
 
 @apontamento_bp.route('/operadores')
 def listar_operadores():
@@ -399,7 +420,7 @@ def status_ativos():
                     print(f"[ERRO] Falha ao calcular ultima_quantidade: {e_q}")
                 
                 # Adicionar timestamp de início da ação
-                status_info['inicio_acao'] = status.inicio_acao.isoformat() if getattr(status, 'inicio_acao', None) else None
+                status_info['inicio_acao'] = to_brt_iso(getattr(status, 'inicio_acao', None))
 
                 # Mapear apontamentos ativos por (item, trabalho) para indicar múltiplos simultâneos
                 try:
@@ -466,7 +487,7 @@ def status_ativos():
                             'trabalho_id': ap.trabalho_id,
                             'trabalho_nome': trabalho_nome,
                             'status': 'Setup em andamento' if ap.tipo_acao == 'inicio_setup' else ('Pausado' if ap.tipo_acao == 'pausa' else 'Produção em andamento'),
-                            'inicio_acao': ap.data_hora.isoformat() if ap.data_hora else None,
+                            'inicio_acao': to_brt_iso(ap.data_hora),
                             'operador_id': operador_id,
                             'operador_nome': operador_nome,
                             'operador_codigo': operador_codigo,
@@ -726,7 +747,7 @@ def registrar_apontamento():
             db.session.add(status_os)
         
         # Atualizar status baseado na ação
-        agora = datetime.now()
+        agora = datetime.utcnow()
         
         if tipo_acao == 'inicio_setup':
             status_os.status_atual = 'Setup em andamento'
@@ -958,8 +979,8 @@ def get_logs_ordem_servico(ordem_id):
             log_info = {
                 'id': apontamento.id,
                 'tipo_acao': apontamento.tipo_acao,
-                'data_hora': apontamento.data_hora.isoformat() if apontamento.data_hora else None,
-                'data_fim': apontamento.data_fim.isoformat() if hasattr(apontamento, 'data_fim') and apontamento.data_fim else None,
+                'data_hora': to_brt_iso(apontamento.data_hora),
+                'data_fim': to_brt_iso(getattr(apontamento, 'data_fim', None)) if hasattr(apontamento, 'data_fim') else None,
                 'quantidade': apontamento.quantidade,
                 'motivo_pausa': apontamento.motivo_parada if hasattr(apontamento, 'motivo_parada') else None,
                 'observacoes': apontamento.observacoes if hasattr(apontamento, 'observacoes') else None,
