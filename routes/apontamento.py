@@ -1,5 +1,5 @@
 from flask import Blueprint, render_template, request, jsonify, flash, redirect, url_for, session
-from models import db, Usuario, ApontamentoProducao, StatusProducaoOS, OrdemServico, ItemTrabalho, PedidoOrdemServico, Pedido, Item, Trabalho
+from models import db, Usuario, ApontamentoProducao, StatusProducaoOS, OrdemServico, ItemTrabalho, PedidoOrdemServico, Pedido, Item, Trabalho, KanbanLista
 from datetime import datetime, timezone, timedelta
 from sqlalchemy.orm import joinedload
 import random
@@ -422,12 +422,180 @@ def status_ativos():
                 # Adicionar timestamp de início da ação
                 status_info['inicio_acao'] = to_brt_iso(getattr(status, 'inicio_acao', None))
 
+                # Analytics por OS/item/trabalho para o Dashboard
+                try:
+                    analytics = {
+                        'tempo_setup_estimado': None,
+                        'tempo_setup_utilizado': None,
+                        'setup_status': None,
+                        'tempo_peca_estimado': None,
+                        'tempo_producao_utilizado': None,
+                        'tempo_pausas_utilizado': None,
+                        'media_seg_por_peca': None,
+                        'producao_status': None
+                    }
+
+                    cronometro = {
+                        'tipo': None,
+                        'inicio': None
+                    }
+
+                    tolerancia = 0.15  # 15%
+                    agora_utc = datetime.utcnow()
+
+                    if getattr(status, 'item_atual_id', None) and getattr(status, 'trabalho_atual_id', None):
+                        # Estimativas do ItemTrabalho
+                        try:
+                            it_rel = ItemTrabalho.query.filter_by(
+                                item_id=status.item_atual_id,
+                                trabalho_id=status.trabalho_atual_id
+                            ).first()
+                            if it_rel:
+                                analytics['tempo_setup_estimado'] = int(it_rel.tempo_setup) if it_rel.tempo_setup else None
+                                analytics['tempo_peca_estimado'] = int(it_rel.tempo_peca) if it_rel.tempo_peca else None
+                        except Exception:
+                            pass
+
+                        # Setup: calcular tempo utilizado (último ciclo)
+                        try:
+                            inicio_setup = ApontamentoProducao.query.filter(
+                                ApontamentoProducao.ordem_servico_id == status.ordem_servico_id,
+                                ApontamentoProducao.item_id == status.item_atual_id,
+                                ApontamentoProducao.trabalho_id == status.trabalho_atual_id,
+                                ApontamentoProducao.tipo_acao == 'inicio_setup'
+                            ).order_by(ApontamentoProducao.data_hora.desc()).first()
+                            tempo_setup_util = None
+                            if inicio_setup:
+                                fim_setup = ApontamentoProducao.query.filter(
+                                    ApontamentoProducao.ordem_servico_id == status.ordem_servico_id,
+                                    ApontamentoProducao.item_id == status.item_atual_id,
+                                    ApontamentoProducao.trabalho_id == status.trabalho_atual_id,
+                                    ApontamentoProducao.tipo_acao == 'fim_setup',
+                                    ApontamentoProducao.data_hora > inicio_setup.data_hora
+                                ).order_by(ApontamentoProducao.data_hora.asc()).first()
+                                if fim_setup:
+                                    tempo_setup_util = int((fim_setup.data_hora - inicio_setup.data_hora).total_seconds())
+                                else:
+                                    tempo_setup_util = int((agora_utc - inicio_setup.data_hora).total_seconds())
+                                analytics['tempo_setup_utilizado'] = max(0, tempo_setup_util)
+                                # Status de setup
+                                if analytics['tempo_setup_estimado']:
+                                    est = analytics['tempo_setup_estimado']
+                                    usado = analytics['tempo_setup_utilizado']
+                                    if usado <= est * (1 - tolerancia):
+                                        analytics['setup_status'] = 'Excelente'
+                                    elif usado <= est * (1 + tolerancia):
+                                        analytics['setup_status'] = 'Dentro do esperado'
+                                    else:
+                                        analytics['setup_status'] = 'Abaixo do esperado'
+                        except Exception as e_set:
+                            print(f"[ERRO] Analytics setup: {e_set}")
+
+                        # Produção: calcular tempo de produção + pausas desde o último início
+                        try:
+                            inicio_prod = ApontamentoProducao.query.filter(
+                                ApontamentoProducao.ordem_servico_id == status.ordem_servico_id,
+                                ApontamentoProducao.item_id == status.item_atual_id,
+                                ApontamentoProducao.trabalho_id == status.trabalho_atual_id,
+                                ApontamentoProducao.tipo_acao == 'inicio_producao'
+                            ).order_by(ApontamentoProducao.data_hora.desc()).first()
+
+                            tempo_producao_util = 0
+                            tempo_pausa_util = 0
+
+                            if inicio_prod:
+                                # Verificar se há pausa aberta após esse início
+                                pausa_aberta = ApontamentoProducao.query.filter(
+                                    ApontamentoProducao.ordem_servico_id == status.ordem_servico_id,
+                                    ApontamentoProducao.item_id == status.item_atual_id,
+                                    ApontamentoProducao.trabalho_id == status.trabalho_atual_id,
+                                    ApontamentoProducao.tipo_acao.in_(['pausa', 'stop']),
+                                    ApontamentoProducao.data_hora >= inicio_prod.data_hora,
+                                    ApontamentoProducao.data_fim == None
+                                ).order_by(ApontamentoProducao.data_hora.desc()).first()
+
+                                if pausa_aberta:
+                                    # produção até início da pausa + tempo da pausa até agora
+                                    tempo_producao_util = int((pausa_aberta.data_hora - inicio_prod.data_hora).total_seconds())
+                                    tempo_pausa_util = int((agora_utc - pausa_aberta.data_hora).total_seconds())
+                                    cronometro['tipo'] = 'pausa'
+                                    cronometro['inicio'] = to_brt_iso(pausa_aberta.data_hora)
+                                else:
+                                    # verificar se produção ainda aberta
+                                    fim_prod = ApontamentoProducao.query.filter(
+                                        ApontamentoProducao.ordem_servico_id == status.ordem_servico_id,
+                                        ApontamentoProducao.item_id == status.item_atual_id,
+                                        ApontamentoProducao.trabalho_id == status.trabalho_atual_id,
+                                        ApontamentoProducao.tipo_acao == 'inicio_producao',
+                                        ApontamentoProducao.data_fim == None
+                                    ).order_by(ApontamentoProducao.data_hora.desc()).first()
+                                    if fim_prod:
+                                        tempo_producao_util = int((agora_utc - inicio_prod.data_hora).total_seconds())
+                                        cronometro['tipo'] = 'producao'
+                                        cronometro['inicio'] = to_brt_iso(inicio_prod.data_hora)
+                                    else:
+                                        # produção encerrada; usar último tempo_decorrido se disponível
+                                        tempo_producao_util = int(getattr(inicio_prod, 'tempo_decorrido', 0) or 0)
+
+                            analytics['tempo_producao_utilizado'] = max(0, tempo_producao_util)
+                            analytics['tempo_pausas_utilizado'] = max(0, tempo_pausa_util)
+
+                            # Cronômetro de setup se em setup
+                            if status.status_atual == 'Setup em andamento' and not cronometro['tipo']:
+                                if 'inicio_acao' in status_info and status_info['inicio_acao']:
+                                    cronometro['tipo'] = 'setup'
+                                    # status_info['inicio_acao'] já está em BRT ISO
+                                    cronometro['inicio'] = status_info['inicio_acao']
+
+                            # Média por peça
+                            qtd = status_info.get('ultima_quantidade') or 0
+                            total_seg = (analytics['tempo_producao_utilizado'] or 0) + (analytics['tempo_pausas_utilizado'] or 0)
+                            if qtd and total_seg:
+                                media = int(total_seg / max(qtd, 1))
+                                analytics['media_seg_por_peca'] = media
+                                if analytics['tempo_peca_estimado']:
+                                    estp = analytics['tempo_peca_estimado']
+                                    if media <= estp * (1 - tolerancia):
+                                        analytics['producao_status'] = 'Excelente'
+                                    elif media <= estp * (1 + tolerancia):
+                                        analytics['producao_status'] = 'Dentro do esperado'
+                                    else:
+                                        analytics['producao_status'] = 'Abaixo do esperado'
+                        except Exception as e_prod:
+                            print(f"[ERRO] Analytics produção: {e_prod}")
+
+                    status_info['analytics'] = analytics
+                    status_info['cronometro'] = cronometro
+                except Exception as e_an:
+                    print(f"[ERRO] Falha ao montar analytics do status {getattr(status,'id',None)}: {e_an}")
+
+                # Nome da lista Kanban atual (ex.: MAZAK, GLM, SERRA)
+                try:
+                    ap_last_list = ApontamentoProducao.query.filter(
+                        ApontamentoProducao.ordem_servico_id == status.ordem_servico_id,
+                        ApontamentoProducao.lista_kanban != None
+                    ).order_by(ApontamentoProducao.data_hora.desc()).first()
+                    status_info['lista_kanban'] = getattr(ap_last_list, 'lista_kanban', None)
+                except Exception:
+                    pass
+
+                # Tipo de serviço e cor da lista Kanban (para agrupamento no dashboard)
+                try:
+                    nome_lista = status_info.get('lista_kanban') if isinstance(status_info, dict) else None
+                    if nome_lista:
+                        kl = KanbanLista.query.filter_by(nome=nome_lista).first()
+                        if kl:
+                            status_info['lista_tipo'] = getattr(kl, 'tipo_servico', None)
+                            status_info['lista_cor'] = getattr(kl, 'cor', None)
+                except Exception:
+                    pass
+
                 # Mapear apontamentos ativos por (item, trabalho) para indicar múltiplos simultâneos
                 try:
                     ativos = ApontamentoProducao.query.filter(
                         ApontamentoProducao.ordem_servico_id == status.ordem_servico_id,
                         ApontamentoProducao.data_fim == None,
-                        ApontamentoProducao.tipo_acao.in_(['inicio_setup', 'inicio_producao', 'pausa'])
+                        ApontamentoProducao.tipo_acao.in_(['inicio_setup', 'inicio_producao', 'pausa', 'stop'])
                     ).order_by(ApontamentoProducao.data_hora.desc()).all()
 
                     ativos_info = []
@@ -486,15 +654,132 @@ def status_ativos():
                             'item_nome': item_nome,
                             'trabalho_id': ap.trabalho_id,
                             'trabalho_nome': trabalho_nome,
-                            'status': 'Setup em andamento' if ap.tipo_acao == 'inicio_setup' else ('Pausado' if ap.tipo_acao == 'pausa' else 'Produção em andamento'),
+                            'status': 'Setup em andamento' if ap.tipo_acao == 'inicio_setup' else ('Pausado' if ap.tipo_acao in ['pausa', 'stop'] else 'Produção em andamento'),
                             'inicio_acao': to_brt_iso(ap.data_hora),
                             'operador_id': operador_id,
                             'operador_nome': operador_nome,
                             'operador_codigo': operador_codigo,
                             'ultima_quantidade': ultima_q_combo,
                             # Motivo da pausa (somente quando tipo_acao == 'pausa')
-                            'motivo_pausa': getattr(ap, 'motivo_parada', None) if ap.tipo_acao == 'pausa' else None
+                            'motivo_pausa': getattr(ap, 'motivo_parada', None) if ap.tipo_acao in ['pausa', 'stop'] else None
                         })
+
+                        # Analytics por trabalho (aproximação baseada no mesmo critério do cartão principal)
+                        try:
+                            analytics_t = {}
+
+                            # Estimativas (reutilizar do nível do status quando disponível)
+                            try:
+                                base_an = status_info.get('analytics', {}) if isinstance(status_info, dict) else {}
+                                analytics_t['tempo_setup_estimado'] = base_an.get('tempo_setup_estimado')
+                                analytics_t['tempo_peca_estimado'] = base_an.get('tempo_peca_estimado')
+                            except Exception:
+                                pass
+
+                            # Setup utilizado para este item/trabalho
+                            try:
+                                inicio_setup_t = ApontamentoProducao.query.filter(
+                                    ApontamentoProducao.ordem_servico_id == status.ordem_servico_id,
+                                    ApontamentoProducao.item_id == ap.item_id,
+                                    ApontamentoProducao.trabalho_id == ap.trabalho_id,
+                                    ApontamentoProducao.tipo_acao == 'inicio_setup'
+                                ).order_by(ApontamentoProducao.data_hora.desc()).first()
+                                if inicio_setup_t:
+                                    fim_setup_t = ApontamentoProducao.query.filter(
+                                        ApontamentoProducao.ordem_servico_id == status.ordem_servico_id,
+                                        ApontamentoProducao.item_id == ap.item_id,
+                                        ApontamentoProducao.trabalho_id == ap.trabalho_id,
+                                        ApontamentoProducao.tipo_acao == 'fim_setup',
+                                        ApontamentoProducao.data_hora > inicio_setup_t.data_hora
+                                    ).order_by(ApontamentoProducao.data_hora.asc()).first()
+                                    if fim_setup_t:
+                                        analytics_t['tempo_setup_utilizado'] = int((fim_setup_t.data_hora - inicio_setup_t.data_hora).total_seconds())
+                                    else:
+                                        analytics_t['tempo_setup_utilizado'] = int((agora_utc - inicio_setup_t.data_hora).total_seconds())
+                            except Exception:
+                                pass
+
+                            # Produção utilizada e pausas para este item/trabalho
+                            tempo_producao_util_t = 0
+                            tempo_pausa_util_t = 0
+                            try:
+                                inicio_prod_t = ApontamentoProducao.query.filter(
+                                    ApontamentoProducao.ordem_servico_id == status.ordem_servico_id,
+                                    ApontamentoProducao.item_id == ap.item_id,
+                                    ApontamentoProducao.trabalho_id == ap.trabalho_id,
+                                    ApontamentoProducao.tipo_acao == 'inicio_producao'
+                                ).order_by(ApontamentoProducao.data_hora.desc()).first()
+
+                                if inicio_prod_t:
+                                    pausa_aberta_t = ApontamentoProducao.query.filter(
+                                        ApontamentoProducao.ordem_servico_id == status.ordem_servico_id,
+                                        ApontamentoProducao.item_id == ap.item_id,
+                                        ApontamentoProducao.trabalho_id == ap.trabalho_id,
+                                        ApontamentoProducao.tipo_acao.in_(['pausa', 'stop']),
+                                        ApontamentoProducao.data_hora >= inicio_prod_t.data_hora,
+                                        ApontamentoProducao.data_fim == None
+                                    ).order_by(ApontamentoProducao.data_hora.desc()).first()
+
+                                    if pausa_aberta_t:
+                                        tempo_producao_util_t = int((pausa_aberta_t.data_hora - inicio_prod_t.data_hora).total_seconds())
+                                        tempo_pausa_util_t = int((agora_utc - pausa_aberta_t.data_hora).total_seconds())
+                                    else:
+                                        fim_prod_t = ApontamentoProducao.query.filter(
+                                            ApontamentoProducao.ordem_servico_id == status.ordem_servico_id,
+                                            ApontamentoProducao.item_id == ap.item_id,
+                                            ApontamentoProducao.trabalho_id == ap.trabalho_id,
+                                            ApontamentoProducao.tipo_acao == 'inicio_producao',
+                                            ApontamentoProducao.data_fim == None
+                                        ).order_by(ApontamentoProducao.data_hora.desc()).first()
+                                        if fim_prod_t:
+                                            tempo_producao_util_t = int((agora_utc - inicio_prod_t.data_hora).total_seconds())
+                                        else:
+                                            tempo_producao_util_t = int(getattr(inicio_prod_t, 'tempo_decorrido', 0) or 0)
+                            except Exception:
+                                pass
+
+                            analytics_t['tempo_producao_utilizado'] = max(0, tempo_producao_util_t)
+                            analytics_t['tempo_pausas_utilizado'] = max(0, tempo_pausa_util_t)
+
+                            # Média por peça e status de performance
+                            try:
+                                qtd_t = ultima_q_combo or 0
+                                total_seg_t = (analytics_t.get('tempo_producao_utilizado') or 0) + (analytics_t.get('tempo_pausas_utilizado') or 0)
+                                if qtd_t and total_seg_t:
+                                    media_t = int(total_seg_t / max(qtd_t, 1))
+                                    analytics_t['media_seg_por_peca'] = media_t
+                                    if analytics_t.get('tempo_peca_estimado'):
+                                        estp_t = analytics_t['tempo_peca_estimado']
+                                        if media_t <= estp_t * (1 - tolerancia):
+                                            analytics_t['producao_status'] = 'Excelente'
+                                        elif media_t <= estp_t * (1 + tolerancia):
+                                            analytics_t['producao_status'] = 'Dentro do esperado'
+                                        else:
+                                            analytics_t['producao_status'] = 'Abaixo do esperado'
+                            except Exception:
+                                pass
+
+                            # Status de setup baseado na estimativa
+                            try:
+                                if analytics_t.get('tempo_setup_estimado') is not None and analytics_t.get('tempo_setup_utilizado') is not None:
+                                    est_t = analytics_t['tempo_setup_estimado']
+                                    usado_t = analytics_t['tempo_setup_utilizado']
+                                    if usado_t <= est_t * (1 - tolerancia):
+                                        analytics_t['setup_status'] = 'Excelente'
+                                    elif usado_t <= est_t * (1 + tolerancia):
+                                        analytics_t['setup_status'] = 'Dentro do esperado'
+                                    else:
+                                        analytics_t['setup_status'] = 'Abaixo do esperado'
+                            except Exception:
+                                pass
+
+                            # Anexar
+                            try:
+                                ativos_info[-1]['analytics'] = analytics_t
+                            except Exception:
+                                pass
+                        except Exception as e_an_t:
+                            print(f"[ERRO] Analytics por trabalho (item={ap.item_id}, trab={ap.trabalho_id}): {e_an_t}")
 
                     status_info['ativos_por_trabalho'] = ativos_info
                     status_info['qtd_ativos'] = len(ativos_info)
