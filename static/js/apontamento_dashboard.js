@@ -50,7 +50,7 @@
     return Math.floor((Date.now() - start.getTime()) / 1000);
   }
 
-  // Build the existing detailed card HTML for a single status item
+  // Build the detailed card HTML for a single status item (simplified view)
   function buildDetailedCard(st) {
     const statusToClass = (st) => {
       const s = st.status_atual;
@@ -62,71 +62,80 @@
     };
 
     const os = st.os_numero || `OS-${st.ordem_servico_id}`;
-    const an = st.analytics || {};
-    const tempoSetupEst = an.tempo_setup_estimado != null ? fmtSecs(an.tempo_setup_estimado) : '-';
-    const tempoSetupUtil = an.tempo_setup_utilizado != null ? fmtSecs(an.tempo_setup_utilizado) : '-';
-    const tempoPecaEst = an.tempo_peca_estimado != null ? `${an.tempo_peca_estimado}s` : '-';
-    const mediaSegPeca = an.media_seg_por_peca != null ? `${an.media_seg_por_peca}s` : '-';
-    const tempoProdUtil = an.tempo_producao_utilizado != null ? fmtSecs(an.tempo_producao_utilizado) : '-';
-    const tempoPausas = an.tempo_pausas_utilizado != null ? fmtSecs(an.tempo_pausas_utilizado) : '-';
-
     const ativos = Array.isArray(st.ativos_por_trabalho) ? st.ativos_por_trabalho : [];
-    const ativosHTML = ativos.map(a => {
-      const tipo = (a.status === 'Setup em andamento') ? 'setup' : (a.status === 'Pausado' ? 'pausa' : 'producao');
-      const startISO = a.inicio_acao || '';
-      const start = startISO ? parseStart(startISO) : null;
-      const tNow = start ? fmtSecs(secondsSince(start)) : '--:--:--';
+    // Resumo de contagens por status (fallback se backend não enviar)
+    const resumo = st.resumo_status || (() => {
+      const c = { setup: 0, pausado: 0, producao: 0 };
+      ativos.forEach(a => {
+        const s = (a.status || '').toLowerCase();
+        if (s.includes('setup')) c.setup++;
+        else if (s.includes('pausado')) c.pausado++;
+        else if (s.includes('produção') || s.includes('producao')) c.producao++;
+      });
+      return c;
+    })();
 
-      const anT = a.analytics || {};
-      const tempoSetupEstT = anT.tempo_setup_estimado != null ? fmtSecs(anT.tempo_setup_estimado) : '-';
-      const tempoSetupUsoT = anT.tempo_setup_utilizado != null ? fmtSecs(anT.tempo_setup_utilizado) : '-';
-      const tempoPecaEstT = anT.tempo_peca_estimado != null ? `${anT.tempo_peca_estimado}s` : '-';
-      const mediaSegPecaT = anT.media_seg_por_peca != null ? `${anT.media_seg_por_peca}s` : '-';
-      const tempoProdUsoT = anT.tempo_producao_utilizado != null ? fmtSecs(anT.tempo_producao_utilizado) : '-';
-      const tempoPausasT = anT.tempo_pausas_utilizado != null ? fmtSecs(anT.tempo_pausas_utilizado) : '-';
+    const total = parseInt(st.quantidade_total ?? 0, 10) || 0;
+    const ultima = parseInt(st.ultima_quantidade ?? 0, 10) || 0;
+    const pct = total > 0 ? Math.max(0, Math.min(100, Math.round((ultima / total) * 100))) : 0;
 
-      const metricsTHTML = `
-        <div class="mt-2 d-flex flex-wrap gap-2 align-items-center">
-          <span class="badge rounded-pill bg-secondary"><i class="fas fa-cogs me-1"></i> Setup Est.: ${tempoSetupEstT}</span>
-          <span class="badge rounded-pill bg-info text-dark"><i class="fas fa-wrench me-1"></i> Setup Usado: ${tempoSetupUsoT} ${perfBadge(anT.setup_status)}</span>
-          <span class="badge rounded-pill bg-primary"><i class="fas fa-gauge-high me-1"></i> Pç Est.: ${tempoPecaEstT}</span>
-          <span class="badge rounded-pill bg-success"><i class="fas fa-stopwatch me-1"></i> Média/pç: ${mediaSegPecaT} ${perfBadge(anT.producao_status)}</span>
-          <span class="badge rounded-pill bg-dark"><i class="fas fa-clock me-1"></i> Prod. Usado: ${tempoProdUsoT}</span>
-          <span class="badge rounded-pill bg-warning text-dark"><i class="fas fa-pause me-1"></i> Pausas: ${tempoPausasT}</span>
-        </div>`;
+    const imgMain = st.item_imagem_path ? `<img src="${st.item_imagem_path}" alt="Imagem do item" class="rounded border me-2" style="width:80px;height:80px;object-fit:cover;">` : '';
+    const clientes = Array.isArray(st.clientes_quantidades)
+      ? st.clientes_quantidades
+      : (st.cliente_nome ? [{ cliente_nome: st.cliente_nome, quantidade: total }] : []);
+    const clientesHtml = clientes.length
+      ? `<div class="small text-muted">${clientes.map(c => `${c.cliente_nome}: ${parseInt(c.quantidade ?? 0, 10) || 0}`).join(' • ')}</div>`
+      : '';
 
+    const trabs = Array.isArray(st.trabalhos_do_item) ? st.trabalhos_do_item : [];
+    const statusBarClass = (s) => {
+      s = (s || '').toLowerCase();
+      if (s.includes('setup')) return 'bg-info';
+      if (s.includes('paus')) return 'bg-warning';
+      if (s.includes('produ')) return 'bg-success';
+      if (s.includes('final')) return 'bg-dark';
+      return 'bg-secondary';
+    };
+    const trabalhosHtml = trabs.map(t => {
+      const u = parseInt(t.ultima_quantidade ?? 0, 10) || 0;
+      const pctT = total > 0 ? Math.max(0, Math.min(100, Math.round((u / total) * 100))) : 0;
+      const barCls = statusBarClass(t.status);
       return `
-        <div class="border rounded p-2 mb-2 trabalho-item ti-${tipo}">
-          <div class="d-flex justify-content-between align-items-center">
-            <div>
-              <div class="fw-semibold">${a.item_codigo || ''} ${a.item_nome || ''}</div>
-              <div class="text-muted small">${a.trabalho_nome || ''}</div>
-            </div>
-            <div class="text-end">
-              ${statusBadge(a.status)}
+        <div class="mb-3">
+          <div class="d-flex justify-content-between align-items-center mb-1">
+            <div class="fw-semibold">${t.trabalho_nome || 'Serviço'}</div>
+            <div class="small text-muted">${t.status || ''}</div>
+          </div>
+          <div class="progress" style="height: 10px;">
+            <div class="progress-bar ${barCls}" role="progressbar" style="width: ${pctT}%;" aria-valuenow="${pctT}" aria-valuemin="0" aria-valuemax="100"></div>
+          </div>
+          <div class="d-flex justify-content-between small text-muted mt-1">
+            <div>Última qtd: ${u} / ${total} (${pctT}%)</div>
+            <div class="d-flex gap-2">
+              <span>Setup: ${fmtSecs(t.tempo_setup_utilizado)}</span>
+              <span>Pausas: ${fmtSecs(t.tempo_pausas_utilizado)}</span>
+              <span>Rodando: ${fmtSecs(t.tempo_producao_utilizado)}</span>
             </div>
           </div>
-          <div class="d-flex flex-wrap align-items-center gap-3 mt-2">
-            <div class="display-6 fw-bold m-0" data-crono-start="${start ? start.toISOString() : ''}" data-crono-tipo="${tipo}">${tNow}</div>
-            <div class="small text-muted">Início: ${startISO ? new Date(startISO).toLocaleString('pt-BR', { timeZone: 'America/Sao_Paulo' }) : '-'}</div>
-            <div class="small"><span class="text-muted">Últ. Qtde:</span> ${a.ultima_quantidade ?? 0}</div>
-            ${a.motivo_pausa ? `<div class="small text-warning"><i class="fas fa-exclamation-triangle"></i> ${a.motivo_pausa}</div>` : ''}
-          </div>
-          ${metricsTHTML}
         </div>`;
     }).join('');
-
-    const listName = (st.lista_kanban || '').toString().toUpperCase();
     return `
       <div class="card mb-3 ${statusToClass(st)}">
         <div class="card-header">
           <div class="row align-items-center">
-            <div class="col-4">
-              <div class="fw-bold">${os}</div>
-              <div class="small text-muted">${st.item_codigo || ''} ${st.item_nome || ''}</div>
+            <div class="col-4 d-flex align-items-center">
+              ${imgMain}
+              <div>
+                <div class="fw-bold">${os}</div>
+                <div class="small text-muted">${st.item_codigo || ''} ${st.item_nome || ''}</div>
+                <div class="small">
+                  <span class="text-muted">Total:</span> <span class="fw-bold">${total}</span>
+                </div>
+                ${clientesHtml}
+              </div>
             </div>
             <div class="col-4 text-center">
-              ${listName ? `<div class=\"kanban-list-name\">${listName}</div>` : ''}
+              <!-- Nome da lista removido - agora usamos agrupamento por máquina -->
             </div>
             <div class="col-4 text-end">
               ${statusBadge(st.status_atual)}
@@ -134,7 +143,7 @@
           </div>
         </div>
         <div class="card-body">
-          ${ativos.length ? (`<div class=\"mt-2\"><div class=\"fw-semibold mb-2\">Ativos por Trabalho</div>${ativosHTML}</div>`) : ''}
+          ${trabalhosHtml || '<div class="small text-muted">Sem serviços cadastrados para o item.</div>'}
         </div>
         <div class="card-footer d-flex gap-2">
           <button class="btn btn-outline-primary btn-sm" onclick="verLogs(${st.ordem_servico_id})"><i class="fas fa-history"></i> Logs</button>
@@ -165,60 +174,125 @@
     if (!container) return;
 
     const list = data.status_ativos || [];
-    if (list.length === 0) {
-      container.innerHTML = `<div class=\"text-center text-muted py-3\">Nenhum cartão ativo</div>`;
-      return;
-    }
+    console.log('Renderizando cartões:', list.length, 'itens recebidos');
 
-    // Group by lista_tipo, excluding 'Outros'
-    const groups = new Map();
-    const leftovers = [];
+    // Canonicalize machine names using dropdown options (case-insensitive)
+    const selLista = document.getElementById('filter-lista');
+    const canonMap = new Map(
+      Array.from(selLista?.options || [])
+        .map(o => [String(o.value || '').trim().toLowerCase(), o.value])
+        .filter(([k, v]) => v && v !== 'Todas')
+    );
+
+    // Group by lista_kanban (nome da máquina), using canonical name when available
+    const groupsByMachine = new Map();
     list.forEach(st => {
-      const tipo = st.lista_tipo;
-      if (tipo && tipo !== 'Outros') {
-        if (!groups.has(tipo)) groups.set(tipo, []);
-        groups.get(tipo).push(st);
-      } else {
-        leftovers.push(st);
+      const raw = (st.lista_kanban || 'Sem Máquina').toString().trim();
+      const maquina = canonMap.get(raw.toLowerCase()) || raw;
+      if (!groupsByMachine.has(maquina)) {
+        groupsByMachine.set(maquina, []);
       }
+      groupsByMachine.get(maquina).push(st);
     });
 
-    // Build HTML for groups
-    const groupSections = [];
-    groups.forEach((items, tipo) => {
-      if (!items.length) return;
-      const principal = items[0];
-      const fila = items.slice(1);
-      const cor = principal.lista_cor || '';
+    console.log('Grupos por máquina:', Array.from(groupsByMachine.keys()));
 
-      const filaHTML = fila.length ? (
-        `<div class=\"mt-2\">
-           <div class=\"fw-semibold mb-2\">Na fila</div>
-           <ul class=\"list-group\">
-             ${fila.map(it => `<li class=\"list-group-item d-flex justify-content-between align-items-center\">` +
-               `<span>${(it.item_codigo || '')} ${(it.item_nome || '')}</span>` +
-               `<span class=\"badge bg-secondary rounded-pill\">Qtde: ${it.ultima_quantidade ?? 0}</span>` +
-             `</li>`).join('')}
+    // Buscar máquinas a partir do dropdown (todas as listas conhecidas) e dos dados para garantir exibição completa
+    const maquinasConhecidas = Array.from(selLista?.options || [])
+      .map(o => o.value)
+      .filter(v => v && v !== 'Todas');
+    const maquinasDosDados = Array.from(groupsByMachine.keys());
+    const todasMaquinas = Array.from(new Set([...maquinasConhecidas, ...maquinasDosDados]));
+    // Ordenar conforme a ordem do dropdown; desconhecidas vão para o final em ordem alfabética
+    const ordem = new Map(todasMaquinas.map((m, idx) => [m, maquinasConhecidas.indexOf(m) === -1 ? 1e6 + idx : maquinasConhecidas.indexOf(m)]));
+    todasMaquinas.sort((a, b) => (ordem.get(a) - ordem.get(b)) || a.localeCompare(b));
+    
+    // Build HTML for each machine
+    const groupSections = [];
+    todasMaquinas.forEach(maquina => {
+      const items = groupsByMachine.get(maquina) || [];
+      
+      // Ordenar por status: Em Produção primeiro, depois Setup, Pausado, Aguardando
+      items.sort((a, b) => {
+        const statusOrder = {
+          'Produção em andamento': 1,
+          'Setup em andamento': 2,
+          'Pausado': 3,
+          'Aguardando': 4
+        };
+        return (statusOrder[a.status_atual] || 5) - (statusOrder[b.status_atual] || 5);
+      });
+
+      const principal = items.length > 0 ? items[0] : null;
+      const fila = items.length > 1 ? items.slice(1) : [];
+      
+      // Informações da máquina (cor e tipo do primeiro item ou padrões)
+      const cor = principal?.lista_cor || '';
+      const tipo = principal?.lista_tipo || '';
+
+      // Cartão principal ou placeholder
+      const cartaoPrincipalHTML = principal ? 
+        buildDetailedCard(principal) : 
+        `<div class="card border-secondary">
+           <div class="card-body text-center text-muted">
+             <i class="fas fa-inbox fa-2x mb-2"></i>
+             <div>Sem cartão ativo</div>
+           </div>
+         </div>`;
+
+      // Fila ou placeholder (com miniaturas)
+      const filaHTML = fila.length > 0 ? (
+        `<div class="mt-3">
+           <div class="fw-semibold mb-2"><i class="fas fa-list me-1"></i>Na fila (${fila.length})</div>
+           <ul class="list-group">
+             ${fila.map(it => {
+               const imgFila = it.item_imagem_path ? `<img src="${it.item_imagem_path}" alt="Imagem" class="rounded border me-2" style="width:36px;height:36px;object-fit:cover;">` : '';
+               return `<li class="list-group-item d-flex justify-content-between align-items-center">` +
+                 `<div class="d-flex align-items-center">` +
+                   `${imgFila}` +
+                   `<div>` +
+                     `<div class="fw-medium">${it.os_numero || ''}</div>` +
+                     `<div class="small text-muted">${(it.item_codigo || '')} ${(it.item_nome || '')}</div>` +
+                   `</div>` +
+                 `</div>` +
+                 `<div class="text-end">` +
+                   `<span class="badge bg-secondary rounded-pill">Qtde: ${it.ultima_quantidade ?? 0}</span>` +
+                   `<div class="small text-muted mt-1">${it.status_atual || 'Aguardando'}</div>` +
+                 `</div>` +
+               `</li>`;
+             }).join('')}
            </ul>
          </div>`
-      ) : '';
+      ) : (
+        `<div class="mt-3">
+           <div class="fw-semibold mb-2"><i class="fas fa-list me-1"></i>Na fila</div>
+           <div class="text-center text-muted py-2 border rounded">
+             <i class="fas fa-inbox me-1"></i>Sem cartões na fila
+           </div>
+         </div>`
+      );
 
       groupSections.push(`
-        <div class=\"mb-4\">
-          <div class=\"d-flex align-items-center mb-2\">
-            <div class=\"h5 m-0\">${tipo}</div>
-            ${cor ? `<span class=\"ms-2 badge\" style=\"background-color:${cor};\">&nbsp;</span>` : ''}
+        <div class="mb-4 p-2 border rounded">
+          <div class="d-flex align-items-center mb-3 border-bottom pb-2">
+            <div class="h4 m-0">${maquina}</div>
+            ${cor ? `<span class="ms-2 badge" style="background-color:${cor};">&nbsp;</span>` : ''}
+            ${tipo ? `<span class="ms-2 text-muted">(${tipo})</span>` : ''}
           </div>
-          ${buildDetailedCard(principal)}
+          ${cartaoPrincipalHTML}
           ${filaHTML}
         </div>
       `);
     });
 
-    // Build HTML for leftovers as individual detailed cards
-    const leftoversHTML = leftovers.map(st => buildDetailedCard(st)).join('');
-
-    container.innerHTML = `<div class=\"d-flex flex-column\">${groupSections.join('')}${leftoversHTML}</div>`;
+    // Se não há cartões, mostrar mensagem
+    if (groupSections.length === 0) {
+      container.innerHTML = `<div class=\"text-center text-muted py-3\">Nenhum cartão ativo</div>`;
+    } else {
+      container.innerHTML = `<div class=\"d-flex flex-column\">${groupSections.join('')}</div>`;
+    }
+    
+    console.log('Renderizadas', todasMaquinas.length, 'máquinas:', todasMaquinas.join(', '));
   }
 
   function tickTimers() {
@@ -234,7 +308,22 @@
 
   async function fetchAndRender() {
     try {
-      const res = await fetch('/apontamento/status-ativos', { cache: 'no-store' });
+      // Read filters from UI
+      const selLista = document.getElementById('filter-lista');
+      const selStatus = document.getElementById('filter-status');
+      
+      // Aplicar filtros apenas se forem diferentes de "Todas" ou "Todos"
+      const lista = selLista && selLista.value && selLista.value !== 'Todas' ? selLista.value : null;
+      const status = selStatus && selStatus.value && selStatus.value !== 'Todos' ? selStatus.value : null;
+
+      const params = new URLSearchParams();
+      if (lista) params.set('lista', lista);
+      if (status) params.set('status', status);
+      
+      console.log('Aplicando filtros:', { lista, status });
+
+      const url = params.toString() ? `/apontamento/status-ativos?${params.toString()}` : '/apontamento/status-ativos';
+      const res = await fetch(url, { cache: 'no-store' });
       if (!res.ok) throw new Error('HTTP ' + res.status);
       const data = await res.json();
       STATE.lastData = data;
@@ -251,6 +340,17 @@
     STATE.timerId = setInterval(tickTimers, 1000);
     if (STATE.refreshId) clearInterval(STATE.refreshId);
     STATE.refreshId = setInterval(() => { if (!document.hidden) fetchAndRender(); }, 10000);
+
+    // Wire up filter change events
+    document.getElementById('filter-lista')?.addEventListener('change', fetchAndRender);
+    document.getElementById('filter-status')?.addEventListener('change', fetchAndRender);
+    document.getElementById('btn-clear-filters')?.addEventListener('click', function() {
+      const listaFilter = document.getElementById('filter-lista');
+      const statusFilter = document.getElementById('filter-status');
+      if (listaFilter) listaFilter.value = 'Todas';
+      if (statusFilter) statusFilter.value = 'Todos';
+      fetchAndRender();
+    });
   }
 
   // Expose init

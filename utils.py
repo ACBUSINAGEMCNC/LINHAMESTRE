@@ -5,6 +5,10 @@ import requests
 from werkzeug.utils import secure_filename
 from flask import flash, current_app, request
 from urllib.parse import urlparse, quote
+import logging
+
+# Logger do módulo
+logger = logging.getLogger(__name__)
 
 def allowed_file(filename, allowed_extensions):
     """Verifica se o arquivo tem uma extensão permitida"""
@@ -58,14 +62,15 @@ def upload_to_supabase(file, folder):
         supabase_key = os.environ.get('SUPABASE_KEY')
         bucket = os.environ.get('SUPABASE_BUCKET', 'uploads')
         
-        print(f"[DEBUG] Iniciando upload para Supabase. Bucket: {bucket}, Folder: {folder}")
-        print(f"[DEBUG] SUPABASE_URL: {'Definido' if supabase_url else 'Não definido'}")
-        print(f"[DEBUG] SUPABASE_KEY: {'Definido' if supabase_key else 'Não definido (truncado)'}")
-        print(f"[DEBUG] SUPABASE_KEY começa com: {supabase_key[:10]}... e termina com: ...{supabase_key[-10:]} (truncado)")
+        logger.debug("Iniciando upload para Supabase. Bucket: %s, Folder: %s", bucket, folder)
+        logger.debug("SUPABASE_URL: %s", 'Definido' if supabase_url else 'Não definido')
+        logger.debug("SUPABASE_KEY: %s", 'Definido' if supabase_key else 'Não definido (truncado)')
+        if supabase_key:
+            logger.debug("SUPABASE_KEY começa com: %s... e termina com: ...%s (truncado)", supabase_key[:10], supabase_key[-10:])
         
         if not all([supabase_url, supabase_key]):
             error_msg = 'Configuração do Supabase Storage incompleta. Verifique as variáveis de ambiente SUPABASE_URL e SUPABASE_KEY.'
-            print(f"[ERROR] {error_msg}")
+            logger.error(error_msg)
             flash(error_msg, 'danger')
             return None
             
@@ -75,7 +80,7 @@ def upload_to_supabase(file, folder):
             
         # Primeiro, verificar se o bucket existe
         list_buckets_url = f"{supabase_url}/storage/v1/bucket"
-        print(f"[DEBUG] Verificando buckets disponíveis: {list_buckets_url}")
+        logger.debug("Verificando buckets disponíveis: %s", list_buckets_url)
         
         headers = {
             'Authorization': f'Bearer {supabase_key}',
@@ -85,10 +90,10 @@ def upload_to_supabase(file, folder):
         
         try:
             bucket_response = requests.get(list_buckets_url, headers=headers)
-            print(f"[DEBUG] Status da verificação de buckets: {bucket_response.status_code}")
+            logger.debug("Status da verificação de buckets: %s", bucket_response.status_code)
             
             if bucket_response.status_code != 200:
-                print(f"[ERROR] Falha ao listar buckets: {bucket_response.text}")
+                logger.error("Falha ao listar buckets: %s", bucket_response.text)
                 # Se não conseguirmos listar buckets, tentamos criar um
                 create_bucket_url = list_buckets_url
                 bucket_data = {
@@ -101,16 +106,16 @@ def upload_to_supabase(file, folder):
                     headers=headers, 
                     data=json.dumps(bucket_data)
                 )
-                print(f"[DEBUG] Tentativa de criar bucket: {create_response.status_code} - {create_response.text}")
+                logger.debug("Tentativa de criar bucket: %s - %s", create_response.status_code, create_response.text)
         except Exception as e:
-            print(f"[ERROR] Erro ao verificar/criar bucket: {str(e)}")
+            logger.exception("Erro ao verificar/criar bucket")
         
         # Gerar um nome de arquivo único para evitar colisões
         original_filename = secure_filename(file.filename)
         unique_id = str(uuid.uuid4())[:8]
         storage_path = f"{folder}/{unique_id}_{original_filename}"
         
-        print(f"[DEBUG] Arquivo original: {file.filename}, Nome seguro: {original_filename}, Caminho no storage: {storage_path}")
+        logger.debug("Arquivo original: %s, Nome seguro: %s, Caminho no storage: %s", file.filename, original_filename, storage_path)
         
         try:
             # Reset do arquivo para leitura (pode ter sido lido anteriormente)
@@ -118,7 +123,7 @@ def upload_to_supabase(file, folder):
             
             # URL de upload do Supabase Storage REST API
             upload_url = f"{supabase_url}/storage/v1/object/{bucket}/{quote(storage_path)}"
-            print(f"[DEBUG] URL de upload: {upload_url}")
+            logger.debug("URL de upload: %s", upload_url)
             
             # Cabeçalhos para o upload
             upload_headers = {
@@ -132,38 +137,38 @@ def upload_to_supabase(file, folder):
                 'file': (original_filename, file, file.mimetype or 'application/octet-stream')
             }
             
-            print(f"[DEBUG] Iniciando upload do arquivo para o bucket '{bucket}'...")
+            logger.debug("Iniciando upload do arquivo para o bucket '%s'...", bucket)
             
             # Fazer o upload via HTTP POST
             response = requests.post(upload_url, headers=upload_headers, files=files)
             
             # Verificar se o upload foi bem-sucedido
-            print(f"[DEBUG] Resposta do upload: {response.status_code} {response.reason}")
-            print(f"[DEBUG] Resposta completa: {response.text}")
+            logger.debug("Resposta do upload: %s %s", response.status_code, response.reason)
+            logger.debug("Resposta completa: %s", response.text)
             
             if response.status_code in [200, 201]:
-                print(f"[DEBUG] Upload concluído com sucesso!")
+                logger.debug("Upload concluído com sucesso!")
                 
                 # Construir URL pública do arquivo
                 public_url = f"{supabase_url}/storage/v1/object/public/{bucket}/{quote(storage_path)}"
-                print(f"[DEBUG] URL pública do arquivo: {public_url}")
+                logger.debug("URL pública do arquivo: %s", public_url)
                 
                 # Retornar caminho do arquivo no formato supabase:// para referência futura
                 return f"supabase://{storage_path}"
             else:
                 error_msg = f"Erro ao fazer upload para o Supabase: {response.status_code} {response.reason} - {response.text}"
-                print(f"[ERROR] {error_msg}")
+                logger.error(error_msg)
                 flash(f"Erro no upload: {response.status_code} {response.reason}", 'danger')
                 return None
                 
         except Exception as e:
             error_msg = f"Erro ao fazer upload para o Supabase: {str(e)}"
-            print(f"[ERROR] {error_msg}")
+            logger.exception("Erro ao fazer upload para o Supabase")
             flash(error_msg, 'danger')
             return None
     except Exception as e:
         error_msg = f"Erro ao fazer upload para Supabase: {str(e)}"
-        print(error_msg)
+        logger.exception("Erro ao fazer upload para Supabase")
         flash(error_msg, 'danger')
         return None
 
@@ -176,8 +181,9 @@ def test_supabase_auth():
     supabase_url = os.environ.get('SUPABASE_URL')
     supabase_key = os.environ.get('SUPABASE_KEY')
     
-    print(f"[TESTE AUTH] URL: {supabase_url}")
-    print(f"[TESTE AUTH] Key (primeiros 10 caracteres): {supabase_key[:10]}...")
+    logger.debug("[TESTE AUTH] URL: %s", supabase_url)
+    if supabase_key:
+        logger.debug("[TESTE AUTH] Key (primeiros 10 caracteres): %s...", supabase_key[:10])
     
     if not all([supabase_url, supabase_key]):
         return "Variáveis de ambiente não configuradas"
@@ -192,21 +198,21 @@ def test_supabase_auth():
     # 1. Primeiro tente um SELECT de alguma tabela existente
     try:
         test_url = f"{supabase_url}/rest/v1/usuario?select=id&limit=1"
-        print(f"[TESTE AUTH] Testando URL: {test_url}")
+        logger.debug("[TESTE AUTH] Testando URL: %s", test_url)
         resp = requests.get(test_url, headers=headers)
-        print(f"[TESTE AUTH] Status: {resp.status_code}, Resposta: {resp.text}")
+        logger.debug("[TESTE AUTH] Status: %s, Resposta: %s", resp.status_code, resp.text)
         
         if resp.status_code == 200:
             return f"Autenticação OK! Status: {resp.status_code}"
     except Exception as e:
-        print(f"[TESTE AUTH] Erro no teste 1: {str(e)}")
+        logger.exception("[TESTE AUTH] Erro no teste 1")
     
     # 2. Se falhar, tente versão do PostgreSQL via RPC
     try:
         test_url2 = f"{supabase_url}/rest/v1/rpc/version"
-        print(f"[TESTE AUTH] Testando URL alternativa: {test_url2}")
+        logger.debug("[TESTE AUTH] Testando URL alternativa: %s", test_url2)
         resp2 = requests.post(test_url2, headers=headers, json={})
-        print(f"[TESTE AUTH] Status: {resp2.status_code}, Resposta: {resp2.text}")
+        logger.debug("[TESTE AUTH] Status: %s, Resposta: %s", resp2.status_code, resp2.text)
         
         if resp2.status_code == 200:
             return f"Autenticação OK no endpoint RPC! Status: {resp2.status_code}"
@@ -232,7 +238,7 @@ def get_file_url(file_path):
         
         # Retornar URL pública direta do Supabase
         public_url = f"{supabase_url}/storage/v1/object/public/{bucket}/{file_name}"
-        print(f"[DEBUG] URL pública de arquivo: {public_url}")
+        logger.debug("URL pública de arquivo: %s", public_url)
         return public_url
     else:
         # Arquivo local - construir URL relativa

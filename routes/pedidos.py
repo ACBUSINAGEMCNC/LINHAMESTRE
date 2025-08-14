@@ -2,8 +2,10 @@ from flask import Blueprint, render_template, request, redirect, url_for, flash,
 from models import db, Pedido, Cliente, UnidadeEntrega, Item, PedidoOrdemServico, OrdemServico, Material, Trabalho, PedidoMaterial, ItemPedidoMaterial, ItemMaterial
 from utils import validate_form_data, parse_json_field, generate_next_code, generate_next_os_code
 from datetime import datetime
+import logging
 
 pedidos = Blueprint('pedidos', __name__)
+logger = logging.getLogger(__name__)
 
 @pedidos.route('/pedidos/gerar-os-multipla', methods=['POST'])
 def gerar_ordem_servico_multipla():
@@ -76,7 +78,7 @@ def gerar_ordem_servico_multipla():
 def gerar_pedido_material_multiplo():
     """Rota para gerar pedido de material a partir de pedidos selecionados"""
     try:
-        print("========== INICIANDO GERAÇÃO DE PEDIDO DE MATERIAL ==========")
+        logger.info("Iniciando geração de pedido de material múltiplo")
         current_app.logger.info("Rota pedidos/gerar-pedido-material-multiplo recebida")
         
         # Obter IDs dos pedidos selecionados
@@ -85,28 +87,28 @@ def gerar_pedido_material_multiplo():
         
         pedidos_ids = request.form.getlist('pedidos[]')
         current_app.logger.info(f"Pedidos IDs recebidos: {pedidos_ids}")
-        print(f"Pedidos IDs recebidos: {pedidos_ids}")
+        logger.debug("Pedidos IDs recebidos: %s", pedidos_ids)
         
         # Verificar especificamente os pedidos 4 e 5
         if '4' in pedidos_ids or '5' in pedidos_ids:
-            print("\n*** DETECTADOS PEDIDOS 4 OU 5 NA SELEÇÃO ***")
+            logger.info("*** DETECTADOS PEDIDOS 4 OU 5 NA SELEÇÃO ***")
             # Consultar diretamente no banco de dados
             try:
                 conn = db.engine.connect()
                 if '4' in pedidos_ids:
                     result = conn.execute(db.text("SELECT * FROM pedido WHERE id = 4"))
                     row = result.fetchone()
-                    print(f"Pedido 4 no banco: {row}")
+                    logger.debug("Pedido 4 no banco: %s", row)
                 if '5' in pedidos_ids:
                     result = conn.execute(db.text("SELECT * FROM pedido WHERE id = 5"))
                     row = result.fetchone()
-                    print(f"Pedido 5 no banco: {row}")
+                    logger.debug("Pedido 5 no banco: %s", row)
                 conn.close()
             except Exception as e:
-                print(f"Erro ao consultar pedidos 4/5 diretamente: {str(e)}")
-            print("*** FIM DA VERIFICAÇÃO ESPECIAL ***\n")
+                logger.exception("Erro ao consultar pedidos 4/5 diretamente")
+            logger.info("*** FIM DA VERIFICAÇÃO ESPECIAL ***")
     except Exception as e:
-        print(f"ERRO INICIAL: {str(e)}")
+        logger.exception("Erro ao iniciar o processo de geração de pedido de material")
         flash(f'Erro ao iniciar o processo: {str(e)}', 'danger')
         return redirect(url_for('pedidos.listar_pedidos'))
     
@@ -139,7 +141,7 @@ def gerar_pedido_material_multiplo():
         return redirect(url_for('pedidos.listar_pedidos'))
     
     # Verificar se todos os pedidos válidos têm itens válidos
-    print("Verificando pedidos válidos...")
+    logger.debug("Verificando pedidos válidos...")
     pedidos_sem_item = []
     pedidos_para_processar = []
     
@@ -172,7 +174,7 @@ def gerar_pedido_material_multiplo():
     
     # Gerar um único código de pedido de material
     codigo_pm = generate_next_code(PedidoMaterial, 'PM', 'numero', padding=5)
-    print(f"Gerando Pedido de Material {codigo_pm}")
+    logger.info("Gerando Pedido de Material %s", codigo_pm)
     
     # Criar um único pedido de material
     pm = PedidoMaterial(
@@ -181,7 +183,7 @@ def gerar_pedido_material_multiplo():
     )
     db.session.add(pm)
     db.session.flush()
-    print(f"Pedido de Material {codigo_pm} criado no banco")
+    logger.debug("Pedido de Material %s criado no banco", codigo_pm)
     
     # Criar associações ItemPedidoMaterial para cada material agrupado
     for material_id, comprimento_total in materiais_agrupados.items():
@@ -198,8 +200,8 @@ def gerar_pedido_material_multiplo():
     
     db.session.commit()
     for pedido in pedidos_para_processar:
-        print(f"Pedido ID {pedido.id} atualizado com numero_pedido_material: {pedido.numero_pedido_material}")
-    print(f"Pedido de Material {codigo_pm} salvo com sucesso. Itens associados: {len(materiais_agrupados)} materiais agrupados.")
+        logger.debug("Pedido ID %s atualizado com numero_pedido_material: %s", pedido.id, pedido.numero_pedido_material)
+    logger.info("Pedido de Material %s salvo com sucesso. Itens associados: %s materiais agrupados.", codigo_pm, len(materiais_agrupados))
     flash(f'Pedido de Material gerado com sucesso: {codigo_pm}', 'success')
     return redirect(url_for('pedidos.listar_pedidos'))
 
@@ -281,7 +283,7 @@ def listar_pedidos():
     """Rota para listar todos os pedidos"""
     pedidos = Pedido.query.all()
     for pedido in pedidos:
-        print(f"Pedido ID {pedido.id}: numero_pedido_material = {pedido.numero_pedido_material if pedido.numero_pedido_material else 'N/A'}")
+        logger.debug("Pedido ID %s: numero_pedido_material = %s", pedido.id, pedido.numero_pedido_material if pedido.numero_pedido_material else 'N/A')
     clientes = Cliente.query.all()
     return render_template('pedidos/listar.html', pedidos=pedidos, clientes=clientes)
 
@@ -426,7 +428,7 @@ def cancelar_pedido(pedido_id):
     """Rota para cancelar um pedido (não exclui do banco)"""
     from flask import session
     pedido = Pedido.query.get_or_404(pedido_id)
-    print(f"Tentando cancelar pedido ID {pedido_id}, status atual: cancelado={pedido.cancelado}")
+    logger.info("Tentando cancelar pedido ID %s, status atual: cancelado=%s", pedido_id, pedido.cancelado)
     if pedido.ordens_servico:
         flash('Não é possível cancelar um pedido associado a uma Ordem de Serviço!', 'danger')
         return redirect(url_for('pedidos.listar_pedidos'))
@@ -439,7 +441,7 @@ def cancelar_pedido(pedido_id):
     pedido.cancelado_por = session.get('usuario_nome', 'Desconhecido')
     pedido.data_cancelamento = datetime.now()
     db.session.commit()
-    print(f"Cancelado pedido ID {pedido_id} com sucesso, novo status: cancelado={pedido.cancelado}")
+    logger.info("Cancelado pedido ID %s com sucesso, novo status: cancelado=%s", pedido_id, pedido.cancelado)
     flash(f'Pedido cancelado com sucesso!', 'success')
     return redirect(url_for('pedidos.listar_pedidos'))
 

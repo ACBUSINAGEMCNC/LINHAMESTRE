@@ -2,10 +2,13 @@ from flask import Blueprint, render_template, request, jsonify, flash, redirect,
 from models import db, Usuario, ApontamentoProducao, StatusProducaoOS, OrdemServico, ItemTrabalho, PedidoOrdemServico, Pedido, Item, Trabalho, KanbanLista
 from datetime import datetime, timezone, timedelta
 from sqlalchemy.orm import joinedload
+import logging
 import random
 import string
+import time
 
 apontamento_bp = Blueprint('apontamento', __name__)
+logger = logging.getLogger(__name__)
 # Timezone helpers
 try:
     from zoneinfo import ZoneInfo  # Python 3.9+
@@ -73,14 +76,18 @@ def dashboard():
             .all()
         )
 
+        # Listas Kanban ativas para filtros no dashboard
+        listas_kanban = KanbanLista.query.filter_by(ativa=True).order_by(KanbanLista.ordem).all()
+
         return render_template(
             'apontamento/dashboard.html',
             status_ativos=status_list,
-            ultimos_apontamentos=ultimos_apontamentos
+            ultimos_apontamentos=ultimos_apontamentos,
+            listas_kanban=listas_kanban
         )
     except Exception as e:
         flash(f'Erro ao carregar dashboard: {e}', 'error')
-        return render_template('apontamento/dashboard.html', status_ativos=[], ultimos_apontamentos=[])
+        return render_template('apontamento/dashboard.html', status_ativos=[], ultimos_apontamentos=[], listas_kanban=[])
 
 @apontamento_bp.route('/operadores/gerar-codigo/<int:usuario_id>', methods=['POST'])
 def gerar_codigo_operador(usuario_id):
@@ -212,7 +219,7 @@ def buscar_itens_os(ordem_id):
         })
         
     except Exception as e:
-        print(f"Erro ao buscar itens para OS {ordem_id}: {e}")
+        logger.exception(f"Erro ao buscar itens para OS {ordem_id}: {e}")
         return jsonify({
             'success': False,
             'message': f'Erro ao buscar itens: {str(e)}'
@@ -254,7 +261,7 @@ def buscar_tipos_trabalho_item(item_id):
         })
         
     except Exception as e:
-        print(f"Erro ao buscar tipos de trabalho para item {item_id}: {e}")
+        logger.exception(f"Erro ao buscar tipos de trabalho para item {item_id}: {e}")
         return jsonify({
             'success': False,
             'message': f'Erro ao buscar tipos de trabalho: {str(e)}'
@@ -302,7 +309,7 @@ def buscar_tipos_trabalho_os(ordem_id):
         })
         
     except Exception as e:
-        print(f"Erro ao buscar tipos de trabalho para OS {ordem_id}: {e}")
+        logger.exception(f"Erro ao buscar tipos de trabalho para OS {ordem_id}: {e}")
         return jsonify({
             'success': False,
             'message': f'Erro ao buscar tipos de trabalho: {str(e)}'
@@ -326,21 +333,106 @@ def gerar_codigo_unico():
 def status_ativos():
     """Retorna todos os status de produção ativos para apontamentos (usado para persistência frontend)"""
     try:
-        # Buscar todos os status ativos de produção
-        print("[DEBUG] Buscando status ativos...")
-        status_ativos = StatusProducaoOS.query.filter(
-            StatusProducaoOS.status_atual != 'Finalizado'
-        ).all()
+        t_start = time.perf_counter()
+        timings = {}
+        # Query params (opcionais) para filtragem
+        lista_filter = None
+        if request.args.get('lista') and request.args.get('lista').strip() and request.args.get('lista').strip().lower() != 'todas':
+            lista_filter = request.args.get('lista').strip().lower()
+            
+        lista_tipo_filter = None
+        if request.args.get('lista_tipo') and request.args.get('lista_tipo').strip():
+            lista_tipo_filter = request.args.get('lista_tipo').strip().lower()
+            
+        status_filter_raw = request.args.get('status', '').strip().lower()
+        status_filter_set = None
+        if status_filter_raw and status_filter_raw != 'todos':
+            status_filter_set = set([s.strip() for s in status_filter_raw.split(',') if s.strip()])
+
+        # Buscar TODAS as listas Kanban ativas para garantir que apareçam no dashboard
+        logger.debug("Buscando todas as listas Kanban ativas...")
+        t0 = time.perf_counter()
+        listas_kanban = KanbanLista.query.filter_by(ativa=True).all()
+        timings['listas_kanban_query_ms'] = int((time.perf_counter() - t0) * 1000)
+        logger.debug(f"Encontradas {len(listas_kanban)} listas Kanban ativas")
+        # Mapas auxiliares para normalização de nomes (case-insensitive)
+        nomes_listas = [lista.nome for lista in listas_kanban]
+        nomes_listas_lower = [lista.nome.strip().lower() for lista in listas_kanban]
+        map_lista_por_lower = {lista.nome.strip().lower(): lista for lista in listas_kanban}
         
-        print(f"[DEBUG] Encontrados {len(status_ativos)} status ativos")
+        # Buscar todos os status ativos de produção
+        logger.debug("Buscando status ativos...")
+        t0 = time.perf_counter()
+        status_ativos = (
+            StatusProducaoOS.query.options(
+                joinedload(StatusProducaoOS.ordem_servico)
+                    .joinedload(OrdemServico.pedidos)
+                    .joinedload(PedidoOrdemServico.pedido)
+                    .joinedload(Pedido.cliente),
+                joinedload(StatusProducaoOS.ordem_servico)
+                    .joinedload(OrdemServico.pedidos)
+                    .joinedload(PedidoOrdemServico.pedido)
+                    .joinedload(Pedido.item)
+                    .joinedload(Item.trabalhos)
+                    .joinedload(ItemTrabalho.trabalho),
+                joinedload(StatusProducaoOS.operador_atual),
+                joinedload(StatusProducaoOS.trabalho_atual),
+                joinedload(StatusProducaoOS.item_atual),
+            )
+            .filter(StatusProducaoOS.status_atual != 'Finalizado')
+            .all()
+        )
+        timings['status_ativos_query_ms'] = int((time.perf_counter() - t0) * 1000)
+
+        logger.debug(f"Encontrados {len(status_ativos)} status ativos (pré-filtro)")
+        for status in status_ativos:
+            logger.debug(f"Status ativo encontrado: ID={status.id}, ordem_servico_id={status.ordem_servico_id}, status_atual='{status.status_atual}'")
+        
+        # Buscar TODAS as OS que estão em máquinas (mesmo sem apontamento ativo)
+        logger.debug("Buscando todas as OS em máquinas...")
+        logger.debug(f"Nomes das listas Kanban: {nomes_listas}")
+        
+        # Uso de comparação case-insensitive para evitar divergências de caixa
+        t0 = time.perf_counter()
+        todas_os_em_maquinas = (
+            OrdemServico.query.options(
+                joinedload(OrdemServico.pedidos)
+                    .joinedload(PedidoOrdemServico.pedido)
+                    .joinedload(Pedido.cliente),
+                joinedload(OrdemServico.pedidos)
+                    .joinedload(PedidoOrdemServico.pedido)
+                    .joinedload(Pedido.item)
+                    .joinedload(Item.trabalhos)
+                    .joinedload(ItemTrabalho.trabalho),
+            )
+            .filter(db.func.lower(db.func.trim(OrdemServico.status)).in_(nomes_listas_lower))
+            .all()
+        )
+        timings['os_em_maquinas_query_ms'] = int((time.perf_counter() - t0) * 1000)
+        logger.debug(f"Encontradas {len(todas_os_em_maquinas)} OS em máquinas")
+        
+        # Debug: mostrar todas as OS encontradas
+        for os in todas_os_em_maquinas:
+            logger.debug(f"OS encontrada: {getattr(os, 'numero', None) or getattr(os, 'codigo', None) or f'OS-{os.id}'} - Status: {getattr(os, 'status', None)}")
+        
+        # Debug: buscar TODAS as OS independente do status para comparar
+        todas_os_sistema = OrdemServico.query.all()
+        logger.debug(f"Total de OS no sistema: {len(todas_os_sistema)}")
+        for os in todas_os_sistema:
+            logger.debug(f"OS sistema: {getattr(os, 'numero', None) or getattr(os, 'codigo', None) or f'OS-{os.id}'} - Status: {getattr(os, 'status', None)}")
         
         # Formatar resposta
         resultado = {
             'status_ativos': []
         }
         
-        # Adicionar informações detalhadas para cada status
+        # Criar um mapa de OS que já têm status ativo
+        os_com_status_ativo = set()
+        
+        # Adicionar informações detalhadas para cada status ativo
+        t0 = time.perf_counter()
         for status in status_ativos:
+            logger.debug(f"Iniciando processamento do status ID={status.id}, ordem_servico_id={status.ordem_servico_id}")
             try:
                 status_info = {
                     'id': status.id,
@@ -349,54 +441,99 @@ def status_ativos():
                     'status_atual': status.status_atual or 'Desconhecido'
                 }
 
-                # Buscar número/identificador da OS
+                # Buscar número/identificador da OS e agregar clientes/quantidades usando relações pre-carregadas
                 try:
-                    if status.ordem_servico_id:
-                        os_obj = OrdemServico.query.get(status.ordem_servico_id)
-                        if os_obj:
-                            # Tente usar um campo de número/código se existir; caso não, use ID
-                            os_num = getattr(os_obj, 'numero', None) or getattr(os_obj, 'codigo', None) or f"OS-{os_obj.id}"
-                            status_info['os_numero'] = os_num
+                    os_obj = getattr(status, 'ordem_servico', None)
+                    if os_obj:
+                        os_num = getattr(os_obj, 'numero', None) or getattr(os_obj, 'codigo', None) or f"OS-{os_obj.id}"
+                        status_info['os_numero'] = os_num
+                        # Clientes e quantidade total (agregar todos os pedidos vinculados à OS)
+                        try:
+                            clientes_map = {}
+                            total_q = 0
+                            for po in getattr(os_obj, 'pedidos', []) or []:
+                                ped = getattr(po, 'pedido', None)
+                                if not ped:
+                                    continue
+                                q = int(getattr(ped, 'quantidade', 0) or 0)
+                                total_q += q
+                                cli = getattr(ped, 'cliente', None)
+                                nome_cli = getattr(cli, 'nome', None) or 'Cliente'
+                                clientes_map[nome_cli] = clientes_map.get(nome_cli, 0) + q
+                            status_info['quantidade_total'] = int(total_q)
+                            if clientes_map:
+                                status_info['clientes_quantidades'] = [
+                                    {'cliente_nome': k, 'quantidade': v} for k, v in clientes_map.items()
+                                ]
+                                # Compatibilidade: primeiro cliente
+                                status_info['cliente_nome'] = next(iter(clientes_map.keys()))
+                        except Exception as e_cli:
+                            logger.error(f"Falha ao agregar clientes/quantidades: {e_cli}")
                 except Exception as e_os:
-                    print(f"[ERRO] Falha ao buscar numero da OS: {e_os}")
+                    logger.error(f"Falha ao obter OS relacionada: {e_os}")
                 
-                # Buscar operador atual
+                # Buscar operador atual (pré-carregado)
                 try:
-                    if hasattr(status, 'operador_atual_id') and status.operador_atual_id:
-                        operador = Usuario.query.get(status.operador_atual_id)
-                        if operador:
-                            status_info['operador_id'] = operador.id
-                            status_info['operador_nome'] = operador.nome
-                            status_info['operador_codigo'] = operador.codigo_operador
-                    elif hasattr(status, 'operador_id') and status.operador_id:
+                    operador = getattr(status, 'operador_atual', None)
+                    if not operador and hasattr(status, 'operador_id') and status.operador_id:
                         operador = Usuario.query.get(status.operador_id)
-                        if operador:
-                            status_info['operador_id'] = operador.id
-                            status_info['operador_nome'] = operador.nome
-                            status_info['operador_codigo'] = operador.codigo_operador
+                    if operador:
+                        status_info['operador_id'] = operador.id
+                        status_info['operador_nome'] = operador.nome
+                        status_info['operador_codigo'] = getattr(operador, 'codigo_operador', None)
                 except Exception as e_op:
-                    print(f"[ERRO] Falha ao buscar operador: {e_op}")
+                    logger.error(f"Falha ao buscar operador: {e_op}")
                 
                 # Buscar item atual
                 try:
-                    if hasattr(status, 'item_atual_id') and status.item_atual_id:
-                        item = Item.query.get(status.item_atual_id)
+                    item_encontrado = False
+                    
+                    # Primeira tentativa: usar item_atual_id se disponível
+                    if getattr(status, 'item_atual', None):
+                        item = status.item_atual
                         if item:
                             status_info['item_id'] = item.id
                             status_info['item_nome'] = item.nome
                             status_info['item_codigo'] = item.codigo_acb
+                            # Caminho da imagem do item para exibição no dashboard
+                            status_info['item_imagem_path'] = getattr(item, 'imagem_path', None)
+                            logger.debug(f"Status {status.id}: item encontrado via item_atual_id - nome='{item.nome}', imagem='{getattr(item, 'imagem_path', None)}'")
+                            item_encontrado = True
+                        else:
+                            logger.debug(f"Status {status.id}: item com ID {status.item_atual_id} não encontrado no banco")
+                    else:
+                        logger.debug(f"Status {status.id}: sem item_atual_id definido")
+                    
+                    # Fallback: buscar via OS → Pedido → Item se não encontrou item_atual_id
+                    if not item_encontrado:
+                        logger.debug(f"Status {status.id}: tentando fallback via OS → Pedido → Item")
+                        os_obj_fallback = getattr(status, 'ordem_servico', None)
+                        if os_obj_fallback and getattr(os_obj_fallback, 'pedidos', None):
+                            pedido_os = os_obj_fallback.pedidos[0]
+                            pedido = getattr(pedido_os, 'pedido', None)
+                            item = getattr(pedido, 'item', None) if pedido else None
+                            if item:
+                                status_info['item_id'] = item.id
+                                status_info['item_nome'] = item.nome
+                                status_info['item_codigo'] = item.codigo_acb
+                                status_info['item_imagem_path'] = getattr(item, 'imagem_path', None)
+                                logger.debug(f"Status {status.id}: item encontrado via fallback - nome='{item.nome}', imagem='{getattr(item, 'imagem_path', None)}'")
+                                item_encontrado = True
+                        
+                        if not item_encontrado:
+                            logger.debug(f"Status {status.id}: nenhum item encontrado (nem via item_atual_id nem via fallback)")
+                    
                 except Exception as e_item:
-                    print(f"[ERRO] Falha ao buscar item: {e_item}")
+                    logger.error(f"Status {status.id}: falha ao buscar item: {e_item}")
                 
-                # Buscar trabalho atual
+                # Buscar trabalho atual (pré-carregado)
                 try:
-                    if hasattr(status, 'trabalho_atual_id') and status.trabalho_atual_id:
-                        trabalho = Trabalho.query.get(status.trabalho_atual_id)
-                        if trabalho:
-                            status_info['trabalho_id'] = trabalho.id
-                            status_info['trabalho_nome'] = trabalho.nome
+                    trabalho = getattr(status, 'trabalho_atual', None)
+                    if trabalho:
+                        status_info['trabalho_id'] = trabalho.id
+                        status_info['trabalho_nome'] = trabalho.nome
                 except Exception as e_trab:
-                    print(f"[ERRO] Falha ao buscar trabalho: {e_trab}")
+                    logger.error(f"Falha ao buscar trabalho: {e_trab}")
                 
                 # Adicionar quantidade atual e última quantidade apontada para este item/trabalho
                 try:
@@ -417,7 +554,7 @@ def status_ativos():
                             ultima_q = int(status.quantidade_atual)
                     status_info['ultima_quantidade'] = ultima_q if ultima_q is not None else 0
                 except Exception as e_q:
-                    print(f"[ERRO] Falha ao calcular ultima_quantidade: {e_q}")
+                    logger.error(f"Falha ao calcular ultima_quantidade: {e_q}")
                 
                 # Adicionar timestamp de início da ação
                 status_info['inicio_acao'] = to_brt_iso(getattr(status, 'inicio_acao', None))
@@ -489,7 +626,7 @@ def status_ativos():
                                     else:
                                         analytics['setup_status'] = 'Abaixo do esperado'
                         except Exception as e_set:
-                            print(f"[ERRO] Analytics setup: {e_set}")
+                            logger.error(f"Analytics setup: {e_set}")
 
                         # Produção: calcular tempo de produção + pausas desde o último início
                         try:
@@ -562,33 +699,76 @@ def status_ativos():
                                     else:
                                         analytics['producao_status'] = 'Abaixo do esperado'
                         except Exception as e_prod:
-                            print(f"[ERRO] Analytics produção: {e_prod}")
+                            logger.error(f"Analytics produção: {e_prod}")
 
                     status_info['analytics'] = analytics
                     status_info['cronometro'] = cronometro
                 except Exception as e_an:
-                    print(f"[ERRO] Falha ao montar analytics do status {getattr(status,'id',None)}: {e_an}")
+                    logger.error(f"Falha ao montar analytics do status {getattr(status,'id',None)}: {e_an}")
 
-                # Nome da lista Kanban atual (ex.: MAZAK, GLM, SERRA)
+                # Nome da lista Kanban atual (ex.: MAZAK, GLM, SERRA) e normalização/canonização
                 try:
-                    ap_last_list = ApontamentoProducao.query.filter(
-                        ApontamentoProducao.ordem_servico_id == status.ordem_servico_id,
-                        ApontamentoProducao.lista_kanban != None
-                    ).order_by(ApontamentoProducao.data_hora.desc()).first()
-                    status_info['lista_kanban'] = getattr(ap_last_list, 'lista_kanban', None)
-                except Exception:
-                    pass
-
-                # Tipo de serviço e cor da lista Kanban (para agrupamento no dashboard)
-                try:
-                    nome_lista = status_info.get('lista_kanban') if isinstance(status_info, dict) else None
-                    if nome_lista:
-                        kl = KanbanLista.query.filter_by(nome=nome_lista).first()
+                    # Primeiro, tentar buscar da OS atual se estiver em uma máquina
+                    os_obj = OrdemServico.query.get(status.ordem_servico_id) if status.ordem_servico_id else None
+                    nome_lista_raw = None
+                    
+                    if os_obj and hasattr(os_obj, 'status') and getattr(os_obj, 'status'):
+                        os_status = getattr(os_obj, 'status')
+                        # Verificar se o status da OS corresponde a uma lista Kanban conhecida
+                        if os_status.strip().lower() in map_lista_por_lower:
+                            nome_lista_raw = os_status
+                            logger.debug(f"Status {status.id}: usando status da OS '{os_status}' como lista_kanban")
+                    
+                    # Se não conseguiu da OS, buscar do último apontamento
+                    if not nome_lista_raw:
+                        ap_last_list = ApontamentoProducao.query.filter(
+                            ApontamentoProducao.ordem_servico_id == status.ordem_servico_id,
+                            ApontamentoProducao.lista_kanban != None
+                        ).order_by(ApontamentoProducao.data_hora.desc()).first()
+                        nome_lista_raw = getattr(ap_last_list, 'lista_kanban', None)
+                        logger.debug(f"Status {status.id}: usando apontamento '{nome_lista_raw}' como lista_kanban")
+                    
+                    if nome_lista_raw:
+                        nome_norm = nome_lista_raw.strip().lower()
+                        kl = map_lista_por_lower.get(nome_norm)
                         if kl:
+                            status_info['lista_kanban'] = getattr(kl, 'nome', None)
                             status_info['lista_tipo'] = getattr(kl, 'tipo_servico', None)
                             status_info['lista_cor'] = getattr(kl, 'cor', None)
-                except Exception:
+                            logger.debug(f"Status {status.id}: normalizado para lista_kanban='{status_info['lista_kanban']}'")
+                        else:
+                            status_info['lista_kanban'] = nome_lista_raw
+                            logger.debug(f"Status {status.id}: usando raw lista_kanban='{nome_lista_raw}' (não encontrado no mapa)")
+                except Exception as e:
+                    logger.error(f"Falha ao determinar lista_kanban para status {status.id}: {e}")
                     pass
+
+                # Aplicar filtros (lista, lista_tipo, status) assim que disponíveis para evitar custo desnecessário
+                try:
+                    logger.debug(f"Verificando filtros para status {status.id}: lista_kanban='{status_info.get('lista_kanban')}', lista_tipo='{status_info.get('lista_tipo')}', status_atual='{status_info.get('status_atual')}'")
+                    logger.debug(f"Filtros ativos: lista_filter={lista_filter}, lista_tipo_filter={lista_tipo_filter}, status_filter_set={status_filter_set}")
+                    
+                    # Aplicar filtro de lista kanban apenas se existir um filtro
+                    if lista_filter is not None:
+                        if not status_info.get('lista_kanban') or status_info.get('lista_kanban').lower() != lista_filter:
+                            logger.debug(f"Status {status.id} excluído por filtro de lista: '{status_info.get('lista_kanban')}' != '{lista_filter}'")
+                            continue
+                    
+                    # Aplicar filtro de tipo apenas se existir um filtro
+                    if lista_tipo_filter is not None:
+                        if not status_info.get('lista_tipo') or status_info.get('lista_tipo').lower() != lista_tipo_filter:
+                            logger.debug(f"Status {status.id} excluído por filtro de tipo: '{status_info.get('lista_tipo')}' != '{lista_tipo_filter}'")
+                            continue
+                    
+                    # Aplicar filtro de status apenas se existir um filtro
+                    if status_filter_set is not None:
+                        if not status_info.get('status_atual') or status_info.get('status_atual').lower() not in status_filter_set:
+                            logger.debug(f"Status {status.id} excluído por filtro de status: '{status_info.get('status_atual')}' not in {status_filter_set}")
+                            continue
+                    
+                    logger.debug(f"Status {status.id} passou em todos os filtros, será incluído")
+                except Exception as e:
+                    logger.error(f"Erro ao aplicar filtros para status {status.id}: {e}")
 
                 # Mapear apontamentos ativos por (item, trabalho) para indicar múltiplos simultâneos
                 try:
@@ -609,12 +789,14 @@ def status_ativos():
                         # Coletar informações do item/trabalho
                         item_nome = None
                         item_codigo = None
+                        item_imagem_path = None
                         trabalho_nome = None
                         try:
                             it = Item.query.get(ap.item_id) if ap.item_id else None
                             if it:
                                 item_nome = getattr(it, 'nome', None)
                                 item_codigo = getattr(it, 'codigo_acb', None)
+                                item_imagem_path = getattr(it, 'imagem_path', None)
                             tr = Trabalho.query.get(ap.trabalho_id) if ap.trabalho_id else None
                             if tr:
                                 trabalho_nome = getattr(tr, 'nome', None)
@@ -652,6 +834,7 @@ def status_ativos():
                             'item_id': ap.item_id,
                             'item_codigo': item_codigo,
                             'item_nome': item_nome,
+                            'item_imagem_path': item_imagem_path if 'item_imagem_path' in locals() else None,
                             'trabalho_id': ap.trabalho_id,
                             'trabalho_nome': trabalho_nome,
                             'status': 'Setup em andamento' if ap.tipo_acao == 'inicio_setup' else ('Pausado' if ap.tipo_acao in ['pausa', 'stop'] else 'Produção em andamento'),
@@ -779,26 +962,423 @@ def status_ativos():
                             except Exception:
                                 pass
                         except Exception as e_an_t:
-                            print(f"[ERRO] Analytics por trabalho (item={ap.item_id}, trab={ap.trabalho_id}): {e_an_t}")
+                            logger.error(f"Analytics por trabalho (item={ap.item_id}, trab={ap.trabalho_id}): {e_an_t}")
 
                     status_info['ativos_por_trabalho'] = ativos_info
                     status_info['qtd_ativos'] = len(ativos_info)
                     status_info['multiplo_ativos'] = len(ativos_info) > 1
                 except Exception as e_mult:
-                    print(f"[ERRO] Falha ao montar ativos_por_trabalho: {e_mult}")
+                    logger.error(f"Falha ao montar ativos_por_trabalho: {e_mult}")
+
+                # Resumo de contagens por status (setup, pausa, producao)
+                try:
+                    counts = {'setup': 0, 'pausado': 0, 'producao': 0}
+                    for a in status_info.get('ativos_por_trabalho', []) or []:
+                        s = (a.get('status') or '').lower()
+                        if 'setup' in s:
+                            counts['setup'] += 1
+                        elif 'pausado' in s:
+                            counts['pausado'] += 1
+                        elif 'produção' in s or 'producao' in s:
+                            counts['producao'] += 1
+                    status_info['resumo_status'] = counts
+                except Exception as e_cnt:
+                    logger.error(f"Falha ao calcular resumo_status: {e_cnt}")
+
+                # Montar lista completa de trabalhos do item com status e tempos somados
+                try:
+                    trabalhos_list = []
+                    # Preferir item atual pré-carregado; fallback para item do primeiro pedido da OS
+                    item_obj = getattr(status, 'item_atual', None)
+                    if not item_obj:
+                        os_obj_local = getattr(status, 'ordem_servico', None)
+                        if os_obj_local and getattr(os_obj_local, 'pedidos', None):
+                            pedido_os = os_obj_local.pedidos[0]
+                            pedido_local = getattr(pedido_os, 'pedido', None)
+                            item_obj = getattr(pedido_local, 'item', None) if pedido_local else None
+                    if item_obj and getattr(item_obj, 'trabalhos', None):
+                        ativos_lista = status_info.get('ativos_por_trabalho', []) or []
+                        for it in item_obj.trabalhos:
+                            trab = getattr(it, 'trabalho', None)
+                            if not trab:
+                                continue
+                            trab_id = getattr(trab, 'id', None)
+                            trab_nome = getattr(trab, 'nome', '')
+                            relacionados = [a for a in ativos_lista if a.get('trabalho_id') == trab_id]
+                            # Agregar tempos
+                            tempo_setup = 0
+                            tempo_pausas = 0
+                            tempo_producao = 0
+                            ultima_q = 0
+                            status_trab = 'Aguardando'
+                            inicio_mais_recente = None
+                            for a in relacionados:
+                                an = a.get('analytics') or {}
+                                tempo_setup += int(an.get('tempo_setup_utilizado') or 0)
+                                tempo_pausas += int(an.get('tempo_pausas_utilizado') or 0)
+                                tempo_producao += int(an.get('tempo_producao_utilizado') or 0)
+                                # última quantidade: pegar da entrada mais recente
+                                try:
+                                    ini = a.get('inicio_acao')
+                                    if ini:
+                                        if not inicio_mais_recente or str(ini) > str(inicio_mais_recente):
+                                            inicio_mais_recente = ini
+                                            ultima_q = int(a.get('ultima_quantidade') or 0)
+                                            status_trab = a.get('status') or status_trab
+                                except Exception:
+                                    pass
+                            trabalhos_list.append({
+                                'trabalho_id': trab_id,
+                                'trabalho_nome': trab_nome,
+                                'status': status_trab,
+                                'ultima_quantidade': int(ultima_q or 0),
+                                'tempo_setup_utilizado': int(tempo_setup or 0),
+                                'tempo_pausas_utilizado': int(tempo_pausas or 0),
+                                'tempo_producao_utilizado': int(tempo_producao or 0)
+                            })
+                        status_info['trabalhos_do_item'] = trabalhos_list
+                except Exception as e_trabs:
+                    logger.error(f"Falha ao montar trabalhos_do_item: {e_trabs}")
 
                 # Adicionar ao resultado
                 resultado['status_ativos'].append(status_info)
+                # Marcar esta OS como já processada
+                os_com_status_ativo.add(status.ordem_servico_id)
+                logger.debug(f"Status ID={status.id} processado com sucesso e adicionado ao resultado")
             except Exception as e_status:
-                print(f"[ERRO] Falha ao montar status_info para status ID {getattr(status, 'id', None)}: {e_status}")
+                logger.error(f"Falha ao montar status_info para status ID {getattr(status, 'id', None)}: {e_status}")
                 # Continua para o próximo status
                 continue
+        timings['build_status_loop_ms'] = int((time.perf_counter() - t0) * 1000)
         
-        print(f"[DEBUG] Status ativos formatados: {len(resultado['status_ativos'])}")
+        # Adicionar OS que estão em máquinas mas NÃO têm status ativo (para mostrar todas as máquinas)
+        logger.debug("Adicionando OS sem status ativo...")
+        t0 = time.perf_counter()
+        for ordem in todas_os_em_maquinas:
+            logger.debug(f"Processando OS {ordem.id} - Status: {getattr(ordem, 'status', None)}")
+            if ordem.id in os_com_status_ativo:
+                logger.debug(f"OS {ordem.id} já tem status ativo, pulando...")
+                continue  # Já foi processada acima
+                
+            try:
+                # Criar status_info básico para OS sem apontamento ativo
+                status_info = {
+                    'id': f"os_{ordem.id}",
+                    'ordem_servico_id': ordem.id,
+                    'ordem_id': ordem.id,
+                    'status_atual': 'Aguardando'
+                }
+                
+                # Número da OS
+                try:
+                    os_num = getattr(ordem, 'numero', None) or getattr(ordem, 'codigo', None) or f"OS-{ordem.id}"
+                    status_info['os_numero'] = os_num
+                except Exception:
+                    status_info['os_numero'] = f"OS-{ordem.id}"
+                
+                # Lista Kanban (status da OS) com normalização/canonização
+                status_info['lista_kanban'] = getattr(ordem, 'status', None)
+                try:
+                    nome_raw = status_info.get('lista_kanban')
+                    if nome_raw:
+                        kl = map_lista_por_lower.get(nome_raw.strip().lower())
+                        if kl:
+                            status_info['lista_kanban'] = getattr(kl, 'nome', None)
+                            status_info['lista_tipo'] = getattr(kl, 'tipo_servico', None)
+                            status_info['lista_cor'] = getattr(kl, 'cor', None)
+                except Exception:
+                    pass
+                
+                # Aplicar filtros
+                try:
+                    if lista_filter is not None:
+                        if not status_info.get('lista_kanban') or status_info.get('lista_kanban').lower() != lista_filter:
+                            continue
+                    
+                    if lista_tipo_filter is not None:
+                        if not status_info.get('lista_tipo') or status_info.get('lista_tipo').lower() != lista_tipo_filter:
+                            continue
+                    
+                    if status_filter_set is not None:
+                        if not status_info.get('status_atual') or status_info.get('status_atual').lower() not in status_filter_set:
+                            continue
+                except Exception:
+                    pass
+                
+                # Buscar item/trabalho da OS (mesmo sem apontamento ativo)
+                try:
+                    logger.debug(f"OS {ordem.id}: buscando informações do item via pedidos")
+                    if ordem.pedidos:
+                        # Agregar clientes e total usando relações já carregadas
+                        try:
+                            clientes_map = {}
+                            total_q = 0
+                            for po in getattr(ordem, 'pedidos', []) or []:
+                                ped = getattr(po, 'pedido', None)
+                                if not ped:
+                                    continue
+                                q = int(getattr(ped, 'quantidade', 0) or 0)
+                                total_q += q
+                                cli = getattr(ped, 'cliente', None)
+                                nome_cli = getattr(cli, 'nome', None) or 'Cliente'
+                                clientes_map[nome_cli] = clientes_map.get(nome_cli, 0) + q
+                            status_info['quantidade_total'] = int(total_q)
+                            if clientes_map:
+                                status_info['clientes_quantidades'] = [
+                                    {'cliente_nome': k, 'quantidade': v} for k, v in clientes_map.items()
+                                ]
+                                status_info['cliente_nome'] = next(iter(clientes_map.keys()))
+                        except Exception as e_cli2:
+                            logger.error(f"OS {ordem.id}: falha ao agregar clientes/quantidades: {e_cli2}")
+
+                        pedido_os = ordem.pedidos[0]
+                        logger.debug(f"OS {ordem.id}: encontrado pedido_os com pedido_id={getattr(pedido_os, 'pedido_id', None)}")
+                        pedido = pedido_os.pedido
+                        item = pedido.item if pedido else None
+                        if item:
+                            logger.debug(f"OS {ordem.id}: encontrado item via relação pre-carregada com item_id={item.id}")
+                            status_info['item_id'] = item.id
+                            status_info['item_nome'] = item.nome
+                            status_info['item_codigo'] = item.codigo_acb
+                            # Caminho da imagem do item para exibição quando não há status ativo
+                            status_info['item_imagem_path'] = getattr(item, 'imagem_path', None)
+                            logger.debug(f"OS {ordem.id}: item encontrado - nome='{item.nome}', imagem='{getattr(item, 'imagem_path', None)}'")
+                            
+                            # Buscar trabalho do item
+                            if item.trabalhos:
+                                trabalho_rel = item.trabalhos[0]
+                                trabalho = trabalho_rel.trabalho
+                                if trabalho:
+                                    status_info['trabalho_id'] = trabalho.id
+                                    status_info['trabalho_nome'] = trabalho.nome
+                                    logger.debug(f"OS {ordem.id}: trabalho encontrado - nome='{trabalho.nome}'")
+                                
+                                # clientes_quantidades e quantidade_total já definidos acima
+                                # Montar trabalhos_do_item mesmo sem ativos, deixando todos visíveis
+                                try:
+                                    trabalhos_list = []
+                                    for it in item.trabalhos:
+                                        trab = it.trabalho
+                                        if not trab:
+                                            continue
+                                        trabalhos_list.append({
+                                            'trabalho_id': trab.id,
+                                            'trabalho_nome': trab.nome,
+                                            'status': 'Aguardando',
+                                            'ultima_quantidade': 0,
+                                            'tempo_setup_utilizado': 0,
+                                            'tempo_pausas_utilizado': 0,
+                                            'tempo_producao_utilizado': 0
+                                        })
+                                    if trabalhos_list:
+                                        status_info['trabalhos_do_item'] = trabalhos_list
+                                except Exception as e_trabs2:
+                                    logger.error(f"OS {ordem.id}: falha ao montar trabalhos_do_item sem ativos: {e_trabs2}")
+                            else:
+                                logger.debug(f"OS {ordem.id}: item com ID {pedido.item_id} não encontrado no banco")
+                        else:
+                            logger.debug(f"OS {ordem.id}: pedido não encontrado ou sem item_id")
+                    else:
+                        logger.debug(f"OS {ordem.id}: sem pedidos associados")
+                except Exception as e:
+                    logger.error(f"OS {ordem.id}: falha ao buscar item via pedidos: {e}")
+                
+                # Valores padrão para campos obrigatórios
+                status_info.setdefault('ultima_quantidade', 0)
+                status_info.setdefault('ativos_por_trabalho', [])
+                status_info.setdefault('qtd_ativos', 0)
+                status_info.setdefault('multiplo_ativos', False)
+                status_info.setdefault('analytics', {})
+                status_info.setdefault('quantidade_total', 0)
+                status_info.setdefault('cliente_nome', None)
+                status_info.setdefault('resumo_status', {'setup': 0, 'pausado': 0, 'producao': 0})
+                status_info.setdefault('trabalhos_do_item', [])
+                
+                # Adicionar ao resultado
+                resultado['status_ativos'].append(status_info)
+                
+            except Exception as e_os:
+                logger.error(f"Falha ao processar OS {ordem.id}: {e_os}")
+                continue
+        timings['build_os_sem_ativos_loop_ms'] = int((time.perf_counter() - t0) * 1000)
+        
+        logger.debug(f"Status ativos formatados: {len(resultado['status_ativos'])}")
+        # Anexar timings apenas quando explicitamente solicitado
+        try:
+            if (request.args.get('timing') or '').strip().lower() in ['1', 'true', 'yes']:
+                timings['total_ms'] = int((time.perf_counter() - t_start) * 1000)
+                resultado['timings'] = timings
+                logger.info(f"/status-ativos timings: {timings}")
+        except Exception:
+            pass
         return jsonify(resultado)
     except Exception as e:
-        print(f"[ERRO FATAL] Falha ao buscar status ativos: {e}")
+        logger.exception(f"Falha ao buscar status ativos: {e}")
         return jsonify({'error': str(e), 'message': 'Falha ao buscar status ativos'}), 500
+
+@apontamento_bp.route('/detalhes/<int:ordem_id>', methods=['GET'])
+def detalhes_ordem_servico(ordem_id):
+    """Retorna análise detalhada completa de uma ordem de serviço"""
+    try:
+        # Buscar OS
+        ordem = OrdemServico.query.get_or_404(ordem_id)
+        
+        # Buscar todos os apontamentos desta OS
+        apontamentos = ApontamentoProducao.query.filter_by(ordem_servico_id=ordem_id).order_by(ApontamentoProducao.data_hora.asc()).all()
+        
+        # Buscar informações do item
+        item_info = {}
+        if ordem.pedidos:
+            pedido_os = ordem.pedidos[0]
+            pedido = Pedido.query.get(pedido_os.pedido_id)
+            if pedido and pedido.item_id:
+                item = Item.query.get(pedido.item_id)
+                if item:
+                    item_info = {
+                        'id': item.id,
+                        'nome': item.nome,
+                        'codigo': item.codigo_acb,
+                        'tempo_estimado_peca': getattr(item, 'tempo_estimado_peca', None),
+                        'tempo_setup_estimado': getattr(item, 'tempo_setup_estimado', None)
+                    }
+        
+        # Agrupar apontamentos por tipo de trabalho
+        trabalhos_analytics = {}
+        
+        for ap in apontamentos:
+            trabalho_key = f"{ap.item_id}_{ap.trabalho_id}"
+            
+            if trabalho_key not in trabalhos_analytics:
+                trabalho = Trabalho.query.get(ap.trabalho_id) if ap.trabalho_id else None
+                trabalhos_analytics[trabalho_key] = {
+                    'item_id': ap.item_id,
+                    'trabalho_id': ap.trabalho_id,
+                    'trabalho_nome': trabalho.nome if trabalho else 'N/A',
+                    'apontamentos': [],
+                    'setup_total': 0,
+                    'producao_total': 0,
+                    'pausas_total': 0,
+                    'pausas_por_motivo': {},
+                    'ultima_quantidade': 0,
+                    'operadores': set()
+                }
+            
+            trabalhos_analytics[trabalho_key]['apontamentos'].append({
+                'id': ap.id,
+                'data_hora': ap.data_hora.isoformat() if ap.data_hora else None,
+                'data_fim': ap.data_fim.isoformat() if ap.data_fim else None,
+                'tipo_acao': ap.tipo_acao,
+                'operador_id': ap.operador_id,
+                'operador_nome': Usuario.query.get(ap.operador_id).nome if ap.operador_id else 'N/A',
+                'quantidade': ap.quantidade,
+                'motivo_pausa': ap.motivo_parada,
+                'duracao_segundos': None
+            })
+            
+            if ap.operador_id:
+                trabalhos_analytics[trabalho_key]['operadores'].add(ap.operador_id)
+                
+            if ap.quantidade:
+                trabalhos_analytics[trabalho_key]['ultima_quantidade'] = ap.quantidade
+        
+        # Calcular durações e analytics
+        for trabalho_key, dados in trabalhos_analytics.items():
+            apts = dados['apontamentos']
+            
+            # Calcular durações
+            for i, ap in enumerate(apts):
+                if ap['data_fim']:
+                    inicio = datetime.fromisoformat(ap['data_hora'])
+                    fim = datetime.fromisoformat(ap['data_fim'])
+                    duracao = int((fim - inicio).total_seconds())
+                    ap['duracao_segundos'] = duracao
+                    
+                    # Somar aos totais
+                    if ap['tipo_acao'] in ['inicio_setup', 'fim_setup']:
+                        dados['setup_total'] += duracao
+                    elif ap['tipo_acao'] in ['inicio_producao', 'fim_producao']:
+                        dados['producao_total'] += duracao
+                    elif ap['tipo_acao'] in ['pausa', 'stop']:
+                        dados['pausas_total'] += duracao
+                        motivo = ap['motivo_pausa'] or 'Não informado'
+                        dados['pausas_por_motivo'][motivo] = dados['pausas_por_motivo'].get(motivo, 0) + duracao
+            
+            # Converter set para lista
+            dados['operadores'] = list(dados['operadores'])
+        
+        # Calcular analytics gerais
+        total_setup = sum(t['setup_total'] for t in trabalhos_analytics.values())
+        total_producao = sum(t['producao_total'] for t in trabalhos_analytics.values())
+        total_pausas = sum(t['pausas_total'] for t in trabalhos_analytics.values())
+        
+        # Calcular eficiência
+        tempo_estimado_total = 0
+        if item_info.get('tempo_estimado_peca') and trabalhos_analytics:
+            for dados in trabalhos_analytics.values():
+                if dados['ultima_quantidade']:
+                    tempo_estimado_total += item_info['tempo_estimado_peca'] * dados['ultima_quantidade']
+        
+        # Analytics por operador
+        analytics_operadores = {}
+        for trabalho_key, dados in trabalhos_analytics.items():
+            for ap in dados['apontamentos']:
+                if ap['operador_id'] and ap['duracao_segundos']:
+                    op_id = ap['operador_id']
+                    if op_id not in analytics_operadores:
+                        analytics_operadores[op_id] = {
+                            'nome': ap['operador_nome'],
+                            'tempo_setup': 0,
+                            'tempo_producao': 0,
+                            'tempo_pausas': 0,
+                            'trabalhos': {}
+                        }
+                    
+                    if ap['tipo_acao'] in ['inicio_setup', 'fim_setup']:
+                        analytics_operadores[op_id]['tempo_setup'] += ap['duracao_segundos']
+                    elif ap['tipo_acao'] in ['inicio_producao', 'fim_producao']:
+                        analytics_operadores[op_id]['tempo_producao'] += ap['duracao_segundos']
+                    elif ap['tipo_acao'] in ['pausa', 'stop']:
+                        analytics_operadores[op_id]['tempo_pausas'] += ap['duracao_segundos']
+                    
+                    # Por trabalho
+                    trabalho_nome = dados['trabalho_nome']
+                    if trabalho_nome not in analytics_operadores[op_id]['trabalhos']:
+                        analytics_operadores[op_id]['trabalhos'][trabalho_nome] = {
+                            'tempo_setup': 0,
+                            'tempo_producao': 0,
+                            'tempo_pausas': 0
+                        }
+                    
+                    if ap['tipo_acao'] in ['inicio_setup', 'fim_setup']:
+                        analytics_operadores[op_id]['trabalhos'][trabalho_nome]['tempo_setup'] += ap['duracao_segundos']
+                    elif ap['tipo_acao'] in ['inicio_producao', 'fim_producao']:
+                        analytics_operadores[op_id]['trabalhos'][trabalho_nome]['tempo_producao'] += ap['duracao_segundos']
+                    elif ap['tipo_acao'] in ['pausa', 'stop']:
+                        analytics_operadores[op_id]['trabalhos'][trabalho_nome]['tempo_pausas'] += ap['duracao_segundos']
+        
+        resultado = {
+            'ordem_servico': {
+                'id': ordem.id,
+                'numero': getattr(ordem, 'numero', None) or f"OS-{ordem.id}",
+                'status': ordem.status
+            },
+            'item': item_info,
+            'analytics_gerais': {
+                'tempo_setup_total': total_setup,
+                'tempo_producao_total': total_producao,
+                'tempo_pausas_total': total_pausas,
+                'tempo_estimado_total': tempo_estimado_total,
+                'eficiencia_percentual': round((tempo_estimado_total / total_producao * 100) if total_producao > 0 else 0, 1)
+            },
+            'trabalhos': list(trabalhos_analytics.values()),
+            'analytics_operadores': analytics_operadores
+        }
+        
+        return jsonify(resultado)
+        
+    except Exception as e:
+        logger.exception(f"Falha ao buscar detalhes da OS {ordem_id}: {e}")
+        return jsonify({'error': str(e)}), 500
 
 @apontamento_bp.route('/registrar', methods=['POST'])
 def registrar_apontamento():
@@ -993,7 +1573,7 @@ def registrar_apontamento():
             if ultimo_ap and ultimo_ap.quantidade is not None:
                 ultima_quantidade = int(ultimo_ap.quantidade)
         except Exception as e_q:
-            print(f"[ERRO] Falha ao obter última quantidade para validação: {e_q}")
+            logger.exception("Falha ao obter última quantidade para validação")
 
         # Validação de quantidade mínima quando informada (início produção, pausa e fim produção)
         if dados.get('quantidade') is not None:
@@ -1288,7 +1868,7 @@ def get_logs_ordem_servico(ordem_id):
                         log_info['operador_nome'] = usuario.nome
                         log_info['operador_codigo'] = usuario.codigo_operador
             except Exception as e_op:
-                print(f"[ERRO] Falha ao buscar operador para log {apontamento.id}: {e_op}")
+                logger.exception("Falha ao buscar operador para log %s", apontamento.id)
             
             # Adicionar informações do item
             try:
@@ -1299,7 +1879,7 @@ def get_logs_ordem_servico(ordem_id):
                         log_info['item_nome'] = item.nome
                         log_info['item_codigo'] = item.codigo_acb
             except Exception as e_item:
-                print(f"[ERRO] Falha ao buscar item para log {apontamento.id}: {e_item}")
+                logger.exception("Falha ao buscar item para log %s", apontamento.id)
             
             # Adicionar informações do trabalho
             try:
@@ -1309,7 +1889,7 @@ def get_logs_ordem_servico(ordem_id):
                         log_info['trabalho_id'] = trabalho.id
                         log_info['trabalho_nome'] = trabalho.nome
             except Exception as e_trab:
-                print(f"[ERRO] Falha ao buscar trabalho para log {apontamento.id}: {e_trab}")
+                logger.exception("Falha ao buscar trabalho para log %s", apontamento.id)
             
             logs.append(log_info)
         
@@ -1318,7 +1898,7 @@ def get_logs_ordem_servico(ordem_id):
             'logs': logs
         })
     except Exception as e:
-        print(f"[ERRO] Falha ao buscar logs de apontamento para OS {ordem_id}: {e}")
+        logger.exception("Falha ao buscar logs de apontamento para OS %s", ordem_id)
         return jsonify({
             'success': False,
             'message': f'Erro ao buscar logs de apontamento: {str(e)}'

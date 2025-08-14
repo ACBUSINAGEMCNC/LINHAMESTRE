@@ -34,6 +34,39 @@
         </div>
     </div>
 
+    <!-- Filtros -->
+    <div class="row mb-3">
+        <div class="col-12">
+            <div class="d-flex flex-wrap gap-3 align-items-end">
+                <div>
+                    <label for="filter-lista" class="form-label mb-1">Lista Kanban</label>
+                    <select id="filter-lista" class="form-select form-select-sm" style="min-width: 220px;">
+                        <option value="Todas">Todas</option>
+                        {% if listas_kanban %}
+                            {% for l in listas_kanban %}
+                                <option value="{{ l.nome }}">{{ l.nome }}</option>
+                            {% endfor %}
+                        {% endif %}
+                    </select>
+                </div>
+                <div>
+                    <label for="filter-status" class="form-label mb-1">Status</label>
+                    <select id="filter-status" class="form-select form-select-sm" style="min-width: 220px;">
+                        <option value="Todos">Todos</option>
+                        <option value="Setup em andamento">Setup em andamento</option>
+                        <option value="Produção em andamento">Produção em andamento</option>
+                        <option value="Pausado">Pausado</option>
+                    </select>
+                </div>
+                <div class="ms-auto">
+                    <button class="btn btn-sm btn-outline-secondary" id="btn-clear-filters">
+                        <i class="fas fa-broom"></i> Limpar filtros
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
     <!-- Resumo Geral -->
     <div class="row mb-4">
         <div class="col-md-3">
@@ -204,6 +237,35 @@
                 </div>
             </div>
         </div>
+    </div>
+</div>
+
+<!-- Modal de Detalhes Analíticos -->
+<div class="modal fade" id="modalDetalhes" tabindex="-1">
+    <div class="modal-dialog modal-xl">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">
+                    <i class="fas fa-chart-line me-2"></i>
+                    Análise Detalhada - <span id="detalhes-os-numero">OS</span>
+                </h5>
+                <div class="d-flex gap-2">
+                    <button class="btn btn-outline-primary btn-sm" onclick="imprimirRelatorio()">
+                        <i class="fas fa-print"></i> Imprimir
+                    </button>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+            </div>
+            <div class="modal-body" id="conteudoDetalhes">
+                <div class="text-center py-5">
+                    <div class="spinner-border" role="status">
+                        <span class="visually-hidden">Carregando análise...</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
     </div>
 </div>
 
@@ -393,8 +455,445 @@ function verLogs(ordemId) {
 }
 
 function verDetalhes(ordemId) {
-    // Implementar visualização de detalhes da OS
-    alert('Funcionalidade em desenvolvimento');
+    const modal = new bootstrap.Modal(document.getElementById('modalDetalhes'));
+    const conteudo = document.getElementById('conteudoDetalhes');
+    const osNumero = document.getElementById('detalhes-os-numero');
+    
+    // Mostrar modal com loading
+    modal.show();
+    conteudo.innerHTML = `
+        <div class="text-center py-5">
+            <div class="spinner-border" role="status">
+                <span class="visually-hidden">Carregando análise...</span>
+            </div>
+        </div>
+    `;
+    
+    // Carregar dados do backend
+    fetch(`/apontamento/detalhes/${ordemId}`)
+        .then(response => response.json())
+        .then(data => {
+            if (data.ordem_servico) {
+                osNumero.textContent = data.ordem_servico.numero;
+                renderizarDetalhes(data);
+            } else {
+                conteudo.innerHTML = `<div class="alert alert-danger">${data.error || 'Erro ao carregar detalhes'}</div>`;
+            }
+        })
+        .catch(error => {
+            console.error('Erro:', error);
+            conteudo.innerHTML = '<div class="alert alert-danger">Erro ao carregar detalhes analíticos</div>';
+        });
+}
+
+function renderizarDetalhes(data) {
+    const conteudo = document.getElementById('conteudoDetalhes');
+    
+    // Armazenar dados globalmente para impressão
+    window.dadosDetalhes = data;
+    
+    const formatarTempo = (segundos) => {
+        if (!segundos) return '0h 0m';
+        const horas = Math.floor(segundos / 3600);
+        const minutos = Math.floor((segundos % 3600) / 60);
+        return `${horas}h ${minutos}m`;
+    };
+    
+    const formatarPercentual = (valor, total) => {
+        if (!total) return '0%';
+        return `${((valor / total) * 100).toFixed(1)}%`;
+    };
+    
+    let html = `
+        <!-- Filtros -->
+        <div class="row mb-4">
+            <div class="col-md-6">
+                <label class="form-label">Filtrar por Operador:</label>
+                <select class="form-select" id="filtroOperador" onchange="aplicarFiltroOperador()">
+                    <option value="">Todos os operadores</option>
+                    ${Object.keys(data.analytics_operadores).map(opId => 
+                        `<option value="${opId}">${data.analytics_operadores[opId].nome}</option>`
+                    ).join('')}
+                </select>
+            </div>
+        </div>
+        
+        <!-- Analytics Gerais -->
+        <div class="row mb-4">
+            <div class="col-12">
+                <h6 class="border-bottom pb-2 mb-3"><i class="fas fa-chart-bar me-2"></i>Resumo Geral</h6>
+            </div>
+            <div class="col-md-3">
+                <div class="card bg-primary text-white">
+                    <div class="card-body text-center">
+                        <i class="fas fa-tools fa-2x mb-2"></i>
+                        <h5 class="card-title">${formatarTempo(data.analytics_gerais.tempo_setup_total)}</h5>
+                        <p class="card-text">Tempo Setup Total</p>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-3">
+                <div class="card bg-success text-white">
+                    <div class="card-body text-center">
+                        <i class="fas fa-cogs fa-2x mb-2"></i>
+                        <h5 class="card-title">${formatarTempo(data.analytics_gerais.tempo_producao_total)}</h5>
+                        <p class="card-text">Tempo Produção Total</p>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-3">
+                <div class="card bg-warning text-white">
+                    <div class="card-body text-center">
+                        <i class="fas fa-pause fa-2x mb-2"></i>
+                        <h5 class="card-title">${formatarTempo(data.analytics_gerais.tempo_pausas_total)}</h5>
+                        <p class="card-text">Tempo Pausas Total</p>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-3">
+                <div class="card ${data.analytics_gerais.eficiencia_percentual >= 80 ? 'bg-success' : data.analytics_gerais.eficiencia_percentual >= 60 ? 'bg-warning' : 'bg-danger'} text-white">
+                    <div class="card-body text-center">
+                        <i class="fas fa-tachometer-alt fa-2x mb-2"></i>
+                        <h5 class="card-title">${data.analytics_gerais.eficiencia_percentual}%</h5>
+                        <p class="card-text">Eficiência</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Item Info -->
+        ${data.item.nome ? `
+        <div class="row mb-4">
+            <div class="col-12">
+                <h6 class="border-bottom pb-2 mb-3"><i class="fas fa-cube me-2"></i>Informações do Item</h6>
+                <div class="card">
+                    <div class="card-body">
+                        <div class="row">
+                            <div class="col-md-6">
+                                <p><strong>Nome:</strong> ${data.item.nome}</p>
+                                <p><strong>Código:</strong> ${data.item.codigo || 'N/A'}</p>
+                            </div>
+                            <div class="col-md-6">
+                                <p><strong>Tempo Estimado/Peça:</strong> ${data.item.tempo_estimado_peca ? formatarTempo(data.item.tempo_estimado_peca) : 'N/A'}</p>
+                                <p><strong>Tempo Setup Estimado:</strong> ${data.item.tempo_setup_estimado ? formatarTempo(data.item.tempo_setup_estimado) : 'N/A'}</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        ` : ''}
+    `;
+    
+    // Análise por Tipo de Trabalho
+    if (data.trabalhos && data.trabalhos.length > 0) {
+        html += `
+            <div class="row mb-4">
+                <div class="col-12">
+                    <h6 class="border-bottom pb-2 mb-3"><i class="fas fa-list me-2"></i>Análise por Tipo de Trabalho</h6>
+                </div>
+            </div>
+        `;
+        
+        data.trabalhos.forEach(trabalho => {
+            const totalPausas = trabalho.pausas_total;
+            
+            html += `
+                <div class="row mb-4 trabalho-section" data-trabalho="${trabalho.trabalho_nome}">
+                    <div class="col-12">
+                        <div class="card">
+                            <div class="card-header bg-light">
+                                <h6 class="mb-0"><i class="fas fa-wrench me-2"></i>${trabalho.trabalho_nome}</h6>
+                            </div>
+                            <div class="card-body">
+                                <div class="row mb-3">
+                                    <div class="col-md-4">
+                                        <small class="text-muted">Setup:</small>
+                                        <div class="h5 text-primary">${formatarTempo(trabalho.setup_total)}</div>
+                                    </div>
+                                    <div class="col-md-4">
+                                        <small class="text-muted">Produção:</small>
+                                        <div class="h5 text-success">${formatarTempo(trabalho.producao_total)}</div>
+                                    </div>
+                                    <div class="col-md-4">
+                                        <small class="text-muted">Pausas:</small>
+                                        <div class="h5 text-warning">${formatarTempo(trabalho.pausas_total)}</div>
+                                    </div>
+                                </div>
+                                
+                                ${Object.keys(trabalho.pausas_por_motivo).length > 0 ? `
+                                <div class="mb-3">
+                                    <small class="text-muted">Pausas por Motivo:</small>
+                                    <div class="row">
+                                        ${Object.entries(trabalho.pausas_por_motivo).map(([motivo, tempo]) => `
+                                            <div class="col-md-6">
+                                                <div class="d-flex justify-content-between">
+                                                    <span>${motivo}:</span>
+                                                    <span class="text-warning">${formatarTempo(tempo)} (${formatarPercentual(tempo, totalPausas)})</span>
+                                                </div>
+                                            </div>
+                                        `).join('')}
+                                    </div>
+                                </div>
+                                ` : ''}
+                                
+                                <!-- Cronologia Detalhada -->
+                                <div class="mb-3">
+                                    <small class="text-muted">Cronologia de Apontamentos:</small>
+                                    <div class="table-responsive">
+                                        <table class="table table-sm">
+                                            <thead>
+                                                <tr>
+                                                    <th>Data/Hora</th>
+                                                    <th>Ação</th>
+                                                    <th>Operador</th>
+                                                    <th>Duração</th>
+                                                    <th>Quantidade</th>
+                                                    <th>Observações</th>
+                                                </tr>
+                                            </thead>
+                                            <tbody>
+                                                ${trabalho.apontamentos.map(ap => `
+                                                    <tr class="apontamento-row" data-operador="${ap.operador_id || ''}">
+                                                        <td>${new Date(ap.data_hora).toLocaleString('pt-BR')}</td>
+                                                        <td>
+                                                            <span class="badge ${
+                                                                ap.tipo_acao.includes('setup') ? 'bg-primary' :
+                                                                ap.tipo_acao.includes('producao') ? 'bg-success' :
+                                                                ap.tipo_acao.includes('pausa') ? 'bg-warning' : 'bg-secondary'
+                                                            }">${ap.tipo_acao}</span>
+                                                        </td>
+                                                        <td>${ap.operador_nome}</td>
+                                                        <td>${ap.duracao_segundos ? formatarTempo(ap.duracao_segundos) : '-'}</td>
+                                                        <td>${ap.quantidade || '-'}</td>
+                                                        <td>${ap.motivo_pausa || '-'}</td>
+                                                    </tr>
+                                                `).join('')}
+                                            </tbody>
+                                        </table>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            `;
+        });
+    }
+    
+    // Analytics por Operador
+    if (Object.keys(data.analytics_operadores).length > 0) {
+        html += `
+            <div class="row mb-4">
+                <div class="col-12">
+                    <h6 class="border-bottom pb-2 mb-3"><i class="fas fa-users me-2"></i>Resumo por Operador</h6>
+                </div>
+            </div>
+        `;
+        
+        Object.entries(data.analytics_operadores).forEach(([opId, operador]) => {
+            html += `
+                <div class="row mb-3 operador-section" data-operador="${opId}">
+                    <div class="col-12">
+                        <div class="card">
+                            <div class="card-header bg-light">
+                                <h6 class="mb-0"><i class="fas fa-user me-2"></i>${operador.nome}</h6>
+                            </div>
+                            <div class="card-body">
+                                <div class="row mb-3">
+                                    <div class="col-md-4">
+                                        <small class="text-muted">Setup Total:</small>
+                                        <div class="h6 text-primary">${formatarTempo(operador.tempo_setup)}</div>
+                                    </div>
+                                    <div class="col-md-4">
+                                        <small class="text-muted">Produção Total:</small>
+                                        <div class="h6 text-success">${formatarTempo(operador.tempo_producao)}</div>
+                                    </div>
+                                    <div class="col-md-4">
+                                        <small class="text-muted">Pausas Total:</small>
+                                        <div class="h6 text-warning">${formatarTempo(operador.tempo_pausas)}</div>
+                                    </div>
+                                </div>
+                                
+                                ${Object.keys(operador.trabalhos).length > 0 ? `
+                                <div>
+                                    <small class="text-muted">Por Tipo de Trabalho:</small>
+                                    <div class="table-responsive">
+                                        <table class="table table-sm">
+                                            <thead>
+                                                <tr>
+                                                    <th>Trabalho</th>
+                                                    <th>Setup</th>
+                                                    <th>Produção</th>
+                                                    <th>Pausas</th>
+                                                </tr>
+                                            </thead>
+                                            <tbody>
+                                                ${Object.entries(operador.trabalhos).map(([trabalhoNome, tempos]) => `
+                                                    <tr>
+                                                        <td>${trabalhoNome}</td>
+                                                        <td class="text-primary">${formatarTempo(tempos.tempo_setup)}</td>
+                                                        <td class="text-success">${formatarTempo(tempos.tempo_producao)}</td>
+                                                        <td class="text-warning">${formatarTempo(tempos.tempo_pausas)}</td>
+                                                    </tr>
+                                                `).join('')}
+                                            </tbody>
+                                        </table>
+                                    </div>
+                                </div>
+                                ` : ''}
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            `;
+        });
+    }
+    
+    conteudo.innerHTML = html;
+}
+
+function aplicarFiltroOperador() {
+    const filtroSelect = document.getElementById('filtroOperador');
+    const operadorSelecionado = filtroSelect.value;
+    
+    // Filtrar seções de operadores
+    const operadorSections = document.querySelectorAll('.operador-section');
+    operadorSections.forEach(section => {
+        const operadorId = section.dataset.operador;
+        if (!operadorSelecionado || operadorId === operadorSelecionado) {
+            section.style.display = 'block';
+        } else {
+            section.style.display = 'none';
+        }
+    });
+    
+    // Filtrar linhas de apontamentos na tabela cronológica
+    const apontamentoRows = document.querySelectorAll('.apontamento-row');
+    apontamentoRows.forEach(row => {
+        const operadorId = row.dataset.operador;
+        if (!operadorSelecionado || operadorId === operadorSelecionado) {
+            row.style.display = '';
+        } else {
+            row.style.display = 'none';
+        }
+    });
+}
+
+function imprimirRelatorio() {
+    if (!window.dadosDetalhes) return;
+    
+    const dadosCompactos = window.dadosDetalhes;
+    const formatarTempo = (segundos) => {
+        if (!segundos) return '0h 0m';
+        const horas = Math.floor(segundos / 3600);
+        const minutos = Math.floor((segundos % 3600) / 60);
+        return `${horas}h ${minutos}m`;
+    };
+    
+    let conteudoImpressao = `
+        <html>
+        <head>
+            <title>Relatório - ${dadosCompactos.ordem_servico.numero}</title>
+            <style>
+                body { font-family: Arial, sans-serif; font-size: 12px; }
+                .header { text-align: center; margin-bottom: 20px; }
+                .secao { margin-bottom: 15px; }
+                .titulo { font-weight: bold; border-bottom: 1px solid #ccc; padding-bottom: 5px; margin-bottom: 10px; }
+                table { width: 100%; border-collapse: collapse; margin-bottom: 10px; }
+                th, td { border: 1px solid #ddd; padding: 5px; text-align: left; }
+                th { background-color: #f5f5f5; }
+                .resumo { display: flex; justify-content: space-around; margin-bottom: 15px; }
+                .resumo-item { text-align: center; }
+                @media print { body { margin: 0; } }
+            </style>
+        </head>
+        <body>
+            <div class="header">
+                <h2>Relatório de Análise Detalhada</h2>
+                <h3>${dadosCompactos.ordem_servico.numero}</h3>
+                <p>Data: ${new Date().toLocaleDateString('pt-BR')}</p>
+            </div>
+            
+            <div class="secao">
+                <div class="titulo">Resumo Geral</div>
+                <div class="resumo">
+                    <div class="resumo-item">
+                        <strong>Setup Total</strong><br>
+                        ${formatarTempo(dadosCompactos.analytics_gerais.tempo_setup_total)}
+                    </div>
+                    <div class="resumo-item">
+                        <strong>Produção Total</strong><br>
+                        ${formatarTempo(dadosCompactos.analytics_gerais.tempo_producao_total)}
+                    </div>
+                    <div class="resumo-item">
+                        <strong>Pausas Total</strong><br>
+                        ${formatarTempo(dadosCompactos.analytics_gerais.tempo_pausas_total)}
+                    </div>
+                    <div class="resumo-item">
+                        <strong>Eficiência</strong><br>
+                        ${dadosCompactos.analytics_gerais.eficiencia_percentual}%
+                    </div>
+                </div>
+            </div>
+            
+            <div class="secao">
+                <div class="titulo">Resumo por Operador</div>
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Operador</th>
+                            <th>Setup</th>
+                            <th>Produção</th>
+                            <th>Pausas</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        ${Object.entries(dadosCompactos.analytics_operadores).map(([opId, op]) => `
+                            <tr>
+                                <td>${op.nome}</td>
+                                <td>${formatarTempo(op.tempo_setup)}</td>
+                                <td>${formatarTempo(op.tempo_producao)}</td>
+                                <td>${formatarTempo(op.tempo_pausas)}</td>
+                            </tr>
+                        `).join('')}
+                    </tbody>
+                </table>
+            </div>
+            
+            <div class="secao">
+                <div class="titulo">Resumo por Tipo de Trabalho</div>
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Trabalho</th>
+                            <th>Setup</th>
+                            <th>Produção</th>
+                            <th>Pausas</th>
+                            <th>Última Qtd</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        ${dadosCompactos.trabalhos.map(trabalho => `
+                            <tr>
+                                <td>${trabalho.trabalho_nome}</td>
+                                <td>${formatarTempo(trabalho.setup_total)}</td>
+                                <td>${formatarTempo(trabalho.producao_total)}</td>
+                                <td>${formatarTempo(trabalho.pausas_total)}</td>
+                                <td>${trabalho.ultima_quantidade}</td>
+                            </tr>
+                        `).join('')}
+                    </tbody>
+                </table>
+            </div>
+        </body>
+        </html>
+    `;
+    
+    const janelaImpressao = window.open('', '_blank');
+    janelaImpressao.document.write(conteudoImpressao);
+    janelaImpressao.document.close();
+    janelaImpressao.print();
 }
 
 // Inicialização e auto-refresh leve

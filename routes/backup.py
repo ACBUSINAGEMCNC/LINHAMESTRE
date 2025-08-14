@@ -8,8 +8,10 @@ import shutil
 import tempfile
 import zipfile
 import glob
+import logging
 
 backup = Blueprint('backup', __name__)
+logger = logging.getLogger(__name__)
 
 
 def _criar_zip(arquivo_destino: str, db_path: str):
@@ -305,5 +307,5 @@ def criar_backup_automatico():
         
         return True
     except Exception as e:
-        print(f"Erro ao criar backup automático: {str(e)}")
+        logger.exception("Erro ao criar backup automático")
         return False
