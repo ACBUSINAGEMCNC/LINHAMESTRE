@@ -1,5 +1,5 @@
 from flask import Blueprint, render_template, request, jsonify, flash, redirect, url_for, session
-from models import db, Usuario, ApontamentoProducao, StatusProducaoOS, OrdemServico, ItemTrabalho, PedidoOrdemServico, Pedido, Item, Trabalho, KanbanLista
+from models import db, Usuario, ApontamentoProducao, StatusProducaoOS, OrdemServico, ItemTrabalho, PedidoOrdemServico, Pedido, Item, Trabalho, KanbanLista, CartaoFantasma
 from datetime import datetime, timezone, timedelta
 from sqlalchemy.orm import joinedload
 import logging
@@ -1202,7 +1202,153 @@ def status_ativos():
                 continue
         timings['build_os_sem_ativos_loop_ms'] = int((time.perf_counter() - t0) * 1000)
         
-        logger.debug(f"Status ativos formatados: {len(resultado['status_ativos'])}")
+        # Adicionar cartões fantasma ao dashboard
+        logger.debug("Buscando cartões fantasma ativos...")
+        t0 = time.perf_counter()
+        try:
+            cartoes_fantasma = (
+                CartaoFantasma.query.options(
+                    joinedload(CartaoFantasma.ordem_servico)
+                        .joinedload(OrdemServico.pedidos)
+                        .joinedload(PedidoOrdemServico.pedido)
+                        .joinedload(Pedido.cliente),
+                    joinedload(CartaoFantasma.ordem_servico)
+                        .joinedload(OrdemServico.pedidos)
+                        .joinedload(PedidoOrdemServico.pedido)
+                        .joinedload(Pedido.item)
+                        .joinedload(Item.trabalhos)
+                        .joinedload(ItemTrabalho.trabalho),
+                    joinedload(CartaoFantasma.trabalho),
+                    joinedload(CartaoFantasma.criado_por)
+                )
+                .filter(CartaoFantasma.ativo == True)
+                .order_by(CartaoFantasma.lista_kanban, CartaoFantasma.posicao_fila)
+                .all()
+            )
+            
+            for cartao in cartoes_fantasma:
+                try:
+                    # Aplicar filtros se necessário
+                    lista_kanban_cartao = cartao.lista_kanban
+                    kl_cartao = map_lista_por_lower.get(lista_kanban_cartao.strip().lower()) if lista_kanban_cartao else None
+                    
+                    # Filtro de lista
+                    if lista_filter is not None:
+                        if not lista_kanban_cartao or lista_kanban_cartao.lower() != lista_filter:
+                            continue
+                    
+                    # Filtro de tipo
+                    if lista_tipo_filter is not None:
+                        lista_tipo_cartao = kl_cartao.tipo_servico if kl_cartao else None
+                        if not lista_tipo_cartao or lista_tipo_cartao.lower() != lista_tipo_filter:
+                            continue
+                    
+                    # Filtro de status (cartões fantasma sempre têm status "Fantasma")
+                    if status_filter_set is not None:
+                        if 'fantasma' not in status_filter_set:
+                            continue
+                    
+                    # Montar informações básicas do cartão fantasma
+                    os_obj = cartao.ordem_servico
+                    if not os_obj:
+                        continue
+                    
+                    cartao_info = {
+                        'id': f"ghost_{cartao.id}",
+                        'ordem_servico_id': cartao.ordem_servico_id,
+                        'ordem_id': cartao.ordem_servico_id,
+                        'status_atual': 'Fantasma',
+                        'is_ghost_card': True,
+                        'ghost_card_id': cartao.id,
+                        'posicao_fila': cartao.posicao_fila,
+                        'observacoes': cartao.observacoes
+                    }
+                    
+                    # Número da OS
+                    os_num = getattr(os_obj, 'numero', None) or getattr(os_obj, 'codigo', None) or f"OS-{os_obj.id}"
+                    cartao_info['os_numero'] = os_num
+                    
+                    # Lista Kanban
+                    cartao_info['lista_kanban'] = lista_kanban_cartao
+                    if kl_cartao:
+                        cartao_info['lista_tipo'] = kl_cartao.tipo_servico
+                        cartao_info['lista_cor'] = kl_cartao.cor
+                    
+                    # Clientes e quantidades (da OS original)
+                    try:
+                        clientes_map = {}
+                        total_q = 0
+                        for po in getattr(os_obj, 'pedidos', []) or []:
+                            ped = getattr(po, 'pedido', None)
+                            if not ped:
+                                continue
+                            q = int(getattr(ped, 'quantidade', 0) or 0)
+                            total_q += q
+                            cli = getattr(ped, 'cliente', None)
+                            nome_cli = getattr(cli, 'nome', None) or 'Cliente'
+                            clientes_map[nome_cli] = clientes_map.get(nome_cli, 0) + q
+                        cartao_info['quantidade_total'] = int(total_q)
+                        if clientes_map:
+                            cartao_info['clientes_quantidades'] = [
+                                {'cliente_nome': k, 'quantidade': v} for k, v in clientes_map.items()
+                            ]
+                            cartao_info['cliente_nome'] = next(iter(clientes_map.keys()))
+                    except Exception:
+                        cartao_info['quantidade_total'] = 0
+                        cartao_info['cliente_nome'] = 'Cliente'
+                    
+                    # Item e trabalho do cartão fantasma
+                    try:
+                        # Se cartão tem trabalho específico, usar ele
+                        if cartao.trabalho:
+                            cartao_info['trabalho_id'] = cartao.trabalho.id
+                            cartao_info['trabalho_nome'] = cartao.trabalho.nome
+                        
+                        # Buscar item da OS
+                        if os_obj.pedidos:
+                            pedido_os = os_obj.pedidos[0]
+                            pedido = getattr(pedido_os, 'pedido', None)
+                            item = getattr(pedido, 'item', None) if pedido else None
+                            if item:
+                                cartao_info['item_id'] = item.id
+                                cartao_info['item_nome'] = item.nome
+                                cartao_info['item_codigo'] = item.codigo_acb
+                                cartao_info['item_imagem_path'] = getattr(item, 'imagem_path', None)
+                    except Exception:
+                        pass
+                    
+                    # Criador do cartão
+                    try:
+                        if cartao.criado_por:
+                            cartao_info['criado_por_nome'] = cartao.criado_por.nome
+                            cartao_info['criado_por_id'] = cartao.criado_por.id
+                        cartao_info['data_criacao'] = cartao.data_criacao.isoformat() if cartao.data_criacao else None
+                    except Exception:
+                        pass
+                    
+                    # Valores padrão para campos obrigatórios
+                    cartao_info.setdefault('ultima_quantidade', 0)
+                    cartao_info.setdefault('ativos_por_trabalho', [])
+                    cartao_info.setdefault('qtd_ativos', 0)
+                    cartao_info.setdefault('multiplo_ativos', False)
+                    cartao_info.setdefault('analytics', {})
+                    cartao_info.setdefault('cronometro', {'tipo': None, 'inicio': None})
+                    cartao_info.setdefault('resumo_status', {'setup': 0, 'pausado': 0, 'producao': 0})
+                    cartao_info.setdefault('trabalhos_do_item', [])
+                    
+                    # Adicionar ao resultado
+                    resultado['status_ativos'].append(cartao_info)
+                    
+                except Exception as e_cartao:
+                    logger.error(f"Falha ao processar cartão fantasma {cartao.id}: {e_cartao}")
+                    continue
+                    
+        except Exception as e_ghost:
+            logger.error(f"Falha ao buscar cartões fantasma: {e_ghost}")
+        
+        timings['build_ghost_cards_ms'] = int((time.perf_counter() - t0) * 1000)
+        
+        logger.debug(f"Status ativos formatados (incluindo fantasmas): {len(resultado['status_ativos'])}")
         # Anexar timings apenas quando explicitamente solicitado
         try:
             if (request.args.get('timing') or '').strip().lower() in ['1', 'true', 'yes']:

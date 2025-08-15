@@ -56,6 +56,7 @@
                         <option value="Setup em andamento">Setup em andamento</option>
                         <option value="Produção em andamento">Produção em andamento</option>
                         <option value="Pausado">Pausado</option>
+                        <option value="Fantasma">Fantasma</option>
                     </select>
                 </div>
                 <div class="ms-auto">
@@ -344,6 +345,49 @@
   line-height: 1.2;
   letter-spacing: 0.04em;
 }
+
+/* Cartões Fantasma */
+.status-fantasma .card-header { 
+  background: linear-gradient(135deg, #f8f9fa 0%, #e9ecef 100%);
+  border-bottom-color: #dee2e6;
+  position: relative;
+}
+
+.status-fantasma .card-header:after {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: repeating-linear-gradient(
+    45deg,
+    transparent,
+    transparent 10px,
+    rgba(108, 117, 125, 0.1) 10px,
+    rgba(108, 117, 125, 0.1) 20px
+  );
+}
+
+.status-fantasma .card-body { 
+  background-color: #fdfdfe;
+  opacity: 0.9;
+}
+
+.status-fantasma {
+  border: 2px dashed #6c757d !important;
+  position: relative;
+}
+
+.status-fantasma:before {
+  content: '👻';
+  position: absolute;
+  top: 10px;
+  right: 10px;
+  font-size: 1.5rem;
+  opacity: 0.3;
+  z-index: 1;
+}
 </style>
 
 <!-- Modal de Logs -->
@@ -484,6 +528,76 @@ function verDetalhes(ordemId) {
             console.error('Erro:', error);
             conteudo.innerHTML = '<div class="alert alert-danger">Erro ao carregar detalhes analíticos</div>';
         });
+}
+
+// Funções para gerenciar cartões fantasma
+function removerCartaoFantasma(cartaoId) {
+    if (!confirm('Tem certeza que deseja remover este cartão fantasma?')) {
+        return;
+    }
+    
+    fetch(`/kanban/cartao-fantasma/remover/${cartaoId}`, {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json'
+        }
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            // Atualizar dashboard
+            if (window.ApontamentoDashboard && typeof window.ApontamentoDashboard.init === 'function') {
+                window.ApontamentoDashboard.init();
+            } else {
+                location.reload();
+            }
+        } else {
+            alert('Erro ao remover cartão fantasma: ' + (data.message || 'Erro desconhecido'));
+        }
+    })
+    .catch(error => {
+        console.error('Erro:', error);
+        alert('Erro ao remover cartão fantasma');
+    });
+}
+
+function moverCartaoFantasma(cartaoId) {
+    const novaPosicao = prompt('Digite a nova posição na fila (número):');
+    if (!novaPosicao) return;
+    
+    const posicao = parseInt(novaPosicao);
+    if (isNaN(posicao) || posicao < 1) {
+        alert('Posição deve ser um número maior que zero');
+        return;
+    }
+    
+    fetch('/kanban/cartao-fantasma/mover', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+            cartao_id: cartaoId,
+            nova_posicao: posicao
+        })
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            // Atualizar dashboard
+            if (window.ApontamentoDashboard && typeof window.ApontamentoDashboard.init === 'function') {
+                window.ApontamentoDashboard.init();
+            } else {
+                location.reload();
+            }
+        } else {
+            alert('Erro ao mover cartão fantasma: ' + (data.message || 'Erro desconhecido'));
+        }
+    })
+    .catch(error => {
+        console.error('Erro:', error);
+        alert('Erro ao mover cartão fantasma');
+    });
 }
 
 function renderizarDetalhes(data) {

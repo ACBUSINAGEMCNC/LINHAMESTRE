@@ -250,6 +250,110 @@
             align-items: center;
             margin-bottom: 6px;
         }
+        
+        /* Estilos para cartões fantasma */
+        .kanban-card.fantasma {
+            opacity: 0.85;
+            border: 2px dashed #6f42c1;
+            background: linear-gradient(135deg, rgba(255,255,255,0.95) 0%, rgba(111,66,193,0.05) 100%);
+            position: relative;
+        }
+        
+        .kanban-card.fantasma::before {
+            content: "👻";
+            position: absolute;
+            top: 5px;
+            right: 5px;
+            font-size: 16px;
+            z-index: 10;
+        }
+        
+        .kanban-card.fantasma::after {
+            content: "FANTASMA";
+            position: absolute;
+            top: 5px;
+            left: 5px;
+            font-size: 8px;
+            font-weight: bold;
+            color: #6f42c1;
+            background: rgba(111,66,193,0.1);
+            padding: 2px 4px;
+            border-radius: 3px;
+            z-index: 10;
+        }
+        
+        .kanban-card.fantasma .kanban-card-header {
+            margin-top: 15px; /* Espaço para os badges fantasma */
+        }
+        
+        .fantasma-info {
+            background-color: rgba(111,66,193,0.1);
+            border: 1px solid rgba(111,66,193,0.3);
+            border-radius: 4px;
+            padding: 6px 8px;
+            margin-bottom: 8px;
+            font-size: 0.75rem;
+        }
+        
+        .fantasma-posicao {
+            background-color: #6f42c1;
+            color: white;
+            border-radius: 50%;
+            width: 20px;
+            height: 20px;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 0.7rem;
+            font-weight: bold;
+            margin-right: 5px;
+        }
+        
+        .fantasma-actions {
+            display: flex;
+            gap: 4px;
+            margin-top: 8px;
+        }
+        
+        .btn-fantasma {
+            font-size: 0.65rem;
+            padding: 0.2rem 0.4rem;
+        }
+        
+        /* Botão para criar cartão fantasma */
+        .btn-criar-fantasma {
+            position: absolute;
+            bottom: 10px;
+            right: 10px;
+            width: 30px;
+            height: 30px;
+            border-radius: 50%;
+            padding: 0;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 14px;
+            background-color: #6f42c1;
+            border-color: #6f42c1;
+            opacity: 0.7;
+            transition: opacity 0.2s;
+        }
+        
+        .kanban-column:hover .btn-criar-fantasma {
+            opacity: 1;
+        }
+        
+        /* Botão fantasma direto no cartão */
+        .btn-outline-purple {
+            border-color: #6f42c1;
+            color: #6f42c1;
+        }
+        
+        .btn-outline-purple:hover {
+            background-color: #6f42c1;
+            border-color: #6f42c1;
+            color: white;
+        }
         .metric-badge {
             display: inline-flex;
             align-items: center;
@@ -356,6 +460,7 @@
                     <span class="column-quantity"><i class="fas fa-cubes"></i> {{ quantidades_listas[lista] }}</span>
                 </div>
                 <div class="kanban-column-body" data-lista="{{ lista }}">
+                    <!-- Cartões normais -->
                     {% for ordem in ordens[lista] %}
                     <div class="kanban-card" data-ordem-id="{{ ordem.id }}">
                         <div class="kanban-card-header">
@@ -368,6 +473,15 @@
                             <span class="card-title" data-ordem-id="{{ ordem.id }}">{{ ordem.numero }}</span>
                             <div class="d-flex">
                                 {% if lista != 'Expedição' %}
+                                    <!-- Botão fantasma direto -->
+                                    <button class="btn btn-sm btn-outline-purple me-2 btn-criar-fantasma-direto" 
+                                            type="button" 
+                                            data-ordem-id="{{ ordem.id }}" 
+                                            data-lista-origem="{{ lista }}"
+                                            onclick="event.stopPropagation()" 
+                                            title="Criar cartão fantasma desta OS">
+                                        <i class="fas fa-ghost"></i>
+                                    </button>
                                     <div class="dropdown me-2">
                                     <button class="btn btn-sm btn-outline-secondary dropdown-toggle" type="button" 
                                             id="dropdownMenuButton{{ ordem.id }}" data-bs-toggle="dropdown" 
@@ -380,6 +494,8 @@
                                                 <li><a class="dropdown-item btn-mover" href="#" data-ordem-id="{{ ordem.id }}" data-lista-destino="{{ lista_destino }}">Mover para {{ lista_destino }}</a></li>
                                             {% endif %}
                                         {% endfor %}
+                                        <li><hr class="dropdown-divider"></li>
+                                        <li><a class="dropdown-item text-purple btn-criar-fantasma-menu" href="#" data-ordem-id="{{ ordem.id }}" data-lista-origem="{{ lista }}"><i class="fas fa-ghost"></i> Criar cartão fantasma</a></li>
                                     </ul>
                                 </div>
                             </div>
@@ -567,6 +683,164 @@
                         </div>
                     </div>
                     {% endfor %}
+                    
+                    <!-- Cartões fantasma -->
+                    {% for cartao_fantasma in cartoes_fantasma[lista] %}
+                    <div class="kanban-card fantasma" data-cartao-id="{{ cartao_fantasma.id }}" data-ordem-id="{{ cartao_fantasma.ordem_servico.id }}">
+                        <div class="kanban-card-header">
+                            <div class="drag-handle" onclick="event.stopPropagation()">
+                                <i class="fas fa-grip-lines"></i>
+                            </div>
+                            <div class="fantasma-info">
+                                <span class="fantasma-posicao">{{ cartao_fantasma.posicao_fila }}</span>
+                                <strong>{{ cartao_fantasma.ordem_servico.numero }}</strong>
+                                <small class="text-muted">(Lista origem: {{ cartao_fantasma.ordem_servico.status }})</small>
+                                {% if cartao_fantasma.trabalho %}
+                                    <br><small><i class="fas fa-cog"></i> {{ cartao_fantasma.trabalho.nome }}</small>
+                                {% endif %}
+                            </div>
+                            {% if cartao_fantasma.ordem_servico.pedidos and cartao_fantasma.ordem_servico.pedidos[0].pedido.item and cartao_fantasma.ordem_servico.pedidos[0].pedido.item.imagem_path %}
+                                <img src="{{ cartao_fantasma.ordem_servico.pedidos[0].pedido.item.imagem_path }}" width="32" height="32" class="rounded me-2" alt="Imagem do item">
+                            {% endif %}
+                        </div>
+                        <div class="kanban-card-body">
+                            {% if cartao_fantasma.ordem_servico.pedidos %}
+                                {% set ordem = cartao_fantasma.ordem_servico %}
+                                {% set total_items = 0 %}
+                                {% set total_qty = 0 %}
+                                {% set grouped_items = {} %}
+                                
+                                {% for pedido_os in ordem.pedidos %}
+                                    {% set item_key = pedido_os.pedido.item_id if pedido_os.pedido.item_id else pedido_os.pedido.nome_item %}
+                                    {% set item_name = pedido_os.pedido.item.codigo_acb ~ ' - ' ~ pedido_os.pedido.item.nome if pedido_os.pedido.item_id else pedido_os.pedido.nome_item %}
+                                    
+                                    {% if item_key in grouped_items %}
+                                        {% set _ = grouped_items[item_key].update({
+                                            'total_qty': grouped_items[item_key].total_qty + pedido_os.pedido.quantidade
+                                        }) %}
+                                    {% else %}
+                                        {% set _ = grouped_items.update({
+                                            item_key: {
+                                                'name': item_name,
+                                                'total_qty': pedido_os.pedido.quantidade,
+                                                'item': pedido_os.pedido.item if pedido_os.pedido.item_id else None
+                                            }
+                                        }) %}
+                                    {% endif %}
+                                {% endfor %}
+                            
+                                <div class="os-items mt-1">
+                                    <div class="small text-muted">Itens da OS</div>
+                                    <ul class="os-item-list list-unstyled mb-1">
+                                        {% for item_key, item_data in grouped_items.items() %}
+                                        <li class="os-item">
+                                            <span class="os-item-name">{{ item_data.name }}</span>
+                                            <span class="badge rounded-pill bg-primary os-item-qty" title="Quantidade do item">{{ item_data.total_qty }}</span>
+                                        </li>
+                                        {% endfor %}
+                                    </ul>
+                                </div>
+                            {% endif %}
+                            
+                            {% if cartao_fantasma.observacoes %}
+                            <div class="mt-2">
+                                <small class="text-muted"><i class="fas fa-comment"></i> {{ cartao_fantasma.observacoes }}</small>
+                            </div>
+                            {% endif %}
+                            
+                            <!-- Botões de Apontamento (apontam para a OS real) -->
+                            {% if acesso_kanban and lista not in ['Entrada', 'Expedição'] %}
+                            <div class="apontamento-buttons mt-2 pt-2 border-top">
+                                <div class="row g-1">
+                                    <!-- Grupo Setup -->
+                                    <div class="col-6">
+                                        <button class="btn btn-outline-primary btn-sm w-100 apontamento-btn" 
+                                                data-acao="inicio_setup"
+                                                data-ordem-id="{{ cartao_fantasma.ordem_servico.id }}"
+                                                onclick="iniciarApontamentoSetup(this.dataset.ordemId);"
+                                                title="Iniciar Setup (OS Real)">
+                                            <i class="fas fa-play"></i> Setup
+                                        </button>
+                                    </div>
+                                    <div class="col-6">
+                                        <button class="btn btn-outline-info btn-sm w-100 apontamento-btn" 
+                                                data-acao="fim_setup"
+                                                data-ordem-id="{{ cartao_fantasma.ordem_servico.id }}"
+                                                onclick="finalizarSetup(this.dataset.ordemId);"
+                                                title="Finalizar Setup (OS Real)">
+                                            <i class="fas fa-stop"></i> Fim Setup
+                                        </button>
+                                    </div>
+
+                                    <!-- Grupo Produção -->
+                                    <div class="col-6">
+                                        <button class="btn btn-outline-success btn-sm w-100 apontamento-btn" 
+                                                data-acao="inicio_producao"
+                                                data-ordem-id="{{ cartao_fantasma.ordem_servico.id }}"
+                                                onclick="iniciarApontamentoProducao(this.dataset.ordemId);"
+                                                title="Iniciar Produção (OS Real)">
+                                            <i class="fas fa-cogs"></i> Produção
+                                        </button>
+                                    </div>
+                                    <div class="col-6">
+                                        <button class="btn btn-outline-warning btn-sm w-100 apontamento-btn" 
+                                                data-acao="pausa"
+                                                data-ordem-id="{{ cartao_fantasma.ordem_servico.id }}"
+                                                onclick="pausarApontamento(this.dataset.ordemId);"
+                                                title="Pausar produção (OS Real)">
+                                            <i class="fas fa-pause"></i> Pausa
+                                        </button>
+                                    </div>
+                                    <div class="col-12">
+                                        <button class="btn btn-outline-danger btn-sm w-100 apontamento-btn" 
+                                                data-acao="stop"
+                                                data-ordem-id="{{ cartao_fantasma.ordem_servico.id }}"
+                                                onclick="pararApontamento(this.dataset.ordemId);"
+                                                title="Stop (fim de turno / parada entre turnos) (OS Real)">
+                                            <i class="fas fa-stop"></i> Stop
+                                        </button>
+                                    </div>
+                                </div>
+                                
+                                <!-- Indicadores de status (baseado na OS real) -->
+                                <div class="apontamento-status mt-2" id="status-{{ cartao_fantasma.ordem_servico.id }}">
+                                    <div class="d-flex justify-content-between align-items-center small">
+                                        <span class="status-text">Aguardando</span>
+                                        <span class="apontamento-timer" id="timer-{{ cartao_fantasma.ordem_servico.id }}">00:00:00</span>
+                                    </div>
+                                </div>
+                            </div>
+                            {% endif %}
+                            
+                            <div class="fantasma-actions mt-2 pt-2 border-top">
+                                <button class="btn btn-outline-warning btn-fantasma btn-mover-fantasma" 
+                                        data-cartao-id="{{ cartao_fantasma.id }}" 
+                                        title="Alterar posição na fila">
+                                    <i class="fas fa-arrows-alt-v"></i>
+                                </button>
+                                <button class="btn btn-outline-danger btn-fantasma btn-remover-fantasma" 
+                                        data-cartao-id="{{ cartao_fantasma.id }}" 
+                                        title="Remover cartão fantasma">
+                                    <i class="fas fa-times"></i>
+                                </button>
+                                <button class="btn btn-outline-info btn-fantasma btn-detalhes-fantasma" 
+                                        data-ordem-id="{{ cartao_fantasma.ordem_servico.id }}"
+                                        title="Ver detalhes da OS original">
+                                    <i class="fas fa-info-circle"></i>
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                    {% endfor %}
+                    
+                    <!-- Botão para criar cartão fantasma (apenas em listas não protegidas) -->
+                    {% if lista not in ['Entrada', 'Expedição'] %}
+                    <button class="btn btn-primary btn-criar-fantasma" 
+                            data-lista="{{ lista }}"
+                            title="Criar cartão fantasma nesta lista">
+                        <i class="fas fa-ghost"></i>
+                    </button>
+                    {% endif %}
                 </div>
             </div>
             {% endfor %}
@@ -589,6 +863,91 @@
                 </div>
                 <div class="modal-footer">
                     <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Fechar</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal para criar cartão fantasma -->
+    <div class="modal fade" id="criarFantasmaModal" tabindex="-1" aria-hidden="true">
+        <div class="modal-dialog modal-lg">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title"><i class="fas fa-ghost text-purple"></i> Criar Cartão Fantasma</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <form id="formCriarFantasma">
+                        <div class="row">
+                            <div class="col-md-6">
+                                <label class="form-label">Ordem de Serviço:</label>
+                                <select class="form-select" id="ordemSelect" name="ordem_id" required>
+                                    <option value="">Selecione uma OS...</option>
+                                </select>
+                            </div>
+                            <div class="col-md-6">
+                                <label class="form-label">Lista Destino:</label>
+                                <select class="form-select" id="listaSelect" name="lista_destino" required>
+                                    <option value="">Selecione a lista...</option>
+                                    {% for lista in listas %}
+                                        {% if lista not in ['Entrada', 'Expedição'] %}
+                                        <option value="{{ lista }}">{{ lista }}</option>
+                                        {% endif %}
+                                    {% endfor %}
+                                </select>
+                            </div>
+                        </div>
+                        <div class="row mt-3">
+                            <div class="col-md-6">
+                                <label class="form-label">Trabalho Específico (Opcional):</label>
+                                <select class="form-select" id="trabalhoSelect" name="trabalho_id">
+                                    <option value="">Selecione um trabalho...</option>
+                                </select>
+                            </div>
+                            <div class="col-md-6">
+                                <label class="form-label">Posição na Fila:</label>
+                                <input type="number" class="form-control" name="posicao_fila" value="1" min="1" max="10">
+                            </div>
+                        </div>
+                        <div class="mt-3">
+                            <label class="form-label">Observações:</label>
+                            <textarea class="form-control" name="observacoes" rows="2" placeholder="Observações sobre este cartão fantasma..."></textarea>
+                        </div>
+                    </form>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
+                    <button type="button" class="btn btn-primary" id="btnConfirmarFantasma">
+                        <i class="fas fa-ghost"></i> Criar Cartão Fantasma
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal para mover cartão fantasma -->
+    <div class="modal fade" id="moverFantasmaModal" tabindex="-1" aria-hidden="true">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title"><i class="fas fa-arrows-alt-v"></i> Alterar Posição</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <form id="formMoverFantasma">
+                        <input type="hidden" id="cartaoIdMover" name="cartao_id">
+                        <div class="mb-3">
+                            <label class="form-label">Nova Posição na Fila:</label>
+                            <input type="number" class="form-control" id="novaPosicao" name="nova_posicao" value="1" min="1" max="10" required>
+                            <div class="form-text">Posição 1 = primeiro da fila</div>
+                        </div>
+                    </form>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
+                    <button type="button" class="btn btn-warning" id="btnConfirmarMoverFantasma">
+                        <i class="fas fa-arrows-alt-v"></i> Alterar Posição
+                    </button>
                 </div>
             </div>
         </div>
@@ -741,7 +1100,7 @@
         
         // Função para inicializar todos os eventos nos cartões
         function initializeKanbanEvents() {
-            console.log('Inicializando eventos do Kanban');
+            console.log('=== Inicializando eventos do Kanban ===');
             
             // Eventos para abrir detalhes do card
             document.querySelectorAll('.card-title').forEach(function(element) {
@@ -752,39 +1111,66 @@
                 });
             });
             
-            // Eventos para toggle de documentos PDF e CNC
-            document.querySelectorAll('.toggle-pdf, .toggle-cnc').forEach(function(element) {
-                element.addEventListener('click', function(e) {
-                    e.stopPropagation();
-                    const containerId = this.dataset.containerId;
-                    console.log('Toggle container:', containerId);
-                    toggleDocContainer(this, containerId);
+            // Event listeners para botões de criação de cartão fantasma direto
+            const btnFantasma = document.querySelectorAll('.btn-criar-fantasma-direto');
+            console.log('Encontrados', btnFantasma.length, 'botões fantasma direto');
+            
+            // Listar todos os botões encontrados
+            btnFantasma.forEach(function(btn, index) {
+                console.log(`Botão ${index + 1}:`, {
+                    element: btn,
+                    ordemId: btn.dataset.ordemId,
+                    listaOrigem: btn.dataset.listaOrigem,
+                    className: btn.className,
+                    initialized: btn.classList.contains('events-initialized')
                 });
             });
             
-            // Eventos para mover ordens entre listas
-            document.querySelectorAll('.btn-mover').forEach(function(element) {
-                element.addEventListener('click', function(e) {
-                    e.preventDefault();
-                    e.stopPropagation();
-                    const ordemId = this.dataset.ordemId;
-                    const listaDestino = this.dataset.listaDestino;
-                    moverOrdem(ordemId, listaDestino);
-                });
+            // Configurar event listeners para botões de criar fantasma
+            btnFantasma.forEach(function(btn) {
+                if (!btn.classList.contains('events-initialized')) {
+                    console.log('🔧 Configurando evento para botão OS:', btn.dataset.ordemId);
+                    
+                    btn.addEventListener('click', function(e) {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        const ordemId = this.dataset.ordemId;
+                        const listaOrigem = this.dataset.listaOrigem;
+                        console.log('🚀 CLIQUE no botão fantasma! OS:', ordemId, 'Lista:', listaOrigem);
+                        criarCartaoFantasmaRapido(ordemId, listaOrigem);
+                    });
+                    
+                    // Teste adicional - evento de mousedown
+                    btn.addEventListener('mousedown', function(e) {
+                        console.log('👆 MOUSEDOWN no botão fantasma OS:', this.dataset.ordemId);
+                    });
+                    
+                    btn.classList.add('events-initialized');
+                    console.log('✅ Evento configurado para OS:', btn.dataset.ordemId);
+                } else {
+                    console.log('⏭️ Botão OS', btn.dataset.ordemId, 'já inicializado');
+                }
             });
+            
+            // Configurar botões de ação dos cartões fantasma
+            configurarBotoesFantasma();
             
             // Marcar os cartões como inicializados
             document.querySelectorAll('.kanban-card').forEach(function(card) {
                 card.classList.add('events-initialized');
             });
+            
+            console.log('=== Inicialização de eventos concluída ===');
         }
         
         // Inicializar eventos após o carregamento do documento
         document.addEventListener('DOMContentLoaded', function() {
+            console.log('DOM carregado - chamando initializeKanbanEvents');
             initializeKanbanEvents();
             
             // Também inicializar novamente quando o Sortable terminar uma operação de arrasto
             document.addEventListener('sortable-drop-complete', function() {
+                console.log('Sortable drop complete - reinicializando eventos');
                 setTimeout(initializeKanbanEvents, 100);
             });
         });
@@ -1590,6 +1976,331 @@
     
     function finalizarProducao(ordemId) {
         abrirModalApontamento('fim_producao', ordemId);
+    }
+    
+    // Função para criar cartão fantasma rapidamente
+    function criarCartaoFantasmaRapido(ordemId, listaOrigem) {
+        console.log('Clicou no botão fantasma! OS:', ordemId, 'Lista:', listaOrigem);
+        
+        // Popular o select com todas as ordens disponíveis
+        popularSelectOrdens().then(() => {
+            // Mostrar modal simplificado com OS pré-selecionada
+            const modal = new bootstrap.Modal(document.getElementById('criarFantasmaModal'));
+            
+            // Pré-selecionar a OS (usar o ID correto do select)
+            const selectOS = document.getElementById('ordemSelect');
+            if (selectOS) {
+                selectOS.value = ordemId;
+                // Disparar evento change se necessário para carregar trabalhos
+                selectOS.dispatchEvent(new Event('change'));
+            }
+            
+            // Definir lista origem no título do modal
+            const modalTitle = document.querySelector('#criarFantasmaModal .modal-title');
+            if (modalTitle) {
+                modalTitle.innerHTML = `<i class="fas fa-ghost text-purple"></i> Criar Cartão Fantasma - OS #${ordemId}`;
+            }
+            
+            // Configurar posição automática baseada em cartões fantasma existentes
+            configurarPosicaoAutomatica();
+            
+            modal.show();
+        });
+    }
+    
+    // Função para configurar posição automática
+    function configurarPosicaoAutomatica() {
+        const selectLista = document.getElementById('listaSelect');
+        const inputPosicao = document.querySelector('[name="posicao_fila"]');
+        
+        if (selectLista && inputPosicao) {
+            // Listener para quando a lista destino mudar
+            selectLista.addEventListener('change', function() {
+                const listaDestino = this.value;
+                if (listaDestino) {
+                    // Contar cartões fantasma existentes nesta lista
+                    const cartoesFantasma = document.querySelectorAll(`.kanban-card.fantasma[data-lista="${listaDestino}"]`);
+                    const proximaPosicao = cartoesFantasma.length + 1;
+                    
+                    inputPosicao.value = proximaPosicao;
+                    console.log(`Lista ${listaDestino}: ${cartoesFantasma.length} fantasmas existentes, sugerindo posição ${proximaPosicao}`);
+                }
+            });
+            
+            // Disparar evento change se já tiver lista selecionada
+            if (selectLista.value) {
+                selectLista.dispatchEvent(new Event('change'));
+            }
+        }
+    }
+    
+    // Função para popular o select de ordens
+    function popularSelectOrdens() {
+        return new Promise((resolve) => {
+            const selectOS = document.getElementById('ordemSelect');
+            if (!selectOS) {
+                resolve();
+                return;
+            }
+            
+            // Limpar select
+            selectOS.innerHTML = '<option value="">Selecione uma OS...</option>';
+            
+            // Coletar todas as ordens da página
+            const cartoes = document.querySelectorAll('.kanban-card[data-ordem-id]');
+            const ordensAdicionadas = new Set();
+            
+            cartoes.forEach(cartao => {
+                const ordemId = cartao.dataset.ordemId;
+                const titulo = cartao.querySelector('.card-title');
+                if (ordemId && titulo && !ordensAdicionadas.has(ordemId)) {
+                    const option = document.createElement('option');
+                    option.value = ordemId;
+                    option.textContent = titulo.textContent.trim();
+                    selectOS.appendChild(option);
+                    ordensAdicionadas.add(ordemId);
+                }
+            });
+            
+            resolve();
+        });
+    }
+    
+    // Função de teste para debug
+    function testarBotaoFantasma() {
+        console.log('=== TESTE BOTÃO FANTASMA ===');
+        const botoes = document.querySelectorAll('.btn-criar-fantasma-direto');
+        console.log('Botões encontrados:', botoes.length);
+        
+        botoes.forEach((btn, i) => {
+            console.log(`Botão ${i}:`, btn, 'OS:', btn.dataset.ordemId);
+            
+            // Adicionar evento de teste direto
+            btn.onclick = function(e) {
+                console.log('ONCLICK FUNCIONOU! OS:', this.dataset.ordemId);
+                criarCartaoFantasmaRapido(this.dataset.ordemId, this.dataset.listaOrigem);
+            };
+        });
+        
+        return botoes.length;
+    }
+    
+    // Executar teste quando carregado
+    setTimeout(function() {
+        console.log('Executando teste automático...');
+        testarBotaoFantasma();
+        configurarBotaoConfirmarFantasma();
+    }, 2000);
+    
+    // Configurar botões de ação dos cartões fantasma
+    function configurarBotoesFantasma() {
+        console.log('Configurando botões de ação dos cartões fantasma...');
+        
+        // Botões de remover fantasma
+        document.querySelectorAll('.btn-remover-fantasma').forEach(function(btn) {
+            if (!btn.classList.contains('events-initialized')) {
+                btn.addEventListener('click', function(e) {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    const cartaoId = this.dataset.cartaoId;
+                    console.log('Removendo cartão fantasma:', cartaoId);
+                    removerCartaoFantasma(cartaoId);
+                });
+                btn.classList.add('events-initialized');
+                console.log('✅ Botão remover configurado para cartão:', btn.dataset.cartaoId);
+            }
+        });
+        
+        // Botões de mover fantasma
+        document.querySelectorAll('.btn-mover-fantasma').forEach(function(btn) {
+            if (!btn.classList.contains('events-initialized')) {
+                btn.addEventListener('click', function(e) {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    const cartaoId = this.dataset.cartaoId;
+                    console.log('Movendo cartão fantasma:', cartaoId);
+                    abrirModalMoverFantasma(cartaoId);
+                });
+                btn.classList.add('events-initialized');
+                console.log('✅ Botão mover configurado para cartão:', btn.dataset.cartaoId);
+            }
+        });
+        
+        // Botões de detalhes fantasma
+        document.querySelectorAll('.btn-detalhes-fantasma').forEach(function(btn) {
+            if (!btn.classList.contains('events-initialized')) {
+                btn.addEventListener('click', function(e) {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    const ordemId = this.dataset.ordemId;
+                    console.log('Abrindo detalhes da OS:', ordemId);
+                    openCardDetails(ordemId);
+                });
+                btn.classList.add('events-initialized');
+                console.log('✅ Botão detalhes configurado para OS:', btn.dataset.ordemId);
+            }
+        });
+    }
+    
+    // Função para remover cartão fantasma
+    function removerCartaoFantasma(cartaoId) {
+        console.log('🗑️ Tentando remover cartão fantasma ID:', cartaoId);
+        // Removendo confirmação temporariamente para teste
+        // if (confirm('Tem certeza que deseja remover este cartão fantasma?')) {
+        if (true) {
+            console.log('✅ Prosseguindo com remoção (sem confirmação para teste)');
+            
+            fetch(`/cartao-fantasma/remover/${cartaoId}`, {
+                method: 'POST'
+            })
+            .then(response => {
+                console.log('📡 Status da resposta:', response.status, response.statusText);
+                console.log('📡 Headers da resposta:', Object.fromEntries(response.headers));
+                return response.text().then(text => {
+                    console.log('📡 Texto bruto da resposta:', text);
+                    try {
+                        return JSON.parse(text);
+                    } catch (e) {
+                        console.error('❌ Erro ao fazer parse JSON:', e);
+                        throw new Error('Resposta não é JSON válido: ' + text);
+                    }
+                });
+            })
+            .then(data => {
+                console.log('📡 Dados parseados da resposta:', data);
+                if (data.success) {
+                    console.log('✅ Remoção bem-sucedida no backend');
+                    alert('Cartão fantasma removido com sucesso!');
+                    window.location.reload();
+                } else {
+                    console.error('❌ Erro no backend:', data.message);
+                    alert('Erro ao remover cartão fantasma: ' + data.message);
+                }
+            })
+            .catch(error => {
+                console.error('❌ Erro na requisição completa:', error);
+                alert('Erro ao remover cartão fantasma: ' + error.message);
+            });
+        } else {
+            console.log('❌ Usuário cancelou remoção');
+        }
+    }
+    
+    // Função para abrir modal de mover fantasma
+    function abrirModalMoverFantasma(cartaoId) {
+        const modal = new bootstrap.Modal(document.getElementById('moverFantasmaModal'));
+        
+        // Definir ID do cartão no campo oculto
+        const inputCartaoId = document.getElementById('cartaoIdMover');
+        if (inputCartaoId) {
+            inputCartaoId.value = cartaoId;
+        }
+        
+        // Resetar posição para 1
+        const inputPosicao = document.getElementById('novaPosicao');
+        if (inputPosicao) {
+            inputPosicao.value = 1;
+        }
+        
+        modal.show();
+        
+        // Configurar botão de confirmar se ainda não foi configurado
+        const btnConfirmar = document.getElementById('btnConfirmarMoverFantasma');
+        if (btnConfirmar && !btnConfirmar.classList.contains('events-initialized')) {
+            btnConfirmar.addEventListener('click', function() {
+                moverCartaoFantasma();
+            });
+            btnConfirmar.classList.add('events-initialized');
+        }
+    }
+    
+    // Função para mover cartão fantasma
+    function moverCartaoFantasma() {
+        const form = document.getElementById('formMoverFantasma');
+        const formData = new FormData(form);
+        
+        console.log('🔄 Movendo cartão fantasma:', Object.fromEntries(formData));
+        
+        fetch('/cartao-fantasma/mover', {
+            method: 'POST',
+            body: formData
+        })
+        .then(response => {
+            console.log('📡 Status da resposta (mover):', response.status, response.statusText);
+            console.log('📡 Headers da resposta (mover):', Object.fromEntries(response.headers));
+            return response.text().then(text => {
+                console.log('📡 Texto bruto da resposta (mover):', text);
+                try {
+                    return JSON.parse(text);
+                } catch (e) {
+                    console.error('❌ Erro ao fazer parse JSON (mover):', e);
+                    throw new Error('Resposta não é JSON válido: ' + text);
+                }
+            });
+        })
+        .then(data => {
+            console.log('📡 Dados parseados da resposta (mover):', data);
+            if (data.success) {
+                console.log('✅ Movimento bem-sucedido no backend');
+                const modal = bootstrap.Modal.getInstance(document.getElementById('moverFantasmaModal'));
+                modal.hide();
+                alert('Posição do cartão fantasma alterada!');
+                window.location.reload();
+            } else {
+                console.error('❌ Erro no backend (mover):', data.message);
+                alert('Erro ao mover cartão fantasma: ' + data.message);
+            }
+        })
+        .catch(error => {
+            console.error('❌ Erro na requisição completa (mover):', error);
+            alert('Erro ao mover cartão fantasma: ' + error.message);
+        });
+    }
+    
+    // Configurar botão de confirmar criação do fantasma
+    function configurarBotaoConfirmarFantasma() {
+        const btnConfirmar = document.getElementById('btnConfirmarFantasma');
+        if (btnConfirmar) {
+            console.log('Configurando botão confirmar fantasma');
+            btnConfirmar.addEventListener('click', function() {
+                console.log('Clicou em confirmar fantasma');
+                criarCartaoFantasma();
+            });
+        } else {
+            console.error('Botão confirmar fantasma não encontrado!');
+        }
+    }
+    
+    // Função para criar o cartão fantasma
+    function criarCartaoFantasma() {
+        const form = document.getElementById('formCriarFantasma');
+        const formData = new FormData(form);
+        
+        console.log('Enviando dados do cartão fantasma:', Object.fromEntries(formData));
+        
+        fetch('/cartao-fantasma/criar', {
+            method: 'POST',
+            body: formData
+        })
+        .then(response => response.json())
+        .then(data => {
+            console.log('Resposta do servidor:', data);
+            if (data.success) {
+                // Fechar modal e recarregar página
+                const modal = bootstrap.Modal.getInstance(document.getElementById('criarFantasmaModal'));
+                modal.hide();
+                
+                // Mostrar sucesso e recarregar
+                alert('Cartão fantasma criado com sucesso!');
+                window.location.reload();
+            } else {
+                alert('Erro ao criar cartão fantasma: ' + data.message);
+            }
+        })
+        .catch(error => {
+            console.error('Erro:', error);
+            alert('Erro ao criar cartão fantasma');
+        });
     }
     </script>
 

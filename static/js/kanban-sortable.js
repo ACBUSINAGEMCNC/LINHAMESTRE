@@ -21,7 +21,7 @@ document.addEventListener('DOMContentLoaded', function() {
             swapThreshold: 0.65,
             preventOnFilter: true,
             filter: '.no-drag, .document-icons, .document-container, .pdf-container, .cnc-container',
-            draggable: '.kanban-card',
+            draggable: '.kanban-card, .kanban-card.fantasma',
             onStart: function(evt) {
                 console.log('Início do arrasto', evt.item.dataset.ordemId);
                 document.body.style.cursor = 'grabbing';
@@ -29,7 +29,7 @@ document.addEventListener('DOMContentLoaded', function() {
                 document.body.classList.add('sorting');
             },
             onEnd: function(evt) {
-                console.log('Fim do arrasto', evt.item.dataset.ordemId);
+                console.log('Fim do arrasto', evt.item.dataset.ordemId || evt.item.dataset.cartaoId);
                 document.body.style.cursor = 'default';
                 document.body.classList.remove('sorting');
                 
@@ -42,30 +42,83 @@ document.addEventListener('DOMContentLoaded', function() {
                     }
                 }));
                 
-                // Se o item foi movido para outra coluna
-                if (evt.from !== evt.to) {
-                    // Obter ID da ordem e nova lista
-                    const ordemId = evt.item.dataset.ordemId;
+                // Verificar se é cartão fantasma ou cartão normal
+                const isGhostCard = evt.item.classList.contains('fantasma');
+                
+                if (isGhostCard) {
+                    // Lógica para cartões fantasma
+                    const cartaoId = evt.item.dataset.cartaoId;
                     const novaLista = evt.to.dataset.lista;
+                    const novaPosicao = Array.from(evt.to.children).indexOf(evt.item) + 1;
                     
-                    console.log(`Movendo item ${ordemId} para ${novaLista}`);
+                    console.log(`🎯 DRAG & DROP: Movendo cartão fantasma ${cartaoId} para lista ${novaLista}, posição ${novaPosicao}`);
+                    console.log('🎯 Elemento arrastado:', evt.item);
+                    console.log('🎯 Lista origem:', evt.from.dataset.lista);
+                    console.log('🎯 Lista destino:', evt.to.dataset.lista);
                     
-                    // Atualizar no servidor
-                    fetch('/kanban/mover', {
+                    // Criar FormData para enviar os dados
+                    const formData = new FormData();
+                    formData.append('cartao_id', cartaoId);
+                    formData.append('nova_lista', novaLista);
+                    formData.append('nova_posicao', novaPosicao);
+                    
+                    console.log('🎯 Dados a enviar:', Object.fromEntries(formData));
+                    
+                    fetch('/cartao-fantasma/mover', {
                         method: 'POST',
-                        headers: {
-                            'Content-Type': 'application/x-www-form-urlencoded'
-                        },
-                        body: `ordem_id=${ordemId}&nova_lista=${novaLista}`
+                        body: formData
                     })
-                    .then(response => response.json())
+                    .then(response => {
+                        console.log('📡 DRAG Status da resposta:', response.status, response.statusText);
+                        return response.text().then(text => {
+                            console.log('📡 DRAG Texto bruto da resposta:', text);
+                            try {
+                                return JSON.parse(text);
+                            } catch (e) {
+                                console.error('❌ DRAG Erro ao fazer parse JSON:', e);
+                                throw new Error('Resposta não é JSON válido: ' + text);
+                            }
+                        });
+                    })
                     .then(data => {
+                        console.log('📡 DRAG Dados parseados:', data);
                         if (data.success) {
-                            console.log('Movimento salvo com sucesso');
-                            // Recarregar para atualizar contadores
+                            console.log('✅ DRAG Cartão fantasma movido com sucesso');
                             setTimeout(() => window.location.reload(), 300);
+                        } else {
+                            console.error('❌ DRAG Erro ao mover cartão fantasma:', data.message);
+                            // Reverter posição em caso de erro
+                            evt.from.appendChild(evt.item);
                         }
+                    })
+                    .catch(error => {
+                        console.error('❌ DRAG Erro na requisição:', error);
+                        // Reverter posição em caso de erro
+                        evt.from.appendChild(evt.item);
                     });
+                } else {
+                    // Lógica para cartões normais (apenas se mudou de coluna)
+                    if (evt.from !== evt.to) {
+                        const ordemId = evt.item.dataset.ordemId;
+                        const novaLista = evt.to.dataset.lista;
+                        
+                        console.log(`Movendo item ${ordemId} para ${novaLista}`);
+                        
+                        fetch('/kanban/mover', {
+                            method: 'POST',
+                            headers: {
+                                'Content-Type': 'application/x-www-form-urlencoded'
+                            },
+                            body: `ordem_id=${ordemId}&nova_lista=${novaLista}`
+                        })
+                        .then(response => response.json())
+                        .then(data => {
+                            if (data.success) {
+                                console.log('Movimento salvo com sucesso');
+                                setTimeout(() => window.location.reload(), 300);
+                            }
+                        });
+                    }
                 }
             }
         });

@@ -1,5 +1,5 @@
 from flask import Blueprint, render_template, request, redirect, url_for, flash, jsonify, session
-from models import db, Usuario, OrdemServico, Pedido, PedidoOrdemServico, Item, Trabalho, ItemTrabalho, RegistroMensal, KanbanLista
+from models import db, Usuario, OrdemServico, Pedido, PedidoOrdemServico, Item, Trabalho, ItemTrabalho, RegistroMensal, KanbanLista, CartaoFantasma
 from utils import validate_form_data, get_kanban_lists, get_kanban_categories, format_seconds_to_time
 from datetime import datetime
 
@@ -36,16 +36,25 @@ def index():
     categorias = get_kanban_categories()
     
     ordens = {}
+    cartoes_fantasma = {}
     tempos_listas = {}
     quantidades_listas = {}
     
     for lista in listas:
+        # Buscar ordens normais
         ordens[lista] = OrdemServico.query.filter_by(status=lista).all()
+        
+        # Buscar cartões fantasma ativos para esta lista
+        cartoes_fantasma[lista] = CartaoFantasma.query.filter_by(
+            lista_kanban=lista, 
+            ativo=True
+        ).order_by(CartaoFantasma.posicao_fila).all()
         
         # Calcular tempos e quantidades para cada lista
         tempo_total = 0
         quantidade_total = 0
         
+        # Contar ordens normais
         for ordem in ordens[lista]:
             for pedido_os in ordem.pedidos:
                 pedido = pedido_os.pedido
@@ -63,11 +72,20 @@ def index():
                                 tempo_peca = item_trabalho.tempo_real or item_trabalho.tempo_peca
                                 tempo_total += (tempo_peca * pedido.quantidade) + item_trabalho.tempo_setup
         
+        # Contar cartões fantasma (apenas para visualização, não duplicar tempo/quantidade)
+        for cartao_fantasma in cartoes_fantasma[lista]:
+            # Os cartões fantasma não adicionam tempo/quantidade pois são referências
+            pass
+        
         tempos_listas[lista] = tempo_total
         quantidades_listas[lista] = quantidade_total
     
-    return render_template('kanban/index.html', listas=listas, ordens=ordens, 
-                          tempos_listas=tempos_listas, quantidades_listas=quantidades_listas,
+    return render_template('kanban/index.html', 
+                          listas=listas, 
+                          ordens=ordens, 
+                          cartoes_fantasma=cartoes_fantasma,
+                          tempos_listas=tempos_listas, 
+                          quantidades_listas=quantidades_listas,
                           Item=Item)
 
 @kanban.route('/kanban/mover', methods=['POST'])
@@ -342,3 +360,174 @@ def excluir_lista(lista_id):
     
     flash(f'Lista "{nome_lista}" excluída com sucesso!', 'success')
     return redirect(url_for('kanban.gerenciar_listas'))
+
+# ===============================
+# ROTAS PARA CARTÕES FANTASMA
+# ===============================
+
+@kanban.route('/cartao-fantasma/criar', methods=['POST'])
+def criar_cartao_fantasma():
+    """Criar um cartão fantasma em uma lista específica"""
+    try:
+        errors = validate_form_data(request.form, ['ordem_id', 'lista_destino'])
+        if errors:
+            return jsonify({'success': False, 'errors': errors})
+        
+        ordem_id = request.form['ordem_id']
+        lista_destino = request.form['lista_destino']
+        trabalho_id = request.form.get('trabalho_id')
+        posicao_fila = request.form.get('posicao_fila', 1)
+        observacoes = request.form.get('observacoes', '')
+        
+        # Validar se a ordem existe
+        ordem = OrdemServico.query.get_or_404(ordem_id)
+        
+        # Verificar se já existe um cartão fantasma nesta lista para esta OS
+        fantasma_existente = CartaoFantasma.query.filter_by(
+            ordem_servico_id=ordem_id,
+            lista_kanban=lista_destino,
+            ativo=True
+        ).first()
+        
+        if fantasma_existente:
+            return jsonify({
+                'success': False, 
+                'message': f'Já existe um cartão fantasma desta OS na lista {lista_destino}'
+            })
+        
+        # Criar o cartão fantasma
+        cartao_fantasma = CartaoFantasma(
+            ordem_servico_id=ordem_id,
+            lista_kanban=lista_destino,
+            trabalho_id=trabalho_id if trabalho_id else None,
+            posicao_fila=int(posicao_fila),
+            observacoes=observacoes,
+            criado_por_id=session.get('usuario_id')
+        )
+        
+        db.session.add(cartao_fantasma)
+        db.session.commit()
+        
+        return jsonify({
+            'success': True,
+            'message': f'Cartão fantasma criado na lista {lista_destino}',
+            'cartao_id': cartao_fantasma.id
+        })
+    
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({'success': False, 'message': f'Erro ao criar cartão fantasma: {str(e)}'})
+
+@kanban.route('/cartao-fantasma/remover/<int:cartao_id>', methods=['POST'])
+def remover_cartao_fantasma(cartao_id):
+    """Remover/desativar um cartão fantasma"""
+    try:
+        cartao = CartaoFantasma.query.get_or_404(cartao_id)
+        cartao.ativo = False
+        db.session.commit()
+        
+        return jsonify({
+            'success': True,
+            'message': 'Cartão fantasma removido'
+        })
+    
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({'success': False, 'message': f'Erro ao remover cartão fantasma: {str(e)}'})
+
+@kanban.route('/cartao-fantasma/mover', methods=['POST'])
+def mover_cartao_fantasma():
+    """Mover um cartão fantasma para outra posição na fila"""
+    try:
+        errors = validate_form_data(request.form, ['cartao_id', 'nova_posicao'])
+        if errors:
+            return jsonify({'success': False, 'errors': errors})
+        
+        cartao_id = request.form['cartao_id']
+        nova_posicao = int(request.form['nova_posicao'])
+        
+        cartao = CartaoFantasma.query.get_or_404(cartao_id)
+        cartao.posicao_fila = nova_posicao
+        db.session.commit()
+        
+        return jsonify({
+            'success': True,
+            'message': f'Cartão fantasma movido para posição {nova_posicao}'
+        })
+    
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({'success': False, 'message': f'Erro ao mover cartão fantasma: {str(e)}'})
+
+@kanban.route('/cartao-fantasma/detalhes/<int:cartao_id>')
+def detalhes_cartao_fantasma(cartao_id):
+    """Obter detalhes de um cartão fantasma"""
+    cartao = CartaoFantasma.query.get_or_404(cartao_id)
+    return render_template('kanban/detalhes_fantasma.html', cartao=cartao, Item=Item)
+
+@kanban.route('/cartao-fantasma/listar-disponiveis/<lista_destino>')
+def listar_ordens_disponiveis(lista_destino):
+    """Listar ordens que podem virar cartão fantasma em uma lista"""
+    try:
+        # Buscar todas as ordens que não estão nesta lista e não têm cartão fantasma nela
+        ordens_existentes_ids = db.session.query(CartaoFantasma.ordem_servico_id)\
+            .filter_by(lista_kanban=lista_destino, ativo=True).subquery()
+        
+        ordens_disponiveis = OrdemServico.query\
+            .filter(OrdemServico.status != lista_destino)\
+            .filter(~OrdemServico.id.in_(ordens_existentes_ids))\
+            .filter(OrdemServico.status != 'Finalizado')\
+            .all()
+        
+        ordens_data = []
+        for ordem in ordens_disponiveis:
+            for pedido_os in ordem.pedidos:
+                pedido = pedido_os.pedido
+                if pedido.item_id:
+                    item = Item.query.get(pedido.item_id)
+                    ordens_data.append({
+                        'id': ordem.id,
+                        'numero': ordem.numero,
+                        'item_nome': item.nome if item else pedido.nome_item,
+                        'quantidade': pedido.quantidade,
+                        'lista_atual': ordem.status
+                    })
+                    break  # Apenas o primeiro item para simplificar
+        
+        return jsonify({
+            'success': True,
+            'ordens': ordens_data
+        })
+    
+    except Exception as e:
+        return jsonify({'success': False, 'message': f'Erro ao listar ordens: {str(e)}'})
+
+@kanban.route('/cartao-fantasma/trabalhos/<int:ordem_id>')
+def listar_trabalhos_ordem(ordem_id):
+    """Listar trabalhos disponíveis para uma ordem específica"""
+    try:
+        ordem = OrdemServico.query.get_or_404(ordem_id)
+        trabalhos_data = []
+        
+        for pedido_os in ordem.pedidos:
+            pedido = pedido_os.pedido
+            if pedido.item_id:
+                item_trabalhos = ItemTrabalho.query.filter_by(item_id=pedido.item_id).all()
+                for it in item_trabalhos:
+                    trabalho = Trabalho.query.get(it.trabalho_id)
+                    trabalhos_data.append({
+                        'id': trabalho.id,
+                        'nome': trabalho.nome,
+                        'categoria': trabalho.categoria,
+                        'tempo_setup': it.tempo_setup_formatado,
+                        'tempo_peca': it.tempo_peca_formatado
+                    })
+                break  # Apenas o primeiro pedido para simplificar
+        
+        return jsonify({
+            'success': True,
+            'trabalhos': trabalhos_data
+        })
+    
+    except Exception as e:
+        return jsonify({'success': False, 'message': f'Erro ao listar trabalhos: {str(e)}'})

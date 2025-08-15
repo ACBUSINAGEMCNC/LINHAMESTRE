@@ -19,14 +19,17 @@
     return `<span class="badge bg-${cls}">${text}</span>`;
   }
 
-  function statusBadge(status) {
+  function statusBadge(status, isGhost = false) {
     const map = {
       'Setup em andamento': 'info',
       'Produção em andamento': 'success',
       'Pausado': 'warning',
-      'Finalizado': 'dark'
+      'Finalizado': 'dark',
+      'Fantasma': 'light text-dark'
     };
-    return badge(map[status] || 'secondary', status || 'Desconhecido');
+    const badgeClass = map[status] || 'secondary';
+    const ghostIcon = isGhost ? '<i class="fas fa-ghost me-1"></i>' : '';
+    return `<span class="badge bg-${badgeClass}">${ghostIcon}${status || 'Desconhecido'}</span>`;
   }
 
   function perfBadge(valor) {
@@ -58,11 +61,22 @@
       if (s === 'Produção em andamento') return 'status-producao';
       if (s === 'Pausado') return 'status-pausa';
       if (s === 'Finalizado') return 'status-finalizado';
+      if (s === 'Fantasma' || st.is_ghost_card) return 'status-fantasma';
       return 'status-neutro';
     };
 
     const os = st.os_numero || `OS-${st.ordem_servico_id}`;
+    const isGhost = st.is_ghost_card === true;
     const ativos = Array.isArray(st.ativos_por_trabalho) ? st.ativos_por_trabalho : [];
+    
+    // Para cartões fantasma, mostrar informações específicas
+    const ghostInfo = isGhost ? {
+      posicao: st.posicao_fila || 1,
+      observacoes: st.observacoes || '',
+      criadoPor: st.criado_por_nome || '',
+      dataCriacao: st.data_criacao ? new Date(st.data_criacao).toLocaleDateString('pt-BR') : ''
+    } : null;
+    
     // Resumo de contagens por status (fallback se backend não enviar)
     const resumo = st.resumo_status || (() => {
       const c = { setup: 0, pausado: 0, producao: 0 };
@@ -138,16 +152,47 @@
               <!-- Nome da lista removido - agora usamos agrupamento por máquina -->
             </div>
             <div class="col-4 text-end">
-              ${statusBadge(st.status_atual)}
+              ${statusBadge(st.status_atual, isGhost)}
+              ${isGhost ? `<div class="small text-muted mt-1">Posição: ${ghostInfo.posicao}</div>` : ''}
             </div>
           </div>
         </div>
         <div class="card-body">
-          ${trabalhosHtml || '<div class="small text-muted">Sem serviços cadastrados para o item.</div>'}
+          ${isGhost ? `
+            <div class="alert alert-light border-2" style="border-left: 4px solid #6c757d;">
+              <div class="row">
+                <div class="col-md-6">
+                  <div class="mb-2">
+                    <i class="fas fa-ghost me-2"></i>
+                    <strong>Cartão Fantasma</strong>
+                  </div>
+                  ${ghostInfo.observacoes ? `<div class="small"><strong>Observações:</strong> ${ghostInfo.observacoes}</div>` : ''}
+                  ${ghostInfo.criadoPor ? `<div class="small text-muted">Criado por: ${ghostInfo.criadoPor}</div>` : ''}
+                  ${ghostInfo.dataCriacao ? `<div class="small text-muted">Data: ${ghostInfo.dataCriacao}</div>` : ''}
+                </div>
+                <div class="col-md-6">
+                  <div class="small text-muted">
+                    <div><strong>OS Original:</strong> ${os}</div>
+                    <div><strong>Posição na fila:</strong> ${ghostInfo.posicao}</div>
+                    ${st.trabalho_nome ? `<div><strong>Trabalho:</strong> ${st.trabalho_nome}</div>` : ''}
+                  </div>
+                </div>
+              </div>
+            </div>
+          ` : trabalhosHtml || '<div class="small text-muted">Sem serviços cadastrados para o item.</div>'}
         </div>
         <div class="card-footer d-flex gap-2">
-          <button class="btn btn-outline-primary btn-sm" onclick="verLogs(${st.ordem_servico_id})"><i class="fas fa-history"></i> Logs</button>
-          <button class="btn btn-outline-secondary btn-sm" onclick="verDetalhes(${st.ordem_servico_id})"><i class="fas fa-eye"></i> Detalhes</button>
+          ${isGhost ? `
+            <button class="btn btn-outline-warning btn-sm" onclick="removerCartaoFantasma(${st.ghost_card_id})">
+              <i class="fas fa-times"></i> Remover Fantasma
+            </button>
+            <button class="btn btn-outline-info btn-sm" onclick="moverCartaoFantasma(${st.ghost_card_id})">
+              <i class="fas fa-arrows-alt-v"></i> Mover Posição
+            </button>
+          ` : `
+            <button class="btn btn-outline-primary btn-sm" onclick="verLogs(${st.ordem_servico_id})"><i class="fas fa-history"></i> Logs</button>
+            <button class="btn btn-outline-secondary btn-sm" onclick="verDetalhes(${st.ordem_servico_id})"><i class="fas fa-eye"></i> Detalhes</button>
+          `}
         </div>
       </div>`;
   }

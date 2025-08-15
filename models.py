@@ -591,6 +591,38 @@ class ApontamentoProducao(db.Model):
         return ""
 
 
+# Modelo para cartões fantasma - permite uma OS em múltiplas listas
+class CartaoFantasma(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    ordem_servico_id = db.Column(db.Integer, db.ForeignKey('ordem_servico.id'), nullable=False)
+    lista_kanban = db.Column(db.String(100), nullable=False)  # Nome da lista onde aparece
+    posicao_fila = db.Column(db.Integer, default=1)  # Posição na fila (1=primeiro, 2=segundo, etc.)
+    ativo = db.Column(db.Boolean, default=True)  # Se o cartão fantasma está ativo
+    trabalho_id = db.Column(db.Integer, db.ForeignKey('trabalho.id'), nullable=True)  # Trabalho específico para este fantasma
+    observacoes = db.Column(db.Text, nullable=True)  # Observações específicas
+    data_criacao = db.Column(db.DateTime, default=datetime.utcnow)
+    data_atualizacao = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    criado_por_id = db.Column(db.Integer, db.ForeignKey('usuario.id'), nullable=True)
+    
+    # Relacionamentos
+    ordem_servico = relationship('OrdemServico', backref='cartoes_fantasma', lazy=True)
+    trabalho = relationship('Trabalho', lazy=True)
+    criado_por = relationship('Usuario', foreign_keys=[criado_por_id], lazy=True)
+    
+    def __repr__(self):
+        return f'<CartaoFantasma OS:{self.ordem_servico_id} Lista:{self.lista_kanban}>'
+    
+    @property
+    def is_fantasma(self):
+        """Sempre retorna True para identificar como cartão fantasma"""
+        return True
+    
+    @property
+    def lista_cor(self):
+        """Retorna a cor da lista Kanban correspondente"""
+        lista = KanbanLista.query.filter_by(nome=self.lista_kanban).first()
+        return lista.cor if lista else '#6c757d'
+
 # Modelo para controle do status atual de produção de cada OS
 class StatusProducaoOS(db.Model):
     id = db.Column(db.Integer, primary_key=True)
