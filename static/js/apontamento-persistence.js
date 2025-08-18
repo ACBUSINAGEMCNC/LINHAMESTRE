@@ -53,6 +53,12 @@ try {
                             qtdNum
                         );
                     }
+                    // Atualizar rótulo "Última qtd" no cabeçalho da QPT
+                    try {
+                        if (qtdNum !== null && typeof window.atualizarUltimaQuantidadeNoCard === 'function') {
+                            window.atualizarUltimaQuantidadeNoCard(osId, qtdNum);
+                        }
+                    } catch {}
                     // Forçar render imediato a partir do cache, respeitando o guard
                     try {
                         const c = document.getElementById(`qtd-por-trabalho-${osId}`);
@@ -341,7 +347,7 @@ function atualizarQuantidadesPorTrabalho(ordemId, ativosLista) {
     if (!container) return;
 
     // Cache por OS para manter últimas quantidades por trabalho após primeiro apontamento
-    window.__cacheQtdTrabalho = window.__cacheQtdTrabalho || {}; // { [ordemId]: { enabled: true, items: { [key]: {trab,itemCod,qty} } } }
+    window.__cacheQtdTrabalho = window.__cacheQtdTrabalho || {}; // { [ordemId]: { enabled: true, items: { [trabIdOrKey]: { trab, qty } } } }
     const store = window.__cacheQtdTrabalho;
     if (!store[ordemId]) {
         store[ordemId] = { enabled: false, items: {} };
@@ -371,102 +377,56 @@ function atualizarQuantidadesPorTrabalho(ordemId, ativosLista) {
         ls = {};
     }
 
-    // Se recebemos lista de ativos, atualizar o cache e habilitar a persistência visual
+    // Se recebemos lista de ativos, atualizar o cache por TRABALHO e habilitar a persistência visual
     if (Array.isArray(ativosLista) && ativosLista.length > 0) {
         current.enabled = true;
         ativosLista.forEach(ap => {
-            const trabId = ap.trabalho_id ?? '-';
-            const itemCod = ap.item_codigo || '';
-            const key = `${trabId}:${itemCod}`;
+            const trabId = (ap.trabalho_id ?? '-').toString();
             const trab = ap.trabalho_nome || `Trabalho #${trabId}`;
             const qtd = Number.isFinite(Number(ap.ultima_quantidade)) ? Number(ap.ultima_quantidade) : '-';
-            current.items[key] = { trab, itemCod, qty: qtd };
+            current.items[trabId] = { trab, qty };
         });
-        // Salvar no localStorage
+        // Salvar no localStorage (formato novo: items por trabalho)
         try {
-            ls[ordemId] = current.items;
+            ls[String(ordemId)] = current.items;
             localStorage.setItem(LS_KEY, JSON.stringify(ls));
-        } catch (e) {
-            // Ignorar falhas de armazenamento
-        }
+        } catch (e) {}
     }
 
-    // Fallback: se não houver itens ainda, tentar carregar do localStorage
+    // Fallback: se não houver itens ainda, tentar carregar do localStorage (compatível com formato antigo)
     if ((!current.items || Object.keys(current.items).length === 0) && ls[ordemId]) {
-        current.items = ls[ordemId] || {};
+        const raw = ls[ordemId] || {};
+        const rebuilt = {};
+        try {
+            // Formato novo: { [trabId]: { trab, qty } }
+            // Formato antigo: { [qualquer]: { trab, itemCod, qty } } -> colapsar por trab
+            Object.entries(raw).forEach(([k, v]) => {
+                if (!v) return;
+                const trabNome = (v.trab || '').toString();
+                const trabKey = trabNome.replace(/\s*\([^)]*\)\s*$/, '').trim().toLowerCase() || k.toString();
+                const qtyNum = Number.isFinite(Number(v.qty)) ? Number(v.qty) : '-';
+                if (!rebuilt[trabKey]) rebuilt[trabKey] = { trab: trabNome || `Trabalho`, qty: qtyNum };
+                else {
+                    const prev = rebuilt[trabKey];
+                    const nPrev = Number(prev.qty);
+                    const nNow = Number(qtyNum);
+                    if (Number.isFinite(nNow) && (!Number.isFinite(nPrev) || nNow !== nPrev)) rebuilt[trabKey] = { trab: trabNome, qty: qtyNum };
+                }
+            });
+        } catch {}
+        current.items = rebuilt;
         if (Object.keys(current.items).length > 0) current.enabled = true;
     }
 
     // Renderização: se houver itens no cache, mostrar sempre (mesmo se enabled não estiver setado)
     let entries = Object.values(current.items || {});
-    // Dedupe por (trab,itemCod) normalizados para evitar duplicidade visual
     if (entries.length > 0) {
-        const dedup = new Map();
-        entries.forEach(e => {
-            // Normaliza trabalho removendo qualquer sufixo final entre parênteses (ex.: "Trabalho (ACB-00002)")
-            const trabKey = ((e.trab || '')
-                .toString()
-                .replace(/\s*\([^)]*\)\s*$/, '')
-                .trim()
-                .toLowerCase());
-            // Normaliza itemCod removendo parênteses e qualquer sufixo após traços variados (-, –, —)
-            const rawItem = (e.itemCod || '').toString().replace(/[()]/g, '').trim();
-            const itemKey = rawItem.replace(/\s*[-–—]\s*.*$/, '').trim().toLowerCase();
-            const k = `${trabKey}|${itemKey}`;
-            // Se houver conflito, preferir quantidade numérica mais recente
-            if (!dedup.has(k)) {
-                dedup.set(k, e);
-            } else {
-                const prev = dedup.get(k);
-                const n1 = Number(e.qty);
-                const n0 = Number(prev.qty);
-                const eIsNum = Number.isFinite(n1);
-                const pIsNum = Number.isFinite(n0);
-                if (eIsNum && !pIsNum) dedup.set(k, e);
-                else if (eIsNum && pIsNum && n1 !== n0) dedup.set(k, e);
-                else dedup.set(k, e); // manter o último
-            }
-        });
-        entries = Array.from(dedup.values());
-        // Regra extra: se houver (trab, item=empty) e também (mesmo trab, item!=empty), descartar o vazio
-        try {
-            const hasNonEmptyByTrab = new Set();
-            entries.forEach(e => {
-                const trabKey = ((e.trab || '').toString().replace(/\s*\([^)]*\)\s*$/, '').trim().toLowerCase());
-                const rawItem = (e.itemCod || '').toString().replace(/[()]/g, '').trim();
-                const itemKey = rawItem.replace(/\s*[-–—]\s*.*$/, '').trim().toLowerCase();
-                if (itemKey) hasNonEmptyByTrab.add(trabKey);
-            });
-            const before = entries.length;
-            entries = entries.filter(e => {
-                const trabKey = ((e.trab || '').toString().replace(/\s*\([^)]*\)\s*$/, '').trim().toLowerCase());
-                const rawItem = (e.itemCod || '').toString().replace(/[()]/g, '').trim();
-                const itemKey = rawItem.replace(/\s*[-–—]\s*.*$/, '').trim().toLowerCase();
-                if (!itemKey && hasNonEmptyByTrab.has(trabKey)) return false;
-                return true;
-            });
-            const after = entries.length;
-            if (after < before) { try { console.debug('[QPT] filtros aplicados: removidos itens sem código por trabalho'); } catch {} }
-        } catch {}
         if (!current.enabled) current.enabled = true;
-        // Ordena por nome do trabalho e depois por item para consistência visual
-        entries.sort((a, b) => {
-            const t = (a.trab || '').localeCompare(b.trab || '');
-            if (t !== 0) return t;
-            const ia = ((a.itemCod || '')).localeCompare((b.itemCod || ''));
-            return ia;
-        });
+        // Ordena por nome do trabalho para consistência visual
+        entries.sort((a, b) => (a.trab || '').localeCompare(b.trab || ''));
 
         // Assinatura de conteúdo para evitar re-render sem mudança
-        const signature = entries.map(e => {
-            const trabSig = ((e.trab || '')
-                .toString()
-                .replace(/\s*\([^)]*\)\s*$/, '')
-                .trim());
-            const rawItem = (e.itemCod || '').toString().replace(/[()]/g, '').trim();
-            const itemSig = rawItem.replace(/\s*[-–—]\s*.*$/, '').trim();
-            return `${trabSig}|${itemSig}=${e.qty ?? '-'}`;
-        }).join(';');
+        const signature = entries.map(e => `${(e.trab || '').toString().replace(/\s*\([^)]*\)\s*$/, '').trim()}=${e.qty ?? '-'}`).join(';');
         if (container.dataset && container.dataset.qptSig === signature) {
             try { console.debug('[QPT] sem mudanças, evitando re-render', { ordemId }); } catch {}
             // Atualiza timestamp de última tentativa para manter debounce funcional
@@ -474,35 +434,34 @@ function atualizarQuantidadesPorTrabalho(ordemId, ativosLista) {
             return;
         }
 
-        // Persistir estrutura deduplicada no cache in-memory e no localStorage (para evitar duplicação futura)
+        // Persistir no formato novo (por trabalho)
         try {
-            const canonical = {};
-            entries.forEach(e => {
-                const trabKey = (e.trab || '').toString().replace(/\s*\([^)]*\)\s*$/, '').trim().toLowerCase();
-                const rawItem = (e.itemCod || '').toString().replace(/[()]/g, '').trim();
-                const itemKey = rawItem.replace(/\s*[-–—]\s*.*$/, '').trim().toLowerCase();
-                const key = `${trabKey}|${itemKey}`;
-                canonical[key] = { trab: e.trab, itemCod: rawItem.replace(/\s*[-–—]\s*.*$/, '').trim(), qty: e.qty };
-            });
-            current.items = canonical;
             const LS_KEY = 'qpt_cache_v1';
             let ls2 = {};
             try { ls2 = JSON.parse(localStorage.getItem(LS_KEY) || '{}'); } catch {}
             ls2[String(ordemId)] = current.items;
             try { localStorage.setItem(LS_KEY, JSON.stringify(ls2)); } catch {}
-        } catch (ePersist) { try { console.warn('[QPT] falha ao persistir dedupe', ePersist); } catch {} }
+        } catch (ePersist) { try { console.warn('[QPT] falha ao persistir QPT', ePersist); } catch {} }
 
         const linhas = [];
-        linhas.push('<div class="small text-muted">Quantidades por trabalho</div>');
+        // Preservar valor anterior da última quantidade, se existir
+        let ultimaVal = '-';
+        try {
+            const prev = container.querySelector(`#ultima-qtd-${ordemId}`);
+            if (prev) ultimaVal = (prev.textContent || '').trim() || '-';
+        } catch {}
+        const header = `<div class="small text-muted d-flex justify-content-between align-items-center">`
+                     +   `<span>Quantidades por trabalho</span>`
+                     +   `<span class="badge rounded-pill bg-secondary ultima-qtd" id="ultima-qtd-${ordemId}" title="Último apontamento">${ultimaVal}</span>`
+                     + `</div>`;
+        linhas.push(header);
         linhas.push('<ul class="qpt-list list-unstyled mb-1">');
         entries.forEach(e => {
-            const itemText = '';
             const qty = (e.qty ?? '-')
             const trabSafe = (e.trab || '').toString();
-            const itemSafe = (e.itemCod || '').toString();
             linhas.push(
-                `<li class=\"qpt-item\" data-trab-nome=\"${trabSafe.replace(/\"/g, '&quot;')}\" data-item-cod=\"${itemSafe.replace(/\"/g, '&quot;')}\">`
-              +   `<span class=\"qpt-label\">${trabSafe}${itemText}</span>`
+                `<li class=\"qpt-item\" data-trab-nome=\"${trabSafe.replace(/\"/g, '&quot;')}\">`
+              +   `<span class=\"qpt-label\">${trabSafe}</span>`
               +   `<span class=\"badge rounded-pill bg-secondary qpt-qty\" title=\"Último apontamento\">${qty}</span>`
               + `</li>`
             );
@@ -531,19 +490,13 @@ try {
         if (ordemId == null) return;
         const osId = parseInt(ordemId, 10);
         if (Number.isNaN(osId)) return;
-        const trabId = (trabalhoId ?? '').toString();
-        // Normaliza nome do trabalho: remove sufixo final entre parênteses (ficará o item no span ao lado)
+        const trabId = ((trabalhoId ?? '').toString() || '-');
+        // Normaliza nome do trabalho: remove sufixo final entre parênteses
         const trabNome = (trabalhoNome && trabalhoNome.trim())
             ? trabalhoNome.replace(/\s+/g, ' ').replace(/\s*\([^)]*\)\s*$/, '').trim()
             : `Trabalho #${trabId}`;
-        // Normaliza item para somente o código base, sem sufixos ou parênteses (traços: -, –, —)
-        const item = ((itemCod ?? '')
-            .toString()
-            .replace(/[()]/g, '')
-            .replace(/\s*[-–—]\s*.*$/, '')
-            .trim());
-        const key = `${trabId}:${item}`;
-        // Determinar a quantidade final: preferir numérica informada; caso vazio, reaproveitar última do cache/LS
+        const key = trabId;
+        // Determinar a quantidade final: preferir numérica informada; caso vazio, reaproveitar última do cache/LS (por trabalho)
         let qty;
         if (Number.isFinite(Number(quantidade))) {
             qty = Number(quantidade);
@@ -562,8 +515,18 @@ try {
                     const LS_KEY = 'qpt_cache_v1';
                     const lsObj = JSON.parse(localStorage.getItem(LS_KEY) || '{}');
                     const osEntry = lsObj[String(osId)];
-                    if (osEntry && osEntry[key] && osEntry[key].qty !== undefined) {
-                        prevQty = osEntry[key].qty;
+                    if (osEntry) {
+                        // Tentar formato novo (por trabalho)
+                        if (osEntry[key] && osEntry[key].qty !== undefined) prevQty = osEntry[key].qty;
+                        // Compat: formato antigo -> procurar por mesmo nome de trabalho
+                        if (prevQty === undefined) {
+                            Object.values(osEntry).forEach(v => {
+                                if (!v) return;
+                                const vNome = (v.trab || '').toString().replace(/\s*\([^)]*\)\s*$/, '').trim().toLowerCase();
+                                const tNome = trabNome.toLowerCase();
+                                if (vNome && vNome === tNome && prevQty === undefined && v.qty !== undefined) prevQty = v.qty;
+                            });
+                        }
                     }
                 } catch {}
             }
@@ -576,13 +539,7 @@ try {
         if (!store[osId]) store[osId] = { enabled: false, items: {} };
         const current = store[osId];
         current.enabled = true;
-        current.items[key] = { trab: trabNome, itemCod: item, qty };
-        // Purga possível entrada anterior sem item para o mesmo trabalho
-        try {
-            Object.keys(current.items).forEach(k => {
-                if (k === `${trabId}:` || k === `${trabId}: `) delete current.items[k];
-            });
-        } catch {}
+        current.items[key] = { trab: trabNome, qty };
 
         // Persistir em localStorage
         const LS_KEY = 'qpt_cache_v1';
@@ -602,7 +559,7 @@ try {
             // Marcar toque recente para evitar renders redundantes em seguida
             try { markQptTouch(osId); } catch {}
         } catch {}
-        try { console.debug('[QPT] cache semeado via entrada', { osId, trabId, item, qty }); } catch {}
+        try { console.debug('[QPT] cache semeado via entrada', { osId, trabId, /* item ignorado no novo modelo */ qty }); } catch {}
     }
 } catch {}
 

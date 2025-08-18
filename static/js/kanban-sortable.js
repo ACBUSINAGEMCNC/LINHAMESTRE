@@ -14,13 +14,14 @@ document.addEventListener('DOMContentLoaded', function() {
             dragClass: 'sortable-drag',
             ghostClass: 'sortable-ghost',
             chosenClass: 'sortable-chosen',
-            handle: '.drag-handle', // Usar apenas a alça para arrastar
+            // Removido o handle: agora o cartão inteiro é arrastável (estilo Trello)
             forceFallback: true, // Modo fallback para melhor controle
             fallbackClass: 'sortable-fallback',
             fallbackOnBody: true, 
             swapThreshold: 0.65,
             preventOnFilter: true,
-            filter: '.no-drag, .document-icons, .document-container, .pdf-container, .cnc-container',
+            // Impede arrastar quando clicando em elementos interativos dentro do cartão
+            filter: '.no-drag, .document-icons, .document-container, .pdf-container, .cnc-container, .apontamento-buttons, .btn, button, .dropdown, .dropdown-menu, input, select, textarea, a, [data-bs-toggle]',
             draggable: '.kanban-card, .kanban-card.fantasma',
             onStart: function(evt) {
                 console.log('Início do arrasto', evt.item.dataset.ordemId);

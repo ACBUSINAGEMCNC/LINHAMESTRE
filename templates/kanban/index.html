@@ -49,7 +49,7 @@
             padding: 0.75rem;
             margin-bottom: 0.75rem;
             box-shadow: 0 1px 2px rgba(0,0,0,0.15);
-            cursor: default;
+            cursor: grab;
             transition: transform 0.15s ease, box-shadow 0.15s ease;
             /* Prevenir seleção de texto durante o arrasto */
             -webkit-user-select: none;
@@ -58,6 +58,7 @@
             user-select: none;
             position: relative;
         }
+        .kanban-card:active { cursor: grabbing; }
         .kanban-card:hover {
             transform: translateY(-2px);
             box-shadow: 0 2px 5px rgba(0,0,0,0.2);
@@ -67,6 +68,26 @@
             margin-bottom: 0.5rem;
             display: flex;
             justify-content: space-between;
+            align-items: center;
+            gap: 8px;
+        }
+        .card-header-main { display: flex; align-items: center; gap: 8px; min-width: 0; }
+        .card-header-actions { display: flex; align-items: center; gap: 6px; margin-left: auto; }
+        .item-thumb { width: 48px; height: 48px; object-fit: cover; }
+        /* Título da OS maior */
+        .kanban-card-header .card-title { font-size: 1.2rem; line-height: 1.2; font-weight: 600; }
+        /* Número nos cartões fantasma maior */
+        .kanban-card.fantasma .fantasma-info strong { font-size: 1.4rem; }
+        /* Nome do item (Itens da OS) maior */
+        .kanban-card .os-item-name { font-size: 1.2rem; font-weight: 600; }
+        /* Quantidade (badge) proporcional ao nome do item */
+        .kanban-card .os-item-qty { font-size: 1.05rem; padding: 0.2rem 0.55rem; }
+        /* Responsivo: reduzir um pouco em telas pequenas */
+        @media (max-width: 576px) {
+            .kanban-card-header .card-title { font-size: 1.1rem; }
+            .kanban-card.fantasma .fantasma-info strong { font-size: 1.2rem; }
+            .kanban-card .os-item-name { font-size: 1.05rem; }
+            .kanban-card .os-item-qty { font-size: 0.95rem; }
         }
         .kanban-card-body {
             font-size: 0.875rem;
@@ -213,19 +234,7 @@
             font-weight: bold;
             color: #0d6efd;
         }
-        .drag-handle {
-            cursor: grab;
-            color: #adb5bd;
-            padding: 2px 5px;
-            border-radius: 3px;
-            margin-right: 5px;
-        }
-        .drag-handle:hover {
-            background-color: #f0f0f0;
-        }
-        .drag-handle:active {
-            cursor: grabbing;
-        }
+        .drag-handle { display: none; }
         /* Estilos para o Sortable.js */
         .sortable-ghost {
             opacity: 0.4;
@@ -464,17 +473,19 @@
                     {% for ordem in ordens[lista] %}
                     <div class="kanban-card" data-ordem-id="{{ ordem.id }}">
                         <div class="kanban-card-header">
-                            <div class="drag-handle" onclick="event.stopPropagation()">
-                                <i class="fas fa-grip-lines"></i>
+                            <div class="card-header-main">
+                                <div class="drag-handle" onclick="event.stopPropagation()">
+                                    <i class="fas fa-grip-lines"></i>
+                                </div>
+                                {% if ordem.pedidos and ordem.pedidos[0].pedido.item and ordem.pedidos[0].pedido.item.imagem_path %}
+                                    <img src="{{ ordem.pedidos[0].pedido.item.imagem_path }}" width="48" height="48" class="item-thumb rounded me-2" alt="Imagem do item">
+                                {% endif %}
+                                <span class="card-title" data-ordem-id="{{ ordem.id }}">{{ ordem.numero }}</span>
                             </div>
-                            {% if ordem.pedidos and ordem.pedidos[0].pedido.item and ordem.pedidos[0].pedido.item.imagem_path %}
-                                <img src="{{ ordem.pedidos[0].pedido.item.imagem_path }}" width="32" height="32" class="rounded me-2" alt="Imagem do item">
-                            {% endif %}
-                            <span class="card-title" data-ordem-id="{{ ordem.id }}">{{ ordem.numero }}</span>
-                            <div class="d-flex">
+                            <div class="card-header-actions">
                                 {% if lista != 'Expedição' %}
                                     <!-- Botão fantasma direto -->
-                                    <button class="btn btn-sm btn-outline-purple me-2 btn-criar-fantasma-direto" 
+                                    <button class="btn btn-sm btn-outline-purple btn-criar-fantasma-direto" 
                                             type="button" 
                                             data-ordem-id="{{ ordem.id }}" 
                                             data-lista-origem="{{ lista }}"
@@ -482,24 +493,24 @@
                                             title="Criar cartão fantasma desta OS">
                                         <i class="fas fa-ghost"></i>
                                     </button>
-                                    <div class="dropdown me-2">
-                                    <button class="btn btn-sm btn-outline-secondary dropdown-toggle" type="button" 
-                                            id="dropdownMenuButton{{ ordem.id }}" data-bs-toggle="dropdown" 
-                                            aria-expanded="false" onclick="event.stopPropagation()">
-                                        <i class="fas fa-ellipsis-v"></i>
-                                    </button>
-                                    <ul class="dropdown-menu dropdown-menu-end" aria-labelledby="dropdownMenuButton{{ ordem.id }}">
-                                        {% for lista_destino in listas %}
-                                            {% if lista_destino != lista and lista_destino not in ['Entrada','Expedição'] %}
-                                                <li><a class="dropdown-item btn-mover" href="#" data-ordem-id="{{ ordem.id }}" data-lista-destino="{{ lista_destino }}">Mover para {{ lista_destino }}</a></li>
-                                            {% endif %}
-                                        {% endfor %}
-                                        <li><hr class="dropdown-divider"></li>
-                                        <li><a class="dropdown-item text-purple btn-criar-fantasma-menu" href="#" data-ordem-id="{{ ordem.id }}" data-lista-origem="{{ lista }}"><i class="fas fa-ghost"></i> Criar cartão fantasma</a></li>
-                                    </ul>
-                                </div>
+                                    <div class="dropdown">
+                                        <button class="btn btn-sm btn-outline-secondary dropdown-toggle" type="button" 
+                                                id="dropdownMenuButton{{ ordem.id }}" data-bs-toggle="dropdown" 
+                                                aria-expanded="false" onclick="event.stopPropagation()">
+                                            <i class="fas fa-ellipsis-v"></i>
+                                        </button>
+                                        <ul class="dropdown-menu dropdown-menu-end" aria-labelledby="dropdownMenuButton{{ ordem.id }}">
+                                            {% for lista_destino in listas %}
+                                                {% if lista_destino != lista and lista_destino not in ['Entrada','Expedição'] %}
+                                                    <li><a class="dropdown-item btn-mover" href="#" data-ordem-id="{{ ordem.id }}" data-lista-destino="{{ lista_destino }}">Mover para {{ lista_destino }}</a></li>
+                                                {% endif %}
+                                            {% endfor %}
+                                            <li><hr class="dropdown-divider"></li>
+                                            <li><a class="dropdown-item text-purple btn-criar-fantasma-menu" href="#" data-ordem-id="{{ ordem.id }}" data-lista-origem="{{ lista }}"><i class="fas fa-ghost"></i> Criar cartão fantasma</a></li>
+                                        </ul>
+                                    </div>
+                                {% endif %}
                             </div>
-                            {% endif %}
                         </div>
                         <div class="kanban-card-body">
                             {% if ordem.pedidos %}
@@ -594,83 +605,86 @@
                              {% endif %}
                              
                             <!-- Itens da OS: nome do item + quantidade -->
-                            {% if grouped_items and grouped_items|length > 0 %}
-                            <div class="os-items mt-1">
-                                <div class="small text-muted">Itens da OS</div>
-                                <ul class="os-item-list list-unstyled mb-1">
-                                    {% for item_key, item_data in grouped_items.items() %}
-                                    <li class="os-item">
-                                        <span class="os-item-name">{{ item_data.name }}</span>
-                                        <span class="badge rounded-pill bg-primary os-item-qty" title="Quantidade do item">{{ item_data.total_qty }}</span>
-                                    </li>
-                                    {% endfor %}
-                                </ul>
-                            </div>
-                            {% endif %}
-                            <!-- Quantidades por trabalho (sempre visível) -->
-                            <div class="qtd-por-trabalho mt-1" id="qtd-por-trabalho-{{ ordem.id }}">
-                                <div class="small text-muted">Quantidades por trabalho</div>
-                                <ul class="qpt-list list-unstyled mb-1">
-                                    <li class="qpt-item">
-                                        <span class="qpt-label">-</span>
-                                        <span class="badge rounded-pill bg-secondary qpt-qty" title="Último apontamento">-</span>
-                                    </li>
-                                </ul>
-                            </div>
+                             {% if grouped_items and grouped_items|length > 0 %}
+                             <div class="os-items mt-1">
+                                 <div class="small text-muted">Itens da OS</div>
+                                 <ul class="os-item-list list-unstyled mb-1">
+                                     {% for item_key, item_data in grouped_items.items() %}
+                                     <li class="os-item">
+                                         <span class="os-item-name">{{ item_data.name }}</span>
+                                         <span class="badge rounded-pill bg-primary os-item-qty" title="Quantidade do item">{{ item_data.total_qty }}</span>
+                                     </li>
+                                     {% endfor %}
+                                 </ul>
+                             </div>
+                             {% endif %}
 
-                            <!-- Botões de Apontamento -->
-                            {% if acesso_kanban and lista not in ['Entrada', 'Expedição'] %}
-                            <div class="apontamento-buttons mt-2 pt-2 border-top">
-                                <div class="row g-1">
-                                    <!-- Grupo Setup -->
-                                    <div class="col-6">
-                                        <button class="btn btn-outline-primary btn-sm w-100 apontamento-btn" 
-                                                data-acao="inicio_setup"
-                                                data-ordem-id="{{ ordem.id }}"
-                                                onclick="iniciarApontamentoSetup(this.dataset.ordemId);"
-                                                title="Iniciar Setup">
-                                            <i class="fas fa-play"></i> Setup
-                                        </button>
-                                    </div>
-                                    <div class="col-6">
-                                        <button class="btn btn-outline-info btn-sm w-100 apontamento-btn" 
-                                                data-acao="fim_setup"
-                                                data-ordem-id="{{ ordem.id }}"
-                                                onclick="finalizarSetup(this.dataset.ordemId);"
-                                                title="Finalizar Setup">
-                                            <i class="fas fa-stop"></i> Fim Setup
-                                        </button>
-                                    </div>
+                             <!-- Quantidades por trabalho (sempre visível) -->
+                             <div class="qtd-por-trabalho mt-1" id="qtd-por-trabalho-{{ ordem.id }}">
+                                 <div class="small text-muted d-flex justify-content-between align-items-center">
+                                     <span>Quantidades por trabalho</span>
+                                     <span class="badge rounded-pill bg-secondary ultima-qtd" id="ultima-qtd-{{ ordem.id }}" title="Último apontamento">-</span>
+                                 </div>
+                                 <ul class="qpt-list list-unstyled mb-1">
+                                     <li class="qpt-item">
+                                         <span class="qpt-label">-</span>
+                                         <span class="badge rounded-pill bg-secondary qpt-qty" title="Último apontamento">-</span>
+                                     </li>
+                                 </ul>
+                             </div>
 
-                                    <!-- Grupo Produção -->
-                                    <div class="col-6">
-                                        <button class="btn btn-outline-success btn-sm w-100 apontamento-btn" 
-                                                data-acao="inicio_producao"
-                                                data-ordem-id="{{ ordem.id }}"
-                                                onclick="iniciarApontamentoProducao(this.dataset.ordemId);"
-                                                title="Iniciar Produção">
-                                            <i class="fas fa-cogs"></i> Produção
-                                        </button>
-                                    </div>
-                                    <div class="col-6">
-                                        <button class="btn btn-outline-warning btn-sm w-100 apontamento-btn" 
-                                                data-acao="pausa"
-                                                data-ordem-id="{{ ordem.id }}"
-                                                onclick="pausarApontamento(this.dataset.ordemId);"
-                                                title="Pausar produção">
-                                            <i class="fas fa-pause"></i> Pausa
-                                        </button>
-                                    </div>
-                                    <div class="col-12">
-                                        <button class="btn btn-outline-danger btn-sm w-100 apontamento-btn" 
-                                                data-acao="stop"
-                                                data-ordem-id="{{ ordem.id }}"
-                                                onclick="pararApontamento(this.dataset.ordemId);"
-                                                title="Stop (fim de turno / parada entre turnos)">
-                                            <i class="fas fa-stop"></i> Stop
-                                        </button>
-                                    </div>
-                                </div>
+                             {% if acesso_kanban and lista not in ['Entrada', 'Expedição'] %}
+                             <div class="apontamento-buttons mt-2 pt-2 border-top">
+                                 <div class="row g-1">
+                                     <!-- Grupo Setup -->
+                                     <div class="col-6">
+                                         <button class="btn btn-outline-primary btn-sm w-100 apontamento-btn" 
+                                                 data-acao="inicio_setup"
+                                                 data-ordem-id="{{ ordem.id }}"
+                                                 onclick="iniciarApontamentoSetup(this.dataset.ordemId);"
+                                                 title="Iniciar Setup">
+                                             <i class="fas fa-play"></i> Setup
+                                         </button>
+                                     </div>
+                                     <div class="col-6">
+                                         <button class="btn btn-outline-info btn-sm w-100 apontamento-btn" 
+                                                 data-acao="fim_setup"
+                                                 data-ordem-id="{{ ordem.id }}"
+                                                 onclick="finalizarSetup(this.dataset.ordemId);"
+                                                 title="Finalizar Setup">
+                                             <i class="fas fa-stop"></i> Fim Setup
+                                         </button>
+                                     </div>
+
+                                     <!-- Grupo Produção -->
+                                     <div class="col-6">
+                                         <button class="btn btn-outline-success btn-sm w-100 apontamento-btn" 
+                                                 data-acao="inicio_producao"
+                                                 data-ordem-id="{{ ordem.id }}"
+                                                 onclick="iniciarApontamentoProducao(this.dataset.ordemId);"
+                                                 title="Iniciar Produção">
+                                             <i class="fas fa-cogs"></i> Produção
+                                         </button>
+                                     </div>
+                                     <div class="col-6">
+                                         <button class="btn btn-outline-warning btn-sm w-100 apontamento-btn" 
+                                                 data-acao="pausa"
+                                                 data-ordem-id="{{ ordem.id }}"
+                                                 onclick="pausarApontamento(this.dataset.ordemId);"
+                                                 title="Pausar produção">
+                                             <i class="fas fa-pause"></i> Pausa
+                                         </button>
+                                     </div>
+                                     <div class="col-12">
+                                         <button class="btn btn-outline-danger btn-sm w-100 apontamento-btn" 
+                                                 data-acao="stop"
+                                                 data-ordem-id="{{ ordem.id }}"
+                                                 onclick="pararApontamento(this.dataset.ordemId);"
+                                                 title="Stop (fim de turno / parada entre turnos)">
+                                             <i class="fas fa-stop"></i> Stop
+                                         </button>
+                                     </div>
+                                 </div>
                                 
                                 <!-- Status atual do apontamento -->
                                 <div class="status-apontamento mt-1" id="status-{{ ordem.id }}">
@@ -688,20 +702,22 @@
                     {% for cartao_fantasma in cartoes_fantasma[lista] %}
                     <div class="kanban-card fantasma" data-cartao-id="{{ cartao_fantasma.id }}" data-ordem-id="{{ cartao_fantasma.ordem_servico.id }}">
                         <div class="kanban-card-header">
-                            <div class="drag-handle" onclick="event.stopPropagation()">
-                                <i class="fas fa-grip-lines"></i>
-                            </div>
-                            <div class="fantasma-info">
-                                <span class="fantasma-posicao">{{ cartao_fantasma.posicao_fila }}</span>
-                                <strong>{{ cartao_fantasma.ordem_servico.numero }}</strong>
-                                <small class="text-muted">(Lista origem: {{ cartao_fantasma.ordem_servico.status }})</small>
-                                {% if cartao_fantasma.trabalho %}
-                                    <br><small><i class="fas fa-cog"></i> {{ cartao_fantasma.trabalho.nome }}</small>
+                            <div class="card-header-main">
+                                <div class="drag-handle" onclick="event.stopPropagation()">
+                                    <i class="fas fa-grip-lines"></i>
+                                </div>
+                                {% if cartao_fantasma.ordem_servico.pedidos and cartao_fantasma.ordem_servico.pedidos[0].pedido.item and cartao_fantasma.ordem_servico.pedidos[0].pedido.item.imagem_path %}
+                                    <img src="{{ cartao_fantasma.ordem_servico.pedidos[0].pedido.item.imagem_path }}" width="48" height="48" class="item-thumb rounded me-2" alt="Imagem do item">
                                 {% endif %}
+                                <div class="fantasma-info">
+                                    <span class="fantasma-posicao">{{ cartao_fantasma.posicao_fila }}</span>
+                                    <strong>{{ cartao_fantasma.ordem_servico.numero }}</strong>
+                                    <small class="text-muted">(Lista origem: {{ cartao_fantasma.ordem_servico.status }})</small>
+                                    {% if cartao_fantasma.trabalho %}
+                                        <br><small><i class="fas fa-cog"></i> {{ cartao_fantasma.trabalho.nome }}</small>
+                                    {% endif %}
+                                </div>
                             </div>
-                            {% if cartao_fantasma.ordem_servico.pedidos and cartao_fantasma.ordem_servico.pedidos[0].pedido.item and cartao_fantasma.ordem_servico.pedidos[0].pedido.item.imagem_path %}
-                                <img src="{{ cartao_fantasma.ordem_servico.pedidos[0].pedido.item.imagem_path }}" width="32" height="32" class="rounded me-2" alt="Imagem do item">
-                            {% endif %}
                         </div>
                         <div class="kanban-card-body">
                             {% if cartao_fantasma.ordem_servico.pedidos %}
