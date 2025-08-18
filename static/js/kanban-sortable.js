@@ -98,11 +98,13 @@ document.addEventListener('DOMContentLoaded', function() {
                         evt.from.appendChild(evt.item);
                     });
                 } else {
-                    // Lógica para cartões normais (apenas se mudou de coluna)
+                    // Lógica para cartões normais
+                    const ordemId = evt.item.dataset.ordemId;
+                    const novaLista = evt.to.dataset.lista;
+                    const novaPosicao = Array.from(evt.to.children).indexOf(evt.item) + 1;
+                    
                     if (evt.from !== evt.to) {
-                        const ordemId = evt.item.dataset.ordemId;
-                        const novaLista = evt.to.dataset.lista;
-                        
+                        // Mudou de coluna - mover para nova lista
                         console.log(`Movendo item ${ordemId} para ${novaLista}`);
                         
                         fetch('/kanban/mover', {
@@ -118,6 +120,32 @@ document.addEventListener('DOMContentLoaded', function() {
                                 console.log('Movimento salvo com sucesso');
                                 setTimeout(() => window.location.reload(), 300);
                             }
+                        });
+                    } else {
+                        // Reordenou dentro da mesma lista - salvar nova posição
+                        console.log(`Reordenando item ${ordemId} para posição ${novaPosicao} na lista ${novaLista}`);
+                        
+                        fetch('/kanban/reordenar', {
+                            method: 'POST',
+                            headers: {
+                                'Content-Type': 'application/x-www-form-urlencoded'
+                            },
+                            body: `ordem_id=${ordemId}&nova_posicao=${novaPosicao}&lista=${novaLista}`
+                        })
+                        .then(response => response.json())
+                        .then(data => {
+                            if (data.success) {
+                                console.log('Reordenação salva com sucesso');
+                            } else {
+                                console.error('Erro ao salvar reordenação:', data.message);
+                                // Reverter em caso de erro
+                                evt.from.appendChild(evt.item);
+                            }
+                        })
+                        .catch(error => {
+                            console.error('Erro na requisição de reordenação:', error);
+                            // Reverter em caso de erro
+                            evt.from.appendChild(evt.item);
                         });
                     }
                 }

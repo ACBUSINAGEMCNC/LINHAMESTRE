@@ -34,11 +34,11 @@ def to_brt_iso(dt):
 @apontamento_bp.route('/operadores')
 def listar_operadores():
     """Lista todos os operadores e seus códigos"""
-    if 'user_id' not in session:
+    if 'usuario_id' not in session:
         return redirect(url_for('auth.login'))
     
     # Verificar se usuário tem acesso
-    usuario_atual = Usuario.query.get(session['user_id'])
+    usuario_atual = Usuario.query.get(session['usuario_id'])
     if not usuario_atual or (usuario_atual.nivel_acesso not in ['admin'] and not usuario_atual.acesso_cadastros):
         flash('Acesso negado. Apenas administradores podem gerenciar códigos de operador.', 'error')
         return redirect(url_for('main.index'))
@@ -92,11 +92,11 @@ def dashboard():
 @apontamento_bp.route('/operadores/gerar-codigo/<int:usuario_id>', methods=['POST'])
 def gerar_codigo_operador(usuario_id):
     """Gera um código de 4 dígitos para um operador"""
-    if 'user_id' not in session:
+    if 'usuario_id' not in session:
         return jsonify({'success': False, 'message': 'Não autenticado'})
     
     # Verificar permissões
-    usuario_atual = Usuario.query.get(session['user_id'])
+    usuario_atual = Usuario.query.get(session['usuario_id'])
     if not usuario_atual or (usuario_atual.nivel_acesso not in ['admin'] and not usuario_atual.acesso_cadastros):
         return jsonify({'success': False, 'message': 'Acesso negado'})
     
@@ -119,11 +119,11 @@ def gerar_codigo_operador(usuario_id):
 @apontamento_bp.route('/operadores/definir-codigo/<int:usuario_id>', methods=['POST'])
 def definir_codigo_operador(usuario_id):
     """Define um código personalizado para um operador"""
-    if 'user_id' not in session:
+    if 'usuario_id' not in session:
         return jsonify({'success': False, 'message': 'Não autenticado'})
     
     # Verificar permissões
-    usuario_atual = Usuario.query.get(session['user_id'])
+    usuario_atual = Usuario.query.get(session['usuario_id'])
     if not usuario_atual or (usuario_atual.nivel_acesso not in ['admin'] and not usuario_atual.acesso_cadastros):
         return jsonify({'success': False, 'message': 'Acesso negado'})
     
@@ -150,11 +150,11 @@ def definir_codigo_operador(usuario_id):
 @apontamento_bp.route('/operadores/remover-codigo/<int:usuario_id>', methods=['POST'])
 def remover_codigo_operador(usuario_id):
     """Remove o código de um operador"""
-    if 'user_id' not in session:
+    if 'usuario_id' not in session:
         return jsonify({'success': False, 'message': 'Não autenticado'})
     
     # Verificar permissões
-    usuario_atual = Usuario.query.get(session['user_id'])
+    usuario_atual = Usuario.query.get(session['usuario_id'])
     if not usuario_atual or (usuario_atual.nivel_acesso not in ['admin'] and not usuario_atual.acesso_cadastros):
         return jsonify({'success': False, 'message': 'Acesso negado'})
     
@@ -315,6 +315,84 @@ def buscar_tipos_trabalho_os(ordem_id):
             'message': f'Erro ao buscar tipos de trabalho: {str(e)}'
         }), 500
 
+@apontamento_bp.route('/detalhes/<int:ordem_id>', methods=['GET'])
+def detalhes_os(ordem_id):
+    """Detalhes resumidos de uma OS para QPT: lista de trabalhos e última quantidade apontada por trabalho."""
+    try:
+        # Confirmar existência da OS e pré-carregar itens -> trabalhos
+        os_obj = (
+            OrdemServico.query.options(
+                joinedload(OrdemServico.pedidos)
+                    .joinedload(PedidoOrdemServico.pedido)
+                    .joinedload(Pedido.item)
+                    .joinedload(Item.trabalhos)
+                    .joinedload(ItemTrabalho.trabalho)
+            ).get_or_404(ordem_id)
+        )
+        # Coletar todos os trabalhos potenciais a partir dos itens da OS
+        trabalhos_map = {}  # trabalho_id -> {'trabalho_id': id, 'trabalho_nome': nome, 'ultima_quantidade': 0}
+        for po in getattr(os_obj, 'pedidos', []) or []:
+            ped = getattr(po, 'pedido', None)
+            item = getattr(ped, 'item', None) if ped else None
+            if not item:
+                continue
+            for it in getattr(item, 'trabalhos', []) or []:
+                tb = getattr(it, 'trabalho', None)
+                if not tb:
+                    continue
+                tid = getattr(tb, 'id', None)
+                if not tid:
+                    continue
+                if tid not in trabalhos_map:
+                    trabalhos_map[tid] = {
+                        'trabalho_id': tid,
+                        'trabalho_nome': getattr(tb, 'nome', f'Trabalho #{tid}'),
+                        'ultima_quantidade': 0
+                    }
+        # Incluir também quaisquer trabalhos que já tiveram apontamento nesta OS (mesmo que não estejam nos itens)
+        try:
+            ap_trabalhos = db.session.query(ApontamentoProducao.trabalho_id).filter(
+                ApontamentoProducao.ordem_servico_id == ordem_id,
+                ApontamentoProducao.trabalho_id != None
+            ).distinct().all()
+            for row in ap_trabalhos:
+                tid = row[0]
+                if tid and tid not in trabalhos_map:
+                    tb = Trabalho.query.get(tid)
+                    trabalhos_map[tid] = {
+                        'trabalho_id': tid,
+                        'trabalho_nome': getattr(tb, 'nome', f'Trabalho #{tid}') if tb else f'Trabalho #{tid}',
+                        'ultima_quantidade': 0
+                    }
+        except Exception:
+            pass
+
+        # Buscar última quantidade por trabalho
+        for tid in list(trabalhos_map.keys()):
+            try:
+                ultimo_ap = (ApontamentoProducao.query
+                    .filter(
+                        ApontamentoProducao.ordem_servico_id == ordem_id,
+                        ApontamentoProducao.trabalho_id == tid,
+                        ApontamentoProducao.quantidade != None
+                    )
+                    .order_by(ApontamentoProducao.data_hora.desc())
+                    .first())
+                if ultimo_ap and ultimo_ap.quantidade is not None:
+                    trabalhos_map[tid]['ultima_quantidade'] = int(ultimo_ap.quantidade)
+            except Exception:
+                continue
+
+        trabalhos_list = sorted(trabalhos_map.values(), key=lambda t: (t.get('trabalho_nome') or '').lower())
+        return jsonify({
+            'success': True,
+            'ordem_servico_id': ordem_id,
+            'trabalhos': trabalhos_list
+        })
+    except Exception as e:
+        logger.exception(f"Erro ao obter detalhes da OS {ordem_id}: {e}")
+        return jsonify({'success': False, 'message': f'Erro ao obter detalhes: {str(e)}'}), 500
+
 def gerar_codigo_unico():
     """Gera um código único de 4 dígitos"""
     max_tentativas = 100
@@ -359,6 +437,71 @@ def status_ativos():
         nomes_listas = [lista.nome for lista in listas_kanban]
         nomes_listas_lower = [lista.nome.strip().lower() for lista in listas_kanban]
         map_lista_por_lower = {lista.nome.strip().lower(): lista for lista in listas_kanban}
+        
+        # Construir mapa de cartões fantasma por OS para mesclar na resposta
+        logger.debug("Buscando cartões fantasma ativos para mesclagem...")
+        t0 = time.perf_counter()
+        ghost_por_os = {}
+        try:
+            cartoes_fantasma_all = (
+                CartaoFantasma.query.options(
+                    joinedload(CartaoFantasma.ordem_servico)
+                        .joinedload(OrdemServico.pedidos)
+                        .joinedload(PedidoOrdemServico.pedido)
+                        .joinedload(Pedido.cliente),
+                    joinedload(CartaoFantasma.ordem_servico)
+                        .joinedload(OrdemServico.pedidos)
+                        .joinedload(PedidoOrdemServico.pedido)
+                        .joinedload(Pedido.item)
+                        .joinedload(Item.trabalhos)
+                        .joinedload(ItemTrabalho.trabalho),
+                    joinedload(CartaoFantasma.trabalho),
+                    joinedload(CartaoFantasma.criado_por)
+                )
+                .filter(CartaoFantasma.ativo == True)
+                .all()
+            )
+            for cf in cartoes_fantasma_all:
+                try:
+                    os_id = getattr(cf, 'ordem_servico_id', None)
+                    if not os_id:
+                        continue
+                    lista_cf = (getattr(cf, 'lista_kanban', None) or '').strip()
+                    lista_cf_lower = lista_cf.lower() if lista_cf else None
+                    kl_cf = map_lista_por_lower.get(lista_cf_lower) if lista_cf_lower else None
+                    info_cf = {
+                        'id': cf.id,
+                        'lista_kanban': lista_cf or None,
+                        'lista_tipo': getattr(kl_cf, 'tipo_servico', None) if kl_cf else None,
+                        'lista_cor': getattr(kl_cf, 'cor', None) if kl_cf else None,
+                        'trabalho_id': getattr(cf, 'trabalho_id', None),
+                        'trabalho_nome': getattr(getattr(cf, 'trabalho', None), 'nome', None) if getattr(cf, 'trabalho', None) else None,
+                        'posicao_fila': getattr(cf, 'posicao_fila', None),
+                        'observacoes': getattr(cf, 'observacoes', None),
+                        'criado_por_id': getattr(getattr(cf, 'criado_por', None), 'id', None) if getattr(cf, 'criado_por', None) else None,
+                        'criado_por_nome': getattr(getattr(cf, 'criado_por', None), 'nome', None) if getattr(cf, 'criado_por', None) else None,
+                        'data_criacao': cf.data_criacao.isoformat() if getattr(cf, 'data_criacao', None) else None,
+                    }
+                    bucket = ghost_por_os.setdefault(os_id, {
+                        'cards': [],
+                        'listas_lower': set(),
+                        'tipos_lower': set(),
+                        'trabalhos_ids': set(),
+                    })
+                    bucket['cards'].append(info_cf)
+                    if lista_cf_lower:
+                        bucket['listas_lower'].add(lista_cf_lower)
+                        if kl_cf and getattr(kl_cf, 'tipo_servico', None):
+                            bucket['tipos_lower'].add(str(kl_cf.tipo_servico).strip().lower())
+                    trab_id_cf = getattr(cf, 'trabalho_id', None)
+                    if trab_id_cf:
+                        bucket['trabalhos_ids'].add(trab_id_cf)
+                except Exception as e_cf_it:
+                    logger.error(f"Falha ao processar cartão fantasma para OS {getattr(cf, 'ordem_servico_id', None)}: {e_cf_it}")
+                    continue
+        except Exception as e_cf:
+            logger.error(f"Falha ao buscar cartões fantasma para mesclagem: {e_cf}")
+        timings['ghost_cards_query_ms'] = int((time.perf_counter() - t0) * 1000)
         
         # Buscar todos os status ativos de produção
         logger.debug("Buscando status ativos...")
@@ -743,27 +886,38 @@ def status_ativos():
                     logger.error(f"Falha ao determinar lista_kanban para status {status.id}: {e}")
                     pass
 
-                # Aplicar filtros (lista, lista_tipo, status) assim que disponíveis para evitar custo desnecessário
+                # Aplicar filtros (lista, lista_tipo, status) considerando cartões fantasma
                 try:
                     logger.debug(f"Verificando filtros para status {status.id}: lista_kanban='{status_info.get('lista_kanban')}', lista_tipo='{status_info.get('lista_tipo')}', status_atual='{status_info.get('status_atual')}'")
                     logger.debug(f"Filtros ativos: lista_filter={lista_filter}, lista_tipo_filter={lista_tipo_filter}, status_filter_set={status_filter_set}")
                     
-                    # Aplicar filtro de lista kanban apenas se existir um filtro
+                    # Aplicar filtro de lista kanban (considerando listas dos cartões fantasma desta OS)
                     if lista_filter is not None:
-                        if not status_info.get('lista_kanban') or status_info.get('lista_kanban').lower() != lista_filter:
-                            logger.debug(f"Status {status.id} excluído por filtro de lista: '{status_info.get('lista_kanban')}' != '{lista_filter}'")
+                        listas_ghost = ghost_por_os.get(status.ordem_servico_id, {}).get('listas_lower', set())
+                        lista_principal = status_info.get('lista_kanban')
+                        lista_principal_ok = lista_principal and lista_principal.lower() == lista_filter
+                        ghost_ok = lista_filter in listas_ghost if listas_ghost else False
+                        if not (lista_principal_ok or ghost_ok):
+                            logger.debug(f"Status {status.id} excluído por filtro de lista (principal/ghost não correspondem)")
                             continue
                     
-                    # Aplicar filtro de tipo apenas se existir um filtro
+                    # Aplicar filtro de tipo (considerando tipos das listas dos cartões fantasma)
                     if lista_tipo_filter is not None:
-                        if not status_info.get('lista_tipo') or status_info.get('lista_tipo').lower() != lista_tipo_filter:
-                            logger.debug(f"Status {status.id} excluído por filtro de tipo: '{status_info.get('lista_tipo')}' != '{lista_tipo_filter}'")
+                        tipos_ghost = ghost_por_os.get(status.ordem_servico_id, {}).get('tipos_lower', set())
+                        tipo_principal = status_info.get('lista_tipo')
+                        tipo_principal_ok = tipo_principal and str(tipo_principal).strip().lower() == lista_tipo_filter
+                        ghost_tipo_ok = lista_tipo_filter in tipos_ghost if tipos_ghost else False
+                        if not (tipo_principal_ok or ghost_tipo_ok):
+                            logger.debug(f"Status {status.id} excluído por filtro de tipo (principal/ghost não correspondem)")
                             continue
                     
-                    # Aplicar filtro de status apenas se existir um filtro
+                    # Aplicar filtro de status (inclui 'fantasma' se houver cartão fantasma associado)
                     if status_filter_set is not None:
-                        if not status_info.get('status_atual') or status_info.get('status_atual').lower() not in status_filter_set:
-                            logger.debug(f"Status {status.id} excluído por filtro de status: '{status_info.get('status_atual')}' not in {status_filter_set}")
+                        st_atual = (status_info.get('status_atual') or '').strip().lower()
+                        tem_ghost = status.ordem_servico_id in ghost_por_os
+                        ok_status = (st_atual in status_filter_set) or ('fantasma' in status_filter_set and tem_ghost)
+                        if not ok_status:
+                            logger.debug(f"Status {status.id} excluído por filtro de status (sem correspondência nem fantasma associado)")
                             continue
                     
                     logger.debug(f"Status {status.id} passou em todos os filtros, será incluído")
@@ -1040,6 +1194,15 @@ def status_ativos():
                 except Exception as e_trabs:
                     logger.error(f"Falha ao montar trabalhos_do_item: {e_trabs}")
 
+                # Anexar metadados de cartões fantasma (se houver) e adicionar ao resultado
+                try:
+                    if status.ordem_servico_id in ghost_por_os:
+                        bucket = ghost_por_os.get(status.ordem_servico_id) or {}
+                        # Listas únicas e cards
+                        status_info['ghost_cards'] = bucket.get('cards', [])
+                        status_info['ghost_listas_kanban'] = sorted(list(bucket.get('listas_lower', set())))
+                except Exception:
+                    pass
                 # Adicionar ao resultado
                 resultado['status_ativos'].append(status_info)
                 # Marcar esta OS como já processada
@@ -1089,18 +1252,29 @@ def status_ativos():
                 except Exception:
                     pass
                 
-                # Aplicar filtros
+                # Aplicar filtros (considerando cartões fantasma associados à OS)
                 try:
                     if lista_filter is not None:
-                        if not status_info.get('lista_kanban') or status_info.get('lista_kanban').lower() != lista_filter:
+                        listas_ghost = ghost_por_os.get(ordem.id, {}).get('listas_lower', set())
+                        lista_principal = status_info.get('lista_kanban')
+                        lista_principal_ok = lista_principal and lista_principal.lower() == lista_filter
+                        ghost_ok = lista_filter in listas_ghost if listas_ghost else False
+                        if not (lista_principal_ok or ghost_ok):
                             continue
                     
                     if lista_tipo_filter is not None:
-                        if not status_info.get('lista_tipo') or status_info.get('lista_tipo').lower() != lista_tipo_filter:
+                        tipos_ghost = ghost_por_os.get(ordem.id, {}).get('tipos_lower', set())
+                        tipo_principal = status_info.get('lista_tipo')
+                        tipo_principal_ok = tipo_principal and str(tipo_principal).strip().lower() == lista_tipo_filter
+                        ghost_tipo_ok = lista_tipo_filter in tipos_ghost if tipos_ghost else False
+                        if not (tipo_principal_ok or ghost_tipo_ok):
                             continue
                     
                     if status_filter_set is not None:
-                        if not status_info.get('status_atual') or status_info.get('status_atual').lower() not in status_filter_set:
+                        st_atual = (status_info.get('status_atual') or '').strip().lower()
+                        tem_ghost = ordem.id in ghost_por_os
+                        ok_status = (st_atual in status_filter_set) or ('fantasma' in status_filter_set and tem_ghost)
+                        if not ok_status:
                             continue
                 except Exception:
                     pass
@@ -1194,6 +1368,14 @@ def status_ativos():
                 status_info.setdefault('resumo_status', {'setup': 0, 'pausado': 0, 'producao': 0})
                 status_info.setdefault('trabalhos_do_item', [])
                 
+                # Anexar metadados de cartões fantasma (se houver) e adicionar ao resultado
+                try:
+                    if ordem.id in ghost_por_os:
+                        bucket = ghost_por_os.get(ordem.id) or {}
+                        status_info['ghost_cards'] = bucket.get('cards', [])
+                        status_info['ghost_listas_kanban'] = sorted(list(bucket.get('listas_lower', set())))
+                except Exception:
+                    pass
                 # Adicionar ao resultado
                 resultado['status_ativos'].append(status_info)
                 
@@ -1202,153 +1384,7 @@ def status_ativos():
                 continue
         timings['build_os_sem_ativos_loop_ms'] = int((time.perf_counter() - t0) * 1000)
         
-        # Adicionar cartões fantasma ao dashboard
-        logger.debug("Buscando cartões fantasma ativos...")
-        t0 = time.perf_counter()
-        try:
-            cartoes_fantasma = (
-                CartaoFantasma.query.options(
-                    joinedload(CartaoFantasma.ordem_servico)
-                        .joinedload(OrdemServico.pedidos)
-                        .joinedload(PedidoOrdemServico.pedido)
-                        .joinedload(Pedido.cliente),
-                    joinedload(CartaoFantasma.ordem_servico)
-                        .joinedload(OrdemServico.pedidos)
-                        .joinedload(PedidoOrdemServico.pedido)
-                        .joinedload(Pedido.item)
-                        .joinedload(Item.trabalhos)
-                        .joinedload(ItemTrabalho.trabalho),
-                    joinedload(CartaoFantasma.trabalho),
-                    joinedload(CartaoFantasma.criado_por)
-                )
-                .filter(CartaoFantasma.ativo == True)
-                .order_by(CartaoFantasma.lista_kanban, CartaoFantasma.posicao_fila)
-                .all()
-            )
-            
-            for cartao in cartoes_fantasma:
-                try:
-                    # Aplicar filtros se necessário
-                    lista_kanban_cartao = cartao.lista_kanban
-                    kl_cartao = map_lista_por_lower.get(lista_kanban_cartao.strip().lower()) if lista_kanban_cartao else None
-                    
-                    # Filtro de lista
-                    if lista_filter is not None:
-                        if not lista_kanban_cartao or lista_kanban_cartao.lower() != lista_filter:
-                            continue
-                    
-                    # Filtro de tipo
-                    if lista_tipo_filter is not None:
-                        lista_tipo_cartao = kl_cartao.tipo_servico if kl_cartao else None
-                        if not lista_tipo_cartao or lista_tipo_cartao.lower() != lista_tipo_filter:
-                            continue
-                    
-                    # Filtro de status (cartões fantasma sempre têm status "Fantasma")
-                    if status_filter_set is not None:
-                        if 'fantasma' not in status_filter_set:
-                            continue
-                    
-                    # Montar informações básicas do cartão fantasma
-                    os_obj = cartao.ordem_servico
-                    if not os_obj:
-                        continue
-                    
-                    cartao_info = {
-                        'id': f"ghost_{cartao.id}",
-                        'ordem_servico_id': cartao.ordem_servico_id,
-                        'ordem_id': cartao.ordem_servico_id,
-                        'status_atual': 'Fantasma',
-                        'is_ghost_card': True,
-                        'ghost_card_id': cartao.id,
-                        'posicao_fila': cartao.posicao_fila,
-                        'observacoes': cartao.observacoes
-                    }
-                    
-                    # Número da OS
-                    os_num = getattr(os_obj, 'numero', None) or getattr(os_obj, 'codigo', None) or f"OS-{os_obj.id}"
-                    cartao_info['os_numero'] = os_num
-                    
-                    # Lista Kanban
-                    cartao_info['lista_kanban'] = lista_kanban_cartao
-                    if kl_cartao:
-                        cartao_info['lista_tipo'] = kl_cartao.tipo_servico
-                        cartao_info['lista_cor'] = kl_cartao.cor
-                    
-                    # Clientes e quantidades (da OS original)
-                    try:
-                        clientes_map = {}
-                        total_q = 0
-                        for po in getattr(os_obj, 'pedidos', []) or []:
-                            ped = getattr(po, 'pedido', None)
-                            if not ped:
-                                continue
-                            q = int(getattr(ped, 'quantidade', 0) or 0)
-                            total_q += q
-                            cli = getattr(ped, 'cliente', None)
-                            nome_cli = getattr(cli, 'nome', None) or 'Cliente'
-                            clientes_map[nome_cli] = clientes_map.get(nome_cli, 0) + q
-                        cartao_info['quantidade_total'] = int(total_q)
-                        if clientes_map:
-                            cartao_info['clientes_quantidades'] = [
-                                {'cliente_nome': k, 'quantidade': v} for k, v in clientes_map.items()
-                            ]
-                            cartao_info['cliente_nome'] = next(iter(clientes_map.keys()))
-                    except Exception:
-                        cartao_info['quantidade_total'] = 0
-                        cartao_info['cliente_nome'] = 'Cliente'
-                    
-                    # Item e trabalho do cartão fantasma
-                    try:
-                        # Se cartão tem trabalho específico, usar ele
-                        if cartao.trabalho:
-                            cartao_info['trabalho_id'] = cartao.trabalho.id
-                            cartao_info['trabalho_nome'] = cartao.trabalho.nome
-                        
-                        # Buscar item da OS
-                        if os_obj.pedidos:
-                            pedido_os = os_obj.pedidos[0]
-                            pedido = getattr(pedido_os, 'pedido', None)
-                            item = getattr(pedido, 'item', None) if pedido else None
-                            if item:
-                                cartao_info['item_id'] = item.id
-                                cartao_info['item_nome'] = item.nome
-                                cartao_info['item_codigo'] = item.codigo_acb
-                                cartao_info['item_imagem_path'] = getattr(item, 'imagem_path', None)
-                    except Exception:
-                        pass
-                    
-                    # Criador do cartão
-                    try:
-                        if cartao.criado_por:
-                            cartao_info['criado_por_nome'] = cartao.criado_por.nome
-                            cartao_info['criado_por_id'] = cartao.criado_por.id
-                        cartao_info['data_criacao'] = cartao.data_criacao.isoformat() if cartao.data_criacao else None
-                    except Exception:
-                        pass
-                    
-                    # Valores padrão para campos obrigatórios
-                    cartao_info.setdefault('ultima_quantidade', 0)
-                    cartao_info.setdefault('ativos_por_trabalho', [])
-                    cartao_info.setdefault('qtd_ativos', 0)
-                    cartao_info.setdefault('multiplo_ativos', False)
-                    cartao_info.setdefault('analytics', {})
-                    cartao_info.setdefault('cronometro', {'tipo': None, 'inicio': None})
-                    cartao_info.setdefault('resumo_status', {'setup': 0, 'pausado': 0, 'producao': 0})
-                    cartao_info.setdefault('trabalhos_do_item', [])
-                    
-                    # Adicionar ao resultado
-                    resultado['status_ativos'].append(cartao_info)
-                    
-                except Exception as e_cartao:
-                    logger.error(f"Falha ao processar cartão fantasma {cartao.id}: {e_cartao}")
-                    continue
-                    
-        except Exception as e_ghost:
-            logger.error(f"Falha ao buscar cartões fantasma: {e_ghost}")
-        
-        timings['build_ghost_cards_ms'] = int((time.perf_counter() - t0) * 1000)
-        
-        logger.debug(f"Status ativos formatados (incluindo fantasmas): {len(resultado['status_ativos'])}")
+        logger.debug(f"Status ativos formatados (com cartões fantasma mesclados): {len(resultado['status_ativos'])}")
         # Anexar timings apenas quando explicitamente solicitado
         try:
             if (request.args.get('timing') or '').strip().lower() in ['1', 'true', 'yes']:

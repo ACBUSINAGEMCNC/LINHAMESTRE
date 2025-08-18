@@ -461,9 +461,9 @@
                     {% set segundos = (tempos_listas[lista] % 60) %}
                     <span class="column-time"><i class="fas fa-clock"></i> 
                         {% if horas > 0 %}
-                            {{ horas }}h {{ minutos }}:{{ segundos }}
+                            {{ horas }}h {{ "%02d"|format(minutos) }}:{{ "%02d"|format(segundos) }}
                         {% else %}
-                            {{ minutos }}:{{ segundos }}
+                            {{ "%02d"|format(minutos) }}:{{ "%02d"|format(segundos) }}
                         {% endif %}
                     </span>
                     <span class="column-quantity"><i class="fas fa-cubes"></i> {{ quantidades_listas[lista] }}</span>
@@ -700,7 +700,7 @@
                     
                     <!-- Cartões fantasma -->
                     {% for cartao_fantasma in cartoes_fantasma[lista] %}
-                    <div class="kanban-card fantasma" data-cartao-id="{{ cartao_fantasma.id }}" data-ordem-id="{{ cartao_fantasma.ordem_servico.id }}">
+                    <div class="kanban-card fantasma" data-cartao-id="{{ cartao_fantasma.id }}" data-fantasma-ordem-id="{{ cartao_fantasma.ordem_servico.id }}">
                         <div class="kanban-card-header">
                             <div class="card-header-main">
                                 <div class="drag-handle" onclick="event.stopPropagation()">
@@ -819,10 +819,10 @@
                                 </div>
                                 
                                 <!-- Indicadores de status (baseado na OS real) -->
-                                <div class="apontamento-status mt-2" id="status-{{ cartao_fantasma.ordem_servico.id }}">
+                                <div class="apontamento-status mt-2" id="status-fantasma-{{ cartao_fantasma.id }}">
                                     <div class="d-flex justify-content-between align-items-center small">
                                         <span class="status-text">Aguardando</span>
-                                        <span class="apontamento-timer" id="timer-{{ cartao_fantasma.ordem_servico.id }}">00:00:00</span>
+                                        <span class="apontamento-timer" id="timer-fantasma-{{ cartao_fantasma.id }}">00:00:00</span>
                                     </div>
                                 </div>
                             </div>
@@ -1751,7 +1751,16 @@
                         }
                     } catch (eForce) { console.warn('Falha ao forçar render imediato da QPT:', eForce); }
                     // Sempre recarregar estado dos apontamentos no mesmo aba (chips/botões/status)
-                    try { if (window.recarregarEstadoApontamentos) window.recarregarEstadoApontamentos(); } catch {}
+                    setTimeout(() => {
+                        try { 
+                            if (window.recarregarEstadoApontamentos) {
+                                window.recarregarEstadoApontamentos(); 
+                            }
+                        } catch (e) {
+                            console.warn('Erro ao recarregar estado:', e);
+                        }
+                    }, 100);
+                    
                     // Sempre publicar broadcast para outras abas/janelas do Kanban
                     try {
                         const osIdNum = parseInt(ordemAtualId, 10);
@@ -1800,9 +1809,23 @@
     }
     
     function atualizarStatusCartao(ordemId, status) {
-        // Atualizar status no card miniatura (kanban-card)
-        const card = document.querySelector(`.kanban-card[data-ordem-id="${ordemId}"]`);
-        if (!card) return;
+        // Buscar TODOS os cartões com essa ordem e verificar qual é o real
+        const allCards = document.querySelectorAll(`[data-ordem-id="${ordemId}"]`);
+        console.debug(`[STATUS] Encontrados ${allCards.length} cartões para OS ${ordemId}`);
+        
+        let card = null;
+        for (const c of allCards) {
+            if (!c.classList.contains('fantasma')) {
+                card = c;
+                console.debug(`[STATUS] Usando cartão real para OS ${ordemId}`);
+                break;
+            }
+        }
+        
+        if (!card) {
+            console.debug(`[STATUS] Nenhum cartão REAL encontrado para OS ${ordemId}`);
+            return;
+        }
         
         // Remover classes de status anteriores
         card.classList.remove('status-setup', 'status-producao', 'status-pausado', 'status-finalizado', 'status-setup-concluido');

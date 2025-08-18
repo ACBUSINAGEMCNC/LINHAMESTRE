@@ -10,13 +10,16 @@ let _carregandoEstado = false;
 // Mantém um carimbo de tempo por OS sempre que a QPT for atualizada manualmente
 try { window.__qptTouch = window.__qptTouch || {}; } catch {}
 
+// Guardião de fetch para evitar requisições duplicadas por OS ao usar o fallback
+try { window.__qptFetching = window.__qptFetching || {}; } catch {}
+
 // Inicialização única: renderiza QPT a partir do cache/localStorage no carregamento
 try {
     if (!window.__qptInitOnce) {
         window.__qptInitOnce = true;
         document.addEventListener('DOMContentLoaded', function() {
             try {
-                const cards = document.querySelectorAll('.kanban-card[data-ordem-id]');
+                const cards = document.querySelectorAll('.kanban-card[data-ordem-id]:not(.fantasma)');
                 cards.forEach(card => {
                     const idStr = card.getAttribute('data-ordem-id');
                     const osId = parseInt(idStr, 10);
@@ -137,6 +140,20 @@ function carregarEstadoApontamentos() {
     }
     _carregandoEstado = true;
     console.log('Carregando estado dos apontamentos...');
+    
+    // Limpar cache de debounce para forçar atualizações
+    try {
+        if (window._qptDebounceMap) {
+            window._qptDebounceMap.clear();
+        }
+        // Limpar também cache localStorage problemático
+        localStorage.removeItem('qpt_cache_v1');
+        if (window.__cacheQtdTrabalho) {
+            window.__cacheQtdTrabalho = {};
+        }
+    } catch (e) {
+        console.debug('Cache QPT não encontrado ou já limpo');
+    }
     // Verificar se há algum apontamento ativo no momento da recarga
     fetch('/apontamento/status-ativos')
         .then(response => {
@@ -158,6 +175,11 @@ function carregarEstadoApontamentos() {
                     const statusAtual = status.status_atual;
                     
                     console.log(`Restaurando status para OS ${ordemId}: ${statusAtual}`);
+                    console.debug(`[BACKEND] Dados completos para OS ${ordemId}:`, {
+                        status_atual: status.status_atual,
+                        ativos_por_trabalho: status.ativos_por_trabalho,
+                        tem_ativos: Array.isArray(status.ativos_por_trabalho) && status.ativos_por_trabalho.length > 0
+                    });
                     
                     // Atualizar visual do card conforme status
                     // Atualizar o status visual normalmente (inclusive Pausado)
@@ -216,7 +238,7 @@ function carregarEstadoApontamentos() {
 
             // Garante QPT visível para OS sem ativo (renderiza via cache/LS)
             try {
-                const cards = document.querySelectorAll('.kanban-card[data-ordem-id]');
+                const cards = document.querySelectorAll('.kanban-card[data-ordem-id]:not(.fantasma)');
                 cards.forEach(card => {
                     const idStr = card.getAttribute('data-ordem-id');
                     if (!ativosIds.has(String(idStr))) {
@@ -295,16 +317,51 @@ function limparTimersTrabalhoDaOS(ordemId) {
 
 // Renderiza chips no status com tipo de trabalho + operador + timer
 function renderizarChipsStatus(ordemId, ativosLista) {
-    const card = document.querySelector(`.kanban-card[data-ordem-id="${ordemId}"]`);
-    if (!card) return;
+    // Buscar TODOS os cartões com essa ordem e verificar qual é o real
+    const allCards = document.querySelectorAll(`[data-ordem-id="${ordemId}"]`);
+    console.debug(`[CHIPS] Encontrados ${allCards.length} cartões para OS ${ordemId}`);
+    
+    let card = null;
+    for (const c of allCards) {
+        if (!c.classList.contains('fantasma')) {
+            card = c;
+            console.debug(`[CHIPS] Usando cartão real para OS ${ordemId}`);
+            break;
+        }
+    }
+    
+    if (!card) {
+        console.debug(`[CHIPS] Nenhum cartão REAL encontrado para OS ${ordemId}`);
+        return;
+    }
+    
     const container = card.querySelector(`#status-${ordemId}`) || card.querySelector('.status-apontamento');
-    if (!container) return;
+    console.debug(`[CHIPS] Procurando container para OS ${ordemId}`, {
+        card: card,
+        statusById: card.querySelector(`#status-${ordemId}`),
+        statusByClass: card.querySelector('.status-apontamento'),
+        container: container
+    });
+    
+    if (!container) {
+        console.debug(`[CHIPS] Container de status não encontrado para OS ${ordemId}`);
+        console.debug(`[CHIPS] HTML do cartão:`, card.outerHTML.substring(0, 500));
+        return;
+    }
     // Limpar timers anteriores dessa OS e conteúdo
     limparTimersTrabalhoDaOS(ordemId);
     container.innerHTML = '';
+    
+    console.debug(`[CHIPS] Dados recebidos para OS ${ordemId}:`, {
+        ativosLista: ativosLista,
+        isArray: Array.isArray(ativosLista),
+        length: ativosLista?.length
+    });
+    
     if (!Array.isArray(ativosLista) || ativosLista.length === 0) {
         // Opcional: exibir aguardando
         container.innerHTML = '<small class="text-muted">Aguardando apontamento</small>';
+        console.debug(`[CHIPS] Lista vazia para OS ${ordemId}, exibindo "aguardando"`);
         return;
     }
     const frags = [];
@@ -376,6 +433,9 @@ function atualizarQuantidadesPorTrabalho(ordemId, ativosLista) {
     } catch (e) {
         ls = {};
     }
+    
+    // Debug: verificar duplicação
+    try { console.debug('[QPT] localStorage atual:', ls[ordemId]); } catch {}
 
     // Se recebemos lista de ativos, atualizar o cache por TRABALHO e habilitar a persistência visual
     if (Array.isArray(ativosLista) && ativosLista.length > 0) {
@@ -384,7 +444,7 @@ function atualizarQuantidadesPorTrabalho(ordemId, ativosLista) {
             const trabId = (ap.trabalho_id ?? '-').toString();
             const trab = ap.trabalho_nome || `Trabalho #${trabId}`;
             const qtd = Number.isFinite(Number(ap.ultima_quantidade)) ? Number(ap.ultima_quantidade) : '-';
-            current.items[trabId] = { trab, qty };
+            current.items[trabId] = { trab, qty: qtd };
         });
         // Salvar no localStorage (formato novo: items por trabalho)
         try {
@@ -399,18 +459,19 @@ function atualizarQuantidadesPorTrabalho(ordemId, ativosLista) {
         const rebuilt = {};
         try {
             // Formato novo: { [trabId]: { trab, qty } }
-            // Formato antigo: { [qualquer]: { trab, itemCod, qty } } -> colapsar por trab
+            // Formato antigo: { [qualquer]: { trab, itemCod, qty } } -> usar trabId como chave para evitar duplicação
             Object.entries(raw).forEach(([k, v]) => {
                 if (!v) return;
                 const trabNome = (v.trab || '').toString();
-                const trabKey = trabNome.replace(/\s*\([^)]*\)\s*$/, '').trim().toLowerCase() || k.toString();
+                // Use trabId se disponível, senão use a chave original
+                const trabKey = k.toString();
                 const qtyNum = Number.isFinite(Number(v.qty)) ? Number(v.qty) : '-';
                 if (!rebuilt[trabKey]) rebuilt[trabKey] = { trab: trabNome || `Trabalho`, qty: qtyNum };
                 else {
                     const prev = rebuilt[trabKey];
                     const nPrev = Number(prev.qty);
                     const nNow = Number(qtyNum);
-                    if (Number.isFinite(nNow) && (!Number.isFinite(nPrev) || nNow !== nPrev)) rebuilt[trabKey] = { trab: trabNome, qty: qtyNum };
+                    if (Number.isFinite(nNow) && (!Number.isFinite(nPrev) || nNow > nPrev)) rebuilt[trabKey] = { trab: trabNome, qty: qtyNum };
                 }
             });
         } catch {}
@@ -444,15 +505,9 @@ function atualizarQuantidadesPorTrabalho(ordemId, ativosLista) {
         } catch (ePersist) { try { console.warn('[QPT] falha ao persistir QPT', ePersist); } catch {} }
 
         const linhas = [];
-        // Preservar valor anterior da última quantidade, se existir
-        let ultimaVal = '-';
-        try {
-            const prev = container.querySelector(`#ultima-qtd-${ordemId}`);
-            if (prev) ultimaVal = (prev.textContent || '').trim() || '-';
-        } catch {}
-        const header = `<div class="small text-muted d-flex justify-content-between align-items-center">`
+        // Cabeçalho simples sem badge duplicado
+        const header = `<div class="small text-muted">`
                      +   `<span>Quantidades por trabalho</span>`
-                     +   `<span class="badge rounded-pill bg-secondary ultima-qtd" id="ultima-qtd-${ordemId}" title="Último apontamento">${ultimaVal}</span>`
                      + `</div>`;
         linhas.push(header);
         linhas.push('<ul class="qpt-list list-unstyled mb-1">');
@@ -479,6 +534,51 @@ function atualizarQuantidadesPorTrabalho(ordemId, ativosLista) {
     // Sem dados atuais: não limpar o container para manter o último valor visível
     // Caso seja o primeiro load e o container esteja vazio, opcionalmente poderíamos
     // exibir um placeholder. Por ora, não alterar o conteúdo existente.
+
+    // Fallback inteligente: buscar últimas quantidades por trabalho na API de detalhes
+    // quando não houver ativos e não houver cache para esta OS.
+    try {
+        const hasAny = current && current.items && Object.keys(current.items).length > 0;
+        if (!hasAny && !window.__qptFetching[ordemId]) {
+            window.__qptFetching[ordemId] = true;
+            fetch(`/apontamento/detalhes/${ordemId}`)
+                .then(r => r.ok ? r.json() : Promise.reject(new Error(`HTTP ${r.status}`)))
+                .then(det => {
+                    try {
+                        const trabalhos = Array.isArray(det.trabalhos) ? det.trabalhos : [];
+                        if (trabalhos.length === 0) return;
+                        // Preencher cache por trabalho usando nome e última quantidade conhecida
+                        window.__cacheQtdTrabalho = window.__cacheQtdTrabalho || {};
+                        if (!window.__cacheQtdTrabalho[ordemId]) window.__cacheQtdTrabalho[ordemId] = { enabled: false, items: {} };
+                        const bucket = window.__cacheQtdTrabalho[ordemId];
+                        bucket.enabled = true;
+                        trabalhos.forEach(t => {
+                            const trabId = ((t.trabalho_id ?? '-').toString());
+                            const trabNome = (t.trabalho_nome || `Trabalho #${trabId}`).toString().replace(/\s*\([^)]*\)\s*$/, '').trim();
+                            const qtyRaw = (t.ultima_quantidade != null ? t.ultima_quantidade : '-');
+                            const qty = Number.isFinite(Number(qtyRaw)) ? Number(qtyRaw) : '-';
+                            bucket.items[trabId] = { trab: trabNome, qty };
+                        });
+                        // Persistir em LS
+                        try {
+                            const LS_KEY = 'qpt_cache_v1';
+                            let ls2 = {};
+                            try { ls2 = JSON.parse(localStorage.getItem(LS_KEY) || '{}'); } catch {}
+                            ls2[String(ordemId)] = bucket.items;
+                            try { localStorage.setItem(LS_KEY, JSON.stringify(ls2)); } catch {}
+                        } catch {}
+                        // Forçar re-render agora usando os dados em cache
+                        try {
+                            if (container && container.dataset) delete container.dataset.qptSig;
+                        } catch {}
+                        try { window.atualizarQuantidadesPorTrabalho(ordemId, []); } catch {}
+                        try { markQptTouch(ordemId); } catch {}
+                    } catch (eDet) { console.warn('[QPT] falha ao aplicar detalhes para QPT', eDet); }
+                })
+                .catch(e => { try { console.debug('[QPT] detalhes indisponíveis', e); } catch {} })
+                .finally(() => { try { delete window.__qptFetching[ordemId]; } catch {} });
+        }
+    } catch {}
 }
 
 // Disponibilizar no escopo global
@@ -565,9 +665,18 @@ try {
 
 // Função para atualizar completamente o status visual de um card
 function atualizarStatusCartaoCompleto(ordemId, statusAtual) {
-    const card = document.querySelector(`.kanban-card[data-ordem-id="${ordemId}"]`);
+    // Buscar TODOS os cartões com essa ordem e verificar qual é o real
+    const allCards = document.querySelectorAll(`[data-ordem-id="${ordemId}"]`);
+    let card = null;
+    for (const c of allCards) {
+        if (!c.classList.contains('fantasma')) {
+            card = c;
+            break;
+        }
+    }
+    
     if (!card) {
-        console.warn(`Card não encontrado para OS ${ordemId}`);
+        console.warn(`Card REAL não encontrado para OS ${ordemId}`);
         return;
     }
     
@@ -709,7 +818,15 @@ function carregarLogsParaCard(ordemId) {
 
 // Função para adicionar indicador visual de operador em um card
 function adicionarIndicadorOperador(ordemId, operadorNome, operadorCodigo) {
-    const card = document.querySelector(`.kanban-card[data-ordem-id="${ordemId}"]`);
+    // Buscar cartão real, ignorando fantasma
+    const allCards = document.querySelectorAll(`[data-ordem-id="${ordemId}"]`);
+    let card = null;
+    for (const c of allCards) {
+        if (!c.classList.contains('fantasma')) {
+            card = c;
+            break;
+        }
+    }
     if (!card) return;
     
     // Remover indicador existente se houver
@@ -753,7 +870,15 @@ const originalAtualizarStatusCartao = window.atualizarStatusCartao || function()
  * @param {string} operadorNome - Nome do operador atual
  */
 function desabilitarBotoesOperadorDiferente(ordemId, operadorNome) {
-    const card = document.querySelector(`.kanban-card[data-ordem-id="${ordemId}"]`);
+    // Buscar cartão real, ignorando fantasma
+    const allCards = document.querySelectorAll(`[data-ordem-id="${ordemId}"]`);
+    let card = null;
+    for (const c of allCards) {
+        if (!c.classList.contains('fantasma')) {
+            card = c;
+            break;
+        }
+    }
     if (!card) return;
     
     const botoesApontamento = card.querySelectorAll('.apontamento-btn');
