@@ -38,9 +38,36 @@
     <div class="row mb-3">
         <div class="col-12">
             <div class="d-flex flex-wrap gap-3 align-items-end">
-                <div>
-                    <label for="filter-lista" class="form-label mb-1">Lista Kanban</label>
-                    <select id="filter-lista" class="form-select form-select-sm" style="min-width: 220px;">
+                <div class="dropdown-custom-wrapper">
+                    <label class="form-label mb-1">Lista Kanban</label>
+                    <div class="dropdown-custom" id="dropdown-lista">
+                        <div class="dropdown-custom-toggle" data-bs-toggle="dropdown" aria-expanded="false">
+                            <div class="selected-items" id="selected-lista-display">
+                                <span class="placeholder-text">Selecione as máquinas...</span>
+                            </div>
+                            <i class="fas fa-chevron-down dropdown-arrow"></i>
+                        </div>
+                        <ul class="dropdown-menu dropdown-custom-menu" style="max-height: 300px; overflow-y: auto;">
+                            <li>
+                                <div class="dropdown-item-custom">
+                                    <input type="checkbox" id="lista-todas" value="Todas" class="form-check-input me-2">
+                                    <label for="lista-todas" class="form-check-label">Todas</label>
+                                </div>
+                            </li>
+                            {% if listas_kanban %}
+                                {% for l in listas_kanban %}
+                                <li>
+                                    <div class="dropdown-item-custom">
+                                        <input type="checkbox" id="lista-{{ loop.index }}" value="{{ l.nome }}" class="form-check-input me-2 lista-checkbox">
+                                        <label for="lista-{{ loop.index }}" class="form-check-label">{{ l.nome }}</label>
+                                    </div>
+                                </li>
+                                {% endfor %}
+                            {% endif %}
+                        </ul>
+                    </div>
+                    <!-- Hidden select para compatibilidade com JS existente -->
+                    <select id="filter-lista" class="d-none" multiple>
                         <option value="Todas">Todas</option>
                         {% if listas_kanban %}
                             {% for l in listas_kanban %}
@@ -49,9 +76,50 @@
                         {% endif %}
                     </select>
                 </div>
-                <div>
-                    <label for="filter-status" class="form-label mb-1">Status</label>
-                    <select id="filter-status" class="form-select form-select-sm" style="min-width: 220px;">
+                <div class="dropdown-custom-wrapper">
+                    <label class="form-label mb-1">Status</label>
+                    <div class="dropdown-custom" id="dropdown-status">
+                        <div class="dropdown-custom-toggle" data-bs-toggle="dropdown" aria-expanded="false">
+                            <div class="selected-items" id="selected-status-display">
+                                <span class="placeholder-text">Selecione os status...</span>
+                            </div>
+                            <i class="fas fa-chevron-down dropdown-arrow"></i>
+                        </div>
+                        <ul class="dropdown-menu dropdown-custom-menu">
+                            <li>
+                                <div class="dropdown-item-custom">
+                                    <input type="checkbox" id="status-todos" value="Todos" class="form-check-input me-2">
+                                    <label for="status-todos" class="form-check-label">Todos</label>
+                                </div>
+                            </li>
+                            <li>
+                                <div class="dropdown-item-custom">
+                                    <input type="checkbox" id="status-setup" value="Setup em andamento" class="form-check-input me-2 status-checkbox">
+                                    <label for="status-setup" class="form-check-label">Setup em andamento</label>
+                                </div>
+                            </li>
+                            <li>
+                                <div class="dropdown-item-custom">
+                                    <input type="checkbox" id="status-producao" value="Produção em andamento" class="form-check-input me-2 status-checkbox">
+                                    <label for="status-producao" class="form-check-label">Produção em andamento</label>
+                                </div>
+                            </li>
+                            <li>
+                                <div class="dropdown-item-custom">
+                                    <input type="checkbox" id="status-pausado" value="Pausado" class="form-check-input me-2 status-checkbox">
+                                    <label for="status-pausado" class="form-check-label">Pausado</label>
+                                </div>
+                            </li>
+                            <li>
+                                <div class="dropdown-item-custom">
+                                    <input type="checkbox" id="status-fantasma" value="Fantasma" class="form-check-input me-2 status-checkbox">
+                                    <label for="status-fantasma" class="form-check-label">Fantasma</label>
+                                </div>
+                            </li>
+                        </ul>
+                    </div>
+                    <!-- Hidden select para compatibilidade com JS existente -->
+                    <select id="filter-status" class="d-none" multiple>
                         <option value="Todos">Todos</option>
                         <option value="Setup em andamento">Setup em andamento</option>
                         <option value="Produção em andamento">Produção em andamento</option>
@@ -60,7 +128,7 @@
                     </select>
                 </div>
                 <div class="ms-auto">
-                    <button class="btn btn-sm btn-outline-secondary" id="btn-clear-filters">
+                    <button class="btn btn-sm btn-outline-secondary" id="btn-clear-filters" onclick="clearCustomFilters()">
                         <i class="fas fa-broom"></i> Limpar filtros
                     </button>
                 </div>
@@ -388,6 +456,138 @@
   opacity: 0.3;
   z-index: 1;
 }
+
+/* Destaque visual para itens/máquinas em produção */
+.thumb-running {
+    box-shadow: 0 0 0 3px rgba(25, 135, 84, 0.35), 0 0 10px rgba(25, 135, 84, 0.55);
+    border-color: #198754 !important;
+}
+.machine-running-dot {
+    display: inline-block;
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+    background: #198754;
+    box-shadow: 0 0 6px #198754;
+    margin-left: 6px;
+    vertical-align: middle;
+    animation: pulse 1.5s infinite ease-in-out;
+}
+@keyframes pulse {
+    0% { transform: scale(1); box-shadow: 0 0 0 0 rgba(25,135,84,0.7); }
+    70% { transform: scale(1.1); box-shadow: 0 0 0 10px rgba(25,135,84,0); }
+    100% { transform: scale(1); box-shadow: 0 0 0 0 rgba(25,135,84,0); }
+}
+
+/* Dropdown customizado para filtros */
+.dropdown-custom-wrapper {
+    min-width: 220px;
+}
+
+.dropdown-custom {
+    position: relative;
+}
+
+.dropdown-custom-toggle {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0.375rem 0.75rem;
+    font-size: 0.875rem;
+    border: 1px solid #ced4da;
+    border-radius: 0.375rem;
+    background-color: #fff;
+    cursor: pointer;
+    min-height: 31px;
+    transition: border-color 0.15s ease-in-out, box-shadow 0.15s ease-in-out;
+}
+
+.dropdown-custom-toggle:hover {
+    border-color: #86b7fe;
+}
+
+.dropdown-custom-toggle:focus,
+.dropdown-custom-toggle.show {
+    border-color: #86b7fe;
+    outline: 0;
+    box-shadow: 0 0 0 0.25rem rgba(13, 110, 253, 0.25);
+}
+
+.selected-items {
+    flex: 1;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.25rem;
+    align-items: center;
+}
+
+.placeholder-text {
+    color: #6c757d;
+    font-style: italic;
+}
+
+.selected-chip {
+    display: inline-flex;
+    align-items: center;
+    padding: 0.125rem 0.5rem;
+    background-color: #0d6efd;
+    color: white;
+    border-radius: 1rem;
+    font-size: 0.75rem;
+    font-weight: 500;
+    gap: 0.25rem;
+}
+
+.selected-chip .remove-chip {
+    cursor: pointer;
+    opacity: 0.8;
+    font-size: 0.6rem;
+}
+
+.selected-chip .remove-chip:hover {
+    opacity: 1;
+}
+
+.dropdown-arrow {
+    font-size: 0.75rem;
+    color: #6c757d;
+    transition: transform 0.2s ease;
+}
+
+.dropdown-custom-toggle.show .dropdown-arrow {
+    transform: rotate(180deg);
+}
+
+.dropdown-custom-menu {
+    width: 100%;
+    padding: 0.5rem 0;
+    margin: 0;
+    border: 1px solid rgba(0, 0, 0, 0.15);
+    border-radius: 0.375rem;
+    box-shadow: 0 0.5rem 1rem rgba(0, 0, 0, 0.15);
+}
+
+.dropdown-item-custom {
+    display: flex;
+    align-items: center;
+    padding: 0.375rem 1rem;
+    cursor: pointer;
+    transition: background-color 0.15s ease-in-out;
+}
+
+.dropdown-item-custom:hover {
+    background-color: #f8f9fa;
+}
+
+.dropdown-item-custom .form-check-input {
+    margin: 0;
+}
+
+.dropdown-item-custom .form-check-label {
+    cursor: pointer;
+    margin: 0;
+    flex: 1;
+}
 </style>
 
 <!-- Modal de Logs -->
@@ -414,6 +614,143 @@
 <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/js/bootstrap.bundle.min.js"></script>
 <script src="{{ url_for('static', filename='js/apontamento_dashboard.js') }}"></script>
 <script>
+// Controle dos dropdowns customizados
+function initCustomDropdowns() {
+    // Inicializar dropdown de Lista Kanban
+    initDropdown('lista', 'dropdown-lista', 'selected-lista-display', 'filter-lista');
+    
+    // Inicializar dropdown de Status
+    initDropdown('status', 'dropdown-status', 'selected-status-display', 'filter-status');
+}
+
+function initDropdown(type, dropdownId, displayId, hiddenSelectId) {
+    const dropdown = document.getElementById(dropdownId);
+    const display = document.getElementById(displayId);
+    const hiddenSelect = document.getElementById(hiddenSelectId);
+    
+    if (!dropdown || !display || !hiddenSelect) return;
+    
+    const checkboxes = dropdown.querySelectorAll(`input[type="checkbox"]`);
+    const toggle = dropdown.querySelector('.dropdown-custom-toggle');
+    const todasCheckbox = dropdown.querySelector(`#${type}-todas, #${type === 'lista' ? 'lista-todas' : 'status-todos'}`);
+    const itemCheckboxes = dropdown.querySelectorAll(`.${type}-checkbox`);
+    
+    // Função para atualizar o display
+    function updateDisplay() {
+        const selected = Array.from(checkboxes)
+            .filter(cb => cb.checked && cb.value !== 'Todas' && cb.value !== 'Todos')
+            .map(cb => cb.value);
+        
+        const todasSelected = todasCheckbox && todasCheckbox.checked;
+        
+        display.innerHTML = '';
+        
+        if (todasSelected || selected.length === 0) {
+            display.innerHTML = '<span class="placeholder-text">Todas</span>';
+        } else {
+            selected.forEach(value => {
+                const chip = document.createElement('span');
+                chip.className = 'selected-chip';
+                chip.innerHTML = `
+                    ${value}
+                    <i class="fas fa-times remove-chip" data-value="${value}"></i>
+                `;
+                display.appendChild(chip);
+            });
+        }
+        
+        // Sincronizar com select oculto
+        Array.from(hiddenSelect.options).forEach(option => {
+            if (todasSelected && (option.value === 'Todas' || option.value === 'Todos')) {
+                option.selected = true;
+            } else if (!todasSelected) {
+                option.selected = selected.includes(option.value);
+            } else {
+                option.selected = false;
+            }
+        });
+        
+        // Disparar evento change no select oculto
+        hiddenSelect.dispatchEvent(new Event('change'));
+    }
+    
+    // Event listeners para checkboxes
+    checkboxes.forEach(checkbox => {
+        checkbox.addEventListener('change', function() {
+            if (this.value === 'Todas' || this.value === 'Todos') {
+                // Se "Todas/Todos" foi marcado, desmarcar outros
+                if (this.checked) {
+                    itemCheckboxes.forEach(cb => cb.checked = false);
+                }
+            } else {
+                // Se um item específico foi marcado, desmarcar "Todas/Todos"
+                if (this.checked && todasCheckbox) {
+                    todasCheckbox.checked = false;
+                }
+                
+                // Se todos os itens foram desmarcados, marcar "Todas/Todos"
+                const anyChecked = Array.from(itemCheckboxes).some(cb => cb.checked);
+                if (!anyChecked && todasCheckbox) {
+                    todasCheckbox.checked = true;
+                }
+            }
+            
+            updateDisplay();
+        });
+    });
+    
+    // Event listener para remover chips
+    display.addEventListener('click', function(e) {
+        if (e.target.classList.contains('remove-chip')) {
+            const value = e.target.getAttribute('data-value');
+            const checkbox = dropdown.querySelector(`input[value="${value}"]`);
+            if (checkbox) {
+                checkbox.checked = false;
+                
+                // Se não há mais itens selecionados, marcar "Todas/Todos"
+                const anyChecked = Array.from(itemCheckboxes).some(cb => cb.checked);
+                if (!anyChecked && todasCheckbox) {
+                    todasCheckbox.checked = true;
+                }
+                
+                updateDisplay();
+            }
+        }
+    });
+    
+    // Prevenir fechamento do dropdown ao clicar nos itens
+    dropdown.addEventListener('click', function(e) {
+        if (e.target.closest('.dropdown-item-custom')) {
+            e.stopPropagation();
+        }
+    });
+    
+    // Inicializar display
+    if (todasCheckbox) {
+        todasCheckbox.checked = true;
+    }
+    updateDisplay();
+}
+
+// Função para limpar filtros customizados
+function clearCustomFilters() {
+    // Limpar Lista Kanban
+    const listaCheckboxes = document.querySelectorAll('#dropdown-lista input[type="checkbox"]');
+    listaCheckboxes.forEach(cb => cb.checked = false);
+    const listaTodas = document.getElementById('lista-todas');
+    if (listaTodas) listaTodas.checked = true;
+    
+    // Limpar Status
+    const statusCheckboxes = document.querySelectorAll('#dropdown-status input[type="checkbox"]');
+    statusCheckboxes.forEach(cb => cb.checked = false);
+    const statusTodos = document.getElementById('status-todos');
+    if (statusTodos) statusTodos.checked = true;
+    
+    // Atualizar displays
+    initDropdown('lista', 'dropdown-lista', 'selected-lista-display', 'filter-lista');
+    initDropdown('status', 'dropdown-status', 'selected-status-display', 'filter-status');
+}
+
 function atualizarDashboard() {
     if (window.ApontamentoDashboard && typeof window.ApontamentoDashboard.init === 'function') {
         window.ApontamentoDashboard.init();
@@ -502,63 +839,84 @@ function verDetalhes(ordemId) {
     const modal = new bootstrap.Modal(document.getElementById('modalDetalhes'));
     const conteudo = document.getElementById('conteudoDetalhes');
     const osNumero = document.getElementById('detalhes-os-numero');
-    
-    // Mostrar modal com loading
-    modal.show();
+
+    if (osNumero) {
+        osNumero.textContent = `OS #${ordemId}`;
+    }
+
+    // Estado de carregamento
     conteudo.innerHTML = `
-        <div class="text-center py-5">
-            <div class="spinner-border" role="status">
-                <span class="visually-hidden">Carregando análise...</span>
-            </div>
+        <div class="d-flex align-items-center justify-content-center p-4">
+            <div class="spinner-border text-primary me-2" role="status"></div>
+            <span>Carregando detalhes...</span>
         </div>
     `;
-    
-    // Carregar dados do backend
-    fetch(`/apontamento/detalhes/${ordemId}`)
-        .then(response => response.json())
-        .then(data => {
-            if (data.ordem_servico) {
-                osNumero.textContent = data.ordem_servico.numero;
-                renderizarDetalhes(data);
-            } else {
-                conteudo.innerHTML = `<div class="alert alert-danger">${data.error || 'Erro ao carregar detalhes'}</div>`;
-            }
-        })
-        .catch(error => {
-            console.error('Erro:', error);
-            conteudo.innerHTML = '<div class="alert alert-danger">Erro ao carregar detalhes analíticos</div>';
-        });
-}
 
-// Funções para gerenciar cartões fantasma
-function removerCartaoFantasma(cartaoId) {
-    if (!confirm('Tem certeza que deseja remover este cartão fantasma?')) {
-        return;
-    }
-    
-    fetch(`/kanban/cartao-fantasma/remover/${cartaoId}`, {
-        method: 'POST',
-        headers: {
-            'Content-Type': 'application/json'
-        }
-    })
-    .then(response => response.json())
-    .then(data => {
-        if (data.success) {
-            // Atualizar dashboard
-            if (window.ApontamentoDashboard && typeof window.ApontamentoDashboard.init === 'function') {
-                window.ApontamentoDashboard.init();
-            } else {
-                location.reload();
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 15000); // 15s timeout
+
+    fetch(`/apontamento/detalhes/${ordemId}`, { signal: controller.signal })
+        .then(async (response) => {
+            clearTimeout(timeoutId);
+            if (!response.ok) {
+                throw new Error(`HTTP ${response.status}`);
             }
-        } else {
-            alert('Erro ao remover cartão fantasma: ' + (data.message || 'Erro desconhecido'));
-        }
-    })
-    .catch(error => {
-        console.error('Erro:', error);
-        alert('Erro ao remover cartão fantasma');
-    });
+            const raw = await response.json();
+
+            // Normalização de dados para evitar quebras no modal
+            const data = (raw && typeof raw === 'object') ? raw : {};
+
+            const trabalhos = Array.isArray(data.trabalhos) ? data.trabalhos : [];
+            const normalizedTrabalhos = trabalhos.map((t) => ({
+                trabalho_id: t?.trabalho_id ?? null,
+                trabalho_nome: t?.trabalho_nome ?? (t?.trabalho_id ? `Trabalho #${t.trabalho_id}` : 'Trabalho'),
+                ultima_quantidade: Number(t?.ultima_quantidade || 0),
+                setup_total: Number(t?.setup_total || 0),
+                producao_total: Number(t?.producao_total || 0),
+                pausas_total: Number(t?.pausas_total || 0),
+                pausas_por_motivo: t?.pausas_por_motivo || {},
+                apontamentos: Array.isArray(t?.apontamentos) ? t.apontamentos : []
+            }));
+
+            const tempo_setup_total = Number(data?.analytics_gerais?.tempo_setup_total || 0);
+            const tempo_producao_total = Number(data?.analytics_gerais?.tempo_producao_total || 0);
+            const tempo_pausas_total = Number(data?.analytics_gerais?.tempo_pausas_total || 0);
+            const total_tempo = tempo_setup_total + tempo_producao_total + tempo_pausas_total;
+            const eficiencia_calc = total_tempo > 0 ? Number(((tempo_producao_total / total_tempo) * 100).toFixed(1)) : 0;
+
+            const normalized = {
+                success: data.success !== false,
+                ordem_servico_id: data?.ordem_servico_id ?? ordemId,
+                analytics_gerais: {
+                    tempo_setup_total,
+                    tempo_producao_total,
+                    tempo_pausas_total,
+                    eficiencia_percentual: Number(
+                        (data?.analytics_gerais?.eficiencia_percentual ?? eficiencia_calc) || 0
+                    )
+                },
+                analytics_operadores: (data?.analytics_operadores && typeof data.analytics_operadores === 'object') ? data.analytics_operadores : {},
+                item: {
+                    nome: data?.item?.nome || '',
+                    codigo: data?.item?.codigo || '',
+                    tempo_estimado_peca: Number(data?.item?.tempo_estimado_peca || 0),
+                    tempo_setup_estimado: Number(data?.item?.tempo_setup_estimado || 0)
+                },
+                trabalhos: normalizedTrabalhos
+            };
+
+            renderizarDetalhes(normalized);
+            modal.show();
+        })
+        .catch((err) => {
+            clearTimeout(timeoutId);
+            console.error('Erro ao carregar detalhes:', err);
+            const msg = (err && err.name === 'AbortError')
+                ? 'Tempo esgotado ao carregar detalhes (timeout).'
+                : 'Erro ao carregar detalhes.';
+            conteudo.innerHTML = `<div class="alert alert-danger">${msg}</div>`;
+            modal.show();
+        });
 }
 
 function moverCartaoFantasma(cartaoId) {
@@ -710,40 +1068,45 @@ function renderizarDetalhes(data) {
         `;
         
         data.trabalhos.forEach(trabalho => {
-            const totalPausas = trabalho.pausas_total;
+            const setupTotal = Number(trabalho.setup_total || 0);
+            const producaoTotal = Number(trabalho.producao_total || 0);
+            const pausasTotal = Number(trabalho.pausas_total || 0);
+            const pausasPorMotivo = trabalho.pausas_por_motivo || {};
+            const apontamentos = Array.isArray(trabalho.apontamentos) ? trabalho.apontamentos : [];
+            const trabalhoNome = trabalho.trabalho_nome || (trabalho.trabalho_id ? `Trabalho #${trabalho.trabalho_id}` : 'Trabalho');
             
             html += `
-                <div class="row mb-4 trabalho-section" data-trabalho="${trabalho.trabalho_nome}">
+                <div class="row mb-4 trabalho-section" data-trabalho="${trabalhoNome}">
                     <div class="col-12">
                         <div class="card">
                             <div class="card-header bg-light">
-                                <h6 class="mb-0"><i class="fas fa-wrench me-2"></i>${trabalho.trabalho_nome}</h6>
+                                <h6 class="mb-0"><i class="fas fa-wrench me-2"></i>${trabalhoNome}</h6>
                             </div>
                             <div class="card-body">
                                 <div class="row mb-3">
                                     <div class="col-md-4">
                                         <small class="text-muted">Setup:</small>
-                                        <div class="h5 text-primary">${formatarTempo(trabalho.setup_total)}</div>
+                                        <div class="h5 text-primary">${formatarTempo(setupTotal)}</div>
                                     </div>
                                     <div class="col-md-4">
                                         <small class="text-muted">Produção:</small>
-                                        <div class="h5 text-success">${formatarTempo(trabalho.producao_total)}</div>
+                                        <div class="h5 text-success">${formatarTempo(producaoTotal)}</div>
                                     </div>
                                     <div class="col-md-4">
                                         <small class="text-muted">Pausas:</small>
-                                        <div class="h5 text-warning">${formatarTempo(trabalho.pausas_total)}</div>
+                                        <div class="h5 text-warning">${formatarTempo(pausasTotal)}</div>
                                     </div>
                                 </div>
                                 
-                                ${Object.keys(trabalho.pausas_por_motivo).length > 0 ? `
+                                ${Object.keys(pausasPorMotivo).length > 0 ? `
                                 <div class="mb-3">
                                     <small class="text-muted">Pausas por Motivo:</small>
                                     <div class="row">
-                                        ${Object.entries(trabalho.pausas_por_motivo).map(([motivo, tempo]) => `
+                                        ${Object.entries(pausasPorMotivo).map(([motivo, tempo]) => `
                                             <div class="col-md-6">
                                                 <div class="d-flex justify-content-between">
                                                     <span>${motivo}:</span>
-                                                    <span class="text-warning">${formatarTempo(tempo)} (${formatarPercentual(tempo, totalPausas)})</span>
+                                                    <span class="text-warning">${formatarTempo(tempo)} (${formatarPercentual(tempo, pausasTotal)})</span>
                                                 </div>
                                             </div>
                                         `).join('')}
@@ -767,19 +1130,19 @@ function renderizarDetalhes(data) {
                                                 </tr>
                                             </thead>
                                             <tbody>
-                                                ${trabalho.apontamentos.map(ap => `
+                                                ${apontamentos.map(ap => `
                                                     <tr class="apontamento-row" data-operador="${ap.operador_id || ''}">
-                                                        <td>${new Date(ap.data_hora).toLocaleString('pt-BR')}</td>
+                                                        <td>${ap.data_hora ? new Date(ap.data_hora).toLocaleString('pt-BR') : '-'}</td>
                                                         <td>
                                                             <span class="badge ${
-                                                                ap.tipo_acao.includes('setup') ? 'bg-primary' :
-                                                                ap.tipo_acao.includes('producao') ? 'bg-success' :
-                                                                ap.tipo_acao.includes('pausa') ? 'bg-warning' : 'bg-secondary'
-                                                            }">${ap.tipo_acao}</span>
+                                                                (ap.tipo_acao || '').includes('setup') ? 'bg-primary' :
+                                                                (ap.tipo_acao || '').includes('producao') ? 'bg-success' :
+                                                                (ap.tipo_acao || '').includes('pausa') ? 'bg-warning' : 'bg-secondary'
+                                                            }">${ap.tipo_acao || '-'}</span>
                                                         </td>
-                                                        <td>${ap.operador_nome}</td>
+                                                        <td>${ap.operador_nome || '-'}</td>
                                                         <td>${ap.duracao_segundos ? formatarTempo(ap.duracao_segundos) : '-'}</td>
-                                                        <td>${ap.quantidade || '-'}</td>
+                                                        <td>${(ap.quantidade ?? '-') }</td>
                                                         <td>${ap.motivo_pausa || '-'}</td>
                                                     </tr>
                                                 `).join('')}
@@ -1012,6 +1375,7 @@ function imprimirRelatorio() {
 
 // Inicialização e auto-refresh leve
 document.addEventListener('DOMContentLoaded', function() {
+    initCustomDropdowns();
     atualizarDashboard();
     setInterval(function() {
         if (!document.hidden) atualizarDashboard();

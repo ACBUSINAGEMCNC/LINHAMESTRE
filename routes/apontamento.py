@@ -315,83 +315,7 @@ def buscar_tipos_trabalho_os(ordem_id):
             'message': f'Erro ao buscar tipos de trabalho: {str(e)}'
         }), 500
 
-@apontamento_bp.route('/detalhes/<int:ordem_id>', methods=['GET'])
-def detalhes_os(ordem_id):
-    """Detalhes resumidos de uma OS para QPT: lista de trabalhos e última quantidade apontada por trabalho."""
-    try:
-        # Confirmar existência da OS e pré-carregar itens -> trabalhos
-        os_obj = (
-            OrdemServico.query.options(
-                joinedload(OrdemServico.pedidos)
-                    .joinedload(PedidoOrdemServico.pedido)
-                    .joinedload(Pedido.item)
-                    .joinedload(Item.trabalhos)
-                    .joinedload(ItemTrabalho.trabalho)
-            ).get_or_404(ordem_id)
-        )
-        # Coletar todos os trabalhos potenciais a partir dos itens da OS
-        trabalhos_map = {}  # trabalho_id -> {'trabalho_id': id, 'trabalho_nome': nome, 'ultima_quantidade': 0}
-        for po in getattr(os_obj, 'pedidos', []) or []:
-            ped = getattr(po, 'pedido', None)
-            item = getattr(ped, 'item', None) if ped else None
-            if not item:
-                continue
-            for it in getattr(item, 'trabalhos', []) or []:
-                tb = getattr(it, 'trabalho', None)
-                if not tb:
-                    continue
-                tid = getattr(tb, 'id', None)
-                if not tid:
-                    continue
-                if tid not in trabalhos_map:
-                    trabalhos_map[tid] = {
-                        'trabalho_id': tid,
-                        'trabalho_nome': getattr(tb, 'nome', f'Trabalho #{tid}'),
-                        'ultima_quantidade': 0
-                    }
-        # Incluir também quaisquer trabalhos que já tiveram apontamento nesta OS (mesmo que não estejam nos itens)
-        try:
-            ap_trabalhos = db.session.query(ApontamentoProducao.trabalho_id).filter(
-                ApontamentoProducao.ordem_servico_id == ordem_id,
-                ApontamentoProducao.trabalho_id != None
-            ).distinct().all()
-            for row in ap_trabalhos:
-                tid = row[0]
-                if tid and tid not in trabalhos_map:
-                    tb = Trabalho.query.get(tid)
-                    trabalhos_map[tid] = {
-                        'trabalho_id': tid,
-                        'trabalho_nome': getattr(tb, 'nome', f'Trabalho #{tid}') if tb else f'Trabalho #{tid}',
-                        'ultima_quantidade': 0
-                    }
-        except Exception:
-            pass
-
-        # Buscar última quantidade por trabalho
-        for tid in list(trabalhos_map.keys()):
-            try:
-                ultimo_ap = (ApontamentoProducao.query
-                    .filter(
-                        ApontamentoProducao.ordem_servico_id == ordem_id,
-                        ApontamentoProducao.trabalho_id == tid,
-                        ApontamentoProducao.quantidade != None
-                    )
-                    .order_by(ApontamentoProducao.data_hora.desc())
-                    .first())
-                if ultimo_ap and ultimo_ap.quantidade is not None:
-                    trabalhos_map[tid]['ultima_quantidade'] = int(ultimo_ap.quantidade)
-            except Exception:
-                continue
-
-        trabalhos_list = sorted(trabalhos_map.values(), key=lambda t: (t.get('trabalho_nome') or '').lower())
-        return jsonify({
-            'success': True,
-            'ordem_servico_id': ordem_id,
-            'trabalhos': trabalhos_list
-        })
-    except Exception as e:
-        logger.exception(f"Erro ao obter detalhes da OS {ordem_id}: {e}")
-        return jsonify({'success': False, 'message': f'Erro ao obter detalhes: {str(e)}'}), 500
+# Rota removida - usando detalhes_ordem_servico() que retorna dados completos
 
 def gerar_codigo_unico():
     """Gera um código único de 4 dígitos"""
@@ -414,9 +338,12 @@ def status_ativos():
         t_start = time.perf_counter()
         timings = {}
         # Query params (opcionais) para filtragem
-        lista_filter = None
-        if request.args.get('lista') and request.args.get('lista').strip() and request.args.get('lista').strip().lower() != 'todas':
-            lista_filter = request.args.get('lista').strip().lower()
+        lista_filters_set = None
+        lista_raw = (request.args.get('lista') or '').strip().lower()
+        if lista_raw and lista_raw != 'todas':
+            lista_filters = [s.strip() for s in lista_raw.split(',') if s.strip() and s.strip() != 'todas']
+            if lista_filters:
+                lista_filters_set = set(lista_filters)
             
         lista_tipo_filter = None
         if request.args.get('lista_tipo') and request.args.get('lista_tipo').strip():
@@ -506,7 +433,8 @@ def status_ativos():
         # Buscar todos os status ativos de produção
         logger.debug("Buscando status ativos...")
         t0 = time.perf_counter()
-        status_ativos = (
+        # Buscar todos os status não finalizados primeiro
+        status_ativos_raw = (
             StatusProducaoOS.query.options(
                 joinedload(StatusProducaoOS.ordem_servico)
                     .joinedload(OrdemServico.pedidos)
@@ -525,6 +453,24 @@ def status_ativos():
             .filter(StatusProducaoOS.status_atual != 'Finalizado')
             .all()
         )
+        
+        # Filtrar manualmente OS com pedidos entregues
+        status_ativos = []
+        for status in status_ativos_raw:
+            os = status.ordem_servico
+            if os and os.pedidos:
+                # Verificar se algum pedido está entregue
+                tem_pedido_entregue = False
+                for pedido_os in os.pedidos:
+                    if pedido_os.pedido and pedido_os.pedido.status == 'entregue':
+                        tem_pedido_entregue = True
+                        break
+                
+                if not tem_pedido_entregue:
+                    status_ativos.append(status)
+            else:
+                # OS sem pedidos ou sem relação - incluir
+                status_ativos.append(status)
         timings['status_ativos_query_ms'] = int((time.perf_counter() - t0) * 1000)
 
         logger.debug(f"Encontrados {len(status_ativos)} status ativos (pré-filtro)")
@@ -532,12 +478,14 @@ def status_ativos():
             logger.debug(f"Status ativo encontrado: ID={status.id}, ordem_servico_id={status.ordem_servico_id}, status_atual='{status.status_atual}'")
         
         # Buscar TODAS as OS que estão em máquinas (mesmo sem apontamento ativo)
-        logger.debug("Buscando todas as OS em máquinas...")
+        # EXCLUINDO OS com pedidos já entregues
+        logger.debug("Buscando todas as OS em máquinas (excluindo entregues)...")
         logger.debug(f"Nomes das listas Kanban: {nomes_listas}")
         
         # Uso de comparação case-insensitive para evitar divergências de caixa
         t0 = time.perf_counter()
-        todas_os_em_maquinas = (
+        # Buscar todas as OS em máquinas primeiro
+        todas_os_em_maquinas_raw = (
             OrdemServico.query.options(
                 joinedload(OrdemServico.pedidos)
                     .joinedload(PedidoOrdemServico.pedido)
@@ -551,6 +499,23 @@ def status_ativos():
             .filter(db.func.lower(db.func.trim(OrdemServico.status)).in_(nomes_listas_lower))
             .all()
         )
+        
+        # Filtrar manualmente OS com pedidos entregues
+        todas_os_em_maquinas = []
+        for os in todas_os_em_maquinas_raw:
+            if os.pedidos:
+                # Verificar se algum pedido está entregue
+                tem_pedido_entregue = False
+                for pedido_os in os.pedidos:
+                    if pedido_os.pedido and pedido_os.pedido.status == 'entregue':
+                        tem_pedido_entregue = True
+                        break
+                
+                if not tem_pedido_entregue:
+                    todas_os_em_maquinas.append(os)
+            else:
+                # OS sem pedidos - incluir
+                todas_os_em_maquinas.append(os)
         timings['os_em_maquinas_query_ms'] = int((time.perf_counter() - t0) * 1000)
         logger.debug(f"Encontradas {len(todas_os_em_maquinas)} OS em máquinas")
         
@@ -889,14 +854,15 @@ def status_ativos():
                 # Aplicar filtros (lista, lista_tipo, status) considerando cartões fantasma
                 try:
                     logger.debug(f"Verificando filtros para status {status.id}: lista_kanban='{status_info.get('lista_kanban')}', lista_tipo='{status_info.get('lista_tipo')}', status_atual='{status_info.get('status_atual')}'")
-                    logger.debug(f"Filtros ativos: lista_filter={lista_filter}, lista_tipo_filter={lista_tipo_filter}, status_filter_set={status_filter_set}")
+                    logger.debug(f"Filtros ativos: lista_filters_set={lista_filters_set}, lista_tipo_filter={lista_tipo_filter}, status_filter_set={status_filter_set}")
                     
                     # Aplicar filtro de lista kanban (considerando listas dos cartões fantasma desta OS)
-                    if lista_filter is not None:
+                    if lista_filters_set is not None:
                         listas_ghost = ghost_por_os.get(status.ordem_servico_id, {}).get('listas_lower', set())
                         lista_principal = status_info.get('lista_kanban')
-                        lista_principal_ok = lista_principal and lista_principal.lower() == lista_filter
-                        ghost_ok = lista_filter in listas_ghost if listas_ghost else False
+                        lista_principal_lower = lista_principal.lower() if lista_principal else None
+                        lista_principal_ok = (lista_principal_lower in lista_filters_set) if lista_principal_lower else False
+                        ghost_ok = bool(listas_ghost.intersection(lista_filters_set)) if listas_ghost else False
                         if not (lista_principal_ok or ghost_ok):
                             logger.debug(f"Status {status.id} excluído por filtro de lista (principal/ghost não correspondem)")
                             continue
@@ -1254,11 +1220,12 @@ def status_ativos():
                 
                 # Aplicar filtros (considerando cartões fantasma associados à OS)
                 try:
-                    if lista_filter is not None:
+                    if lista_filters_set is not None:
                         listas_ghost = ghost_por_os.get(ordem.id, {}).get('listas_lower', set())
                         lista_principal = status_info.get('lista_kanban')
-                        lista_principal_ok = lista_principal and lista_principal.lower() == lista_filter
-                        ghost_ok = lista_filter in listas_ghost if listas_ghost else False
+                        lista_principal_lower = lista_principal.lower() if lista_principal else None
+                        lista_principal_ok = (lista_principal_lower in lista_filters_set) if lista_principal_lower else False
+                        ghost_ok = bool(listas_ghost.intersection(lista_filters_set)) if listas_ghost else False
                         if not (lista_principal_ok or ghost_ok):
                             continue
                     
@@ -1278,6 +1245,104 @@ def status_ativos():
                             continue
                 except Exception:
                     pass
+                
+                # Buscar último apontamento para mostrar progresso correto
+                try:
+                    ultimo_ap = (
+                        ApontamentoProducao.query
+                        .filter_by(ordem_servico_id=ordem.id)
+                        .filter(ApontamentoProducao.quantidade != None)
+                        .order_by(ApontamentoProducao.data_hora.desc())
+                        .first()
+                    )
+                    
+                    if ultimo_ap:
+                        status_info['ultima_quantidade'] = int(ultimo_ap.quantidade)
+                        status_info['item_atual_id'] = ultimo_ap.item_id
+                        status_info['trabalho_atual_id'] = ultimo_ap.trabalho_id
+                        logger.debug(f"OS {ordem.id}: último apontamento encontrado - {ultimo_ap.quantidade} peças")
+                        
+                        # Calcular tempos históricos acumulados mesmo sem status ativo
+                        try:
+                            # Buscar todos os apontamentos desta OS/item/trabalho para calcular tempos totais
+                            apontamentos_historicos = ApontamentoProducao.query.filter(
+                                ApontamentoProducao.ordem_servico_id == ordem.id,
+                                ApontamentoProducao.item_id == ultimo_ap.item_id,
+                                ApontamentoProducao.trabalho_id == ultimo_ap.trabalho_id
+                            ).order_by(ApontamentoProducao.data_hora.asc()).all()
+                            
+                            tempo_setup_total = 0
+                            tempo_producao_total = 0 
+                            tempo_pausas_total = 0
+                            
+                            # Calcular tempos baseado nos apontamentos históricos
+                            for i, ap in enumerate(apontamentos_historicos):
+                                if ap.data_fim and ap.data_hora:
+                                    duracao = int((ap.data_fim - ap.data_hora).total_seconds())
+                                    if ap.tipo_acao in ['inicio_setup', 'fim_setup']:
+                                        tempo_setup_total += duracao
+                                    elif ap.tipo_acao in ['inicio_producao', 'fim_producao']:
+                                        tempo_producao_total += duracao
+                                    elif ap.tipo_acao in ['pausa', 'stop']:
+                                        tempo_pausas_total += duracao
+                            
+                            # Adicionar analytics históricos
+                            status_info['analytics'] = {
+                                'tempo_setup_utilizado': tempo_setup_total,
+                                'tempo_producao_utilizado': tempo_producao_total,
+                                'tempo_pausas_utilizado': tempo_pausas_total,
+                                'tempo_setup_estimado': None,
+                                'tempo_peca_estimado': None,
+                                'setup_status': None,
+                                'producao_status': None,
+                                'media_seg_por_peca': None
+                            }
+                            
+                            # Calcular média por peça se houver quantidade
+                            if status_info['ultima_quantidade'] > 0 and tempo_producao_total > 0:
+                                media = int(tempo_producao_total / status_info['ultima_quantidade'])
+                                status_info['analytics']['media_seg_por_peca'] = media
+                                
+                            logger.debug(f"OS {ordem.id}: tempos históricos calculados - setup: {tempo_setup_total}s, produção: {tempo_producao_total}s, pausas: {tempo_pausas_total}s")
+                            
+                        except Exception as e_hist:
+                            logger.error(f"OS {ordem.id}: falha ao calcular tempos históricos: {e_hist}")
+                            status_info['analytics'] = {
+                                'tempo_setup_utilizado': 0,
+                                'tempo_producao_utilizado': 0,
+                                'tempo_pausas_utilizado': 0,
+                                'tempo_setup_estimado': None,
+                                'tempo_peca_estimado': None,
+                                'setup_status': None,
+                                'producao_status': None,
+                                'media_seg_por_peca': None
+                            }
+                    else:
+                        status_info['ultima_quantidade'] = 0
+                        status_info['analytics'] = {
+                            'tempo_setup_utilizado': 0,
+                            'tempo_producao_utilizado': 0,
+                            'tempo_pausas_utilizado': 0,
+                            'tempo_setup_estimado': None,
+                            'tempo_peca_estimado': None,
+                            'setup_status': None,
+                            'producao_status': None,
+                            'media_seg_por_peca': None
+                        }
+                        logger.debug(f"OS {ordem.id}: sem apontamentos com quantidade")
+                except Exception as e_ultimo:
+                    logger.error(f"OS {ordem.id}: falha ao buscar último apontamento: {e_ultimo}")
+                    status_info['ultima_quantidade'] = 0
+                    status_info['analytics'] = {
+                        'tempo_setup_utilizado': 0,
+                        'tempo_producao_utilizado': 0,
+                        'tempo_pausas_utilizado': 0,
+                        'tempo_setup_estimado': None,
+                        'tempo_peca_estimado': None,
+                        'setup_status': None,
+                        'producao_status': None,
+                        'media_seg_por_peca': None
+                    }
                 
                 # Buscar item/trabalho da OS (mesmo sem apontamento ativo)
                 try:
@@ -1328,18 +1393,38 @@ def status_ativos():
                                     logger.debug(f"OS {ordem.id}: trabalho encontrado - nome='{trabalho.nome}'")
                                 
                                 # clientes_quantidades e quantidade_total já definidos acima
-                                # Montar trabalhos_do_item mesmo sem ativos, deixando todos visíveis
+                                # Montar trabalhos_do_item mesmo sem ativos, usando último apontamento
                                 try:
                                     trabalhos_list = []
                                     for it in item.trabalhos:
                                         trab = it.trabalho
                                         if not trab:
                                             continue
+                                        
+                                        # Buscar último apontamento para este trabalho específico
+                                        ultima_qtd_trabalho = 0
+                                        try:
+                                            ultimo_ap_trab = (
+                                                ApontamentoProducao.query
+                                                .filter_by(
+                                                    ordem_servico_id=ordem.id,
+                                                    item_id=item.id,
+                                                    trabalho_id=trab.id
+                                                )
+                                                .filter(ApontamentoProducao.quantidade != None)
+                                                .order_by(ApontamentoProducao.data_hora.desc())
+                                                .first()
+                                            )
+                                            if ultimo_ap_trab:
+                                                ultima_qtd_trabalho = int(ultimo_ap_trab.quantidade)
+                                        except Exception:
+                                            pass
+                                        
                                         trabalhos_list.append({
                                             'trabalho_id': trab.id,
                                             'trabalho_nome': trab.nome,
                                             'status': 'Aguardando',
-                                            'ultima_quantidade': 0,
+                                            'ultima_quantidade': ultima_qtd_trabalho,
                                             'tempo_setup_utilizado': 0,
                                             'tempo_pausas_utilizado': 0,
                                             'tempo_producao_utilizado': 0
@@ -1383,6 +1468,127 @@ def status_ativos():
                 logger.error(f"Falha ao processar OS {ordem.id}: {e_os}")
                 continue
         timings['build_os_sem_ativos_loop_ms'] = int((time.perf_counter() - t0) * 1000)
+        
+        # Adicionar cartões fantasma ativos como entradas separadas
+        logger.debug("Adicionando cartões fantasma ativos...")
+        t0 = time.perf_counter()
+        cartoes_fantasma_ativos = CartaoFantasma.query.filter_by(ativo=True).all()
+        
+        for cf in cartoes_fantasma_ativos:
+            try:
+                # Verificar se já foi processada (evitar duplicatas)
+                if cf.ordem_servico_id in os_com_status_ativo:
+                    continue  # OS já tem status ativo, não criar cartão fantasma separado
+                
+                # Buscar OS do cartão fantasma
+                os_fantasma = OrdemServico.query.get(cf.ordem_servico_id)
+                if not os_fantasma:
+                    continue
+                
+                # Verificar filtros
+                try:
+                    if lista_filters_set is not None:
+                        lista_fantasma_lower = cf.lista_kanban.lower() if cf.lista_kanban else None
+                        if lista_fantasma_lower not in lista_filters_set:
+                            continue
+                    
+                    if status_filter_set is not None:
+                        if 'fantasma' not in status_filter_set:
+                            continue
+                except Exception:
+                    pass
+                
+                # Criar status_info para cartão fantasma
+                status_info_fantasma = {
+                    'id': f"fantasma_{cf.id}",
+                    'ordem_servico_id': cf.ordem_servico_id,
+                    'ordem_id': cf.ordem_servico_id,
+                    'status_atual': 'Fantasma',
+                    'lista_kanban': cf.lista_kanban,
+                    'is_fantasma': True,
+                    'fantasma_id': cf.id
+                }
+                
+                # Número da OS
+                try:
+                    os_num = getattr(os_fantasma, 'numero', None) or f"OS-{os_fantasma.id}"
+                    status_info_fantasma['os_numero'] = os_num
+                except Exception:
+                    status_info_fantasma['os_numero'] = f"OS-{os_fantasma.id}"
+                
+                # Buscar informações do item via pedidos
+                try:
+                    if os_fantasma.pedidos:
+                        pedido_os = os_fantasma.pedidos[0]
+                        pedido = pedido_os.pedido
+                        item = pedido.item if pedido else None
+                        
+                        if item:
+                            status_info_fantasma['item_id'] = item.id
+                            status_info_fantasma['item_nome'] = item.nome
+                            status_info_fantasma['item_codigo'] = item.codigo_acb
+                            status_info_fantasma['item_imagem_path'] = getattr(item, 'imagem_path', None)
+                            
+                            # Buscar último apontamento
+                            try:
+                                ultimo_ap = (
+                                    ApontamentoProducao.query
+                                    .filter_by(ordem_servico_id=cf.ordem_servico_id)
+                                    .filter(ApontamentoProducao.quantidade != None)
+                                    .order_by(ApontamentoProducao.data_hora.desc())
+                                    .first()
+                                )
+                                if ultimo_ap:
+                                    status_info_fantasma['ultima_quantidade'] = int(ultimo_ap.quantidade)
+                                else:
+                                    status_info_fantasma['ultima_quantidade'] = 0
+                            except Exception:
+                                status_info_fantasma['ultima_quantidade'] = 0
+                            
+                            # Agregar clientes e quantidades
+                            try:
+                                clientes_map = {}
+                                total_q = 0
+                                for po in os_fantasma.pedidos:
+                                    ped = po.pedido
+                                    if not ped:
+                                        continue
+                                    q = int(getattr(ped, 'quantidade', 0) or 0)
+                                    total_q += q
+                                    cli = getattr(ped, 'cliente', None)
+                                    nome_cli = getattr(cli, 'nome', None) or 'Cliente'
+                                    clientes_map[nome_cli] = clientes_map.get(nome_cli, 0) + q
+                                
+                                status_info_fantasma['quantidade_total'] = int(total_q)
+                                if clientes_map:
+                                    status_info_fantasma['clientes_quantidades'] = [
+                                        {'cliente_nome': k, 'quantidade': v} for k, v in clientes_map.items()
+                                    ]
+                                    status_info_fantasma['cliente_nome'] = next(iter(clientes_map.keys()))
+                            except Exception:
+                                pass
+                except Exception:
+                    pass
+                
+                # Valores padrão
+                status_info_fantasma.setdefault('ultima_quantidade', 0)
+                status_info_fantasma.setdefault('ativos_por_trabalho', [])
+                status_info_fantasma.setdefault('qtd_ativos', 0)
+                status_info_fantasma.setdefault('multiplo_ativos', False)
+                status_info_fantasma.setdefault('analytics', {})
+                status_info_fantasma.setdefault('quantidade_total', 0)
+                status_info_fantasma.setdefault('cliente_nome', None)
+                status_info_fantasma.setdefault('resumo_status', {'setup': 0, 'pausado': 0, 'producao': 0})
+                status_info_fantasma.setdefault('trabalhos_do_item', [])
+                
+                # Adicionar ao resultado
+                resultado['status_ativos'].append(status_info_fantasma)
+                
+            except Exception as e_cf:
+                logger.error(f"Falha ao processar cartão fantasma {cf.id}: {e_cf}")
+                continue
+        
+        timings['build_cartoes_fantasma_ms'] = int((time.perf_counter() - t0) * 1000)
         
         logger.debug(f"Status ativos formatados (com cartões fantasma mesclados): {len(resultado['status_ativos'])}")
         # Anexar timings apenas quando explicitamente solicitado

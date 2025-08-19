@@ -68,6 +68,7 @@
     const os = st.os_numero || `OS-${st.ordem_servico_id}`;
     const isGhost = st.is_ghost_card === true;
     const ativos = Array.isArray(st.ativos_por_trabalho) ? st.ativos_por_trabalho : [];
+    const isRunning = (st.cronometro && st.cronometro.tipo === 'producao') || st.status_atual === 'Produção em andamento' || (Array.isArray(ativos) && ativos.some(a => a.status === 'Produção em andamento'));
     
     // Para cartões fantasma, mostrar informações específicas
     const ghostInfo = isGhost ? {
@@ -93,7 +94,7 @@
     const ultima = parseInt(st.ultima_quantidade ?? 0, 10) || 0;
     const pct = total > 0 ? Math.max(0, Math.min(100, Math.round((ultima / total) * 100))) : 0;
 
-    const imgMain = st.item_imagem_path ? `<img src="${st.item_imagem_path}" alt="Imagem do item" class="rounded border me-2" style="width:80px;height:80px;object-fit:cover;">` : '';
+    const imgMain = st.item_imagem_path ? `<img src="${st.item_imagem_path}" alt="Imagem do item" class="rounded border me-2 ${isRunning ? 'thumb-running' : ''}" style="width:80px;height:80px;object-fit:cover;">` : '';
     const clientes = Array.isArray(st.clientes_quantidades)
       ? st.clientes_quantidades
       : (st.cliente_nome ? [{ cliente_nome: st.cliente_nome, quantidade: total }] : []);
@@ -242,15 +243,28 @@
 
     console.log('Grupos por máquina:', Array.from(groupsByMachine.keys()));
 
-    // Buscar máquinas a partir do dropdown (todas as listas conhecidas) e dos dados para garantir exibição completa
-    const maquinasConhecidas = Array.from(selLista?.options || [])
-      .map(o => o.value)
-      .filter(v => v && v !== 'Todas');
-    const maquinasDosDados = Array.from(groupsByMachine.keys());
-    const todasMaquinas = Array.from(new Set([...maquinasConhecidas, ...maquinasDosDados]));
-    // Ordenar conforme a ordem do dropdown; desconhecidas vão para o final em ordem alfabética
-    const ordem = new Map(todasMaquinas.map((m, idx) => [m, maquinasConhecidas.indexOf(m) === -1 ? 1e6 + idx : maquinasConhecidas.indexOf(m)]));
-    todasMaquinas.sort((a, b) => (ordem.get(a) - ordem.get(b)) || a.localeCompare(b));
+    // Determinar se há filtros por múltiplas listas selecionadas
+    let selecionadas = [];
+    if (selLista) {
+      const opts = Array.from(selLista.selectedOptions || []).map(o => o.value);
+      selecionadas = opts.filter(v => v && v !== 'Todas');
+    }
+
+    let todasMaquinas;
+    if (selecionadas.length > 0) {
+      // Filtrar para renderizar apenas as máquinas selecionadas (existentes nos dados)
+      todasMaquinas = selecionadas.filter(m => groupsByMachine.has(m));
+    } else {
+      // Sem filtro: buscar máquinas conhecidas no dropdown e também as presentes nos dados
+      const maquinasConhecidas = Array.from(selLista?.options || [])
+        .map(o => o.value)
+        .filter(v => v && v !== 'Todas');
+      const maquinasDosDados = Array.from(groupsByMachine.keys());
+      todasMaquinas = Array.from(new Set([...maquinasConhecidas, ...maquinasDosDados]));
+      // Ordenar conforme a ordem do dropdown; desconhecidas vão para o final em ordem alfabética
+      const ordem = new Map(todasMaquinas.map((m, idx) => [m, maquinasConhecidas.indexOf(m) === -1 ? 1e6 + idx : maquinasConhecidas.indexOf(m)]));
+      todasMaquinas.sort((a, b) => (ordem.get(a) - ordem.get(b)) || a.localeCompare(b));
+    }
     
     // Build HTML for each machine
     const groupSections = [];
@@ -270,6 +284,7 @@
 
       const principal = items.length > 0 ? items[0] : null;
       const fila = items.length > 1 ? items.slice(1) : [];
+      const isRunningMachine = items.some(x => (x.cronometro && x.cronometro.tipo === 'producao') || x.status_atual === 'Produção em andamento' || (Array.isArray(x.ativos_por_trabalho) && x.ativos_por_trabalho.some(a => a.status === 'Produção em andamento')));
       
       // Informações da máquina (cor e tipo do primeiro item ou padrões)
       const cor = principal?.lista_cor || '';
@@ -291,7 +306,8 @@
            <div class="fw-semibold mb-2"><i class="fas fa-list me-1"></i>Na fila (${fila.length})</div>
            <ul class="list-group">
              ${fila.map(it => {
-               const imgFila = it.item_imagem_path ? `<img src="${it.item_imagem_path}" alt="Imagem" class="rounded border me-2" style="width:36px;height:36px;object-fit:cover;">` : '';
+               const itRunning = (it.cronometro && it.cronometro.tipo === 'producao') || it.status_atual === 'Produção em andamento' || (Array.isArray(it.ativos_por_trabalho) && it.ativos_por_trabalho.some(a => a.status === 'Produção em andamento'));
+               const imgFila = it.item_imagem_path ? `<img src="${it.item_imagem_path}" alt="Imagem" class="rounded border me-2 ${itRunning ? 'thumb-running' : ''}" style="width:36px;height:36px;object-fit:cover;">` : '';
                return `<li class="list-group-item d-flex justify-content-between align-items-center">` +
                  `<div class="d-flex align-items-center">` +
                    `${imgFila}` +
@@ -320,7 +336,7 @@
       groupSections.push(`
         <div class="mb-4 p-2 border rounded">
           <div class="d-flex align-items-center mb-3 border-bottom pb-2">
-            <div class="h4 m-0">${maquina}</div>
+            <div class="h4 m-0">${maquina}${isRunningMachine ? ' <span class="machine-running-dot" title="Em produção"></span>' : ''}</div>
             ${cor ? `<span class="ms-2 badge" style="background-color:${cor};">&nbsp;</span>` : ''}
             ${tipo ? `<span class="ms-2 text-muted">(${tipo})</span>` : ''}
           </div>
@@ -357,15 +373,29 @@
       const selLista = document.getElementById('filter-lista');
       const selStatus = document.getElementById('filter-status');
       
-      // Aplicar filtros apenas se forem diferentes de "Todas" ou "Todos"
-      const lista = selLista && selLista.value && selLista.value !== 'Todas' ? selLista.value : null;
-      const status = selStatus && selStatus.value && selStatus.value !== 'Todos' ? selStatus.value : null;
+      // Aplicar filtros (lista múltipla; status múltiplo)
+      let listaParam = null;
+      if (selLista) {
+        const selectedListas = Array.from(selLista.selectedOptions || []).map(o => o.value);
+        const cleanedListas = selectedListas.filter(v => v && v !== 'Todas');
+        if (cleanedListas.length > 0) {
+          listaParam = cleanedListas.join(',');
+        }
+      }
+      let statusParam = null;
+      if (selStatus) {
+        const selected = Array.from(selStatus.selectedOptions || []).map(o => o.value);
+        const cleaned = selected.filter(v => v && v !== 'Todos');
+        if (cleaned.length > 0) {
+          statusParam = cleaned.join(',');
+        }
+      }
 
       const params = new URLSearchParams();
-      if (lista) params.set('lista', lista);
-      if (status) params.set('status', status);
+      if (listaParam) params.set('lista', listaParam);
+      if (statusParam) params.set('status', statusParam);
       
-      console.log('Aplicando filtros:', { lista, status });
+      console.log('Aplicando filtros:', { lista: listaParam, status: statusParam });
 
       const url = params.toString() ? `/apontamento/status-ativos?${params.toString()}` : '/apontamento/status-ativos';
       const res = await fetch(url, { cache: 'no-store' });
@@ -380,6 +410,27 @@
   }
 
   function init() {
+    // Restaurar seleção da lista Kanban, se existir
+    try {
+      // Suporte legado (chave antiga) e nova chave para múltiplas listas
+      const savedListaLegacy = localStorage.getItem('dashboard_lista_kanban');
+      const savedListasCsv = localStorage.getItem('dashboard_listas_kanban');
+      const selLista = document.getElementById('filter-lista');
+      if (selLista) {
+        if (savedListasCsv) {
+          const values = savedListasCsv.split(',').map(s => s.trim()).filter(Boolean);
+          const options = Array.from(selLista.options);
+          options.forEach(o => { o.selected = values.includes(o.value); });
+        } else if (savedListaLegacy) {
+          // Migrar seleção única antiga
+          const exists = Array.from(selLista.options).some(o => o.value === savedListaLegacy);
+          if (exists) {
+            Array.from(selLista.options).forEach(o => { o.selected = (o.value === savedListaLegacy); });
+          }
+        }
+      }
+    } catch (e) { /* noop */ }
+
     fetchAndRender();
     if (STATE.timerId) clearInterval(STATE.timerId);
     STATE.timerId = setInterval(tickTimers, 1000);
@@ -387,13 +438,38 @@
     STATE.refreshId = setInterval(() => { if (!document.hidden) fetchAndRender(); }, 10000);
 
     // Wire up filter change events
-    document.getElementById('filter-lista')?.addEventListener('change', fetchAndRender);
+    document.getElementById('filter-lista')?.addEventListener('change', function(e) {
+      try {
+        const sel = e.target;
+        const selected = Array.from(sel.selectedOptions || []).map(o => o.value).filter(v => v && v !== 'Todas');
+        // Persistir como CSV múltiplo (nova chave)
+        if (selected.length > 0) {
+          localStorage.setItem('dashboard_listas_kanban', selected.join(','));
+        } else {
+          localStorage.removeItem('dashboard_listas_kanban');
+        }
+      } catch (err) { /* noop */ }
+      fetchAndRender();
+    });
     document.getElementById('filter-status')?.addEventListener('change', fetchAndRender);
     document.getElementById('btn-clear-filters')?.addEventListener('click', function() {
       const listaFilter = document.getElementById('filter-lista');
       const statusFilter = document.getElementById('filter-status');
-      if (listaFilter) listaFilter.value = 'Todas';
-      if (statusFilter) statusFilter.value = 'Todos';
+      if (listaFilter) {
+        // Limpar múltiplas seleções e selecionar 'Todas' se existir
+        Array.from(listaFilter.options).forEach(o => o.selected = false);
+        const optTodas = Array.from(listaFilter.options).find(o => o.value === 'Todas');
+        if (optTodas) optTodas.selected = true;
+        try {
+          localStorage.removeItem('dashboard_listas_kanban');
+          localStorage.setItem('dashboard_lista_kanban', 'Todas');
+        } catch (e) { /* noop */ }
+      }
+      if (statusFilter) {
+        Array.from(statusFilter.options).forEach(o => o.selected = false);
+        const optTodos = Array.from(statusFilter.options).find(o => o.value === 'Todos');
+        if (optTodos) optTodos.selected = true;
+      }
       fetchAndRender();
     });
   }
