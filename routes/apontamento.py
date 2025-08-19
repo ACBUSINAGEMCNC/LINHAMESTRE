@@ -1614,9 +1614,27 @@ def detalhes_ordem_servico(ordem_id):
         # Buscar todos os apontamentos desta OS
         apontamentos = ApontamentoProducao.query.filter_by(ordem_servico_id=ordem_id).order_by(ApontamentoProducao.data_hora.asc()).all()
         
-        # Buscar informações do item
+        # Buscar informações do item e estimativas dos trabalhos
         item_info = {}
+        estimativas_trabalhos = {}
+        pedidos_info = []
+        quantidade_total_os = 0
+        
         if ordem.pedidos:
+            # Coletar informações de todos os pedidos
+            for pedido_os in ordem.pedidos:
+                pedido = Pedido.query.get(pedido_os.pedido_id)
+                if pedido:
+                    quantidade_total_os += pedido.quantidade or 0
+                    cliente = pedido.cliente if hasattr(pedido, 'cliente') and pedido.cliente else None
+                    pedidos_info.append({
+                        'id': pedido.id,
+                        'quantidade': pedido.quantidade or 0,
+                        'cliente_nome': cliente.nome if cliente else 'N/A',
+                        'numero_pedido_cliente': getattr(pedido, 'numero_pedido_cliente', None) or 'N/A'
+                    })
+            
+            # Buscar informações do primeiro item (assumindo que todos os pedidos são do mesmo item)
             pedido_os = ordem.pedidos[0]
             pedido = Pedido.query.get(pedido_os.pedido_id)
             if pedido and pedido.item_id:
@@ -1626,9 +1644,18 @@ def detalhes_ordem_servico(ordem_id):
                         'id': item.id,
                         'nome': item.nome,
                         'codigo': item.codigo_acb,
-                        'tempo_estimado_peca': getattr(item, 'tempo_estimado_peca', None),
-                        'tempo_setup_estimado': getattr(item, 'tempo_setup_estimado', None)
+                        'imagem_path': getattr(item, 'imagem_path', None),
+                        'quantidade_total': quantidade_total_os,
+                        'pedidos': pedidos_info
                     }
+                    
+                    # Buscar estimativas de todos os trabalhos do item
+                    item_trabalhos = ItemTrabalho.query.filter_by(item_id=item.id).all()
+                    for it in item_trabalhos:
+                        estimativas_trabalhos[it.trabalho_id] = {
+                            'tempo_setup': it.tempo_setup or 0,
+                            'tempo_peca': it.tempo_peca or 0
+                        }
         
         # Agrupar apontamentos por tipo de trabalho
         trabalhos_analytics = {}
@@ -1699,12 +1726,24 @@ def detalhes_ordem_servico(ordem_id):
         total_producao = sum(t['producao_total'] for t in trabalhos_analytics.values())
         total_pausas = sum(t['pausas_total'] for t in trabalhos_analytics.values())
         
-        # Calcular eficiência
-        tempo_estimado_total = 0
-        if item_info.get('tempo_estimado_peca') and trabalhos_analytics:
-            for dados in trabalhos_analytics.values():
-                if dados['ultima_quantidade']:
-                    tempo_estimado_total += item_info['tempo_estimado_peca'] * dados['ultima_quantidade']
+        # Calcular tempos estimados totais
+        tempo_setup_estimado_total = 0
+        tempo_producao_estimado_total = 0
+        
+        # Quantidade total já calculada acima
+        
+        # Calcular estimativas baseadas na quantidade total da OS
+        for trabalho_key, dados in trabalhos_analytics.items():
+            trabalho_id = dados['trabalho_id']
+            if trabalho_id in estimativas_trabalhos:
+                est = estimativas_trabalhos[trabalho_id]
+                # Setup: uma vez por trabalho (independente da quantidade)
+                tempo_setup_estimado_total += est['tempo_setup']
+                # Produção: tempo por peça × quantidade total da OS
+                if quantidade_total_os > 0:
+                    tempo_producao_estimado_total += est['tempo_peca'] * quantidade_total_os
+        
+        tempo_estimado_total = tempo_setup_estimado_total + tempo_producao_estimado_total
         
         # Analytics por operador
         analytics_operadores = {}
@@ -1755,8 +1794,10 @@ def detalhes_ordem_servico(ordem_id):
                 'tempo_setup_total': total_setup,
                 'tempo_producao_total': total_producao,
                 'tempo_pausas_total': total_pausas,
+                'tempo_setup_estimado_total': tempo_setup_estimado_total,
+                'tempo_producao_estimado_total': tempo_producao_estimado_total,
                 'tempo_estimado_total': tempo_estimado_total,
-                'eficiencia_percentual': round((tempo_estimado_total / total_producao * 100) if total_producao > 0 else 0, 1)
+                'eficiencia_percentual': round((total_producao / (total_setup + total_producao + total_pausas) * 100) if (total_setup + total_producao + total_pausas) > 0 else 0, 1)
             },
             'trabalhos': list(trabalhos_analytics.values()),
             'analytics_operadores': analytics_operadores

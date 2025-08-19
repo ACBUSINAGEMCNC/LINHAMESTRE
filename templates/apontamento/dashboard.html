@@ -887,10 +887,18 @@ function verDetalhes(ordemId) {
             const normalized = {
                 success: data.success !== false,
                 ordem_servico_id: data?.ordem_servico_id ?? ordemId,
+                ordem_servico: {
+                    id: data?.ordem_servico?.id ?? ordemId,
+                    numero: data?.ordem_servico?.numero || `OS-${ordemId}`,
+                    status: data?.ordem_servico?.status || null
+                },
                 analytics_gerais: {
                     tempo_setup_total,
                     tempo_producao_total,
                     tempo_pausas_total,
+                    tempo_setup_estimado_total: Number(data?.analytics_gerais?.tempo_setup_estimado_total || 0),
+                    tempo_producao_estimado_total: Number(data?.analytics_gerais?.tempo_producao_estimado_total || 0),
+                    tempo_estimado_total: Number(data?.analytics_gerais?.tempo_estimado_total || 0),
                     eficiencia_percentual: Number(
                         (data?.analytics_gerais?.eficiencia_percentual ?? eficiencia_calc) || 0
                     )
@@ -899,8 +907,10 @@ function verDetalhes(ordemId) {
                 item: {
                     nome: data?.item?.nome || '',
                     codigo: data?.item?.codigo || '',
-                    tempo_estimado_peca: Number(data?.item?.tempo_estimado_peca || 0),
-                    tempo_setup_estimado: Number(data?.item?.tempo_setup_estimado || 0)
+                    id: data?.item?.id || null,
+                    imagem_path: data?.item?.imagem_path || null,
+                    quantidade_total: Number(data?.item?.quantidade_total || 0),
+                    pedidos: Array.isArray(data?.item?.pedidos) ? data.item.pedidos : []
                 },
                 trabalhos: normalizedTrabalhos
             };
@@ -976,6 +986,13 @@ function renderizarDetalhes(data) {
         return `${((valor / total) * 100).toFixed(1)}%`;
     };
     
+    // Normalizar URL da imagem do item (suporte a Supabase)
+    const imagemUrl = (data.item && data.item.imagem_path)
+        ? (data.item.imagem_path.startsWith('supabase://')
+            ? `/uploads/${data.item.imagem_path}`
+            : data.item.imagem_path)
+        : null;
+    
     let html = `
         <!-- Filtros -->
         <div class="row mb-4">
@@ -990,49 +1007,6 @@ function renderizarDetalhes(data) {
             </div>
         </div>
         
-        <!-- Analytics Gerais -->
-        <div class="row mb-4">
-            <div class="col-12">
-                <h6 class="border-bottom pb-2 mb-3"><i class="fas fa-chart-bar me-2"></i>Resumo Geral</h6>
-            </div>
-            <div class="col-md-3">
-                <div class="card bg-primary text-white">
-                    <div class="card-body text-center">
-                        <i class="fas fa-tools fa-2x mb-2"></i>
-                        <h5 class="card-title">${formatarTempo(data.analytics_gerais.tempo_setup_total)}</h5>
-                        <p class="card-text">Tempo Setup Total</p>
-                    </div>
-                </div>
-            </div>
-            <div class="col-md-3">
-                <div class="card bg-success text-white">
-                    <div class="card-body text-center">
-                        <i class="fas fa-cogs fa-2x mb-2"></i>
-                        <h5 class="card-title">${formatarTempo(data.analytics_gerais.tempo_producao_total)}</h5>
-                        <p class="card-text">Tempo Produção Total</p>
-                    </div>
-                </div>
-            </div>
-            <div class="col-md-3">
-                <div class="card bg-warning text-white">
-                    <div class="card-body text-center">
-                        <i class="fas fa-pause fa-2x mb-2"></i>
-                        <h5 class="card-title">${formatarTempo(data.analytics_gerais.tempo_pausas_total)}</h5>
-                        <p class="card-text">Tempo Pausas Total</p>
-                    </div>
-                </div>
-            </div>
-            <div class="col-md-3">
-                <div class="card ${data.analytics_gerais.eficiencia_percentual >= 80 ? 'bg-success' : data.analytics_gerais.eficiencia_percentual >= 60 ? 'bg-warning' : 'bg-danger'} text-white">
-                    <div class="card-body text-center">
-                        <i class="fas fa-tachometer-alt fa-2x mb-2"></i>
-                        <h5 class="card-title">${data.analytics_gerais.eficiencia_percentual}%</h5>
-                        <p class="card-text">Eficiência</p>
-                    </div>
-                </div>
-            </div>
-        </div>
-        
         <!-- Item Info -->
         ${data.item.nome ? `
         <div class="row mb-4">
@@ -1040,14 +1014,46 @@ function renderizarDetalhes(data) {
                 <h6 class="border-bottom pb-2 mb-3"><i class="fas fa-cube me-2"></i>Informações do Item</h6>
                 <div class="card">
                     <div class="card-body">
-                        <div class="row">
-                            <div class="col-md-6">
-                                <p><strong>Nome:</strong> ${data.item.nome}</p>
-                                <p><strong>Código:</strong> ${data.item.codigo || 'N/A'}</p>
+                        <div class="row align-items-center">
+                            <div class="col-md-2 text-center mb-3 mb-md-0">
+                                ${imagemUrl ? `
+                                    <img src="${imagemUrl}" alt="Imagem do Item" class="img-fluid rounded border" style="max-height: 120px; object-fit: contain;">
+                                ` : `
+                                    <div class="d-inline-flex align-items-center justify-content-center bg-light border rounded" style="width: 120px; height: 120px;">
+                                        <i class="fas fa-cube fa-2x text-muted"></i>
+                                    </div>
+                                `}
                             </div>
-                            <div class="col-md-6">
-                                <p><strong>Tempo Estimado/Peça:</strong> ${data.item.tempo_estimado_peca ? formatarTempo(data.item.tempo_estimado_peca) : 'N/A'}</p>
-                                <p><strong>Tempo Setup Estimado:</strong> ${data.item.tempo_setup_estimado ? formatarTempo(data.item.tempo_setup_estimado) : 'N/A'}</p>
+                            <div class="col-md-5">
+                                <p class="mb-1"><strong>Nome:</strong> ${data.item.nome}</p>
+                                <p class="mb-1"><strong>Código:</strong> ${data.item.codigo || 'N/A'}</p>
+                                <p class="mb-0"><strong>Quantidade Total (OS):</strong> ${data.item.quantidade_total || 0}</p>
+                            </div>
+                            <div class="col-md-5">
+                                <div class="table-responsive">
+                                    <table class="table table-sm mb-0">
+                                        <thead>
+                                            <tr>
+                                                <th>Cliente</th>
+                                                <th>Pedido Cliente</th>
+                                                <th class="text-end">Qtd</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody>
+                                            ${data.item.pedidos && data.item.pedidos.length > 0 ? data.item.pedidos.map(p => `
+                                                <tr>
+                                                    <td>${p.cliente_nome || 'N/A'}</td>
+                                                    <td>${p.numero_pedido_cliente || 'N/A'}</td>
+                                                    <td class="text-end">${p.quantidade || 0}</td>
+                                                </tr>
+                                            `).join('') : `
+                                                <tr>
+                                                    <td colspan="3" class="text-muted text-center">Sem pedidos vinculados</td>
+                                                </tr>
+                                            `}
+                                        </tbody>
+                                    </table>
+                                </div>
                             </div>
                         </div>
                     </div>
@@ -1055,6 +1061,115 @@ function renderizarDetalhes(data) {
             </div>
         </div>
         ` : ''}
+        
+        <!-- Resumo Comparativo Estimado vs Real -->
+        <div class="row mb-4">
+            <div class="col-12">
+                <h6 class="border-bottom pb-2 mb-3"><i class="fas fa-balance-scale me-2"></i>Comparativo: Estimado vs Real</h6>
+            </div>
+            <div class="col-md-6">
+                <div class="card border-info">
+                    <div class="card-header bg-info text-white">
+                        <h6 class="mb-0"><i class="fas fa-clock me-2"></i>Tempos Estimados</h6>
+                    </div>
+                    <div class="card-body">
+                        <div class="row text-center">
+                            <div class="col-6">
+                                <div class="mb-2">
+                                    <i class="fas fa-tools text-primary"></i>
+                                    <div class="fw-bold">${formatarTempo(data.analytics_gerais.tempo_setup_estimado_total)}</div>
+                                    <small class="text-muted">Setup</small>
+                                </div>
+                            </div>
+                            <div class="col-6">
+                                <div class="mb-2">
+                                    <i class="fas fa-cogs text-success"></i>
+                                    <div class="fw-bold">${formatarTempo(data.analytics_gerais.tempo_producao_estimado_total)}</div>
+                                    <small class="text-muted">Produção</small>
+                                </div>
+                            </div>
+                        </div>
+                        <hr class="my-2">
+                        <div class="text-center">
+                            <div class="fw-bold text-info">${formatarTempo(data.analytics_gerais.tempo_estimado_total)}</div>
+                            <small class="text-muted">Total Estimado</small>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-6">
+                <div class="card border-warning">
+                    <div class="card-header bg-warning text-dark">
+                        <h6 class="mb-0"><i class="fas fa-stopwatch me-2"></i>Tempos Reais</h6>
+                    </div>
+                    <div class="card-body">
+                        <div class="row text-center">
+                            <div class="col-4">
+                                <div class="mb-2">
+                                    <i class="fas fa-tools text-primary"></i>
+                                    <div class="fw-bold">${formatarTempo(data.analytics_gerais.tempo_setup_total)}</div>
+                                    <small class="text-muted">Setup</small>
+                                </div>
+                            </div>
+                            <div class="col-4">
+                                <div class="mb-2">
+                                    <i class="fas fa-cogs text-success"></i>
+                                    <div class="fw-bold">${formatarTempo(data.analytics_gerais.tempo_producao_total)}</div>
+                                    <small class="text-muted">Produção</small>
+                                </div>
+                            </div>
+                            <div class="col-4">
+                                <div class="mb-2">
+                                    <i class="fas fa-pause text-warning"></i>
+                                    <div class="fw-bold">${formatarTempo(data.analytics_gerais.tempo_pausas_total)}</div>
+                                    <small class="text-muted">Pausas</small>
+                                </div>
+                            </div>
+                        </div>
+                        <hr class="my-2">
+                        <div class="text-center">
+                            <div class="fw-bold text-warning">${formatarTempo(data.analytics_gerais.tempo_setup_total + data.analytics_gerais.tempo_producao_total + data.analytics_gerais.tempo_pausas_total)}</div>
+                            <small class="text-muted">Total Real</small>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Eficiência e Performance -->
+        <div class="row mb-4">
+            <div class="col-md-4">
+                <div class="card ${data.analytics_gerais.eficiencia_percentual >= 80 ? 'bg-success' : data.analytics_gerais.eficiencia_percentual >= 60 ? 'bg-warning' : 'bg-danger'} text-white">
+                    <div class="card-body text-center">
+                        <i class="fas fa-tachometer-alt fa-2x mb-2"></i>
+                        <h4 class="card-title">${data.analytics_gerais.eficiencia_percentual}%</h4>
+                        <p class="card-text">Eficiência Produtiva</p>
+                        <small>Produção / Tempo Total</small>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-4">
+                <div class="card ${(data.analytics_gerais.tempo_producao_total <= data.analytics_gerais.tempo_producao_estimado_total) ? 'bg-success' : 'bg-danger'} text-white">
+                    <div class="card-body text-center">
+                        <i class="fas fa-chart-line fa-2x mb-2"></i>
+                        <h4 class="card-title">${data.analytics_gerais.tempo_producao_estimado_total > 0 ? Math.round((data.analytics_gerais.tempo_producao_total / data.analytics_gerais.tempo_producao_estimado_total) * 100) : 0}%</h4>
+                        <p class="card-text">Performance Produção</p>
+                        <small>Real / Estimado</small>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-4">
+                <div class="card ${(data.analytics_gerais.tempo_setup_total <= data.analytics_gerais.tempo_setup_estimado_total) ? 'bg-success' : 'bg-danger'} text-white">
+                    <div class="card-body text-center">
+                        <i class="fas fa-tools fa-2x mb-2"></i>
+                        <h4 class="card-title">${data.analytics_gerais.tempo_setup_estimado_total > 0 ? Math.round((data.analytics_gerais.tempo_setup_total / data.analytics_gerais.tempo_setup_estimado_total) * 100) : 0}%</h4>
+                        <p class="card-text">Performance Setup</p>
+                        <small>Real / Estimado</small>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
     `;
     
     // Análise por Tipo de Trabalho
@@ -1296,20 +1411,16 @@ function imprimirRelatorio() {
                 <div class="titulo">Resumo Geral</div>
                 <div class="resumo">
                     <div class="resumo-item">
-                        <strong>Setup Total</strong><br>
-                        ${formatarTempo(dadosCompactos.analytics_gerais.tempo_setup_total)}
+                        <strong>Estimado vs Real</strong><br>
+                        Setup: ${formatarTempo(dadosCompactos.analytics_gerais.tempo_setup_estimado_total)} / ${formatarTempo(dadosCompactos.analytics_gerais.tempo_setup_total)}<br>
+                        Produção: ${formatarTempo(dadosCompactos.analytics_gerais.tempo_producao_estimado_total)} / ${formatarTempo(dadosCompactos.analytics_gerais.tempo_producao_total)}<br>
+                        Pausas: - / ${formatarTempo(dadosCompactos.analytics_gerais.tempo_pausas_total)}
                     </div>
                     <div class="resumo-item">
-                        <strong>Produção Total</strong><br>
-                        ${formatarTempo(dadosCompactos.analytics_gerais.tempo_producao_total)}
-                    </div>
-                    <div class="resumo-item">
-                        <strong>Pausas Total</strong><br>
-                        ${formatarTempo(dadosCompactos.analytics_gerais.tempo_pausas_total)}
-                    </div>
-                    <div class="resumo-item">
-                        <strong>Eficiência</strong><br>
-                        ${dadosCompactos.analytics_gerais.eficiencia_percentual}%
+                        <strong>Performance</strong><br>
+                        Eficiência: ${dadosCompactos.analytics_gerais.eficiencia_percentual}%<br>
+                        Perf. Produção: ${dadosCompactos.analytics_gerais.tempo_producao_estimado_total > 0 ? Math.round((dadosCompactos.analytics_gerais.tempo_producao_total / dadosCompactos.analytics_gerais.tempo_producao_estimado_total) * 100) : 0}%<br>
+                        Perf. Setup: ${dadosCompactos.analytics_gerais.tempo_setup_estimado_total > 0 ? Math.round((dadosCompactos.analytics_gerais.tempo_setup_total / dadosCompactos.analytics_gerais.tempo_setup_estimado_total) * 100) : 0}%
                     </div>
                 </div>
             </div>

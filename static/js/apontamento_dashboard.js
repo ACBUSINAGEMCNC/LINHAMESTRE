@@ -3,8 +3,55 @@
   const STATE = {
     lastData: null,
     timerId: null,
-    refreshId: null
+    refreshId: null,
+    // Mantém o maior valor de quantidade já visto por OS e por trabalho para evitar regressão visual
+    // Chaves: `os:<ordem_servico_id>` e `os:<ordem_servico_id>:trab:<trabalho_id|nome|idx>`
+    progressCache: new Map()
   };
+
+  // Persistência local por aba/navegador para manter último progresso mesmo após reload
+  function lsKey(key) { return `ap_dash_qty:${key}`; }
+  function getStoredQty(key) {
+    try {
+      const v = localStorage.getItem(lsKey(key));
+      return v != null ? (parseInt(v, 10) || 0) : 0;
+    } catch (_) { return 0; }
+  }
+  function setStoredQty(key, val) {
+    try {
+      localStorage.setItem(lsKey(key), String(val || 0));
+    } catch (_) { /* noop */ }
+  }
+
+  // Normaliza nomes para chaves estáveis (sem acentos, minúsculo, underscores)
+  function normalizeKey(s) {
+    try {
+      return (s || '')
+        .toString()
+        .normalize('NFD')
+        .replace(/[\u0300-\u036f]/g, '')
+        .trim()
+        .toLowerCase()
+        .replace(/[^a-z0-9]+/g, '_')
+        .replace(/^_+|_+$/g, '');
+    } catch (_) {
+      return (s || '').toString().trim().toLowerCase();
+    }
+  }
+
+  // Gera chave estável por trabalho dentro da OS (prefere nome do trabalho)
+  function trabKey(st, t, idx) {
+    const osId = st?.ordem_servico_id ?? st?.os_id ?? st?.id ?? 'os';
+    const nome = t?.trabalho_nome || t?.nome || t?.maquina_nome || t?.tipo_trabalho || '';
+    const base = normalizeKey(nome) || (t?.trabalho_id ? `id${t.trabalho_id}` : (t?.id ? `id${t.id}` : `t${idx}`));
+    return `os:${osId}:trab:${base}`;
+  }
+
+  // Chave estável por OS
+  function osKey(st) {
+    const osId = st?.ordem_servico_id ?? st?.os_id ?? st?.id ?? 'os';
+    return `os:${osId}`;
+  }
 
   function fmtSecs(total) {
     if (total == null || isNaN(total)) return '-';
@@ -91,7 +138,14 @@
     })();
 
     const total = parseInt(st.quantidade_total ?? 0, 10) || 0;
-    const ultima = parseInt(st.ultima_quantidade ?? 0, 10) || 0;
+    let ultima = parseInt(st.ultima_quantidade ?? 0, 10) || 0;
+    // Progresso da OS não deve regredir: usar maior entre servidor e cache
+    const keyOS = osKey(st);
+    const cachedMemOS = STATE.progressCache.get(keyOS) || 0;
+    const cachedLocalOS = getStoredQty(keyOS) || 0;
+    ultima = Math.max(ultima, cachedMemOS, cachedLocalOS);
+    STATE.progressCache.set(keyOS, ultima);
+    setStoredQty(keyOS, ultima);
     const pct = total > 0 ? Math.max(0, Math.min(100, Math.round((ultima / total) * 100))) : 0;
 
     const imgMain = st.item_imagem_path ? `<img src="${st.item_imagem_path}" alt="Imagem do item" class="rounded border me-2 ${isRunning ? 'thumb-running' : ''}" style="width:80px;height:80px;object-fit:cover;">` : '';
@@ -111,8 +165,15 @@
       if (s.includes('final')) return 'bg-dark';
       return 'bg-secondary';
     };
-    const trabalhosHtml = trabs.map(t => {
-      const u = parseInt(t.ultima_quantidade ?? 0, 10) || 0;
+    const trabalhosHtml = trabs.map((t, idx) => {
+      // Quantidade não deve regredir: usar o maior entre servidor e cache
+      let u = parseInt(t.ultima_quantidade ?? 0, 10) || 0;
+      const cacheKey = trabKey(st, t, idx);
+      const cachedMem = STATE.progressCache.get(cacheKey) || 0;
+      const cachedLocal = getStoredQty(cacheKey) || 0;
+      u = Math.max(u, cachedMem, cachedLocal);
+      STATE.progressCache.set(cacheKey, u);
+      setStoredQty(cacheKey, u);
       const pctT = total > 0 ? Math.max(0, Math.min(100, Math.round((u / total) * 100))) : 0;
       const barCls = statusBarClass(t.status);
       return `
@@ -222,6 +283,18 @@
     const list = data.status_ativos || [];
     console.log('Renderizando cartões:', list.length, 'itens recebidos');
 
+    // Preparar conjunto de chaves presentes para limpeza do cache ao final
+    const presentKeys = new Set();
+    list.forEach(st => {
+      if (st && (st.ordem_servico_id != null || st.os_id != null || st.id != null)) {
+        presentKeys.add(osKey(st));
+        const trabs = Array.isArray(st.trabalhos_do_item) ? st.trabalhos_do_item : [];
+        trabs.forEach((t, idx) => {
+          presentKeys.add(trabKey(st, t, idx));
+        });
+      }
+    });
+
     // Canonicalize machine names using dropdown options (case-insensitive)
     const selLista = document.getElementById('filter-lista');
     const canonMap = new Map(
@@ -308,16 +381,24 @@
              ${fila.map(it => {
                const itRunning = (it.cronometro && it.cronometro.tipo === 'producao') || it.status_atual === 'Produção em andamento' || (Array.isArray(it.ativos_por_trabalho) && it.ativos_por_trabalho.some(a => a.status === 'Produção em andamento'));
                const imgFila = it.item_imagem_path ? `<img src="${it.item_imagem_path}" alt="Imagem" class="rounded border me-2 ${itRunning ? 'thumb-running' : ''}" style="width:36px;height:36px;object-fit:cover;">` : '';
-               return `<li class="list-group-item d-flex justify-content-between align-items-center">` +
-                 `<div class="d-flex align-items-center">` +
-                   `${imgFila}` +
-                   `<div>` +
-                     `<div class="fw-medium">${it.os_numero || ''}</div>` +
+               // Quantidade da fila também não deve regredir: cache por OS
+              const keyOSFila = osKey(it);
+              let u = parseInt(it.ultima_quantidade ?? 0, 10) || 0;
+              const cachedMem = STATE.progressCache.get(keyOSFila) || 0;
+              const cachedLocal = getStoredQty(keyOSFila) || 0;
+              u = Math.max(u, cachedMem, cachedLocal);
+              STATE.progressCache.set(keyOSFila, u);
+              setStoredQty(keyOSFila, u);
+                return `<li class="list-group-item d-flex justify-content-between align-items-center">` +
+                  `<div class="d-flex align-items-center">` +
+                    `${imgFila}` +
+                    `<div>` +
+                      `<div class="fw-medium">${it.os_numero || ''}</div>` +
                      `<div class="small text-muted">${(it.item_codigo || '')} ${(it.item_nome || '')}</div>` +
                    `</div>` +
                  `</div>` +
                  `<div class="text-end">` +
-                   `<span class="badge bg-secondary rounded-pill">Qtde: ${it.ultima_quantidade ?? 0}</span>` +
+                   `<span class="badge bg-secondary rounded-pill">Qtde: ${u}</span>` +
                    `<div class="small text-muted mt-1">${it.status_atual || 'Aguardando'}</div>` +
                  `</div>` +
                `</li>`;
@@ -354,6 +435,13 @@
     }
     
     console.log('Renderizadas', todasMaquinas.length, 'máquinas:', todasMaquinas.join(', '));
+
+    // Limpar entradas de cache que não pertencem mais ao conjunto presente
+    try {
+      for (const key of STATE.progressCache.keys()) {
+        if (!presentKeys.has(key)) STATE.progressCache.delete(key);
+      }
+    } catch (_) { /* noop */ }
   }
 
   function tickTimers() {
