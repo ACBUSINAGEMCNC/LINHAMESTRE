@@ -115,7 +115,11 @@
     const os = st.os_numero || `OS-${st.ordem_servico_id}`;
     const isGhost = st.is_ghost_card === true;
     const ativos = Array.isArray(st.ativos_por_trabalho) ? st.ativos_por_trabalho : [];
-    const isRunning = (st.cronometro && st.cronometro.tipo === 'producao') || st.status_atual === 'Produção em andamento' || (Array.isArray(ativos) && ativos.some(a => a.status === 'Produção em andamento'));
+    // Se for um cartão fantasma, ainda precisamos verificar status do cartão real
+    // mas ainda mantemos o badge específico para cartões fantasma
+    const isRunning = (st.cronometro && st.cronometro.tipo === 'producao') || 
+                     st.status_atual === 'Produção em andamento' || 
+                     (Array.isArray(ativos) && ativos.some(a => a.status === 'Produção em andamento'));
     
     // Para cartões fantasma, mostrar informações específicas
     const ghostInfo = isGhost ? {
@@ -283,6 +287,9 @@
 
     const list = data.status_ativos || [];
     console.log('Renderizando cartões:', list.length, 'itens recebidos');
+    
+    // Mapear ordens de serviço que tem ativos por trabalho para depois atualizar status
+    const ordemIdsComAtivos = new Map();
 
     // Preparar conjunto de chaves presentes para limpeza do cache ao final
     const presentKeys = new Set();
@@ -293,6 +300,12 @@
         trabs.forEach((t, idx) => {
           presentKeys.add(trabKey(st, t, idx));
         });
+        
+        // Coletar ordem e ativos por trabalho para atualização de status
+        const ordemId = st.ordem_servico_id ?? st.os_id ?? st.id;
+        if (ordemId && Array.isArray(st.ativos_por_trabalho)) {
+          ordemIdsComAtivos.set(ordemId, st.ativos_por_trabalho);
+        }
       }
     });
 
@@ -443,6 +456,17 @@
         if (!presentKeys.has(key)) STATE.progressCache.delete(key);
       }
     } catch (_) { /* noop */ }
+    
+    // Atualizar chips de status para cada OS que tem ativos
+    if (ordemIdsComAtivos.size > 0) {
+      console.debug(`[CHIPS] Atualizando status de ${ordemIdsComAtivos.size} cartões após renderização`);
+      // Dar tempo para o DOM ser atualizado antes de processar os status
+      setTimeout(() => {
+        ordemIdsComAtivos.forEach((ativos, ordemId) => {
+          renderizarChipsStatus(ordemId, ativos);
+        });
+      }, 100);
+    }
   }
 
   function tickTimers() {
@@ -468,6 +492,100 @@
     } catch (_) { /* noop */ }
   }
 
+  // Função para renderizar chips de status para todos os cartões associados a uma OS
+  function renderizarChipsStatus(ordemId, ativosLista) {
+    // Buscar TODOS os cartões com essa ordem (reais e fantasmas) - usar data-os-id no dashboard
+    const allCards = document.querySelectorAll(`[data-os-id="${ordemId}"]`);
+    console.debug(`[CHIPS] Dashboard - Encontrados ${allCards.length} cartões para OS ${ordemId}`);
+    
+    if (allCards.length === 0) {
+      console.debug(`[CHIPS] Dashboard - Nenhum cartão encontrado para OS ${ordemId}`);
+      return;
+    }
+
+    // Garantir que ativosLista seja sempre um array válido
+    if (!Array.isArray(ativosLista)) {
+      console.debug(`[CHIPS] ativosLista não é array para OS ${ordemId}, inicializando vazio`);
+      ativosLista = [];
+    }
+    
+    // Extrair status e aplicar para todos os cartões da OS
+    const statusInfo = determinarStatusAtivos(ativosLista);
+    
+    // Aplicar status em cada cartão (real ou fantasma)
+    for (const card of allCards) {
+      const isGhostCard = card.classList.contains('fantasma');
+      
+      // Encontrar container de status no cartão
+      let statusContainer = card.querySelector('.card-header .col-4.text-end');
+      if (!statusContainer) {
+        console.debug(`[CHIPS] Container de status não encontrado para cartão da OS ${ordemId}`);
+        continue;
+      }
+      
+      // Atualizar status com badges apropriados
+      let statusHTML = '';
+      
+      if (isGhostCard) {
+        // Para cartões fantasma, mostrar badge fantasma mas também o status atual
+        statusHTML = `<span class="badge bg-light text-dark"><i class="fas fa-ghost me-1"></i>Fantasma</span>`;
+        if (statusInfo.emProducao) {
+          statusHTML += ` <span class="badge bg-success">Produção</span>`;
+        } else if (statusInfo.emSetup) {
+          statusHTML += ` <span class="badge bg-info">Setup</span>`;
+        } else if (statusInfo.pausado) {
+          statusHTML += ` <span class="badge bg-warning">Pausado</span>`;
+        }
+      } else {
+        // Para cartões reais, mostrar badge adequado ao status atual
+        if (statusInfo.emProducao) {
+          statusHTML = `<span class="badge bg-success">Produção em andamento</span>`;
+        } else if (statusInfo.emSetup) {
+          statusHTML = `<span class="badge bg-info">Setup em andamento</span>`;
+        } else if (statusInfo.pausado) {
+          statusHTML = `<span class="badge bg-warning">Pausado</span>`;
+        } else {
+          statusHTML = `<span class="badge bg-secondary">Aguardando</span>`;
+        }
+      }
+      
+      // Atualizar os chips de status no cartão
+      const firstChild = statusContainer.firstChild;
+      if (firstChild && firstChild.tagName === 'SPAN' && firstChild.classList.contains('badge')) {
+        // Substituir primeiro badge existente
+        firstChild.outerHTML = statusHTML;
+      } else {
+        // Adicionar no início do container
+        statusContainer.innerHTML = statusHTML + statusContainer.innerHTML;
+      }
+    }
+  }
+  
+  // Função auxiliar para determinar status agregado dos ativos por trabalho
+  function determinarStatusAtivos(ativosLista) {
+    const result = {
+      emProducao: false,
+      emSetup: false,
+      pausado: false
+    };
+    
+    if (!Array.isArray(ativosLista)) return result;
+    
+    // Verificar todos os itens ativos para determinar status agregado
+    for (const ativo of ativosLista) {
+      const status = (ativo.status || '').toLowerCase();
+      if (status.includes('produ')) {
+        result.emProducao = true;
+      } else if (status.includes('setup')) {
+        result.emSetup = true;
+      } else if (status.includes('paus')) {
+        result.pausado = true;
+      }
+    }
+    
+    return result;
+  }
+
   // Handle stop broadcasts coming from other tabs to immediately stop timers on the dashboard
   function handleBroadcastStop(payload) {
     try {
@@ -483,11 +601,12 @@
         // Fallback: clear all timers
         resetTimerElements(null);
       }
+      
+      // Refresh data to reflect latest statuses and prevent stale UI
+      try { fetchAndRender(); } catch (_) { /* noop */ }
     } catch (e) {
       console.debug('Falha ao resetar timers do dashboard no stop broadcast:', e);
     }
-    // Refresh data to reflect latest statuses and prevent stale UI
-    try { fetchAndRender(); } catch (_) { /* noop */ }
   }
 
   function onStorage(ev) {
@@ -612,6 +731,7 @@
     });
   }
 
-  // Expose init
+  // Expose init and other useful functions
   window.ApontamentoDashboard = { init };
+  window.renderizarChipsStatus = renderizarChipsStatus;
 })();

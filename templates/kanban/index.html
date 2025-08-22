@@ -2329,9 +2329,23 @@
                 const modal = bootstrap.Modal.getInstance(document.getElementById('criarFantasmaModal'));
                 modal.hide();
                 
-                // Mostrar sucesso e recarregar
+                // Mostrar sucesso e recarregar estado sem reload completo
                 alert('Cartão fantasma criado com sucesso!');
-                window.location.reload();
+                
+                // Em vez de reload completo, recarregar apenas o estado dos apontamentos
+                try {
+                    if (typeof window.recarregarEstadoApontamentos === 'function') {
+                        window.recarregarEstadoApontamentos();
+                    }
+                    // Forçar atualização do kanban recarregando a página após pequeno delay
+                    // para permitir que o backend processe o novo cartão fantasma
+                    setTimeout(() => {
+                        window.location.reload();
+                    }, 100);
+                } catch (e) {
+                    console.warn('Erro ao recarregar estado, fazendo reload completo:', e);
+                    window.location.reload();
+                }
             } else {
                 alert('Erro ao criar cartão fantasma: ' + data.message);
             }

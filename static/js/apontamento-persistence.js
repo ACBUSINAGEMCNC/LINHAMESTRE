@@ -55,6 +55,10 @@ try {
                             payload.itemCodigoBase || null,
                             qtdNum
                         );
+                        // Força atualização imediata e envia broadcast para outras abas
+                        try {
+                            localStorage.setItem('force_qpt_refresh', JSON.stringify({osId, timestamp: Date.now()}));
+                        } catch {}
                     }
                     // Atualizar rótulo "Última qtd" no cabeçalho da QPT
                     try {
@@ -66,19 +70,38 @@ try {
                     try {
                         const c = document.getElementById(`qtd-por-trabalho-${osId}`);
                         if (c && c.dataset) delete c.dataset.qptSig;
-                    } catch {}
-                    try {
-                        if (!(typeof shouldSkipQpt === 'function' && shouldSkipQpt(osId))) {
-                            if (typeof window.atualizarQuantidadesPorTrabalho === 'function') {
-                                window.atualizarQuantidadesPorTrabalho(osId, []);
-                            }
+                        if (typeof window.atualizarQuantidadesPorTrabalho === 'function') {
+                            window.atualizarQuantidadesPorTrabalho(osId, []);
                         }
                         if (typeof window.markQptTouch === 'function') window.markQptTouch(osId);
+                        // Forçar atualização dos chips de status
+                        if (typeof window.renderizarChipsStatus === 'function' && Array.isArray(payload.ativos_por_trabalho)) {
+                            window.renderizarChipsStatus(osId, payload.ativos_por_trabalho);
+                        }
                     } catch {}
                     // Não recarregar status aqui para evitar piscadas nos timers
                 }
             } catch (e) { console.warn('Falha ao processar apontamento_event de outra aba:', e); }
         }
+        // Forçar refresh de QPT quando outra aba emitir o evento
+        if (key === 'force_qpt_refresh') {
+            try {
+                const data = JSON.parse(ev.newValue || 'null');
+                if (!data || typeof data !== 'object') return;
+                const osId = parseInt(data.osId, 10);
+                if (Number.isNaN(osId)) return;
+                
+                // Limpar assinatura da QPT para forçar re-render
+                const c = document.getElementById(`qtd-por-trabalho-${osId}`);
+                if (c && c.dataset) delete c.dataset.qptSig;
+                
+                // Forçar atualização imediata da QPT sem esperar debounce
+                if (typeof window.atualizarQuantidadesPorTrabalho === 'function') {
+                    window.atualizarQuantidadesPorTrabalho(osId, []);
+                }
+            } catch (e) { console.warn('Falha ao processar force_qpt_refresh:', e); }
+        }
+        
         // Broadcast genérico (atualizações diversas: qpt_update, stop, etc.)
         if (key === 'apontamento_broadcast') {
             try {
@@ -336,40 +359,70 @@ function limparTimersTrabalhoDaOS(ordemId) {
 
 // Renderiza chips no status com tipo de trabalho + operador + timer
 function renderizarChipsStatus(ordemId, ativosLista) {
-    // Buscar TODOS os cartões com essa ordem e verificar qual é o real
-    const allCards = document.querySelectorAll(`[data-ordem-id="${ordemId}"]`);
+    // Tentar primeiro no dashboard (data-os-id), depois no kanban (data-ordem-id)
+    let allCards = document.querySelectorAll(`[data-os-id="${ordemId}"]`);
+    if (allCards.length === 0) {
+        allCards = document.querySelectorAll(`[data-ordem-id="${ordemId}"]`);
+    }
     console.debug(`[CHIPS] Encontrados ${allCards.length} cartões para OS ${ordemId}`);
     
-    let card = null;
+    // Forçar uso da função local sempre no kanban para garantir que chips apareçam
+    console.debug(`[CHIPS] Usando função local do persistence para OS ${ordemId}`);
+    
+    // Processar tanto cartões reais quanto fantasmas
+    const cartoesReais = [];
+    const cartoesFantasma = [];
+    
     for (const c of allCards) {
-        if (!c.classList.contains('fantasma')) {
-            card = c;
-            console.debug(`[CHIPS] Usando cartão real para OS ${ordemId}`);
-            break;
+        if (c.classList.contains('fantasma')) {
+            cartoesFantasma.push(c);
+        } else {
+            cartoesReais.push(c);
         }
     }
     
-    if (!card) {
-        console.debug(`[CHIPS] Nenhum cartão REAL encontrado para OS ${ordemId}`);
+    console.debug(`[CHIPS] Encontrados ${cartoesReais.length} cartões reais e ${cartoesFantasma.length} cartões fantasma para OS ${ordemId}`);
+    
+    // Se não há cartões, sair
+    if (cartoesReais.length === 0 && cartoesFantasma.length === 0) {
+        console.debug(`[CHIPS] Nenhum cartão encontrado para OS ${ordemId}`);
         return;
     }
     
-    const container = card.querySelector(`#status-${ordemId}`) || card.querySelector('.status-apontamento');
-    console.debug(`[CHIPS] Procurando container para OS ${ordemId}`, {
-        card: card,
-        statusById: card.querySelector(`#status-${ordemId}`),
-        statusByClass: card.querySelector('.status-apontamento'),
-        container: container
-    });
+    // Função para processar um cartão (real ou fantasma)
+    function processarCartao(card, isFantasma = false) {
+        const container = card.querySelector(`#status-${ordemId}`) || card.querySelector('.status-apontamento');
+        console.debug(`[CHIPS] Procurando container para OS ${ordemId} (${isFantasma ? 'fantasma' : 'real'})`, {
+            card: card,
+            statusById: card.querySelector(`#status-${ordemId}`),
+            statusByClass: card.querySelector('.status-apontamento'),
+            container: container
+        });
+        
+        if (!container) {
+            console.debug(`[CHIPS] Container de status não encontrado para OS ${ordemId} (${isFantasma ? 'fantasma' : 'real'})`);
+            return;
+        }
+        
+        // Limpar timers anteriores dessa OS e conteúdo
+        if (!isFantasma) {
+            limparTimersTrabalhoDaOS(ordemId);
+        }
+        container.innerHTML = '';
+        
+        return container;
+    }
     
-    if (!container) {
-        console.debug(`[CHIPS] Container de status não encontrado para OS ${ordemId}`);
-        console.debug(`[CHIPS] HTML do cartão:`, card.outerHTML.substring(0, 500));
+    // Processar cartões reais primeiro
+    const containersReais = cartoesReais.map(card => processarCartao(card, false)).filter(Boolean);
+    
+    // Processar cartões fantasma
+    const containersFantasma = cartoesFantasma.map(card => processarCartao(card, true)).filter(Boolean);
+    
+    if (containersReais.length === 0 && containersFantasma.length === 0) {
+        console.debug(`[CHIPS] Nenhum container de status encontrado para OS ${ordemId}`);
         return;
     }
-    // Limpar timers anteriores dessa OS e conteúdo
-    limparTimersTrabalhoDaOS(ordemId);
-    container.innerHTML = '';
     
     console.debug(`[CHIPS] Dados recebidos para OS ${ordemId}:`, {
         ativosLista: ativosLista,
@@ -378,9 +431,33 @@ function renderizarChipsStatus(ordemId, ativosLista) {
     });
     
     if (!Array.isArray(ativosLista) || ativosLista.length === 0) {
-        // Opcional: exibir aguardando
-        container.innerHTML = '<small class="text-muted">Aguardando apontamento</small>';
-        console.debug(`[CHIPS] Lista vazia para OS ${ordemId}, exibindo "aguardando"`);
+        // Verificar se há apontamento ativo no backend antes de mostrar "aguardando"
+        console.debug(`[CHIPS] Lista vazia para OS ${ordemId}, verificando status no backend`);
+        
+        // Fazer uma verificação rápida do status atual
+        fetch(`/apontamento/status-ativos`)
+            .then(response => response.json())
+            .then(data => {
+                const statusAtivos = data.status_ativos || [];
+                const osAtiva = statusAtivos.find(s => (s.ordem_servico_id || s.os_id || s.id) == ordemId);
+                
+                if (osAtiva && Array.isArray(osAtiva.ativos_por_trabalho) && osAtiva.ativos_por_trabalho.length > 0) {
+                    console.debug(`[CHIPS] Encontrado status ativo no backend para OS ${ordemId}, re-renderizando`);
+                    // Re-chamar com os dados corretos
+                    renderizarChipsStatus(ordemId, osAtiva.ativos_por_trabalho);
+                } else {
+                    // Mostrar "aguardando" em todos os containers
+                    [...containersReais, ...containersFantasma].forEach(container => {
+                        container.innerHTML = '<small class="text-muted">Aguardando apontamento</small>';
+                    });
+                }
+            })
+            .catch(e => {
+                console.warn(`[CHIPS] Erro ao verificar status no backend:`, e);
+                [...containersReais, ...containersFantasma].forEach(container => {
+                    container.innerHTML = '<small class="text-muted">Aguardando apontamento</small>';
+                });
+            });
         return;
     }
     const frags = [];
@@ -414,7 +491,22 @@ function renderizarChipsStatus(ordemId, ativosLista) {
         // Iniciar timer em seguida (após injetar DOM)
         setTimeout(() => iniciarTimerTrabalho(ordemId, itemId, trabId, inicio), 0);
     });
-    container.innerHTML = frags.join('');
+    
+    // Renderizar chips em todos os containers (reais e fantasmas)
+    const htmlContent = frags.join('');
+    [...containersReais, ...containersFantasma].forEach((container, index) => {
+        const isFantasma = index >= containersReais.length;
+        if (isFantasma) {
+            // Para cartões fantasma, adicionar indicador visual
+            const fantasmaContent = `<div class="d-flex align-items-center gap-2">
+                <span class="badge bg-light text-dark"><i class="fas fa-ghost me-1"></i>Fantasma</span>
+                <div class="flex-grow-1">${htmlContent}</div>
+            </div>`;
+            container.innerHTML = fantasmaContent;
+        } else {
+            container.innerHTML = htmlContent;
+        }
+    });
 }
 
 // Renderiza a lista de quantidades por trabalho ativo no card
