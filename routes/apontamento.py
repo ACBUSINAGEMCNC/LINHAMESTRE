@@ -1476,9 +1476,10 @@ def status_ativos():
         
         for cf in cartoes_fantasma_ativos:
             try:
-                # Verificar se já foi processada (evitar duplicatas)
-                if cf.ordem_servico_id in os_com_status_ativo:
-                    continue  # OS já tem status ativo, não criar cartão fantasma separado
+                # Cartões fantasma devem sempre aparecer, independente de status ativo
+                # Remover verificação que impedia cartões fantasma de aparecer
+                # if cf.ordem_servico_id in os_com_status_ativo:
+                #     continue  # OS já tem status ativo, não criar cartão fantasma separado
                 
                 # Buscar OS do cartão fantasma
                 os_fantasma = OrdemServico.query.get(cf.ordem_servico_id)

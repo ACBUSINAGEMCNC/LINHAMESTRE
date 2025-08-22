@@ -755,7 +755,162 @@ function atualizarDashboard() {
     if (window.ApontamentoDashboard && typeof window.ApontamentoDashboard.init === 'function') {
         window.ApontamentoDashboard.init();
     } else {
+        // Sincronizar com dados do QPT antes de recarregar
+        sincronizarComQPT();
         location.reload();
+    }
+}
+
+// Função para sincronizar dashboard com dados do QPT em tempo real
+function sincronizarComQPT() {
+    try {
+        // Buscar cache QPT do localStorage
+        const LS_KEY = 'qpt_cache_v1';
+        const qptCache = JSON.parse(localStorage.getItem(LS_KEY) || '{}');
+        
+        // Para cada OS no cache QPT, atualizar os dados no backend
+        Object.entries(qptCache).forEach(([osId, trabalhos]) => {
+            if (!trabalhos || typeof trabalhos !== 'object') return;
+            
+            // Para cada trabalho, pegar a última quantidade
+            Object.entries(trabalhos).forEach(([trabId, dados]) => {
+                if (!dados || typeof dados.qty === 'undefined') return;
+                
+                const quantidade = dados.qty;
+                const trabalhoNome = dados.trab;
+                
+                // Enviar atualização para o backend via localStorage event
+                // Isso vai sincronizar os dados do QPT com o dashboard
+                try {
+                    localStorage.setItem('apontamento_event', JSON.stringify({
+                        osId: parseInt(osId),
+                        trabalhoId: trabId,
+                        trabalhoNome: trabalhoNome,
+                        quantidade: quantidade,
+                        timestamp: Date.now()
+                    }));
+                    // Limpar imediatamente para não interferir com outros eventos
+                    setTimeout(() => localStorage.removeItem('apontamento_event'), 100);
+                } catch (e) {
+                    console.debug('Erro ao sincronizar QPT com dashboard:', e);
+                }
+            });
+        });
+        
+        console.log('Sincronização QPT -> Dashboard concluída');
+    } catch (e) {
+        console.warn('Falha na sincronização QPT:', e);
+    }
+}
+
+// Função para atualizar valores em tempo real sem recarregar a página
+function atualizarValoresTempoReal() {
+    try {
+        const LS_KEY = 'qpt_cache_v1';
+        const qptCache = JSON.parse(localStorage.getItem(LS_KEY) || '{}');
+        
+        const cardsAtivos = document.getElementById('cards-ativos');
+        if (!cardsAtivos) return;
+
+        // Normalizador compatível com o módulo para casar nomes
+        const normalizeKey = (s) => {
+            try {
+                return (s || '')
+                    .toString()
+                    .normalize('NFD')
+                    .replace(/[\u0300-\u036f]/g, '')
+                    .trim()
+                    .toLowerCase()
+                    .replace(/[^a-z0-9]+/g, '_')
+                    .replace(/^_+|_+$/g, '');
+            } catch (e) {
+                return (s || '').toString().trim().toLowerCase();
+            }
+        };
+
+        // Atualizar cada cartão no dashboard com dados do QPT
+        Object.entries(qptCache).forEach(([osId, trabalhos]) => {
+            if (!trabalhos || typeof trabalhos !== 'object') return;
+
+            // Selecionar o cartão desta OS
+            const card = cardsAtivos.querySelector(`.card[data-os-id="${osId}"]`);
+            if (!card) return;
+
+            // Para cada trabalho no QPT, atualizar o display correspondente
+            Object.entries(trabalhos).forEach(([trabId, dados]) => {
+                if (!dados) return;
+
+                const qtyRaw = Number(dados.qty || 0);
+                const trabNome = dados.trab || `Trabalho #${trabId}`;
+                const key = normalizeKey(trabNome);
+
+                // Encontrar o bloco do trabalho por chave normalizada
+                const item = card.querySelector(`.mb-3[data-trab-name-key="${key}"]`);
+                if (!item) return;
+
+                const qtdEl = item.querySelector('.ultima-qtd');
+                const progressBar = item.querySelector('[data-progress-bar="1"]');
+
+                if (qtdEl) {
+                    const prevQty = Number(qtdEl.getAttribute('data-ultima-qtd') || 0);
+                    const total = Number(qtdEl.getAttribute('data-total') || 0);
+                    const newQty = Math.max(prevQty, qtyRaw); // evitar regressão visual
+                    const percentage = total > 0 ? Math.round((newQty / total) * 100) : 0;
+
+                    // Atualizar DOM e atributos de dados
+                    qtdEl.setAttribute('data-ultima-qtd', String(newQty));
+                    qtdEl.textContent = `Última qtd: ${newQty} / ${total} (${percentage}%)`;
+
+                    if (progressBar) {
+                        progressBar.style.width = `${percentage}%`;
+                        progressBar.setAttribute('aria-valuenow', String(percentage));
+                        // Recolorir baseado no progresso
+                        progressBar.className = 'progress-bar';
+                        if (percentage > 80) {
+                            progressBar.classList.add('bg-success');
+                        } else if (percentage > 50) {
+                            progressBar.classList.add('bg-warning');
+                        } else if (percentage > 0) {
+                            progressBar.classList.add('bg-info');
+                        } else {
+                            progressBar.classList.add('bg-secondary');
+                        }
+                    }
+
+                    // Persistir no mesmo esquema do módulo para manter cache alinhado
+                    try {
+                        localStorage.setItem(`ap_dash_qty:os:${osId}:trab:${key}`, String(newQty));
+                    } catch (_) { /* noop */ }
+
+                    console.debug(`Dashboard atualizado [OS ${osId}] ${trabNome} = ${newQty}/${total} (${percentage}%)`);
+                }
+            });
+
+            // Atualizar lista QPT se existir
+            const qptContainer = document.getElementById(`qtd-por-trabalho-${osId}`);
+            if (qptContainer) {
+                const listaTrabalhos = qptContainer.querySelector('.qpt-list');
+                if (listaTrabalhos) {
+                    let htmlTrabalhos = '';
+                    Object.entries(trabalhos).forEach(([trabId, dados]) => {
+                        if (!dados) return;
+                        const qty = Number(dados.qty || 0);
+                        const trabNome = dados.trab || `Trabalho #${trabId}`;
+                        htmlTrabalhos += `
+                            <li class="qpt-item" data-trab-nome="${trabNome}">
+                                <span class="qpt-label">${trabNome}</span>
+                                <span class="badge rounded-pill bg-secondary qpt-qty" title="QPT - Tempo real">${qty}</span>
+                            </li>
+                        `;
+                    });
+                    listaTrabalhos.innerHTML = htmlTrabalhos;
+                }
+            }
+        });
+        
+        console.debug('Valores atualizados em tempo real via QPT');
+    } catch (e) {
+        console.warn('Erro ao atualizar valores em tempo real:', e);
     }
 }
 
@@ -1488,9 +1643,26 @@ function imprimirRelatorio() {
 document.addEventListener('DOMContentLoaded', function() {
     initCustomDropdowns();
     atualizarDashboard();
+    
+    // Atualizar valores em tempo real a cada 5 segundos
+    setInterval(function() {
+        if (!document.hidden) {
+            atualizarValoresTempoReal();
+        }
+    }, 5000);
+    
+    // Refresh completo a cada 30 segundos
     setInterval(function() {
         if (!document.hidden) atualizarDashboard();
     }, 30000);
+    
+    // Escutar eventos de localStorage para sincronização em tempo real
+    window.addEventListener('storage', function(e) {
+        if (e.key === 'apontamento_event' || e.key === 'qpt_cache_v1') {
+            // Aguardar um pouco para o QPT processar e depois atualizar
+            setTimeout(atualizarValoresTempoReal, 500);
+        }
+    });
 });
 </script>
 {# endblock removed: standalone template #}

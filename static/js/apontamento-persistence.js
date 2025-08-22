@@ -103,7 +103,19 @@ try {
                     } catch {}
                     // Não recarregar status neste tipo para evitar piscadas no cronômetro
                 } else if (type === 'stop') {
-                    // Limpa status visual e mantém QPT a partir do cache
+                    // Limpa timers e UI imediatamente na mesma aba
+                    try { if (typeof limparTimersTrabalhoDaOS === 'function') limparTimersTrabalhoDaOS(osNum); } catch {}
+                    try { if (typeof pararTimerApontamento === 'function') pararTimerApontamento(osNum); } catch {}
+                    try {
+                        const allCards = document.querySelectorAll(`[data-ordem-id="${osNum}"]`);
+                        let card = null;
+                        for (const c of allCards) { if (!c.classList.contains('fantasma')) { card = c; break; } }
+                        if (card) {
+                            const container = card.querySelector(`#status-${osNum}`) || card.querySelector('.status-apontamento');
+                            if (container) container.innerHTML = '<small class="text-muted">Aguardando apontamento</small>';
+                        }
+                    } catch {}
+                    // Em seguida, recarrega estado e mantém QPT a partir do cache
                     try { if (typeof window.recarregarEstadoApontamentos === 'function') window.recarregarEstadoApontamentos(); } catch {}
                     try {
                         const c = document.getElementById(`qtd-por-trabalho-${osNum}`);
@@ -130,6 +142,13 @@ function shouldSkipQpt(osId) {
         const t = (window.__qptTouch && window.__qptTouch[osId]) || 0;
         return t && (Date.now() - t) < 1200; // 1,2s de tolerância para pular renders concorrentes
     } catch { return false; }
+}
+
+// Emite um evento customizado na mesma aba sempre que a QPT for atualizada
+function emitQptChange(osId) {
+    try {
+        window.dispatchEvent(new CustomEvent('qpt:cache-updated', { detail: { osId } }));
+    } catch (_) {}
 }
 
 // Função para carregar o estado dos apontamentos ao iniciar a página
@@ -433,30 +452,63 @@ function atualizarQuantidadesPorTrabalho(ordemId, ativosLista) {
     } catch (e) {
         ls = {};
     }
-    
-    // Debug: verificar duplicação
-    try { console.debug('[QPT] localStorage atual:', ls[ordemId]); } catch {}
+
+    // Pré-preencher cache atual a partir do LS (se ainda vazio)
+    try {
+        if ((!current.items || Object.keys(current.items).length === 0) && ls[ordemId]) {
+            const raw = ls[ordemId] || {};
+            const rebuilt = {};
+            Object.entries(raw).forEach(([k, v]) => {
+                if (!v) return;
+                const trabNome = (v.trab || '').toString();
+                const trabKey = k.toString();
+                const qtyNum = Number.isFinite(Number(v.qty)) ? Number(v.qty) : '-';
+                if (!rebuilt[trabKey]) rebuilt[trabKey] = { trab: trabNome || 'Trabalho', qty: qtyNum };
+                else {
+                    const prev = rebuilt[trabKey];
+                    const nPrev = Number(prev.qty);
+                    const nNow = Number(qtyNum);
+                    if (Number.isFinite(nNow) && (!Number.isFinite(nPrev) || nNow > nPrev)) rebuilt[trabKey] = { trab: trabNome, qty: qtyNum };
+                }
+            });
+            current.items = rebuilt;
+            if (Object.keys(current.items).length > 0) current.enabled = true;
+        }
+    } catch {}
 
     // Se recebemos lista de ativos, atualizar o cache por TRABALHO e habilitar a persistência visual
     if (Array.isArray(ativosLista) && ativosLista.length > 0) {
         current.enabled = true;
         ativosLista.forEach(ap => {
-            const trabId = (ap.trabalho_id ?? '-').toString();
-            const trab = ap.trabalho_nome || `Trabalho #${trabId}`;
+            const trabNomeNorm = (ap.trabalho_nome || '')
+                .toString()
+                .replace(/\s*\([^)]*\)\s*$/, '')
+                .trim();
+            const trabKey = (ap.trabalho_id != null)
+                ? String(ap.trabalho_id)
+                : (trabNomeNorm || '-');
+            const trabLabel = (ap.trabalho_nome && ap.trabalho_nome.toString().trim())
+                ? ap.trabalho_nome.toString().replace(/\s*\([^)]*\)\s*$/, '').trim()
+                : (trabNomeNorm || `Trabalho #${trabKey}`);
             const qtd = Number.isFinite(Number(ap.ultima_quantidade)) ? Number(ap.ultima_quantidade) : '-';
-            current.items[trabId] = { trab, qty: qtd };
+            current.items[trabKey] = { trab: trabLabel, qty: qtd };
         });
         // Salvar no localStorage (formato novo: items por trabalho)
         try {
             ls[String(ordemId)] = current.items;
             localStorage.setItem(LS_KEY, JSON.stringify(ls));
+            // Emitir evento personalizado para atualizar em tempo real
+            window.dispatchEvent(new CustomEvent('qpt:cache-updated', { detail: ordemId }));
         } catch (e) {}
+        // Notificar a mesma aba para atualização em tempo real
+        try { emitQptChange(ordemId); } catch (_) {}
     }
 
     // Fallback: se não houver itens ainda, tentar carregar do localStorage (compatível com formato antigo)
     if ((!current.items || Object.keys(current.items).length === 0) && ls[ordemId]) {
         const raw = ls[ordemId] || {};
         const rebuilt = {};
+        // Placeholder removido: compatibilidade com formato antigo mantida no bloco try abaixo
         try {
             // Formato novo: { [trabId]: { trab, qty } }
             // Formato antigo: { [qualquer]: { trab, itemCod, qty } } -> usar trabId como chave para evitar duplicação
@@ -503,6 +555,8 @@ function atualizarQuantidadesPorTrabalho(ordemId, ativosLista) {
             ls2[String(ordemId)] = current.items;
             try { localStorage.setItem(LS_KEY, JSON.stringify(ls2)); } catch {}
         } catch (ePersist) { try { console.warn('[QPT] falha ao persistir QPT', ePersist); } catch {} }
+        // Notificar a mesma aba para atualização em tempo real
+        try { emitQptChange(ordemId); } catch (_) {}
 
         const linhas = [];
         // Cabeçalho simples sem badge duplicado
@@ -553,11 +607,19 @@ function atualizarQuantidadesPorTrabalho(ordemId, ativosLista) {
                         const bucket = window.__cacheQtdTrabalho[ordemId];
                         bucket.enabled = true;
                         trabalhos.forEach(t => {
-                            const trabId = ((t.trabalho_id ?? '-').toString());
-                            const trabNome = (t.trabalho_nome || `Trabalho #${trabId}`).toString().replace(/\s*\([^)]*\)\s*$/, '').trim();
+                            const trabNomeNorm = (t.trabalho_nome || '')
+                                .toString()
+                                .replace(/\s*\([^)]*\)\s*$/, '')
+                                .trim();
+                            const trabKey = (t.trabalho_id != null)
+                                ? String(t.trabalho_id)
+                                : (trabNomeNorm || '-');
+                            const trabLabel = (t.trabalho_nome && t.trabalho_nome.toString().trim())
+                                ? t.trabalho_nome.toString().replace(/\s*\([^)]*\)\s*$/, '').trim()
+                                : (trabNomeNorm || `Trabalho #${trabKey}`);
                             const qtyRaw = (t.ultima_quantidade != null ? t.ultima_quantidade : '-');
                             const qty = Number.isFinite(Number(qtyRaw)) ? Number(qtyRaw) : '-';
-                            bucket.items[trabId] = { trab: trabNome, qty };
+                            bucket.items[trabKey] = { trab: trabLabel, qty };
                         });
                         // Persistir em LS
                         try {
@@ -567,6 +629,8 @@ function atualizarQuantidadesPorTrabalho(ordemId, ativosLista) {
                             ls2[String(ordemId)] = bucket.items;
                             try { localStorage.setItem(LS_KEY, JSON.stringify(ls2)); } catch {}
                         } catch {}
+                        // Notificar a mesma aba para atualização em tempo real
+                        try { emitQptChange(ordemId); } catch (_) {}
                         // Forçar re-render agora usando os dados em cache
                         try {
                             if (container && container.dataset) delete container.dataset.qptSig;
@@ -590,12 +654,13 @@ try {
         if (ordemId == null) return;
         const osId = parseInt(ordemId, 10);
         if (Number.isNaN(osId)) return;
-        const trabId = ((trabalhoId ?? '').toString() || '-');
+        const trabId = (trabalhoId != null && trabalhoId !== '') ? String(trabalhoId) : '';
         // Normaliza nome do trabalho: remove sufixo final entre parênteses
-        const trabNome = (trabalhoNome && trabalhoNome.trim())
+        const trabNomeNorm = (trabalhoNome && trabalhoNome.trim())
             ? trabalhoNome.replace(/\s+/g, ' ').replace(/\s*\([^)]*\)\s*$/, '').trim()
-            : `Trabalho #${trabId}`;
-        const key = trabId;
+            : '';
+        const trabKey = (trabId !== '') ? trabId : (trabNomeNorm || '-');
+        const trabNome = trabNomeNorm || (trabId ? `Trabalho #${trabId}` : `Trabalho #${trabKey}`);
         // Determinar a quantidade final: preferir numérica informada; caso vazio, reaproveitar última do cache/LS (por trabalho)
         let qty;
         if (Number.isFinite(Number(quantidade))) {
@@ -605,7 +670,7 @@ try {
             // Buscar no cache em memória
             try {
                 if (window.__cacheQtdTrabalho && window.__cacheQtdTrabalho[osId] && window.__cacheQtdTrabalho[osId].items) {
-                    const prev = window.__cacheQtdTrabalho[osId].items[key];
+                    const prev = window.__cacheQtdTrabalho[osId].items[trabKey];
                     if (prev && prev.qty !== undefined) prevQty = prev.qty;
                 }
             } catch {}
@@ -617,7 +682,7 @@ try {
                     const osEntry = lsObj[String(osId)];
                     if (osEntry) {
                         // Tentar formato novo (por trabalho)
-                        if (osEntry[key] && osEntry[key].qty !== undefined) prevQty = osEntry[key].qty;
+                        if (osEntry[trabKey] && osEntry[trabKey].qty !== undefined) prevQty = osEntry[trabKey].qty;
                         // Compat: formato antigo -> procurar por mesmo nome de trabalho
                         if (prevQty === undefined) {
                             Object.values(osEntry).forEach(v => {
@@ -639,7 +704,7 @@ try {
         if (!store[osId]) store[osId] = { enabled: false, items: {} };
         const current = store[osId];
         current.enabled = true;
-        current.items[key] = { trab: trabNome, qty };
+        current.items[trabKey] = { trab: trabNome, qty };
 
         // Persistir em localStorage
         const LS_KEY = 'qpt_cache_v1';
@@ -647,6 +712,8 @@ try {
         try { ls = JSON.parse(localStorage.getItem(LS_KEY) || '{}'); } catch {}
         ls[String(osId)] = current.items;
         try { localStorage.setItem(LS_KEY, JSON.stringify(ls)); } catch {}
+        // Notificar a mesma aba para atualização em tempo real
+        try { emitQptChange(osId); } catch (_) {}
 
         // Re-renderizar imediatamente usando fallback de cache
         try {

@@ -176,17 +176,18 @@
       setStoredQty(cacheKey, u);
       const pctT = total > 0 ? Math.max(0, Math.min(100, Math.round((u / total) * 100))) : 0;
       const barCls = statusBarClass(t.status);
+      const nameKey = normalizeKey(t.trabalho_nome || 'Serviço');
       return `
-        <div class="mb-3">
+        <div class="mb-3" data-trab-name-key="${nameKey}" data-trab-id="${t.trabalho_id ?? ''}">
           <div class="d-flex justify-content-between align-items-center mb-1">
-            <div class="fw-semibold">${t.trabalho_nome || 'Serviço'}</div>
+            <div class="fw-semibold" data-trab-name="${t.trabalho_nome || 'Serviço'}">${t.trabalho_nome || 'Serviço'}</div>
             <div class="small text-muted">${t.status || ''}</div>
           </div>
           <div class="progress" style="height: 10px;">
-            <div class="progress-bar ${barCls}" role="progressbar" style="width: ${pctT}%;" aria-valuenow="${pctT}" aria-valuemin="0" aria-valuemax="100"></div>
+            <div class="progress-bar ${barCls}" data-progress-bar="1" role="progressbar" style="width: ${pctT}%;" aria-valuenow="${pctT}" aria-valuemin="0" aria-valuemax="100"></div>
           </div>
           <div class="d-flex justify-content-between small text-muted mt-1">
-            <div>Última qtd: ${u} / ${total} (${pctT}%)</div>
+            <div class="ultima-qtd" data-ultima-qtd="${u}" data-total="${total}">Última qtd: ${u} / ${total} (${pctT}%)</div>
             <div class="d-flex gap-2">
               <span>Setup: ${fmtSecs(t.tempo_setup_utilizado)}</span>
               <span>Pausas: ${fmtSecs(t.tempo_pausas_utilizado)}</span>
@@ -196,7 +197,7 @@
         </div>`;
     }).join('');
     return `
-      <div class="card mb-3 ${statusToClass(st)}">
+      <div class="card mb-3 ${statusToClass(st)}" data-os-id="${st.ordem_servico_id ?? st.os_id ?? st.id}">
         <div class="card-header">
           <div class="row align-items-center">
             <div class="col-4 d-flex align-items-center">
@@ -455,6 +456,52 @@
     });
   }
 
+  // Reset any timer elements by removing their data-crono-start attribute
+  function resetTimerElements(root) {
+    try {
+      const scope = root ? root : document;
+      const timers = scope.querySelectorAll('[data-crono-start]');
+      timers.forEach(t => {
+        try { t.removeAttribute('data-crono-start'); } catch (_) { /* noop */ }
+        try { t.textContent = '00:00:00'; } catch (_) { /* noop */ }
+      });
+    } catch (_) { /* noop */ }
+  }
+
+  // Handle stop broadcasts coming from other tabs to immediately stop timers on the dashboard
+  function handleBroadcastStop(payload) {
+    try {
+      if (payload && payload.osId != null) {
+        // Try to scope the reset to the specific OS card when possible
+        const card = document.querySelector(`.card[data-os-id="${payload.osId}"]`) || document.querySelector(`[data-os-id="${payload.osId}"]`);
+        if (card) {
+          resetTimerElements(card);
+        } else {
+          resetTimerElements(null);
+        }
+      } else {
+        // Fallback: clear all timers
+        resetTimerElements(null);
+      }
+    } catch (e) {
+      console.debug('Falha ao resetar timers do dashboard no stop broadcast:', e);
+    }
+    // Refresh data to reflect latest statuses and prevent stale UI
+    try { fetchAndRender(); } catch (_) { /* noop */ }
+  }
+
+  function onStorage(ev) {
+    if (!ev || ev.key !== 'apontamento_broadcast') return;
+    let payload = null;
+    try {
+      payload = JSON.parse(ev.newValue || 'null');
+    } catch (_) { payload = null; }
+    if (!payload || typeof payload !== 'object') return;
+    if (payload.type === 'stop') {
+      handleBroadcastStop(payload);
+    }
+  }
+
   async function fetchAndRender() {
     try {
       // Read filters from UI
@@ -524,6 +571,9 @@
     STATE.timerId = setInterval(tickTimers, 1000);
     if (STATE.refreshId) clearInterval(STATE.refreshId);
     STATE.refreshId = setInterval(() => { if (!document.hidden) fetchAndRender(); }, 10000);
+
+    // Listen to cross-tab stop broadcasts to immediately clear any running timers on the dashboard
+    try { window.addEventListener('storage', onStorage); } catch (_) { /* noop */ }
 
     // Wire up filter change events
     document.getElementById('filter-lista')?.addEventListener('change', function(e) {
