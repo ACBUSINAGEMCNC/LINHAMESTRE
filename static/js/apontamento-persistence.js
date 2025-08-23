@@ -72,6 +72,10 @@ try {
                         if (c && c.dataset) delete c.dataset.qptSig;
                         if (typeof window.atualizarQuantidadesPorTrabalho === 'function') {
                             window.atualizarQuantidadesPorTrabalho(osId, []);
+                            // Fallback 200ms
+                            setTimeout(() => {
+                                try { if (window.atualizarQuantidadesPorTrabalho) window.atualizarQuantidadesPorTrabalho(osId, []); } catch {}
+                            }, 200);
                         }
                         if (typeof window.markQptTouch === 'function') window.markQptTouch(osId);
                         // Forçar atualização dos chips de status
@@ -98,6 +102,10 @@ try {
                 // Forçar atualização imediata da QPT sem esperar debounce
                 if (typeof window.atualizarQuantidadesPorTrabalho === 'function') {
                     window.atualizarQuantidadesPorTrabalho(osId, []);
+                    // Fallback 200ms
+                    setTimeout(() => {
+                        try { if (window.atualizarQuantidadesPorTrabalho) window.atualizarQuantidadesPorTrabalho(osId, []); } catch {}
+                    }, 200);
                 }
             } catch (e) { console.warn('Falha ao processar force_qpt_refresh:', e); }
         }
@@ -120,6 +128,10 @@ try {
                         if (!(typeof shouldSkipQpt === 'function' && shouldSkipQpt(osNum))) {
                             if (typeof window.atualizarQuantidadesPorTrabalho === 'function') {
                                 window.atualizarQuantidadesPorTrabalho(osNum, []);
+                                // Fallback 200ms
+                                setTimeout(() => {
+                                    try { if (window.atualizarQuantidadesPorTrabalho) window.atualizarQuantidadesPorTrabalho(osNum, []); } catch {}
+                                }, 200);
                             }
                         }
                         if (typeof window.markQptTouch === 'function') window.markQptTouch(osNum);
@@ -129,6 +141,26 @@ try {
                     // Limpa timers e UI imediatamente na mesma aba
                     try { if (typeof limparTimersTrabalhoDaOS === 'function') limparTimersTrabalhoDaOS(osNum); } catch {}
                     try { if (typeof pararTimerApontamento === 'function') pararTimerApontamento(osNum); } catch {}
+                    // Marcar flag para forçar atualização imediata de QPT após stop
+                    try {
+                        window.__qptAfterStop = window.__qptAfterStop || {};
+                        window.__qptAfterStop[osNum] = true;
+                        console.debug('[QPT] Marcando OS para atualização imediata após STOP:', osNum);
+                        // Forçar atualização imediata de QPT
+                        if (typeof window.atualizarQuantidadesPorTrabalho === 'function') {
+                            // Limpar assinatura anterior para forçar re-render
+                            try {
+                                const container = document.getElementById(`qtd-por-trabalho-${osNum}`);
+                                if (container && container.dataset) delete container.dataset.qptSig;
+                            } catch {}
+                            // Chamar com lista vazia para forçar uso do cache
+                            window.atualizarQuantidadesPorTrabalho(osNum, []);
+                            // Fallback 200ms
+                            setTimeout(() => {
+                                try { if (window.atualizarQuantidadesPorTrabalho) window.atualizarQuantidadesPorTrabalho(osNum, []); } catch {}
+                            }, 200);
+                        }
+                    } catch {}
                     try {
                         const allCards = document.querySelectorAll(`[data-ordem-id="${osNum}"]`);
                         let card = null;
@@ -144,7 +176,13 @@ try {
                         const c = document.getElementById(`qtd-por-trabalho-${osNum}`);
                         if (c && c.dataset) delete c.dataset.qptSig;
                         if (!(typeof shouldSkipQpt === 'function' && shouldSkipQpt(osNum))) {
-                            if (typeof window.atualizarQuantidadesPorTrabalho === 'function') window.atualizarQuantidadesPorTrabalho(osNum, []);
+                            if (typeof window.atualizarQuantidadesPorTrabalho === 'function') {
+                                window.atualizarQuantidadesPorTrabalho(osNum, []);
+                                // Fallback 200ms
+                                setTimeout(() => {
+                                    try { if (window.atualizarQuantidadesPorTrabalho) window.atualizarQuantidadesPorTrabalho(osNum, []); } catch {}
+                                }, 200);
+                            }
                         }
                         if (typeof window.markQptTouch === 'function') window.markQptTouch(osNum);
                     } catch {}
@@ -174,6 +212,15 @@ function emitQptChange(osId) {
     } catch (_) {}
 }
 
+// Normaliza nomes de trabalho para comparação/deduplicação
+function normalizeTrabLabel(n) {
+    try {
+        return (n || '').toString().replace(/\s*\([^)]*\)\s*$/, '').trim().toLowerCase();
+    } catch {
+        return '';
+    }
+}
+
 // Função para carregar o estado dos apontamentos ao iniciar a página
 function carregarEstadoApontamentos() {
     if (_carregandoEstado) {
@@ -183,18 +230,14 @@ function carregarEstadoApontamentos() {
     _carregandoEstado = true;
     console.log('Carregando estado dos apontamentos...');
     
-    // Limpar cache de debounce para forçar atualizações
+    // Limpar apenas debounce; manter caches para preservar últimas quantidades
     try {
         if (window._qptDebounceMap) {
             window._qptDebounceMap.clear();
         }
-        // Limpar também cache localStorage problemático
-        localStorage.removeItem('qpt_cache_v1');
-        if (window.__cacheQtdTrabalho) {
-            window.__cacheQtdTrabalho = {};
-        }
+        // Não limpar localStorage nem __cacheQtdTrabalho aqui; isso removia as últimas quantidades por trabalho
     } catch (e) {
-        console.debug('Cache QPT não encontrado ou já limpo');
+        console.debug('Debounce QPT não encontrado ou já limpo');
     }
     // Verificar se há algum apontamento ativo no momento da recarga
     fetch('/apontamento/status-ativos')
@@ -359,13 +402,18 @@ function limparTimersTrabalhoDaOS(ordemId) {
 
 // Renderiza chips no status com tipo de trabalho + operador + timer
 function renderizarChipsStatus(ordemId, ativosLista) {
-    // Tentar primeiro no dashboard (data-os-id), depois no kanban (data-ordem-id)
-    let allCards = document.querySelectorAll(`[data-os-id="${ordemId}"]`);
+    // Coletar possíveis nós e normalizar para o elemento do cartão real (.kanban-card)
+    const candidateNodes = Array.from(document.querySelectorAll(`[data-os-id="${ordemId}"], [data-ordem-id="${ordemId}"]`));
+    let allCards = candidateNodes
+        .map(n => n.closest('.kanban-card') || n)
+        .filter(el => el && el.classList && el.classList.contains('kanban-card'));
+    // Se nada encontrado, tentativa direta por seletor específico do cartão
     if (allCards.length === 0) {
-        allCards = document.querySelectorAll(`[data-ordem-id="${ordemId}"]`);
+        allCards = Array.from(document.querySelectorAll(`.kanban-card[data-ordem-id="${ordemId}"]`));
     }
-    console.debug(`[CHIPS] Encontrados ${allCards.length} cartões para OS ${ordemId}`);
-    
+    // Deduplicar
+    allCards = Array.from(new Set(allCards));
+    console.debug(`[CHIPS] Encontrados ${allCards.length} cartões (.kanban-card) para OS ${ordemId}`);
     // Forçar uso da função local sempre no kanban para garantir que chips apareçam
     console.debug(`[CHIPS] Usando função local do persistence para OS ${ordemId}`);
     
@@ -417,7 +465,19 @@ function renderizarChipsStatus(ordemId, ativosLista) {
     const containersReais = cartoesReais.map(card => processarCartao(card, false)).filter(Boolean);
     
     // Processar cartões fantasma
-    const containersFantasma = cartoesFantasma.map(card => processarCartao(card, true)).filter(Boolean);
+    const containersFantasma = cartoesFantasma.map(card => {
+        // Garantir que o cartão fantasma tenha um container de status
+        const container = card.querySelector('.apontamento-status') || card.querySelector('.status-apontamento');
+        if (container) {
+            console.debug(`[CHIPS] Container encontrado para cartão fantasma OS ${ordemId}, ID ${card.dataset.cartaoId || 'desconhecido'}`);
+            // Limpar conteúdo
+            container.innerHTML = '';
+            return container;
+        } else {
+            console.debug(`[CHIPS] Nenhum container encontrado para cartão fantasma OS ${ordemId}`);
+            return null;
+        }
+    }).filter(Boolean);
     
     if (containersReais.length === 0 && containersFantasma.length === 0) {
         console.debug(`[CHIPS] Nenhum container de status encontrado para OS ${ordemId}`);
@@ -511,8 +571,20 @@ function renderizarChipsStatus(ordemId, ativosLista) {
 
 // Renderiza a lista de quantidades por trabalho ativo no card
 function atualizarQuantidadesPorTrabalho(ordemId, ativosLista) {
-    const container = document.getElementById(`qtd-por-trabalho-${ordemId}`);
-    if (!container) return;
+    let container = document.getElementById(`qtd-por-trabalho-${ordemId}`);
+    if (!container) {
+        // Tentar localizar dentro do cartão REAL (não-fantasma) para evitar colisão de IDs
+        try {
+            const allCards = document.querySelectorAll(`[data-ordem-id="${ordemId}"]`);
+            for (const c of allCards) {
+                if (!c.classList.contains('fantasma')) {
+                    const scoped = c.querySelector(`#qtd-por-trabalho-${ordemId}`);
+                    if (scoped) { container = scoped; break; }
+                }
+            }
+        } catch {}
+    }
+    if (!container) { try { console.debug('[QPT] container não encontrado para OS', ordemId); } catch {} return; }
 
     // Cache por OS para manter últimas quantidades por trabalho após primeiro apontamento
     window.__cacheQtdTrabalho = window.__cacheQtdTrabalho || {}; // { [ordemId]: { enabled: true, items: { [trabIdOrKey]: { trab, qty } } } }
@@ -521,11 +593,18 @@ function atualizarQuantidadesPorTrabalho(ordemId, ativosLista) {
         store[ordemId] = { enabled: false, items: {} };
     }
 
-    // Debounce: ignorar chamadas "vazias" muito próximas (ex.: STOP imediato + tardio)
-    // para evitar re-renderizações concorrentes e duplicidade visual momentânea
+    // Registrar timestamp para debounce
     window.__qptRenderLast = window.__qptRenderLast || {};
     const isEmptyCall = !(Array.isArray(ativosLista) && ativosLista.length > 0);
-    if (isEmptyCall) {
+    
+    // Verificar se esta é uma chamada após STOP (forçar atualização)
+    const isAfterStop = window.__qptAfterStop && window.__qptAfterStop[ordemId];
+    if (isAfterStop) {
+        // Limpar flag após uso
+        delete window.__qptAfterStop[ordemId];
+        console.debug('[QPT] Forçando atualização após STOP para OS', ordemId);
+    } else if (isEmptyCall) {
+        // Manter debounce apenas para chamadas vazias que não são após STOP
         const lastTs = window.__qptRenderLast[ordemId] || 0;
         if (lastTs && (Date.now() - lastTs) < 400) {
             try { console.debug('[QPT] debounce: ignorando render vazio recente', { ordemId }); } catch {}
@@ -564,6 +643,27 @@ function atualizarQuantidadesPorTrabalho(ordemId, ativosLista) {
                 }
             });
             current.items = rebuilt;
+            // Deduplicar por nome normalizado (preferir chaves numéricas e maior qty)
+            try {
+                const byLabel = {};
+                const dedup = {};
+                Object.entries(current.items || {}).forEach(([k, v]) => {
+                    if (!v) return;
+                    const label = normalizeTrabLabel(v.trab);
+                    if (!label) return;
+                    const isId = /^\d+$/.test(k);
+                    const qtyNum = Number.isFinite(Number(v.qty)) ? Number(v.qty) : Number.NEGATIVE_INFINITY;
+                    if (!byLabel[label]) {
+                        byLabel[label] = { key: k, val: v, isId, qty: qtyNum };
+                    } else {
+                        const cur = byLabel[label];
+                        const better = (isId && !cur.isId) || (!isId && !cur.isId && qtyNum > cur.qty) || (isId && cur.isId && qtyNum > cur.qty);
+                        if (better) byLabel[label] = { key: k, val: v, isId, qty: qtyNum };
+                    }
+                });
+                Object.values(byLabel).forEach(({ key, val }) => { dedup[key] = val; });
+                current.items = dedup;
+            } catch {}
             if (Object.keys(current.items).length > 0) current.enabled = true;
         }
     } catch {}
@@ -571,6 +671,7 @@ function atualizarQuantidadesPorTrabalho(ordemId, ativosLista) {
     // Se recebemos lista de ativos, atualizar o cache por TRABALHO e habilitar a persistência visual
     if (Array.isArray(ativosLista) && ativosLista.length > 0) {
         current.enabled = true;
+        // Atualizar itens ativos e migrar possíveis chaves antigas por NOME -> ID
         ativosLista.forEach(ap => {
             const trabNomeNorm = (ap.trabalho_nome || '')
                 .toString()
@@ -583,8 +684,43 @@ function atualizarQuantidadesPorTrabalho(ordemId, ativosLista) {
                 ? ap.trabalho_nome.toString().replace(/\s*\([^)]*\)\s*$/, '').trim()
                 : (trabNomeNorm || `Trabalho #${trabKey}`);
             const qtd = Number.isFinite(Number(ap.ultima_quantidade)) ? Number(ap.ultima_quantidade) : '-';
+
+            // Migrar: remover chave antiga baseada em nome se existir com mesmo label
+            try {
+                const label = normalizeTrabLabel(trabLabel);
+                Object.entries(current.items || {}).forEach(([k, v]) => {
+                    if (k === trabKey || !v) return;
+                    if (normalizeTrabLabel(v.trab) === label && !/^\d+$/.test(k) && /^\d+$/.test(trabKey)) {
+                        delete current.items[k];
+                    }
+                });
+            } catch {}
+
             current.items[trabKey] = { trab: trabLabel, qty: qtd };
         });
+
+        // Deduplicar por nome normalizado após atualização dos ativos
+        try {
+            const byLabel = {};
+            const dedup = {};
+            Object.entries(current.items).forEach(([k, v]) => {
+                if (!v) return;
+                const label = normalizeTrabLabel(v.trab);
+                if (!label) return;
+                const isId = /^\d+$/.test(k);
+                const qtyNum = Number.isFinite(Number(v.qty)) ? Number(v.qty) : Number.NEGATIVE_INFINITY;
+                if (!byLabel[label]) {
+                    byLabel[label] = { key: k, val: v, isId, qty: qtyNum };
+                } else {
+                    const cur = byLabel[label];
+                    const better = (isId && !cur.isId) || (!isId && !cur.isId && qtyNum > cur.qty) || (isId && cur.isId && qtyNum > cur.qty);
+                    if (better) byLabel[label] = { key: k, val: v, isId, qty: qtyNum };
+                }
+            });
+            Object.values(byLabel).forEach(({ key, val }) => { dedup[key] = val; });
+            current.items = dedup;
+        } catch {}
+
         // Salvar no localStorage (formato novo: items por trabalho)
         try {
             ls[String(ordemId)] = current.items;
@@ -693,11 +829,9 @@ function atualizarQuantidadesPorTrabalho(ordemId, ativosLista) {
                     try {
                         const trabalhos = Array.isArray(det.trabalhos) ? det.trabalhos : [];
                         if (trabalhos.length === 0) return;
-                        // Preencher cache por trabalho usando nome e última quantidade conhecida
-                        window.__cacheQtdTrabalho = window.__cacheQtdTrabalho || {};
-                        if (!window.__cacheQtdTrabalho[ordemId]) window.__cacheQtdTrabalho[ordemId] = { enabled: false, items: {} };
-                        const bucket = window.__cacheQtdTrabalho[ordemId];
-                        bucket.enabled = true;
+
+                        // Montar items a partir do fallback de detalhes
+                        const bucket = { enabled: true, items: {} };
                         trabalhos.forEach(t => {
                             const trabNomeNorm = (t.trabalho_nome || '')
                                 .toString()
@@ -713,19 +847,52 @@ function atualizarQuantidadesPorTrabalho(ordemId, ativosLista) {
                             const qty = Number.isFinite(Number(qtyRaw)) ? Number(qtyRaw) : '-';
                             bucket.items[trabKey] = { trab: trabLabel, qty };
                         });
-                        // Persistir em LS
+
+                        // Deduplicar por nome normalizado (preferir chave numérica e maior qty)
                         try {
-                            const LS_KEY = 'qpt_cache_v1';
-                            let ls2 = {};
-                            try { ls2 = JSON.parse(localStorage.getItem(LS_KEY) || '{}'); } catch {}
-                            ls2[String(ordemId)] = bucket.items;
-                            try { localStorage.setItem(LS_KEY, JSON.stringify(ls2)); } catch {}
+                            const byLabel = {};
+                            const dedup = {};
+                            Object.entries(bucket.items || {}).forEach(([k, v]) => {
+                                if (!v) return;
+                                const label = normalizeTrabLabel(v.trab);
+                                if (!label) return;
+                                const isId = /^\d+$/.test(k);
+                                const qtyNum = Number.isFinite(Number(v.qty)) ? Number(v.qty) : Number.NEGATIVE_INFINITY;
+                                if (!byLabel[label]) {
+                                    byLabel[label] = { key: k, val: v, isId, qty: qtyNum };
+                                } else {
+                                    const cur = byLabel[label];
+                                    const better = (isId && !cur.isId) || (!isId && !cur.isId && qtyNum > cur.qty) || (isId && cur.isId && qtyNum > cur.qty);
+                                    if (better) byLabel[label] = { key: k, val: v, isId, qty: qtyNum };
+                                }
+                            });
+                            Object.values(byLabel).forEach(({ key, val }) => { dedup[key] = val; });
+                            bucket.items = dedup;
                         } catch {}
-                        // Notificar a mesma aba para atualização em tempo real
-                        try { emitQptChange(ordemId); } catch (_) {}
-                        // Forçar re-render agora usando os dados em cache
+
+                        // Atualizar cache em memória e LS
+                        current.enabled = true;
+                        current.items = bucket.items;
                         try {
-                            if (container && container.dataset) delete container.dataset.qptSig;
+                            ls[String(ordemId)] = current.items;
+                            localStorage.setItem(LS_KEY, JSON.stringify(ls));
+                        } catch {}
+
+                        // Notificar e forçar re-render agora usando os dados em cache
+                        try { emitQptChange(ordemId); } catch (_) {}
+                        // Resolver container dentro do cartão REAL ao limpar assinatura
+                        try {
+                            let cont = document.getElementById(`qtd-por-trabalho-${ordemId}`);
+                            if (!cont) {
+                                const cards = document.querySelectorAll(`[data-ordem-id="${ordemId}"]`);
+                                for (const c of cards) {
+                                    if (!c.classList.contains('fantasma')) {
+                                        const scoped = c.querySelector(`#qtd-por-trabalho-${ordemId}`);
+                                        if (scoped) { cont = scoped; break; }
+                                    }
+                                }
+                            }
+                            if (cont && cont.dataset) delete cont.dataset.qptSig;
                         } catch {}
                         try { window.atualizarQuantidadesPorTrabalho(ordemId, []); } catch {}
                         try { markQptTouch(ordemId); } catch {}
@@ -796,7 +963,40 @@ try {
         if (!store[osId]) store[osId] = { enabled: false, items: {} };
         const current = store[osId];
         current.enabled = true;
+        // Migrar chaves antigas por NOME -> ID, se aplicável
+        try {
+            const labelNew = normalizeTrabLabel(trabNome);
+            Object.entries(current.items || {}).forEach(([k, v]) => {
+                if (!v || k === trabKey) return;
+                if (normalizeTrabLabel(v.trab) === labelNew && !/^\d+$/.test(k) && /^\d+$/.test(trabKey)) {
+                    delete current.items[k];
+                }
+            });
+        } catch {}
+
         current.items[trabKey] = { trab: trabNome, qty };
+
+        // Deduplicar por nome normalizado (preferir chave numérica e maior qty)
+        try {
+            const byLabel = {};
+            const dedup = {};
+            Object.entries(current.items || {}).forEach(([k, v]) => {
+                if (!v) return;
+                const label = normalizeTrabLabel(v.trab);
+                if (!label) return;
+                const isId = /^\d+$/.test(k);
+                const qtyNum = Number.isFinite(Number(v.qty)) ? Number(v.qty) : Number.NEGATIVE_INFINITY;
+                if (!byLabel[label]) {
+                    byLabel[label] = { key: k, val: v, isId, qty: qtyNum };
+                } else {
+                    const cur = byLabel[label];
+                    const better = (isId && !cur.isId) || (!isId && !cur.isId && qtyNum > cur.qty) || (isId && cur.isId && qtyNum > cur.qty);
+                    if (better) byLabel[label] = { key: k, val: v, isId, qty: qtyNum };
+                }
+            });
+            Object.values(byLabel).forEach(({ key, val }) => { dedup[key] = val; });
+            current.items = dedup;
+        } catch {}
 
         // Persistir em localStorage
         const LS_KEY = 'qpt_cache_v1';
@@ -809,10 +1009,19 @@ try {
 
         // Re-renderizar imediatamente usando fallback de cache
         try {
-            // Limpar assinatura anterior para forçar re-render, se existir
+            // Limpar assinatura anterior para forçar re-render, se existir (no cartão REAL)
             try {
-                const container = document.getElementById(`qtd-por-trabalho-${osId}`);
-                if (container && container.dataset) delete container.dataset.qptSig;
+                let cont = document.getElementById(`qtd-por-trabalho-${osId}`);
+                if (!cont) {
+                    const cards = document.querySelectorAll(`[data-ordem-id="${osId}"]`);
+                    for (const c of cards) {
+                        if (!c.classList.contains('fantasma')) {
+                            const scoped = c.querySelector(`#qtd-por-trabalho-${osId}`);
+                            if (scoped) { cont = scoped; break; }
+                        }
+                    }
+                }
+                if (cont && cont.dataset) delete cont.dataset.qptSig;
             } catch {}
             atualizarQuantidadesPorTrabalho(osId, []);
             // Marcar toque recente para evitar renders redundantes em seguida

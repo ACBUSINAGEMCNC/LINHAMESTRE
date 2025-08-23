@@ -1430,6 +1430,7 @@
                 // No STOP não deve exibir motivo de parada e nada é obrigatório
                 divQuantidade.style.display = 'block';
                 divMotivoParada.style.display = 'none';
+                // STOP: quantidade opcional, sem motivo de parada
                 quantidade.required = false;
                 motivoParada.required = false;
                 quantidade.placeholder = 'Quantidade final no turno (opcional)';
@@ -1705,6 +1706,19 @@
                             localStorage.setItem('apontamento_broadcast', JSON.stringify({ type: 'stop', osId: osIdNum, ts: Date.now() }));
                         }
                     } catch {}
+                    // Marcar flag after-stop nesta mesma aba e limpar assinatura; a atualização ocorrerá após o seed de cache abaixo
+                    try {
+                        const osIdNum = parseInt(ordemAtualId, 10);
+                        if (!Number.isNaN(osIdNum)) {
+                            window.__qptAfterStop = window.__qptAfterStop || {};
+                            window.__qptAfterStop[osIdNum] = true;
+                            try { console.debug('[QPT] (same tab) flag after STOP set', osIdNum); } catch {}
+                            try {
+                                const c = document.getElementById(`qtd-por-trabalho-${osIdNum}`);
+                                if (c && c.dataset) delete c.dataset.qptSig;
+                            } catch {}
+                        }
+                    } catch {}
                 } else {
                     // Para demais ações, atualizar status normalmente
                     atualizarStatusCartao(ordemAtualId, data.status);
@@ -1746,6 +1760,10 @@
                                 if (c && c.dataset) delete c.dataset.qptSig;
                             } catch {}
                             window.atualizarQuantidadesPorTrabalho(osIdNum, entrada);
+                            // Fallback 200ms: reintentar com lista vazia para garantir refresh em casos de atraso no DOM
+                            setTimeout(() => {
+                                try { if (window.atualizarQuantidadesPorTrabalho) window.atualizarQuantidadesPorTrabalho(osIdNum, []); } catch {}
+                            }, 200);
                             try { console.debug('[QPT] render imediato pós-salvar', { osIdNum, entrada }); } catch {}
                             try { if (window.markQptTouch) window.markQptTouch(osIdNum); } catch {}
                         }
@@ -1791,6 +1809,10 @@
                         } catch {}
                         if (window.atualizarQuantidadesPorTrabalho) {
                             window.atualizarQuantidadesPorTrabalho(osIdNum, []);
+                            // Fallback 200ms: reintentar para garantir refresh
+                            setTimeout(() => {
+                                try { if (window.atualizarQuantidadesPorTrabalho) window.atualizarQuantidadesPorTrabalho(osIdNum, []); } catch {}
+                            }, 200);
                         }
                         try { if (window.markQptTouch) window.markQptTouch(osIdNum); } catch {}
                         // Broadcast QPT update para outras abas
