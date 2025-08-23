@@ -1477,34 +1477,42 @@ def status_ativos():
         for cf in cartoes_fantasma_ativos:
             try:
                 # Cartões fantasma devem sempre aparecer, independente de status ativo
-                # Remover verificação que impedia cartões fantasma de aparecer
-                # if cf.ordem_servico_id in os_com_status_ativo:
-                #     continue  # OS já tem status ativo, não criar cartão fantasma separado
+                # CORREÇÃO: Permitir cartões fantasma mesmo com status ativo para mostrar no dashboard
                 
                 # Buscar OS do cartão fantasma
                 os_fantasma = OrdemServico.query.get(cf.ordem_servico_id)
                 if not os_fantasma:
                     continue
                 
-                # Verificar filtros
+                # Verificar filtros - CORREÇÃO: Sempre mostrar cartões fantasma no dashboard
                 try:
                     if lista_filters_set is not None:
                         lista_fantasma_lower = cf.lista_kanban.lower() if cf.lista_kanban else None
-                        if lista_fantasma_lower not in lista_filters_set:
+                        # Se filtro não inclui "todas", verificar se a lista do fantasma está incluída
+                        if 'todas' not in lista_filters_set and lista_fantasma_lower not in lista_filters_set:
                             continue
                     
-                    if status_filter_set is not None:
-                        if 'fantasma' not in status_filter_set:
-                            continue
+                    # CORREÇÃO: Não filtrar por status "fantasma" - sempre mostrar cartões fantasma
+                    # if status_filter_set is not None:
+                    #     if 'fantasma' not in status_filter_set:
+                    #         continue
                 except Exception:
                     pass
+                
+                # Verificar se há apontamento ativo para esta OS
+                status_ativo_os = StatusProducaoOS.query.filter_by(ordem_servico_id=cf.ordem_servico_id).first()
+                status_atual_real = 'Fantasma'
+                
+                # Se há status ativo, usar o status real em vez de "Fantasma"
+                if status_ativo_os and status_ativo_os.status_atual != 'Finalizado':
+                    status_atual_real = status_ativo_os.status_atual
                 
                 # Criar status_info para cartão fantasma
                 status_info_fantasma = {
                     'id': f"fantasma_{cf.id}",
                     'ordem_servico_id': cf.ordem_servico_id,
                     'ordem_id': cf.ordem_servico_id,
-                    'status_atual': 'Fantasma',
+                    'status_atual': status_atual_real,
                     'lista_kanban': cf.lista_kanban,
                     'is_fantasma': True,
                     'fantasma_id': cf.id
@@ -2095,6 +2103,9 @@ def registrar_apontamento():
             status_os.trabalho_atual_id = None
             status_os.inicio_acao = None
             status_os.motivo_parada = None
+            # CORREÇÃO: Preservar quantidade informada no STOP
+            if dados.get('quantidade'):
+                status_os.quantidade_atual = int(dados['quantidade'])
                 
         elif tipo_acao == 'fim_producao':
             status_os.status_atual = 'Finalizado'

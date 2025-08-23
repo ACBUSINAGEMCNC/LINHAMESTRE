@@ -1589,7 +1589,43 @@
             return;
         }
         try {
-            const ultimaQ = await obterUltimaQuantidade(ordemId, itemId, trabalhoId);
+            // Primeiro, tentar buscar do QPT atualizado no DOM
+            let ultimaQ = null;
+            
+            // Buscar o cartão da OS no DOM
+            const cartoes = document.querySelectorAll('.kanban-card');
+            for (const cartao of cartoes) {
+                const osIdElement = cartao.querySelector('[data-ordem-id]');
+                if (osIdElement && parseInt(osIdElement.getAttribute('data-ordem-id')) === ordemId) {
+                    // Encontrou o cartão da OS, agora buscar o QPT do trabalho específico
+                    const qptItems = cartao.querySelectorAll('.qpt-item');
+                    for (const qptItem of qptItems) {
+                        const trabalhoNome = qptItem.getAttribute('data-trab-nome');
+                        const qptQty = qptItem.querySelector('.qpt-qty');
+                        
+                        // Verificar se é o trabalho correto comparando com o select
+                        const trabalhoSelect = document.getElementById('tipoTrabalho');
+                        const trabalhoSelecionado = trabalhoSelect.options[trabalhoSelect.selectedIndex];
+                        
+                        if (trabalhoSelecionado && trabalhoSelecionado.text === trabalhoNome && qptQty) {
+                            ultimaQ = parseInt(qptQty.textContent.trim());
+                            console.log(`QPT encontrado no DOM: ${ultimaQ} para trabalho ${trabalhoNome}`);
+                            break;
+                        }
+                    }
+                    if (ultimaQ !== null) break;
+                }
+            }
+            
+            // Se não encontrou no QPT, buscar via backend
+            if (ultimaQ === null) {
+                ultimaQ = await obterUltimaQuantidade(ordemId, itemId, trabalhoId);
+            } else {
+                // Atualizar o cache com o valor do QPT
+                const chave = chaveUltimaQuantidade(ordemId, itemId, trabalhoId);
+                cacheUltimaQuantidade.set(chave, ultimaQ);
+            }
+            
             if (info) info.textContent = `Última quantidade apontada para este item/trabalho: ${ultimaQ}`;
             if (qtdInput) {
                 qtdInput.min = Math.max(0, ultimaQ);
@@ -1736,7 +1772,10 @@
                     const trabalhoId = trabSelect ? trabSelect.value : null;
                     const trabalhoNome = trabSelect && trabSelect.selectedOptions[0] ? trabSelect.selectedOptions[0].textContent : null;
                     const itemCod = itemSelect && itemSelect.selectedOptions[0] ? itemSelect.selectedOptions[0].textContent : null;
-                    const qtdResp = (data && 'ultima_quantidade' in data) ? data.ultima_quantidade : (qtdInput ? qtdInput.value : null);
+                    // CORREÇÃO: Para STOP, priorizar quantidade informada no modal sobre a resposta do backend
+                    const qtdInput_value = qtdInput ? qtdInput.value : null;
+                    const qtdResp = (qtdInput_value && qtdInput_value.trim() !== '') ? qtdInput_value : 
+                                   (data && 'ultima_quantidade' in data) ? data.ultima_quantidade : null;
                     if (window.atualizarQPTCacheEntrada && osId && trabalhoId) {
                         window.atualizarQPTCacheEntrada(osId, trabalhoId, trabalhoNome, itemCod, qtdResp);
                     }
@@ -1768,6 +1807,26 @@
                             try { if (window.markQptTouch) window.markQptTouch(osIdNum); } catch {}
                         }
                     } catch (eForce) { console.warn('Falha ao forçar render imediato da QPT:', eForce); }
+                    // CORREÇÃO: Atualizar campo "Última quantidade" no modal se estiver aberto
+                    try {
+                        const modal = document.getElementById('apontamentoModal');
+                        const modalInstance = bootstrap.Modal.getInstance(modal);
+                        if (modalInstance && qtdResp && Number.isFinite(Number(qtdResp))) {
+                            // Atualizar o campo de última quantidade no modal
+                            setTimeout(() => {
+                                const info = document.getElementById('ultimaQuantidadeInfo');
+                                if (info && trabalhoNome) {
+                                    info.textContent = `Última quantidade apontada para este item/trabalho: ${qtdResp}`;
+                                }
+                                // Atualizar placeholder do input de quantidade
+                                const qtdInputModal = document.getElementById('quantidade');
+                                if (qtdInputModal) {
+                                    qtdInputModal.min = Math.max(0, Number(qtdResp));
+                                    qtdInputModal.placeholder = `>= ${qtdResp}`;
+                                }
+                            }, 100);
+                        }
+                    } catch (eModal) { console.warn('Falha ao atualizar modal:', eModal); }
                     // Sempre recarregar estado dos apontamentos no mesmo aba (chips/botões/status)
                     setTimeout(() => {
                         try { 
