@@ -1754,11 +1754,15 @@ def detalhes_ordem_servico(ordem_id):
         
         tempo_estimado_total = tempo_setup_estimado_total + tempo_producao_estimado_total
         
-        # Analytics por operador
+        # Analytics por operador (tempos e quantidade)
         analytics_operadores = {}
+        # Controle de última quantidade por trabalho (cumulativo) para somar apenas incrementos
+        last_qty_by_trabalho = {}
         for trabalho_key, dados in trabalhos_analytics.items():
-            for ap in dados['apontamentos']:
-                if ap['operador_id'] and ap['duracao_segundos']:
+            # Iterar ordenando por data para calcular incrementos corretamente
+            apts_ordenados = sorted(dados['apontamentos'], key=lambda x: x['data_hora'] or '')
+            for ap in apts_ordenados:
+                if ap['operador_id'] and ap['duracao_segundos'] is not None:
                     op_id = ap['operador_id']
                     if op_id not in analytics_operadores:
                         analytics_operadores[op_id] = {
@@ -1766,9 +1770,11 @@ def detalhes_ordem_servico(ordem_id):
                             'tempo_setup': 0,
                             'tempo_producao': 0,
                             'tempo_pausas': 0,
+                            'quantidade_total': 0,
                             'trabalhos': {}
                         }
                     
+                    # Somar tempos por tipo de ação
                     if ap['tipo_acao'] in ['inicio_setup', 'fim_setup']:
                         analytics_operadores[op_id]['tempo_setup'] += ap['duracao_segundos']
                     elif ap['tipo_acao'] in ['inicio_producao', 'fim_producao']:
@@ -1782,7 +1788,8 @@ def detalhes_ordem_servico(ordem_id):
                         analytics_operadores[op_id]['trabalhos'][trabalho_nome] = {
                             'tempo_setup': 0,
                             'tempo_producao': 0,
-                            'tempo_pausas': 0
+                            'tempo_pausas': 0,
+                            'quantidade': 0
                         }
                     
                     if ap['tipo_acao'] in ['inicio_setup', 'fim_setup']:
@@ -1791,7 +1798,79 @@ def detalhes_ordem_servico(ordem_id):
                         analytics_operadores[op_id]['trabalhos'][trabalho_nome]['tempo_producao'] += ap['duracao_segundos']
                     elif ap['tipo_acao'] in ['pausa', 'stop']:
                         analytics_operadores[op_id]['trabalhos'][trabalho_nome]['tempo_pausas'] += ap['duracao_segundos']
+
+                    # Quantidade: somar apenas incrementos em eventos de fim de produção
+                    if ap['tipo_acao'] == 'fim_producao' and ap.get('quantidade') is not None:
+                        try:
+                            qtd_atual = int(ap.get('quantidade') or 0)
+                        except Exception:
+                            qtd_atual = 0
+                        # Usar a chave do trabalho para pegar delta cumulativo desta linha de produção
+                        key_trab = trabalho_key
+                        last = last_qty_by_trabalho.get(key_trab, 0)
+                        delta = qtd_atual - last
+                        if delta > 0:
+                            analytics_operadores[op_id]['quantidade_total'] += delta
+                            analytics_operadores[op_id]['trabalhos'][trabalho_nome]['quantidade'] += delta
+                            last_qty_by_trabalho[key_trab] = qtd_atual
         
+        # Analytics por tipo de trabalho (estimado vs alcançado)
+        analytics_trabalhos = {}
+        for trabalho_key, dados in trabalhos_analytics.items():
+            trabalho_id = dados['trabalho_id']
+            trabalho_nome = dados['trabalho_nome']
+            
+            # Tempos reais
+            tempo_setup_real = dados['setup_total']
+            tempo_producao_real = dados['producao_total']
+            tempo_pausas_real = dados['pausas_total']
+            
+            # Tempos estimados para este trabalho específico
+            tempo_setup_estimado = 0
+            tempo_producao_estimado = 0
+            
+            if trabalho_id in estimativas_trabalhos:
+                est = estimativas_trabalhos[trabalho_id]
+                tempo_setup_estimado = est['tempo_setup']
+                if quantidade_total_os > 0:
+                    tempo_producao_estimado = est['tempo_peca'] * quantidade_total_os
+            
+            # Calcular eficiências específicas
+            eficiencia_setup = 0
+            if tempo_setup_estimado > 0:
+                eficiencia_setup = round((tempo_setup_estimado / tempo_setup_real * 100) if tempo_setup_real > 0 else 0, 1)
+            
+            eficiencia_producao = 0
+            if tempo_producao_estimado > 0:
+                eficiencia_producao = round((tempo_producao_estimado / tempo_producao_real * 100) if tempo_producao_real > 0 else 0, 1)
+            
+            tempo_total_estimado = tempo_setup_estimado + tempo_producao_estimado
+            tempo_total_real = tempo_setup_real + tempo_producao_real + tempo_pausas_real
+            eficiencia_total = round((tempo_total_estimado / tempo_total_real * 100) if tempo_total_real > 0 else 0, 1)
+            
+            analytics_trabalhos[trabalho_nome] = {
+                'trabalho_id': trabalho_id,
+                'trabalho_nome': trabalho_nome,
+                'tempos_estimados': {
+                    'setup': tempo_setup_estimado,
+                    'producao': tempo_producao_estimado,
+                    'total': tempo_total_estimado
+                },
+                'tempos_reais': {
+                    'setup': tempo_setup_real,
+                    'producao': tempo_producao_real,
+                    'pausas': tempo_pausas_real,
+                    'total': tempo_total_real
+                },
+                'eficiencias': {
+                    'setup': eficiencia_setup,
+                    'producao': eficiencia_producao,
+                    'total': eficiencia_total
+                },
+                'quantidade': quantidade_total_os,
+                'ultima_quantidade_apontada': dados['ultima_quantidade']
+            }
+
         resultado = {
             'ordem_servico': {
                 'id': ordem.id,
@@ -1808,6 +1887,7 @@ def detalhes_ordem_servico(ordem_id):
                 'tempo_estimado_total': tempo_estimado_total,
                 'eficiencia_percentual': round((total_producao / (total_setup + total_producao + total_pausas) * 100) if (total_setup + total_producao + total_pausas) > 0 else 0, 1)
             },
+            'analytics_trabalhos': analytics_trabalhos,
             'trabalhos': list(trabalhos_analytics.values()),
             'analytics_operadores': analytics_operadores
         }

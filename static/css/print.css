@@ -18,7 +18,7 @@
   body {
     background: #fff !important;
     color: #000 !important;
-    font-size: 11pt;
+    font-size: 10pt;
     margin: 0;
     padding: 0;
   }
@@ -27,31 +27,58 @@
   .container-fluid {
     width: 100% !important;
     max-width: 100% !important;
-    padding: 0 10mm !important; /* margem lateral para não cortar texto */
+    padding: 0 8mm !important; /* margem lateral para não cortar texto */
   }
 
   /* Cartões sem sombra/borda para economizar tinta e deixar limpo */
   .card,
   .kanban-card {
-    border: none !important;
+    border: 1px solid #ddd !important;
     box-shadow: none !important;
     page-break-inside: avoid;
   }
 
   .card-body,
   .card-header {
-    padding: 0.5rem 0 !important;
+    padding: 6px 0 !important;
   }
 
   /* Tabelas com bordas sutis */
   table {
     width: 100%;
     border-collapse: collapse !important;
+    font-size: 9pt;
   }
   th, td {
-    border: 1px solid #999 !important;
-    padding: 4px 6px !important;
+    border: 1px solid #bbb !important;
+    padding: 3px 5px !important;
+    vertical-align: top;
   }
+
+  /* Neutralizar cores e ícones para impressão limpa */
+  .fa, .fas, .far, .fal, .fad, [class^="fa-"] { display: none !important; }
+  .bg-light, .bg-primary, .bg-success, .bg-warning, .bg-secondary, .bg-info, .bg-danger {
+    background: transparent !important;
+  }
+  .text-primary, .text-success, .text-warning, .text-secondary, .text-info, .text-danger {
+    color: #000 !important;
+  }
+  .badge {
+    background: #fff !important;
+    color: #000 !important;
+    border: 1px solid #bbb !important;
+    font-size: 8pt !important;
+    padding: 2px 4px !important;
+  }
+
+  /* Evitar quebras ruins em colunas/linhas */
+  .row, .col, [class^="col-"], [class*=" col-"] {
+    break-inside: avoid;
+    page-break-inside: avoid;
+  }
+
+  h6 { font-size: 11pt; margin: 4px 0; }
+  .h6, .h5, .h4 { font-size: 10pt; margin: 3px 0; }
 
   /* Quebra de página após cada folha de processo se necessário */
   .folha-processo-print {
