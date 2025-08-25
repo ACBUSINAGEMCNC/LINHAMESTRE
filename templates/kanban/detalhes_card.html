@@ -15,9 +15,6 @@
                     <div class="row">
                         <div class="col-md-12 mb-3">
                             <div class="d-flex justify-content-end flex-wrap">
-                                <a href="/ordens-servico/imprimir/{{ ordem.id }}" class="btn btn-sm btn-outline-primary me-2 mb-1" target="_blank">
-                                    <i class="fas fa-print"></i> Imprimir OS
-                                </a>
                                 <a href="/ordens-servico/imprimir-desenho/{{ ordem.id }}" class="btn btn-sm btn-outline-secondary me-2 mb-1" target="_blank">
                                     <i class="fas fa-drafting-compass"></i> Imprimir Desenhos
                                 </a>
@@ -40,6 +37,9 @@
                                         {% endif %}
                                     </ul>
                                 </div>
+                                <button type="button" class="btn btn-sm btn-outline-info me-2 mb-1" onclick="abrirDetalhesOS('{{ ordem.id }}')" title="Ver apontamentos da OS">
+                                    <i class="fas fa-info-circle"></i> Apontamentos
+                                </button>
                                 {% if ordem.status == 'Expedição' %}
                                 <button type="button" class="btn btn-sm btn-success mb-1" onclick="finalizarOS('{{ ordem.id }}')">
                                     <i class="fas fa-check-circle"></i> Finalizar OS
@@ -264,7 +264,7 @@
                     </div>
                     
                     <!-- Seção de Logs de Apontamento -->
-                    <div class="row mt-4">
+                    <div class="row mt-4" id="secao-apontamentos-{{ ordem.id }}">
                         <div class="col-md-12">
                             <div class="card">
                                 <div class="card-header bg-info text-white">
@@ -291,6 +291,26 @@
 </div>
 
 <script>
+// Botão interno para rolar até a seção de apontamentos e garantir recarga dos logs
+function scrollToApontamentos(ordemId) {
+    const el = document.getElementById(`secao-apontamentos-${ordemId}`);
+    if (el) {
+        el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        const card = el.querySelector('.card');
+        if (card) {
+            card.classList.add('border', 'border-warning');
+            setTimeout(() => card.classList.remove('border', 'border-warning'), 800);
+        }
+    }
+    try {
+        if (typeof carregarLogsManualmente === 'function') {
+            carregarLogsManualmente(ordemId);
+        }
+    } catch (e) {
+        console.warn('Falha ao recarregar logs:', e);
+    }
+}
+
 // Carregar logs diretamente usando a função global carregarLogsManualmente
 window.addEventListener('load', function() {
     console.log('Carregando logs diretamente para OS {{ ordem.id }}');

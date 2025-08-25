@@ -5,32 +5,83 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Ordem de Serviço {{ ordem.numero }} - ACB Usinagem CNC</title>
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css">
+    {% if not modo_bonito %}
     <style>
         @media print {
-            body {
-                padding: 0;
-                margin: 0;
-            }
-            .no-print {
-                display: none;
-            }
-            .page-break {
-                page-break-after: always;
-            }
-            .container {
-                width: 100%;
-                max-width: 100%;
-                padding: 0;
-                margin: 0;
-            }
+            @page { size: A4; margin: 8mm; }
+            body { padding: 0; margin: 0; font-size: 11px; line-height: 1.2; }
+            .no-print { display: none !important; }
+            .container { width: 100%; max-width: 100%; padding: 0; margin: 0; }
+            h1, h2, h3 { margin: 0 0 8px 0; font-size: 14px; }
+            h1 { font-size: 16px; }
+            h2 { font-size: 15px; }
+            .table { margin-bottom: 8px; }
+            .table th, .table td { padding: 3px 6px; font-size: 10px; line-height: 1.1; }
+            .item-group { margin-bottom: 12px; padding: 8px; }
+            .item-group-header { margin-bottom: 4px; padding-bottom: 4px; font-size: 12px; }
+            .item-group-total { margin-bottom: 6px; font-size: 11px; }
+            .trabalho-info { margin-top: 8px; padding: 6px; }
+            .trabalho-info h5 { font-size: 11px; margin-bottom: 4px; }
+            .header { margin-bottom: 12px; padding-bottom: 6px; }
+            .ordem-info { padding: 8px; margin-bottom: 12px; }
+            .footer { margin-top: 15px; padding-top: 6px; font-size: 9px; }
+            .item-breakdown { padding: 6px; }
+            .item-breakdown-title { margin-bottom: 4px; font-size: 10px; }
         }
+    </style>
+    {% else %}
+    <style>
+        @media print {
+            @page { size: A4; margin: 12mm; }
+            /* Preservar cores e fundos mesmo no modo impressão */
+            html, body { -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }
+            * { -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }
+            .no-print { display: none !important; }
+
+            /* Reaplicar cores comuns do Bootstrap que são removidas no @media print do Bootstrap */
+            .bg-primary { background-color: #0d6efd !important; color: #fff !important; }
+            .bg-secondary { background-color: #6c757d !important; color: #fff !important; }
+            .bg-success { background-color: #198754 !important; color: #fff !important; }
+            .bg-info { background-color: #0dcaf0 !important; color: #000 !important; }
+            .bg-warning { background-color: #ffc107 !important; color: #000 !important; }
+            .bg-danger { background-color: #dc3545 !important; color: #fff !important; }
+            .bg-light { background-color: #f8f9fa !important; color: #000 !important; }
+            .bg-dark { background-color: #212529 !important; color: #fff !important; }
+            .text-white { color: #fff !important; }
+
+            /* Badges e elementos com fundo colorido */
+            .badge.bg-primary { background-color: #0d6efd !important; color: #fff !important; }
+            .badge.bg-secondary { background-color: #6c757d !important; color: #fff !important; }
+            .badge.bg-success { background-color: #198754 !important; color: #fff !important; }
+            .badge.bg-info { background-color: #0dcaf0 !important; color: #000 !important; }
+            .badge.bg-warning { background-color: #ffc107 !important; color: #000 !important; }
+            .badge.bg-danger { background-color: #dc3545 !important; color: #fff !important; }
+            .badge.bg-light { background-color: #f8f9fa !important; color: #000 !important; }
+            .badge.bg-dark { background-color: #212529 !important; color: #fff !important; }
+
+            /* Tabelas: manter cabeçalho com leve fundo */
+            .table thead th { background-color: #f8f9fa !important; color: #000 !important; }
+            .table { color: inherit !important; }
+            .table-bordered > :not(caption) > * { border-color: #dee2e6 !important; }
+
+            /* Componentes do próprio template */
+            .item-group { background-color: #f8f9fa !important; border-color: #dee2e6 !important; }
+            .item-breakdown { background-color: #ffffff !important; }
+            .item-group-header { border-bottom-color: #dee2e6 !important; }
+            .trabalho-info { border-color: #ddd !important; }
+            .footer { border-top-color: #ddd !important; }
+        }
+    </style>
+    {% endif %}
+    <style>
+        /* Estilos para tela */
         .header {
             border-bottom: 2px solid #000;
             padding-bottom: 10px;
             margin-bottom: 20px;
         }
         .logo {
-            max-height: 80px;
+            max-height: 60px;
         }
         .ordem-info {
             border: 1px solid #ddd;
@@ -38,23 +89,17 @@
             margin-bottom: 20px;
             border-radius: 5px;
         }
-        .item-table {
-            margin-top: 20px;
-        }
         .footer {
-            margin-top: 50px;
+            margin-top: 30px;
             border-top: 1px solid #ddd;
             padding-top: 10px;
             font-size: 0.8rem;
         }
         .trabalho-info {
-            margin-top: 20px;
+            margin-top: 15px;
             border: 1px solid #ddd;
-            padding: 15px;
+            padding: 12px;
             border-radius: 5px;
-        }
-        .trabalho-table th, .trabalho-table td {
-            padding: 8px;
         }
         .item-group {
             background-color: #f8f9fa;
@@ -62,29 +107,31 @@
             border-radius: 5px;
             padding: 15px;
             margin-bottom: 20px;
+            page-break-inside: avoid;
         }
         .item-group-header {
-            font-size: 1.2rem;
-            font-weight: bold;
-            margin-bottom: 10px;
-            border-bottom: 1px solid #dee2e6;
-            padding-bottom: 10px;
-        }
-        .item-group-total {
             font-size: 1.1rem;
             font-weight: bold;
+            margin-bottom: 8px;
+            border-bottom: 1px solid #dee2e6;
+            padding-bottom: 6px;
+        }
+        .item-group-total {
+            font-size: 1rem;
+            font-weight: bold;
             color: #0d6efd;
-            margin-bottom: 15px;
+            margin-bottom: 10px;
         }
         .item-breakdown {
             background-color: #fff;
             border: 1px solid #dee2e6;
             border-radius: 5px;
-            padding: 10px;
+            padding: 8px;
         }
         .item-breakdown-title {
             font-weight: bold;
-            margin-bottom: 10px;
+            margin-bottom: 6px;
+            font-size: 0.9rem;
         }
     </style>
 </head>
@@ -97,25 +144,12 @@
         
         <div class="header d-flex justify-content-between align-items-center">
             <div>
-                <h1>Ordem de Serviço</h1>
-                <h2>{{ ordem.numero }}</h2>
+                <h1>OS {{ ordem.numero }}</h1>
+                <small>{{ ordem.data_criacao.strftime('%d/%m/%Y') }} | {{ ordem.status }}</small>
             </div>
             <div class="text-end">
                 <img src="/static/logo.svg" alt="ACB Usinagem CNC" class="logo">
-                <div>ACB Usinagem CNC</div>
-                <div>CNPJ: XX.XXX.XXX/0001-XX</div>
-            </div>
-        </div>
-        
-        <div class="ordem-info">
-            <div class="row">
-                <div class="col-md-6">
-                    <p><strong>Data de Criação:</strong> {{ ordem.data_criacao.strftime('%d/%m/%Y') }}</p>
-                    <p><strong>Status:</strong> {{ ordem.status }}</p>
-                </div>
-                <div class="col-md-6">
-                    <p><strong>Código de Barras:</strong> *{{ ordem.numero }}*</p>
-                </div>
+                <div><small>ACB Usinagem CNC</small></div>
             </div>
         </div>
         
@@ -214,9 +248,31 @@
         {% endfor %}
         
         <div class="footer text-center">
-            <p>Documento gerado em {{ now().strftime('%d/%m/%Y %H:%M:%S') }}</p>
-            <p>ACB Usinagem CNC - Todos os direitos reservados</p>
+            <small>Gerado em {{ now().strftime('%d/%m/%Y %H:%M') }} - ACB Usinagem CNC</small>
         </div>
     </div>
+
+    <script>
+        // Auto-print se vier com parâmetro ?auto=1
+        const urlParams = new URLSearchParams(window.location.search);
+        const autoPrint = urlParams.get('auto') === '1';
+        const autoClose = urlParams.get('fechar') === '1'; // Fechamento opcional
+
+        if (autoPrint) {
+            window.onload = function() {
+                // Aumentar o delay para garantir que o CSS/Bootstrap carregue antes da impressão
+                setTimeout(() => {
+                    window.print();
+                }, 1000);
+            };
+        }
+
+        if (autoClose) {
+            // Alguns navegadores disparam onafterprint de forma diferente; adiciona um pequeno delay
+            window.onafterprint = function() {
+                setTimeout(() => window.close(), 800);
+            };
+        }
+    </script>
 </body>
 </html>

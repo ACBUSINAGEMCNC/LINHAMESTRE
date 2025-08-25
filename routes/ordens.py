@@ -67,7 +67,9 @@ def nova_ordem_servico():
 def imprimir_ordem_servico(ordem_id):
     """Rota para imprimir uma ordem de serviço"""
     ordem = OrdemServico.query.get_or_404(ordem_id)
-    return render_template('ordens/imprimir.html', ordem=ordem, Item=Item)
+    # Modo bonito preserva o layout de tela e cores na impressão
+    modo_bonito = request.args.get('bonito') == '1' or request.args.get('modo') == 'bonito'
+    return render_template('ordens/imprimir.html', ordem=ordem, Item=Item, modo_bonito=modo_bonito)
 
 @ordens.route('/ordens-servico/imprimir-desenho/<int:ordem_id>')
 def imprimir_desenho(ordem_id):
