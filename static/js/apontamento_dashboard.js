@@ -249,14 +249,7 @@
           ` : trabalhosHtml || '<div class="small text-muted">Sem serviços cadastrados para o item.</div>'}
         </div>
         <div class="card-footer d-flex gap-2">
-          ${isGhost ? `
-            <button class="btn btn-outline-warning btn-sm" onclick="removerCartaoFantasma(${st.ghost_card_id})">
-              <i class="fas fa-times"></i> Remover Fantasma
-            </button>
-            <button class="btn btn-outline-info btn-sm" onclick="moverCartaoFantasma(${st.ghost_card_id})">
-              <i class="fas fa-arrows-alt-v"></i> Mover Posição
-            </button>
-          ` : `
+          ${isGhost ? `` : `
             <button class="btn btn-outline-primary btn-sm" onclick="verLogs(${st.ordem_servico_id})"><i class="fas fa-history"></i> Logs</button>
             <button class="btn btn-outline-secondary btn-sm" onclick="verDetalhes(${st.ordem_servico_id})"><i class="fas fa-eye"></i> Detalhes</button>
           `}
@@ -357,20 +350,38 @@
     const groupSections = [];
     todasMaquinas.forEach(maquina => {
       const items = groupsByMachine.get(maquina) || [];
-      
-      // Ordenar por status: Em Produção primeiro, depois Setup, Pausado, Aguardando
-      items.sort((a, b) => {
-        const statusOrder = {
-          'Produção em andamento': 1,
-          'Setup em andamento': 2,
-          'Pausado': 3,
-          'Aguardando': 4
-        };
-        return (statusOrder[a.status_atual] || 5) - (statusOrder[b.status_atual] || 5);
-      });
 
-      const principal = items.length > 0 ? items[0] : null;
-      const fila = items.length > 1 ? items.slice(1) : [];
+      // Funções auxiliares para ranking de status e posição numérica
+      const statusOrder = {
+        'Produção em andamento': 1,
+        'Setup em andamento': 2,
+        'Pausado': 3,
+        'Aguardando': 4
+      };
+      const getStatusRank = (s) => statusOrder[s] || 5;
+      const getPos = (it) => {
+        const p = parseInt(it?.posicao ?? it?.posicao_fila ?? 0, 10);
+        return Number.isFinite(p) ? p : 0;
+      };
+
+      // Escolher principal pelo melhor status, desempate por menor posição
+      let principal = null;
+      if (items.length > 0) {
+        principal = items.reduce((best, it) => {
+          if (!best) return it;
+          const rb = getStatusRank(best.status_atual);
+          const ri = getStatusRank(it.status_atual);
+          if (ri !== rb) return ri < rb ? it : best;
+          const pb = getPos(best);
+          const pi = getPos(it);
+          return pi < pb ? it : best;
+        }, null);
+      }
+
+      // Restante da fila ordenada por posição (desempate por status rank)
+      const fila = principal
+        ? items.filter(it => it !== principal).sort((a, b) => (getPos(a) - getPos(b)) || (getStatusRank(a.status_atual) - getStatusRank(b.status_atual)))
+        : [];
       const isRunningMachine = items.some(x => (x.cronometro && x.cronometro.tipo === 'producao') || x.status_atual === 'Produção em andamento' || (Array.isArray(x.ativos_por_trabalho) && x.ativos_por_trabalho.some(a => a.status === 'Produção em andamento')));
       
       // Informações da máquina (cor e tipo do primeiro item ou padrões)

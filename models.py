@@ -226,6 +226,7 @@ class OrdemServico(db.Model):
     numero = db.Column(db.String(20), unique=True)
     data_criacao = db.Column(db.Date, default=datetime.now().date())
     status = db.Column(db.String(50), default='Entrada')
+    posicao = db.Column(db.Integer, nullable=False, default=0)
     pedidos = db.relationship('PedidoOrdemServico', backref='ordem_servico', lazy=True, cascade="all, delete-orphan")
     
     def __repr__(self):

@@ -851,6 +851,13 @@ def status_ativos():
                     logger.error(f"Falha ao determinar lista_kanban para status {status.id}: {e}")
                     pass
 
+                # Posição atual da OS (quando disponível) para ordenação no dashboard
+                try:
+                    if os_obj:
+                        status_info['posicao'] = getattr(os_obj, 'posicao', None)
+                except Exception:
+                    pass
+
                 # Aplicar filtros (lista, lista_tipo, status) considerando cartões fantasma
                 try:
                     logger.debug(f"Verificando filtros para status {status.id}: lista_kanban='{status_info.get('lista_kanban')}', lista_tipo='{status_info.get('lista_tipo')}', status_atual='{status_info.get('status_atual')}'")
@@ -1197,7 +1204,12 @@ def status_ativos():
                     'ordem_id': ordem.id,
                     'status_atual': 'Aguardando'
                 }
-                
+                # Posição da OS na lista/máquina (quando disponível)
+                try:
+                    status_info['posicao'] = getattr(ordem, 'posicao', None)
+                except Exception:
+                    pass
+
                 # Número da OS
                 try:
                     os_num = getattr(ordem, 'numero', None) or getattr(ordem, 'codigo', None) or f"OS-{ordem.id}"
@@ -1515,8 +1527,17 @@ def status_ativos():
                     'status_atual': status_atual_real,
                     'lista_kanban': cf.lista_kanban,
                     'is_fantasma': True,
-                    'fantasma_id': cf.id
+                    'fantasma_id': cf.id,
+                    # Compatibilidade com frontend
+                    'is_ghost_card': True,
+                    'ghost_card_id': cf.id
                 }
+                # Usar posicao_fila do cartão fantasma para ordenação
+                try:
+                    status_info_fantasma['posicao'] = getattr(cf, 'posicao_fila', None)
+                    status_info_fantasma['posicao_fila'] = getattr(cf, 'posicao_fila', None)
+                except Exception:
+                    pass
                 
                 # Número da OS
                 try:
@@ -1600,6 +1621,17 @@ def status_ativos():
         timings['build_cartoes_fantasma_ms'] = int((time.perf_counter() - t0) * 1000)
         
         logger.debug(f"Status ativos formatados (com cartões fantasma mesclados): {len(resultado['status_ativos'])}")
+        # Ordenar por lista_kanban (case-insensitive) e posicao (asc)
+        try:
+            resultado['status_ativos'].sort(
+                key=lambda x: (
+                    (x.get('lista_kanban') or '').strip().lower(),
+                    int(x.get('posicao') or x.get('posicao_fila') or 0)
+                )
+            )
+        except Exception as e_sort:
+            logger.error(f"Falha ao ordenar status_ativos: {e_sort}")
+
         # Anexar timings apenas quando explicitamente solicitado
         try:
             if (request.args.get('timing') or '').strip().lower() in ['1', 'true', 'yes']:

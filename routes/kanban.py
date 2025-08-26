@@ -42,7 +42,8 @@ def index():
     
     for lista in listas:
         # Buscar ordens normais
-        ordens[lista] = OrdemServico.query.filter_by(status=lista).all()
+        ordens[lista] = OrdemServico.query.filter_by(status=lista)\
+            .order_by(OrdemServico.posicao.asc(), OrdemServico.id.asc()).all()
         
         # Buscar cartões fantasma ativos para esta lista
         cartoes_fantasma[lista] = CartaoFantasma.query.filter_by(
@@ -100,7 +101,20 @@ def mover_kanban():
     nova_lista = request.form['nova_lista']
     
     ordem = OrdemServico.query.get_or_404(ordem_id)
+    old_status = ordem.status
+    
+    # Atualiza lista e posiciona no fim da lista de destino
     ordem.status = nova_lista
+    max_pos = db.session.query(db.func.max(OrdemServico.posicao)).filter_by(status=nova_lista).scalar()
+    ordem.posicao = (max_pos or 0) + 1
+    
+    # Reindexa a lista de origem para manter posições sequenciais
+    if old_status and old_status != nova_lista:
+        cards_origem = OrdemServico.query.filter_by(status=old_status)\
+            .order_by(OrdemServico.posicao.asc(), OrdemServico.id.asc()).all()
+        for idx, card in enumerate(cards_origem, start=1):
+            card.posicao = idx
+    
     db.session.commit()
     
     return jsonify({'success': True})
@@ -123,16 +137,34 @@ def reordenar_kanban():
         if ordem.status != lista:
             return jsonify({'success': False, 'message': 'Ordem não está na lista especificada'})
         
-        # Por enquanto, vamos apenas confirmar o sucesso
-        # A posição será mantida pela interface até o próximo reload
-        # Futuramente podemos adicionar um campo 'posicao' na tabela se necessário
+        # Obter todas as ordens da lista (excluindo a atual), ordenadas pela posição atual
+        cards = OrdemServico.query\
+            .filter_by(status=lista)\
+            .order_by(OrdemServico.posicao.asc(), OrdemServico.id.asc()).all()
+        
+        # Construir a nova ordem de IDs
+        ids = [c.id for c in cards if c.id != ordem.id]
+        # Garantir faixa válida (1..len(ids)+1)
+        nova_posicao = max(1, min(nova_posicao, len(ids) + 1))
+        ids.insert(nova_posicao - 1, ordem.id)
+        
+        # Mapear id -> objeto para atualização eficiente
+        card_by_id = {c.id: c for c in cards}
+        card_by_id[ordem.id] = ordem
+        
+        # Reindexar posições sequenciais
+        for idx, oid in enumerate(ids, start=1):
+            card_by_id[oid].posicao = idx
+        
+        db.session.commit()
         
         return jsonify({
-            'success': True, 
+            'success': True,
             'message': f'Posição atualizada para {nova_posicao}'
         })
     
     except Exception as e:
+        db.session.rollback()
         return jsonify({'success': False, 'message': f'Erro ao reordenar: {str(e)}'})
 
 @kanban.route('/kanban/enviar-para', methods=['POST'])
@@ -147,7 +179,20 @@ def enviar_para_lista():
     lista_destino = request.form['lista_destino']
     
     ordem = OrdemServico.query.get_or_404(ordem_id)
+    old_status = ordem.status
+    
+    # Envia para a lista de destino e posiciona no final
     ordem.status = lista_destino
+    max_pos = db.session.query(db.func.max(OrdemServico.posicao)).filter_by(status=lista_destino).scalar()
+    ordem.posicao = (max_pos or 0) + 1
+    
+    # Reindexa a lista de origem, se aplicável
+    if old_status and old_status != lista_destino:
+        cards_origem = OrdemServico.query.filter_by(status=old_status)\
+            .order_by(OrdemServico.posicao.asc(), OrdemServico.id.asc()).all()
+        for idx, card in enumerate(cards_origem, start=1):
+            card.posicao = idx
+    
     db.session.commit()
     
     return jsonify({

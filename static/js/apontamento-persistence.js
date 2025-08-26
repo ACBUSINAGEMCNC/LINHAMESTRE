@@ -461,8 +461,23 @@ function renderizarChipsStatus(ordemId, ativosLista) {
         return container;
     }
     
+    // Verificar se esta OS tem cartões fantasmas associados
+    const temCartaoFantasma = cartoesFantasma.length > 0;
+    
+    // Verificar se já existe um cartão fantasma com status ativo
+    let fantasmaTemStatus = false;
+    if (temCartaoFantasma) {
+        fantasmaTemStatus = cartoesFantasma.some(card => {
+            const container = card.querySelector('.apontamento-status') || card.querySelector('.status-apontamento');
+            return container && container.innerHTML && container.innerHTML.trim() !== '';
+        });
+    }
+    
     // Processar cartões reais primeiro
-    const containersReais = cartoesReais.map(card => processarCartao(card, false)).filter(Boolean);
+    const containersReais = cartoesReais.map(card => {
+        // Sempre processar cartões reais normalmente, sem bloquear
+        return processarCartao(card, false);
+    }).filter(Boolean);
     
     // Processar cartões fantasma
     const containersFantasma = cartoesFantasma.map(card => {
@@ -470,7 +485,14 @@ function renderizarChipsStatus(ordemId, ativosLista) {
         const container = card.querySelector('.apontamento-status') || card.querySelector('.status-apontamento');
         if (container) {
             console.debug(`[CHIPS] Container encontrado para cartão fantasma OS ${ordemId}, ID ${card.dataset.cartaoId || 'desconhecido'}`);
-            // Limpar conteúdo
+            
+            // Verificar se já tem conteúdo e está bloqueado
+            if (container.dataset.statusLocked === 'true' && container.innerHTML && container.innerHTML.trim() !== '') {
+                console.debug(`[CHIPS] Mantendo conteúdo existente do cartão fantasma OS ${ordemId}`);
+                return container;
+            }
+            
+            // Limpar conteúdo apenas se não estiver bloqueado
             container.innerHTML = '';
             return container;
         } else {
@@ -508,15 +530,11 @@ function renderizarChipsStatus(ordemId, ativosLista) {
                 } else {
                     // Mostrar "aguardando" em todos os containers
                     [...containersReais, ...containersFantasma].forEach(container => {
+                        // Não atualizar containers com status bloqueado (cartões fantasma)
+                        if (container.dataset.statusLocked === 'true') return;
                         container.innerHTML = '<small class="text-muted">Aguardando apontamento</small>';
                     });
                 }
-            })
-            .catch(e => {
-                console.warn(`[CHIPS] Erro ao verificar status no backend:`, e);
-                [...containersReais, ...containersFantasma].forEach(container => {
-                    container.innerHTML = '<small class="text-muted">Aguardando apontamento</small>';
-                });
             });
         return;
     }
@@ -555,6 +573,12 @@ function renderizarChipsStatus(ordemId, ativosLista) {
     // Renderizar chips em todos os containers (reais e fantasmas)
     const htmlContent = frags.join('');
     [...containersReais, ...containersFantasma].forEach((container, index) => {
+        // Verificar se o container já está bloqueado e tem conteúdo
+        if (container.dataset.statusLocked === 'true' && container.innerHTML && container.innerHTML.trim() !== '') {
+            console.debug(`[CHIPS] Pulando atualização de container bloqueado`);
+            return;
+        }
+        
         const isFantasma = index >= containersReais.length;
         if (isFantasma) {
             // Para cartões fantasma, adicionar indicador visual
@@ -563,8 +587,32 @@ function renderizarChipsStatus(ordemId, ativosLista) {
                 <div class="flex-grow-1">${htmlContent}</div>
             </div>`;
             container.innerHTML = fantasmaContent;
+            
+            // Garantir que o conteúdo não seja sobrescrito por outras atualizações
+            container.dataset.statusLocked = 'true';
         } else {
             container.innerHTML = htmlContent;
+            
+            // Bloquear temporariamente cartões reais com status ativos para evitar sobrescrita
+            if (htmlContent && htmlContent.trim() !== '') {
+                container.dataset.statusLocked = 'true';
+                
+                // Registrar timestamp para desbloquear após 30 segundos
+                const now = Date.now();
+                container.dataset.statusLockedTs = now;
+                
+                // Programar desbloqueio após 30 segundos
+                setTimeout(() => {
+                    // Só desbloquear se o timestamp ainda for o mesmo
+                    if (container.dataset.statusLockedTs == now) {
+                        delete container.dataset.statusLocked;
+                        delete container.dataset.statusLockedTs;
+                        console.debug(`[CHIPS] Desbloqueando status do cartão real OS ${ordemId} após 30s`);
+                    }
+                }, 30000);
+                
+                console.debug(`[CHIPS] Bloqueando temporariamente status do cartão real OS ${ordemId} por 30s`);
+            }
         }
     });
 }
