@@ -1,0 +1,80 @@
+{% extends 'base.html' %}
+
+{% block title %}Gabaritos Centro Usinagem{% endblock %}
+
+{% block content %}
+<div class="container mt-4">
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <h1>Gabaritos Centro Usinagem</h1>
+        <a href="{{ url_for('gabaritos_centro.novo_gabarito_centro') }}" class="btn btn-primary">
+            <i class="fas fa-plus"></i> Novo Gabarito
+        </a>
+    </div>
+
+    <div class="card shadow">
+        <div class="card-body">
+            <div class="table-responsive">
+                <table class="table table-striped table-hover" id="tabela-gabaritos">
+                    <thead>
+                        <tr>
+                            <th>Código</th>
+                            <th>Descrição</th>
+                            <th>Máquina</th>
+                            <th>Local de Armazenamento</th>
+                            <th>Imagem</th>
+                            <th>Data de Cadastro</th>
+                            <th>Ações</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for gabarito in gabaritos %}
+                        <tr>
+                            <td>{{ gabarito.codigo }}</td>
+                            <td>{{ gabarito.descricao }}</td>
+                            <td>{% if gabarito.maquina %}{{ gabarito.maquina.nome }}{% else %}-{% endif %}</td>
+                            <td>{{ gabarito.local_armazenamento }}</td>
+                            <td>
+                                {% if gabarito.imagem_path %}
+                                <img src="{{ gabarito.imagem_path }}" alt="Imagem do gabarito" class="img-thumbnail" style="max-height: 50px;">
+                                {% else %}
+                                <span class="text-muted">Sem imagem</span>
+                                {% endif %}
+                            </td>
+                            <td>{{ gabarito.data_cadastro.strftime('%d/%m/%Y') }}</td>
+                            <td>
+                                <a href="{{ url_for('gabaritos_centro.editar_gabarito_centro', gabarito_id=gabarito.id) }}" class="btn btn-sm btn-outline-primary">
+                                    <i class="fas fa-edit"></i> Editar
+                                </a>
+                            </td>
+                        </tr>
+                        {% else %}
+                        <tr>
+                            <td colspan="7" class="text-center">Nenhum gabarito cadastrado.</td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+    
+    <div class="mt-4">
+        <a href="{{ url_for('trabalhos.listar_trabalhos') }}" class="btn btn-secondary">
+            <i class="fas fa-arrow-left"></i> Voltar para Trabalhos
+        </a>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+    $(document).ready(function() {
+        $('#tabela-gabaritos').DataTable({
+            "language": {
+                "url": "//cdn.datatables.net/plug-ins/1.10.25/i18n/Portuguese-Brasil.json"
+            },
+            "order": [[0, "asc"]]
+        });
+    });
+</script>
+{% endblock %}

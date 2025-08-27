@@ -26,11 +26,32 @@ def verificar_inicializar_banco():
     database_url = os.getenv('DATABASE_URL', '')
     
     # Se for PostgreSQL (Supabase), usar script de migração específico
-    if database_url.startswith('postgresql://'):
+    if database_url.startswith('postgresql://'):        
         logger.info("Usando PostgreSQL (Supabase) - verificando tabelas de apontamento...")
         try:
             subprocess.run([sys.executable, 'migrate_apontamento_supabase.py'], check=True)
             logger.info("Tabelas PostgreSQL verificadas/criadas com sucesso.")
+            
+            # Executar migração para adicionar coluna categoria_trabalho
+            try:
+                from migrations.add_categoria_trabalho import migrate_postgres
+                if migrate_postgres():
+                    logger.info("Coluna categoria_trabalho verificada/adicionada com sucesso.")
+                else:
+                    logger.warning("Falha ao verificar/adicionar coluna categoria_trabalho.")
+            except Exception as col_err:
+                logger.warning(f"Erro ao migrar coluna categoria_trabalho: {str(col_err)}")
+                
+            # Executar migração para adicionar colunas imagem e data_cadastro
+            try:
+                from migrations.add_columns_maquina import migrate_postgres as migrate_colunas_postgres
+                if migrate_colunas_postgres():
+                    logger.info("Colunas imagem e data_cadastro verificadas/adicionadas com sucesso.")
+                else:
+                    logger.warning("Falha ao verificar/adicionar colunas imagem e data_cadastro.")
+            except Exception as cols_err:
+                logger.warning(f"Erro ao migrar colunas imagem e data_cadastro: {str(cols_err)}")
+                
         except subprocess.CalledProcessError as e:
             logger.warning(f"Migração retornou código {e.returncode}, mas pode estar OK")
         return
@@ -59,6 +80,29 @@ def verificar_inicializar_banco():
                 subprocess.run([sys.executable, 'migrate_apontamento.py'], check=True)
                 logger.info("Migração de apontamento concluída.")
             
+            # Verificar se tabela maquina tem a coluna categoria_trabalho
+            try:
+                cursor.execute("PRAGMA table_info(maquina)")
+                columns = [column[1] for column in cursor.fetchall()]
+                if 'categoria_trabalho' not in columns:
+                    logger.info("Coluna categoria_trabalho não encontrada na tabela maquina. Executando migração...")
+                    from migrations.add_categoria_trabalho import migrate_sqlite
+                    if migrate_sqlite():
+                        logger.info("Coluna categoria_trabalho adicionada com sucesso à tabela maquina.")
+                    else:
+                        logger.warning("Falha ao adicionar coluna categoria_trabalho à tabela maquina.")
+                        
+                # Verificar se tabela maquina tem as colunas imagem e data_cadastro
+                if 'imagem' not in columns or 'data_cadastro' not in columns:
+                    logger.info("Colunas imagem ou data_cadastro não encontradas na tabela maquina. Executando migração...")
+                    from migrations.add_columns_maquina import migrate_sqlite
+                    if migrate_sqlite():
+                        logger.info("Colunas imagem e data_cadastro adicionadas com sucesso à tabela maquina.")
+                    else:
+                        logger.warning("Falha ao adicionar colunas imagem e data_cadastro à tabela maquina.")
+            except Exception as col_err:
+                logger.warning(f"Erro ao verificar/adicionar colunas na tabela maquina: {str(col_err)}")
+                
             conn.close()
             
         except Exception as e:
@@ -165,6 +209,10 @@ def create_app():
     from routes.main import main
     from routes.folhas_processo import folhas_processo
     from routes.apontamento import apontamento_bp
+    from routes.maquinas import maquinas
+    from routes.castanhas import castanhas
+    from routes.gabaritos_centro import gabaritos_centro
+    from routes.gabaritos_rosca import gabaritos_rosca
     
     app.register_blueprint(clientes)
     app.register_blueprint(materiais)
@@ -181,6 +229,10 @@ def create_app():
     app.register_blueprint(backup)
     app.register_blueprint(main)
     app.register_blueprint(apontamento_bp, url_prefix='/apontamento')
+    app.register_blueprint(maquinas)
+    app.register_blueprint(castanhas)
+    app.register_blueprint(gabaritos_centro)
+    app.register_blueprint(gabaritos_rosca)
     
     # Rota para redirecionar URLs Supabase
     @app.route('/uploads/supabase://<path:file_path>')

@@ -1,0 +1,56 @@
+{% extends 'base.html' %}
+
+{% block title %}Novo Gabarito Centro Usinagem{% endblock %}
+
+{% block content %}
+<div class="container mt-4">
+    <h1>Novo Gabarito Centro Usinagem</h1>
+    
+    <div class="card shadow">
+        <div class="card-body">
+            <form method="POST" enctype="multipart/form-data">
+                <div class="mb-3">
+                    <label for="descricao" class="form-label">Descrição <span class="text-danger">*</span></label>
+                    <input type="text" class="form-control" id="descricao" name="descricao" required>
+                </div>
+                
+                <div class="mb-3">
+                    <label for="maquina_id" class="form-label">Máquina</label>
+                    <select class="form-select" id="maquina_id" name="maquina_id">
+                        <option value="">Selecione uma máquina</option>
+                        {% for maquina in maquinas %}
+                        <option value="{{ maquina.id }}">{{ maquina.nome }} ({{ maquina.codigo }})</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                
+                <div class="mb-3">
+                    <label for="local_armazenamento" class="form-label">Local de Armazenamento</label>
+                    <input type="text" class="form-control" id="local_armazenamento" name="local_armazenamento">
+                    <small class="text-muted">Ex: Armário 2 / Prateleira B</small>
+                </div>
+                
+                <div class="mb-3">
+                    <label for="observacoes" class="form-label">Observações</label>
+                    <textarea class="form-control" id="observacoes" name="observacoes" rows="3"></textarea>
+                </div>
+                
+                <div class="mb-3">
+                    <label for="imagem" class="form-label">Imagem do Gabarito</label>
+                    <input type="file" class="form-control" id="imagem" name="imagem" accept="image/*">
+                    <small class="text-muted">Formatos aceitos: JPG, PNG, GIF</small>
+                </div>
+                
+                <div class="d-flex justify-content-between">
+                    <a href="{{ url_for('gabaritos_centro.listar_gabaritos_centro') }}" class="btn btn-secondary">
+                        <i class="fas fa-arrow-left"></i> Voltar
+                    </a>
+                    <button type="submit" class="btn btn-primary">
+                        <i class="fas fa-save"></i> Salvar
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+{% endblock %}

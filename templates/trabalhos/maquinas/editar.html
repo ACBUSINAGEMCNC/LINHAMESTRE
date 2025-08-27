@@ -1,0 +1,53 @@
+{% extends 'base.html' %}
+
+{% block title %}Editar Máquina{% endblock %}
+
+{% block content %}
+<div class="container mt-4">
+    <h1>Editar Máquina</h1>
+    
+    <div class="card shadow">
+        <div class="card-body">
+            <form method="POST" enctype="multipart/form-data">
+                <div class="mb-3">
+                    <label for="codigo" class="form-label">Código</label>
+                    <input type="text" class="form-control" id="codigo" value="{{ maquina.codigo }}" readonly>
+                    <small class="text-muted">O código é gerado automaticamente e não pode ser alterado.</small>
+                </div>
+                
+                <div class="mb-3">
+                    <label for="nome" class="form-label">Nome da Máquina <span class="text-danger">*</span></label>
+                    <input type="text" class="form-control" id="nome" name="nome" value="{{ maquina.nome }}" required>
+                </div>
+                
+                <div class="mb-3">
+                    <label for="categoria_trabalho" class="form-label">Categoria de Trabalho <span class="text-danger">*</span></label>
+                    <input type="text" class="form-control" id="categoria_trabalho" name="categoria_trabalho" value="{{ maquina.categoria_trabalho }}" required>
+                    <small class="text-muted">Ex: Torneamento, Fresamento, etc.</small>
+                </div>
+                
+                <div class="mb-3">
+                    <label for="imagem" class="form-label">Imagem da Máquina</label>
+                    {% if maquina.imagem_path %}
+                    <div class="mb-2">
+                        <img src="{{ maquina.imagem_path }}" alt="Imagem atual da máquina" class="img-thumbnail" style="max-height: 200px;">
+                        <p class="text-muted">Imagem atual</p>
+                    </div>
+                    {% endif %}
+                    <input type="file" class="form-control" id="imagem" name="imagem" accept="image/*">
+                    <small class="text-muted">Deixe em branco para manter a imagem atual. Formatos aceitos: JPG, PNG, GIF</small>
+                </div>
+                
+                <div class="d-flex justify-content-between">
+                    <a href="{{ url_for('maquinas.listar_maquinas') }}" class="btn btn-secondary">
+                        <i class="fas fa-arrow-left"></i> Voltar
+                    </a>
+                    <button type="submit" class="btn btn-primary">
+                        <i class="fas fa-save"></i> Salvar Alterações
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+{% endblock %}

@@ -55,6 +55,81 @@ class Trabalho(db.Model):
     
     def __repr__(self):
         return f'<Trabalho {self.nome}>'
+
+class Maquina(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    codigo = db.Column(db.String(20), unique=True)  # Código automático
+    nome = db.Column(db.String(100), nullable=False)
+    categoria_trabalho = db.Column(db.String(50))  # Categoria de trabalho
+    imagem = db.Column(db.String(255))  # Caminho para a imagem da máquina
+    data_cadastro = db.Column(db.DateTime, default=datetime.utcnow)
+    
+    def __repr__(self):
+        return f'<Maquina {self.nome}>'
+    
+    @property
+    def imagem_path(self):
+        if self.imagem:
+            return f'/uploads/{self.imagem}'
+        return None
+
+class Castanha(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    codigo = db.Column(db.String(20), unique=True)  # Código automático
+    diametro = db.Column(db.Float, nullable=True)  # Diâmetro da castanha
+    comprimento = db.Column(db.Float, nullable=True)  # Comprimento da castanha
+    castanha_livre = db.Column(db.Boolean, default=False)  # Se é castanha livre
+    imagem = db.Column(db.String(255))  # Caminho para a imagem da castanha
+    maquina_id = db.Column(db.Integer, db.ForeignKey('maquina.id'), nullable=True)
+    local_armazenamento = db.Column(db.String(100))  # Bloco/posição
+    data_cadastro = db.Column(db.DateTime, default=datetime.utcnow)
+    
+    # Relacionamento
+    maquina = relationship('Maquina', backref='castanhas', lazy=True)
+    
+    def __repr__(self):
+        return f'<Castanha {self.codigo}>'
+    
+    @property
+    def imagem_path(self):
+        if self.imagem:
+            return f'/uploads/{self.imagem}'
+        return None
+
+class GabaritoCentroUsinagem(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    codigo = db.Column(db.String(20), unique=True)  # Código automático
+    nome = db.Column(db.String(100), nullable=False)
+    funcao = db.Column(db.Text)  # Função do gabarito
+    imagem = db.Column(db.String(255))  # Caminho para a imagem do gabarito
+    local_armazenamento = db.Column(db.String(100))  # Estante/linha/posição
+    data_cadastro = db.Column(db.DateTime, default=datetime.utcnow)
+    
+    def __repr__(self):
+        return f'<GabaritoCentroUsinagem {self.nome}>'
+    
+    @property
+    def imagem_path(self):
+        if self.imagem:
+            return f'/uploads/{self.imagem}'
+        return None
+
+class GabaritoRosca(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    codigo = db.Column(db.String(20), unique=True)  # Código automático
+    tipo_rosca = db.Column(db.String(100), nullable=False)  # Qual rosca é
+    imagem = db.Column(db.String(255))  # Caminho para a imagem do gabarito
+    local_armazenamento = db.Column(db.String(100))  # Bloco/posição
+    data_cadastro = db.Column(db.DateTime, default=datetime.utcnow)
+    
+    def __repr__(self):
+        return f'<GabaritoRosca {self.tipo_rosca}>'
+    
+    @property
+    def imagem_path(self):
+        if self.imagem:
+            return f'/uploads/{self.imagem}'
+        return None
     
 class ItemTrabalho(db.Model):
     id = db.Column(db.Integer, primary_key=True)

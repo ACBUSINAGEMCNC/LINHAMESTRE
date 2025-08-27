@@ -373,3 +373,25 @@ def generate_next_os_code():
             continue
     proximo = max_seq + 1
     return f"{prefixo}-{proximo:03d}"
+
+def save_uploaded_file(file, folder='imagens'):
+    """Salva um arquivo enviado e retorna o caminho relativo"""
+    if not file or file.filename == '':
+        return None
+        
+    # Gerar nome único para o arquivo
+    filename = secure_filename(file.filename)
+    unique_filename = f"{uuid.uuid4().hex}_{filename}"
+    
+    # Definir pasta de upload
+    upload_folder = os.path.join(current_app.config.get('UPLOAD_FOLDER', 'static/uploads'), folder)
+    
+    # Garantir que a pasta existe
+    os.makedirs(upload_folder, exist_ok=True)
+    
+    # Salvar o arquivo
+    filepath = os.path.join(upload_folder, unique_filename)
+    file.save(filepath)
+    
+    # Retornar caminho relativo
+    return os.path.join(folder, unique_filename)

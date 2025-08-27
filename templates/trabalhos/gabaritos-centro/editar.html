@@ -1,0 +1,70 @@
+{% extends 'base.html' %}
+
+{% block title %}Editar Gabarito Centro Usinagem{% endblock %}
+
+{% block content %}
+<div class="container mt-4">
+    <h1>Editar Gabarito Centro Usinagem</h1>
+    
+    <div class="card shadow">
+        <div class="card-body">
+            <form method="POST" enctype="multipart/form-data">
+                <div class="mb-3">
+                    <label for="codigo" class="form-label">Código</label>
+                    <input type="text" class="form-control" id="codigo" value="{{ gabarito.codigo }}" readonly>
+                    <small class="text-muted">O código é gerado automaticamente e não pode ser alterado.</small>
+                </div>
+                
+                <div class="mb-3">
+                    <label for="descricao" class="form-label">Descrição <span class="text-danger">*</span></label>
+                    <input type="text" class="form-control" id="descricao" name="descricao" value="{{ gabarito.descricao }}" required>
+                </div>
+                
+                <div class="mb-3">
+                    <label for="maquina_id" class="form-label">Máquina</label>
+                    <select class="form-select" id="maquina_id" name="maquina_id">
+                        <option value="">Selecione uma máquina</option>
+                        {% for maquina in maquinas %}
+                        <option value="{{ maquina.id }}" {% if gabarito.maquina_id == maquina.id %}selected{% endif %}>
+                            {{ maquina.nome }} ({{ maquina.codigo }})
+                        </option>
+                        {% endfor %}
+                    </select>
+                </div>
+                
+                <div class="mb-3">
+                    <label for="local_armazenamento" class="form-label">Local de Armazenamento</label>
+                    <input type="text" class="form-control" id="local_armazenamento" name="local_armazenamento" value="{{ gabarito.local_armazenamento }}">
+                    <small class="text-muted">Ex: Armário 2 / Prateleira B</small>
+                </div>
+                
+                <div class="mb-3">
+                    <label for="observacoes" class="form-label">Observações</label>
+                    <textarea class="form-control" id="observacoes" name="observacoes" rows="3">{{ gabarito.observacoes }}</textarea>
+                </div>
+                
+                <div class="mb-3">
+                    <label for="imagem" class="form-label">Imagem do Gabarito</label>
+                    {% if gabarito.imagem_path %}
+                    <div class="mb-2">
+                        <img src="{{ gabarito.imagem_path }}" alt="Imagem atual do gabarito" class="img-thumbnail" style="max-height: 200px;">
+                        <p class="text-muted">Imagem atual</p>
+                    </div>
+                    {% endif %}
+                    <input type="file" class="form-control" id="imagem" name="imagem" accept="image/*">
+                    <small class="text-muted">Deixe em branco para manter a imagem atual. Formatos aceitos: JPG, PNG, GIF</small>
+                </div>
+                
+                <div class="d-flex justify-content-between">
+                    <a href="{{ url_for('gabaritos_centro.listar_gabaritos_centro') }}" class="btn btn-secondary">
+                        <i class="fas fa-arrow-left"></i> Voltar
+                    </a>
+                    <button type="submit" class="btn btn-primary">
+                        <i class="fas fa-save"></i> Salvar Alterações
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+{% endblock %}

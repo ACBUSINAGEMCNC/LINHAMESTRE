@@ -1,0 +1,78 @@
+{% extends 'base.html' %}
+
+{% block title %}Máquinas{% endblock %}
+
+{% block content %}
+<div class="container mt-4">
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <h1>Máquinas</h1>
+        <a href="{{ url_for('maquinas.nova_maquina') }}" class="btn btn-primary">
+            <i class="fas fa-plus"></i> Nova Máquina
+        </a>
+    </div>
+
+    <div class="card shadow">
+        <div class="card-body">
+            <div class="table-responsive">
+                <table class="table table-striped table-hover" id="tabela-maquinas">
+                    <thead>
+                        <tr>
+                            <th>Código</th>
+                            <th>Nome</th>
+                            <th>Categoria</th>
+                            <th>Imagem</th>
+                            <th>Data de Cadastro</th>
+                            <th>Ações</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for maquina in maquinas %}
+                        <tr>
+                            <td>{{ maquina.codigo }}</td>
+                            <td>{{ maquina.nome }}</td>
+                            <td>{{ maquina.categoria_trabalho }}</td>
+                            <td>
+                                {% if maquina.imagem_path %}
+                                <img src="{{ maquina.imagem_path }}" alt="Imagem da máquina" class="img-thumbnail" style="max-height: 50px;">
+                                {% else %}
+                                <span class="text-muted">Sem imagem</span>
+                                {% endif %}
+                            </td>
+                            <td>{{ maquina.data_cadastro.strftime('%d/%m/%Y') }}</td>
+                            <td>
+                                <a href="{{ url_for('maquinas.editar_maquina', maquina_id=maquina.id) }}" class="btn btn-sm btn-outline-primary">
+                                    <i class="fas fa-edit"></i> Editar
+                                </a>
+                            </td>
+                        </tr>
+                        {% else %}
+                        <tr>
+                            <td colspan="6" class="text-center">Nenhuma máquina cadastrada.</td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+    
+    <div class="mt-4">
+        <a href="{{ url_for('trabalhos.listar_trabalhos') }}" class="btn btn-secondary">
+            <i class="fas fa-arrow-left"></i> Voltar para Trabalhos
+        </a>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+    $(document).ready(function() {
+        $('#tabela-maquinas').DataTable({
+            "language": {
+                "url": "//cdn.datatables.net/plug-ins/1.10.25/i18n/Portuguese-Brasil.json"
+            },
+            "order": [[0, "asc"]]
+        });
+    });
+</script>
+{% endblock %}
