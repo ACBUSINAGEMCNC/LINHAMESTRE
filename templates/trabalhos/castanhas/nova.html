@@ -9,17 +9,6 @@
     <div class="card shadow">
         <div class="card-body">
             <form method="POST" enctype="multipart/form-data">
-                <div class="row">
-                    <div class="col-md-6 mb-3">
-                        <div class="form-check mb-3">
-                            <input class="form-check-input" type="checkbox" id="castanha_livre" name="castanha_livre" onchange="toggleDiametroField()">
-                            <label class="form-check-label" for="castanha_livre">
-                                Castanha Livre
-                            </label>
-                            <small class="form-text text-muted d-block">Marque esta opção se a castanha não tem diâmetro fixo</small>
-                        </div>
-                    </div>
-                </div>
                 
                 <div class="row">
                     <div class="col-md-6 mb-3" id="diametro_container">
@@ -27,10 +16,17 @@
                         <input type="number" step="0.01" class="form-control" id="diametro" name="diametro" required>
                     </div>
                     
-                    <div class="col-md-6 mb-3">
+                    <div class="col-md-6 mb-3" id="comprimento_container">
                         <label for="comprimento" class="form-label">Comprimento (mm)</label>
                         <input type="number" step="0.01" class="form-control" id="comprimento" name="comprimento">
                         <small class="text-muted">Opcional</small>
+                        <div class="form-check mt-2">
+                            <input class="form-check-input" type="checkbox" id="castanha_livre" name="castanha_livre" onchange="toggleComprimentoField()">
+                            <label class="form-check-label" for="castanha_livre">
+                                Comprimento Livre
+                            </label>
+                            <small class="form-text text-muted d-block">Marque esta opção se a castanha não tem comprimento fixo</small>
+                        </div>
                     </div>
                 </div>
                 
@@ -44,11 +40,18 @@
                     </select>
                 </div>
                 
-                <div class="mb-3">
-                    <label for="local_armazenamento" class="form-label">Local de Armazenamento</label>
-                    <input type="text" class="form-control" id="local_armazenamento" name="local_armazenamento">
-                    <small class="text-muted">Ex: Bloco A / Posição 3</small>
+                <div class="row">
+                    <div class="col-md-6 mb-3">
+                        <label for="bloco_armazenamento" class="form-label">Bloco</label>
+                        <input type="text" class="form-control" id="bloco_armazenamento" name="bloco_armazenamento" placeholder="Ex: Bloco A">
+                    </div>
+                    <div class="col-md-6 mb-3">
+                        <label for="posicao_armazenamento" class="form-label">Posição</label>
+                        <input type="text" class="form-control" id="posicao_armazenamento" name="posicao_armazenamento" placeholder="Ex: Posição 3">
+                    </div>
                 </div>
+                <!-- Campo oculto para compatibilidade com o backend atual -->
+                <input type="hidden" id="local_armazenamento" name="local_armazenamento">
                 
                 <div class="mb-3">
                     <label for="imagem" class="form-label">Imagem da Castanha</label>
@@ -72,24 +75,37 @@
 
 {% block scripts %}
 <script>
-    function toggleDiametroField() {
+    function toggleComprimentoField() {
         const castanhaLivreChecked = document.getElementById('castanha_livre').checked;
-        const diametroInput = document.getElementById('diametro');
-        const diametroContainer = document.getElementById('diametro_container');
+        const comprimentoInput = document.getElementById('comprimento');
+        const comprimentoContainer = document.getElementById('comprimento_container');
         
         if (castanhaLivreChecked) {
-            diametroInput.required = false;
-            diametroInput.value = '';
-            diametroContainer.classList.add('opacity-50');
+            comprimentoInput.value = '';
+            comprimentoContainer.classList.add('opacity-50');
         } else {
-            diametroInput.required = true;
-            diametroContainer.classList.remove('opacity-50');
+            comprimentoContainer.classList.remove('opacity-50');
         }
     }
     
     // Inicializar o estado do campo de diâmetro
     document.addEventListener('DOMContentLoaded', function() {
-        toggleDiametroField();
+        toggleComprimentoField();
+        // Combinar Bloco e Posição no campo oculto antes de enviar
+        const form = document.querySelector('form');
+        form.addEventListener('submit', function() {
+            const bloco = (document.getElementById('bloco_armazenamento').value || '').trim();
+            const posicao = (document.getElementById('posicao_armazenamento').value || '').trim();
+            let combinado = '';
+            if (bloco && posicao) {
+                combinado = `${bloco} / ${posicao}`;
+            } else if (bloco) {
+                combinado = bloco;
+            } else if (posicao) {
+                combinado = posicao;
+            }
+            document.getElementById('local_armazenamento').value = combinado;
+        });
     });
 </script>
 {% endblock %}

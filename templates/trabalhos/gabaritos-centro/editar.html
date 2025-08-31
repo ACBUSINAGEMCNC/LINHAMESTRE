@@ -32,11 +32,18 @@
                     </select>
                 </div>
                 
-                <div class="mb-3">
-                    <label for="local_armazenamento" class="form-label">Local de Armazenamento</label>
-                    <input type="text" class="form-control" id="local_armazenamento" name="local_armazenamento" value="{{ gabarito.local_armazenamento }}">
-                    <small class="text-muted">Ex: Armário 2 / Prateleira B</small>
+                <div class="row">
+                    <div class="col-md-6 mb-3">
+                        <label for="bloco_armazenamento" class="form-label">Bloco</label>
+                        <input type="text" class="form-control" id="bloco_armazenamento" name="bloco_armazenamento" placeholder="Ex: Armário 2">
+                    </div>
+                    <div class="col-md-6 mb-3">
+                        <label for="posicao_armazenamento" class="form-label">Posição</label>
+                        <input type="text" class="form-control" id="posicao_armazenamento" name="posicao_armazenamento" placeholder="Ex: Prateleira B">
+                    </div>
                 </div>
+                <!-- Campo oculto para compatibilidade com o backend atual -->
+                <input type="hidden" id="local_armazenamento" name="local_armazenamento" value="{{ gabarito.local_armazenamento or '' }}">
                 
                 <div class="mb-3">
                     <label for="observacoes" class="form-label">Observações</label>
@@ -67,4 +74,40 @@
         </div>
     </div>
 </div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+    document.addEventListener('DOMContentLoaded', function() {
+        const blocoInput = document.getElementById('bloco_armazenamento');
+        const posicaoInput = document.getElementById('posicao_armazenamento');
+        // Preencher a partir do valor existente do campo oculto
+        const existing = (document.getElementById('local_armazenamento').value || '');
+        if (existing) {
+            const parts = existing.split('/');
+            if (parts.length >= 2) {
+                blocoInput.value = (parts[0] || '').trim();
+                posicaoInput.value = (parts[1] || '').trim();
+            } else {
+                blocoInput.value = existing.trim();
+                posicaoInput.value = '';
+            }
+        }
+        // Combinar antes de enviar
+        const form = document.querySelector('form');
+        form.addEventListener('submit', function() {
+            const bloco = (blocoInput.value || '').trim();
+            const posicao = (posicaoInput.value || '').trim();
+            let combinado = '';
+            if (bloco && posicao) {
+                combinado = `${bloco} / ${posicao}`;
+            } else if (bloco) {
+                combinado = bloco;
+            } else if (posicao) {
+                combinado = posicao;
+            }
+            document.getElementById('local_armazenamento').value = combinado;
+        });
+    });
+</script>
 {% endblock %}

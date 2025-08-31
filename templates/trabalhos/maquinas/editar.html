@@ -22,8 +22,19 @@
                 
                 <div class="mb-3">
                     <label for="categoria_trabalho" class="form-label">Categoria de Trabalho <span class="text-danger">*</span></label>
-                    <input type="text" class="form-control" id="categoria_trabalho" name="categoria_trabalho" value="{{ maquina.categoria_trabalho }}" required>
-                    <small class="text-muted">Ex: Torneamento, Fresamento, etc.</small>
+                    {% set cur = (maquina.categoria_trabalho or '')|lower %}
+                    <select class="form-select" id="categoria_trabalho" name="categoria_trabalho" required>
+                        <option value="">Selecione uma categoria</option>
+                        <option value="Serra" {% if cur == 'serra' %}selected{% endif %}>Serra</option>
+                        <option value="Torno CNC" {% if cur == 'torno cnc' %}selected{% endif %}>Torno CNC</option>
+                        <option value="Centro de Usinagem" {% if cur == 'centro de usinagem' %}selected{% endif %}>Centro de Usinagem</option>
+                        <option value="Manual" {% if cur == 'manual' %}selected{% endif %}>Manual</option>
+                        <option value="Acabamento" {% if cur == 'acabamento' %}selected{% endif %}>Acabamento</option>
+                        <option value="Outro" {% if cur == 'outro' %}selected{% endif %}>Outro</option>
+                    </select>
+                    <div class="form-text">
+                        A categoria é usada para cálculos de tempo no Kanban.
+                    </div>
                 </div>
                 
                 <div class="mb-3">

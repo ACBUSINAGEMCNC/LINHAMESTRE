@@ -375,7 +375,13 @@ def generate_next_os_code():
     return f"{prefixo}-{proximo:03d}"
 
 def save_uploaded_file(file, folder='imagens'):
-    """Salva um arquivo enviado e retorna o caminho relativo"""
+    """Salva arquivo delegando para save_file(), com suporte a Supabase/local.
+    Mantém compatibilidade para rotas existentes que chamam save_uploaded_file().
+    """
+    # Utilize o helper unificado que já trata ambiente serverless/Supabase.
+    return save_file(file, folder)
+    
+    # Código legado mantido abaixo como fallback (não será executado):
     if not file or file.filename == '':
         return None
         

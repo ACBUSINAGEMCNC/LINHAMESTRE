@@ -16,8 +16,18 @@
                 
                 <div class="mb-3">
                     <label for="categoria_trabalho" class="form-label">Categoria de Trabalho <span class="text-danger">*</span></label>
-                    <input type="text" class="form-control" id="categoria_trabalho" name="categoria_trabalho" required>
-                    <small class="text-muted">Ex: Torneamento, Fresamento, etc.</small>
+                    <select class="form-select" id="categoria_trabalho" name="categoria_trabalho" required>
+                        <option value="">Selecione uma categoria</option>
+                        <option value="Serra">Serra</option>
+                        <option value="Torno CNC">Torno CNC</option>
+                        <option value="Centro de Usinagem">Centro de Usinagem</option>
+                        <option value="Manual">Manual</option>
+                        <option value="Acabamento">Acabamento</option>
+                        <option value="Outro">Outro</option>
+                    </select>
+                    <div class="form-text">
+                        A categoria é usada para cálculos de tempo no Kanban.
+                    </div>
                 </div>
                 
                 <div class="mb-3">
