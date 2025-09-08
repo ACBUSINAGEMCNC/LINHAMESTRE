@@ -1,7 +1,7 @@
 from flask import Blueprint, render_template, request, redirect, url_for, flash, send_file, session
 from models import db, Backup, Usuario
 from routes.auth import login_required, permissao_requerida
-from datetime import datetime
+from datetime import datetime, date, time
 import os
 import subprocess
 import shutil
@@ -30,7 +30,17 @@ def _detect_database_type():
 
 def _get_db_connection_info():
     """Retorna informações de conexão do banco de dados."""
-    db_url = str(db.engine.url)
+    # Usar DATABASE_URL diretamente do ambiente se disponível
+    import os
+    env_database_url = os.getenv('DATABASE_URL')
+    
+    if env_database_url:
+        # Usar URL do ambiente (.env) que sabemos que funciona
+        db_url = env_database_url
+    else:
+        # Fallback para URL do SQLAlchemy
+        db_url = str(db.engine.url)
+    
     if db_url.startswith('sqlite'):
         return {'type': 'sqlite', 'path': db.engine.url.database}
     elif db_url.startswith('postgresql'):
@@ -68,6 +78,10 @@ def _criar_zip(arquivo_destino: str, db_path: str):
 def _criar_backup_supabase_alternativo(arquivo_destino: str, conn_info: dict):
     """Backup alternativo para Supabase usando SQL queries diretas."""
     try:
+        # Verificar se as credenciais estão disponíveis
+        if not all([conn_info.get('username'), conn_info.get('password'), conn_info.get('host')]):
+            raise Exception("Credenciais do Supabase não configuradas. Configure DATABASE_URL no arquivo .env com as credenciais corretas.")
+        
         # Conectar ao banco Supabase
         connection_string = f"postgresql://{conn_info['username']}:{conn_info['password']}@{conn_info['host']}:{conn_info['port']}/{conn_info['database']}"
         engine = create_engine(connection_string)
@@ -105,15 +119,36 @@ def _criar_backup_supabase_alternativo(arquivo_destino: str, conn_info: dict):
                                     if value is None:
                                         values.append('NULL')
                                     elif isinstance(value, str):
-                                        values.append(f"'{value.replace(chr(39), chr(39)+chr(39))}'")
+                                        # Escapar aspas simples
+                                        values.append(f"'{value.replace("'", "''")}'")
+                                    elif isinstance(value, (datetime, date, time)):
+                                        # Normalizar datas/horas para string e citar
+                                        if isinstance(value, datetime):
+                                            formatted = value.strftime('%Y-%m-%d %H:%M:%S.%f')
+                                        else:
+                                            formatted = value.isoformat()
+                                        values.append(f"'{formatted}'")
+                                    elif isinstance(value, bool):
+                                        values.append('TRUE' if value else 'FALSE')
                                     else:
+                                        # Números e outros tipos
                                         values.append(str(value))
                                 f.write(f"INSERT INTO {table} VALUES ({', '.join(values)});\n")
                         f.write("\n")
 
-            # Uploads
+            # Backup dos arquivos do Supabase Storage
+            try:
+                _backup_supabase_storage(tmpdir)
+            except Exception as storage_error:
+                # Se falhar o backup do storage, continuar com o backup do banco
+                logger.warning(f"Falha no backup do Supabase Storage: {storage_error}")
+                with open(os.path.join(tmpdir, 'storage_error.txt'), 'w') as f:
+                    f.write(f"Erro no backup do Supabase Storage: {storage_error}\n")
+                    f.write("Apenas dados do banco foram salvos.\n")
+
+            # Uploads locais (fallback)
             if os.path.exists(UPLOADS_DIR):
-                shutil.copytree(UPLOADS_DIR, os.path.join(tmpdir, 'uploads'))
+                shutil.copytree(UPLOADS_DIR, os.path.join(tmpdir, 'uploads_local'))
 
             # README explicativo
             readme_file = os.path.join(tmpdir, 'README.md')
@@ -121,6 +156,10 @@ def _criar_backup_supabase_alternativo(arquivo_destino: str, conn_info: dict):
                 f.write("# Backup Supabase\n\n")
                 f.write("Este backup foi criado usando queries SQL diretas ao invés de pg_dump.\n")
                 f.write("Para restaurar, execute o arquivo backup_supabase.sql no seu banco PostgreSQL.\n\n")
+                f.write("## Conteúdo do Backup:\n")
+                f.write("- backup_supabase.sql: Dados das tabelas\n")
+                f.write("- supabase_storage/: Arquivos do Supabase Storage\n")
+                f.write("- uploads_local/: Arquivos locais (se existirem)\n\n")
                 f.write(f"Data do backup: {datetime.now()}\n")
 
             # Compactar
@@ -132,7 +171,165 @@ def _criar_backup_supabase_alternativo(arquivo_destino: str, conn_info: dict):
                         zipf.write(abs_path, rel_path)
 
     except Exception as e:
-        raise Exception(f"Erro no backup alternativo Supabase: {str(e)}")
+        error_msg = str(e)
+        if "Wrong password" in error_msg or "authentication failed" in error_msg:
+            raise Exception(f"Erro de autenticação Supabase: Verifique se a senha no DATABASE_URL está correta. Detalhes: {error_msg}")
+        elif "connection" in error_msg.lower():
+            raise Exception(f"Erro de conexão Supabase: Verifique se o DATABASE_URL está correto e se o servidor está acessível. Detalhes: {error_msg}")
+        else:
+            raise Exception(f"Erro no backup alternativo Supabase: {error_msg}")
+
+
+def _backup_supabase_storage(tmpdir: str):
+    """Faz backup dos arquivos do Supabase Storage."""
+    import requests
+    import os
+    from models import db
+    from sqlalchemy import text
+    
+    # Obter configurações do Supabase
+    supabase_url = os.environ.get('SUPABASE_URL')
+    supabase_key = os.environ.get('SUPABASE_KEY')
+    bucket = os.environ.get('SUPABASE_BUCKET', 'uploads')
+    
+    if not all([supabase_url, supabase_key]):
+        raise Exception("Configuração do Supabase Storage não encontrada")
+    
+    # Remover barra final da URL
+    if supabase_url.endswith('/'):
+        supabase_url = supabase_url[:-1]
+    
+    # Criar diretório para arquivos do storage
+    storage_dir = os.path.join(tmpdir, 'supabase_storage')
+    os.makedirs(storage_dir, exist_ok=True)
+    
+    # Headers para autenticação
+    headers = {
+        'Authorization': f'Bearer {supabase_key}',
+        'apikey': supabase_key
+    }
+    
+    try:
+        # Listar todos os arquivos no bucket
+        list_url = f"{supabase_url}/storage/v1/object/list/{bucket}"
+        response = requests.post(list_url, headers=headers, json={})
+        
+        if response.status_code != 200:
+            raise Exception(f"Erro ao listar arquivos: {response.status_code} - {response.text}")
+        
+        files = response.json()
+        downloaded_count = 0
+        
+        for file_info in files:
+            if file_info.get('name'):
+                file_path = file_info['name']
+                
+                # URL para download do arquivo
+                download_url = f"{supabase_url}/storage/v1/object/{bucket}/{file_path}"
+                
+                try:
+                    # Fazer download do arquivo
+                    file_response = requests.get(download_url, headers=headers)
+                    
+                    if file_response.status_code == 200:
+                        # Criar estrutura de diretórios se necessário
+                        local_file_path = os.path.join(storage_dir, file_path)
+                        os.makedirs(os.path.dirname(local_file_path), exist_ok=True)
+                        
+                        # Salvar arquivo
+                        with open(local_file_path, 'wb') as f:
+                            f.write(file_response.content)
+                        
+                        downloaded_count += 1
+                        logger.debug(f"Arquivo baixado: {file_path}")
+                    else:
+                        logger.warning(f"Erro ao baixar {file_path}: {file_response.status_code}")
+                        
+                except Exception as e:
+                    logger.warning(f"Erro ao processar arquivo {file_path}: {e}")
+        
+        # Criar arquivo de log do backup
+        with open(os.path.join(storage_dir, 'backup_info.txt'), 'w') as f:
+            f.write(f"Backup do Supabase Storage\n")
+            f.write(f"Data: {datetime.now()}\n")
+            f.write(f"Bucket: {bucket}\n")
+            f.write(f"Arquivos baixados: {downloaded_count}\n")
+            f.write(f"Total de arquivos listados: {len(files)}\n")
+        
+        logger.info(f"Backup do Supabase Storage concluído: {downloaded_count} arquivos")
+        
+    except Exception as e:
+        raise Exception(f"Erro no backup do Supabase Storage: {str(e)}")
+
+
+def _restaurar_supabase_storage(tmpdir: str):
+    """Restaura arquivos do Supabase Storage a partir do backup."""
+    import requests
+    import os
+    
+    storage_dir = os.path.join(tmpdir, 'supabase_storage')
+    
+    if not os.path.exists(storage_dir):
+        logger.info("Nenhum backup do Supabase Storage encontrado")
+        return
+    
+    # Obter configurações do Supabase
+    supabase_url = os.environ.get('SUPABASE_URL')
+    supabase_key = os.environ.get('SUPABASE_KEY')
+    bucket = os.environ.get('SUPABASE_BUCKET', 'uploads')
+    
+    if not all([supabase_url, supabase_key]):
+        logger.warning("Configuração do Supabase Storage não encontrada para restauração")
+        return
+    
+    # Remover barra final da URL
+    if supabase_url.endswith('/'):
+        supabase_url = supabase_url[:-1]
+    
+    # Headers para autenticação
+    headers = {
+        'Authorization': f'Bearer {supabase_key}',
+        'apikey': supabase_key
+    }
+    
+    uploaded_count = 0
+    
+    # Percorrer todos os arquivos do backup
+    for root, dirs, files in os.walk(storage_dir):
+        for file_name in files:
+            if file_name == 'backup_info.txt':
+                continue
+                
+            local_file_path = os.path.join(root, file_name)
+            # Calcular caminho relativo no storage
+            rel_path = os.path.relpath(local_file_path, storage_dir)
+            storage_path = rel_path.replace('\\', '/')  # Normalizar para URL
+            
+            try:
+                # URL de upload
+                upload_url = f"{supabase_url}/storage/v1/object/{bucket}/{storage_path}"
+                
+                # Ler arquivo
+                with open(local_file_path, 'rb') as f:
+                    file_content = f.read()
+                
+                # Fazer upload
+                files_data = {
+                    'file': (file_name, file_content, 'application/octet-stream')
+                }
+                
+                response = requests.post(upload_url, headers=headers, files=files_data)
+                
+                if response.status_code in [200, 201]:
+                    uploaded_count += 1
+                    logger.debug(f"Arquivo restaurado: {storage_path}")
+                else:
+                    logger.warning(f"Erro ao restaurar {storage_path}: {response.status_code} - {response.text}")
+                    
+            except Exception as e:
+                logger.warning(f"Erro ao processar arquivo {storage_path}: {e}")
+    
+    logger.info(f"Restauração do Supabase Storage concluída: {uploaded_count} arquivos")
 
 
 def _criar_backup_postgresql(arquivo_destino: str, conn_info: dict):
@@ -181,9 +378,32 @@ def _criar_backup_postgresql_pg_dump(arquivo_destino: str, conn_info: dict):
                     raise Exception("pg_dump não encontrado. Para Supabase, considere usar o painel de administração do Supabase para backups, ou instalar PostgreSQL client tools.")
                 raise Exception(f"pg_dump falhou: {result.stderr}")
 
-            # Uploads
+            # Uploads locais (usar uploads_local para casar com a restauração)
             if os.path.exists(UPLOADS_DIR):
-                shutil.copytree(UPLOADS_DIR, os.path.join(tmpdir, 'uploads'))
+                shutil.copytree(UPLOADS_DIR, os.path.join(tmpdir, 'uploads_local'))
+
+            # Incluir arquivos do Supabase Storage no pacote de backup (best effort)
+            try:
+                _backup_supabase_storage(tmpdir)
+            except Exception as storage_error:
+                logger.warning(f"Falha no backup do Supabase Storage (pg_dump path): {storage_error}")
+                # Registrar aviso no pacote
+                with open(os.path.join(tmpdir, 'storage_error.txt'), 'w', encoding='utf-8') as f:
+                    f.write(f"Erro no backup do Supabase Storage: {storage_error}\n")
+                    f.write("Apenas dados do banco foram salvos para o storage.\n")
+
+            # Adicionar README com instruções
+            readme_file = os.path.join(tmpdir, 'README.md')
+            try:
+                with open(readme_file, 'w', encoding='utf-8') as f:
+                    f.write("# Backup PostgreSQL (pg_dump)\n\n")
+                    f.write("Este backup foi criado com pg_dump.\n\n")
+                    f.write("## Conteúdo:\n")
+                    f.write("- backup.sql: Dump do banco via pg_dump (formato custom em arquivo)\n")
+                    f.write("- supabase_storage/: Arquivos do Supabase Storage (se configurado)\n")
+                    f.write("- uploads_local/: Uploads locais (se existirem)\n")
+            except Exception:
+                pass
 
             # Compacta tudo em ZIP
             with zipfile.ZipFile(arquivo_destino, 'w', zipfile.ZIP_DEFLATED) as zipf:
@@ -211,24 +431,50 @@ def _restaurar_backup_postgresql(caminho_backup: str, conn_info: dict):
         with zipfile.ZipFile(caminho_backup, 'r') as zipf:
             zipf.extractall(tmpdir)
 
-        sql_file = os.path.join(tmpdir, 'backup.sql')
+        # Procurar por diferentes tipos de arquivo SQL
+        sql_file = None
+        possible_files = ['backup.sql', 'backup_supabase.sql']
+        
+        for filename in possible_files:
+            test_path = os.path.join(tmpdir, filename)
+            if os.path.exists(test_path):
+                sql_file = test_path
+                break
+        
+        if not sql_file:
+            # Listar arquivos disponíveis para debug
+            available_files = []
+            for root, dirs, files in os.walk(tmpdir):
+                for file in files:
+                    available_files.append(os.path.relpath(os.path.join(root, file), tmpdir))
+            
+            raise Exception(f"Arquivo de backup PostgreSQL não encontrado no ZIP. Arquivos disponíveis: {', '.join(available_files)}")
 
-        if not os.path.exists(sql_file):
-            raise Exception("Arquivo de backup PostgreSQL não encontrado no ZIP")
-
-        # Comando pg_restore
-        cmd = [
-            'pg_restore',
-            f"--host={conn_info['host']}",
-            f"--port={conn_info['port']}",
-            f"--username={conn_info['username']}",
-            f"--dbname={conn_info['database']}",
-            sql_file,
-            "--clean",
-            "--if-exists",
-            "--no-owner",
-            "--no-privileges"
-        ]
+        # Verificar se é arquivo SQL do Supabase (texto) ou backup binário do pg_dump
+        if sql_file.endswith('backup_supabase.sql'):
+            # Para backups SQL do Supabase, usar psql ao invés de pg_restore
+            cmd = [
+                'psql',
+                f"--host={conn_info['host']}",
+                f"--port={conn_info['port']}",
+                f"--username={conn_info['username']}",
+                f"--dbname={conn_info['database']}",
+                f"--file={sql_file}"
+            ]
+        else:
+            # Para backups binários do pg_dump, usar pg_restore
+            cmd = [
+                'pg_restore',
+                f"--host={conn_info['host']}",
+                f"--port={conn_info['port']}",
+                f"--username={conn_info['username']}",
+                f"--dbname={conn_info['database']}",
+                sql_file,
+                "--clean",
+                "--if-exists",
+                "--no-owner",
+                "--no-privileges"
+            ]
 
         # Configurar senha via variável de ambiente
         env = os.environ.copy()
@@ -237,19 +483,78 @@ def _restaurar_backup_postgresql(caminho_backup: str, conn_info: dict):
         try:
             result = subprocess.run(cmd, env=env, capture_output=True, text=True, timeout=300)
             if result.returncode != 0:
-                raise Exception(f"pg_restore falhou: {result.stderr}")
+                raise Exception(f"Comando falhou: {result.stderr}")
 
-            # Restaura uploads se existirem
-            extracted_uploads = os.path.join(tmpdir, 'uploads')
-            if os.path.exists(extracted_uploads):
+            # Restaurar arquivos do Supabase Storage
+            try:
+                _restaurar_supabase_storage(tmpdir)
+            except Exception as storage_error:
+                logger.warning(f"Erro ao restaurar Supabase Storage: {storage_error}")
+
+            # Restaurar uploads locais se existirem
+            uploads_local_dir = os.path.join(tmpdir, 'uploads_local')
+            if os.path.exists(uploads_local_dir):
                 if os.path.exists(UPLOADS_DIR):
                     shutil.rmtree(UPLOADS_DIR)
-                shutil.copytree(extracted_uploads, UPLOADS_DIR)
+                shutil.copytree(uploads_local_dir, UPLOADS_DIR)
+                print(f"Uploads locais restaurados para {UPLOADS_DIR}")
 
+            return "Backup PostgreSQL restaurado com sucesso!"
         except subprocess.TimeoutExpired:
             raise Exception("Timeout ao restaurar backup do PostgreSQL")
         except FileNotFoundError:
-            raise Exception("pg_restore não encontrado. Certifique-se que PostgreSQL está instalado.")
+            # Fallback: restauração manual usando SQLAlchemy
+            return _restaurar_backup_supabase_manual(sql_file, conn_info)
+
+
+def _restaurar_backup_supabase_manual(sql_file: str, conn_info: dict):
+    """Restaura backup do Supabase usando SQLAlchemy (sem dependência de ferramentas PostgreSQL)."""
+    try:
+        from sqlalchemy import create_engine, text
+        
+        # Criar conexão usando SQLAlchemy
+        connection_string = f"postgresql://{conn_info['username']}:{conn_info['password']}@{conn_info['host']}:{conn_info['port']}/{conn_info['database']}"
+        engine = create_engine(connection_string)
+        
+        # Ler e executar o arquivo SQL
+        with open(sql_file, 'r', encoding='utf-8') as f:
+            sql_content = f.read()
+        
+        # Dividir em comandos individuais e executar
+        with engine.connect() as conn:
+            # Executar em transação
+            trans = conn.begin()
+            try:
+                # Dividir por linhas e filtrar comandos válidos
+                commands = []
+                current_command = ""
+                
+                for line in sql_content.split('\n'):
+                    line = line.strip()
+                    if line and not line.startswith('--'):
+                        current_command += line + " "
+                        if line.endswith(';'):
+                            commands.append(current_command.strip())
+                            current_command = ""
+                
+                # Executar comandos
+                for command in commands:
+                    if command and not command.startswith('--'):
+                        try:
+                            conn.execute(text(command))
+                        except Exception as cmd_error:
+                            # Ignorar erros de comandos específicos (ex: CREATE TABLE IF NOT EXISTS)
+                            if "already exists" not in str(cmd_error).lower():
+                                print(f"Aviso ao executar comando: {cmd_error}")
+                
+                trans.commit()
+                
+            except Exception as e:
+                trans.rollback()
+                raise Exception(f"Erro na restauração manual: {str(e)}")
+                
+    except Exception as e:
+        raise Exception(f"Erro na restauração manual do Supabase: {str(e)}")
 
 
 def _restaurar_backup_sqlite(caminho_backup: str, db_path: str):
@@ -268,9 +573,13 @@ def _restaurar_backup_sqlite(caminho_backup: str, db_path: str):
             if os.path.exists(UPLOADS_DIR):
                 shutil.rmtree(UPLOADS_DIR)
             shutil.copytree(extracted_uploads, UPLOADS_DIR)
+
+
+# Configurações de diretórios
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 BACKUP_DIR = os.path.join(BASE_DIR, 'backups')
 UPLOADS_DIR = os.path.join(BASE_DIR, 'uploads')
+
 try:
     os.makedirs(BACKUP_DIR, exist_ok=True)
 except (PermissionError, OSError):
@@ -303,6 +612,14 @@ def criar_backup():
         if db_type == 'postgresql':
             # Backup PostgreSQL
             conn_info = _get_db_connection_info()
+            
+            # Verificar se estamos usando Supabase
+            if 'supabase.com' in conn_info.get('host', ''):
+                # Para Supabase, adicionar informações de configuração
+                database_url = os.getenv('DATABASE_URL', '')
+                if not database_url or 'postgresql://' not in database_url:
+                    raise Exception("DATABASE_URL não configurado. Para usar Supabase, configure DATABASE_URL no arquivo .env com: postgresql://postgres.[SEU-PROJETO]:[SUA-SENHA]@aws-0-sa-east-1.pooler.supabase.com:6543/postgres")
+            
             _criar_backup_postgresql(caminho_arquivo, conn_info)
         elif db_type == 'sqlite':
             # Backup SQLite (método original)
@@ -329,7 +646,13 @@ def criar_backup():
 
         flash(f'Backup criado com sucesso! Tipo de banco: {db_type.upper()}', 'success')
     except Exception as e:
-        flash(f'Erro ao criar backup: {str(e)}', 'danger')
+        error_msg = str(e)
+        if "Wrong password" in error_msg or "authentication failed" in error_msg:
+            flash(f'Erro de autenticação: Verifique as credenciais do Supabase no arquivo .env. {error_msg}', 'danger')
+        elif "DATABASE_URL não configurado" in error_msg:
+            flash(f'Configuração necessária: {error_msg}', 'warning')
+        else:
+            flash(f'Erro ao criar backup: {error_msg}', 'danger')
 
     return redirect(url_for('backup.listar_backups'))
 
@@ -345,55 +668,35 @@ def restaurar_backup(backup_id):
         flash('Arquivo de backup não encontrado!', 'danger')
         return redirect(url_for('backup.listar_backups'))
     
-    # Obter caminho do banco de dados atual
-    db_uri = db.engine.url.database
-    if db_uri.startswith('/'):
-        db_path = db_uri
-    else:
-        db_path = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), db_uri)
-    
     try:
-        # Criar backup temporário antes da restauração
-        temp_backup = f"{db_path}.temp"
-        shutil.copy2(db_path, temp_backup)
+        # Detectar tipo de banco de dados
+        db_type = _detect_database_type()
         
-        # Fechar todas as conexões com o banco de dados
-        db.session.close()
-        db.engine.dispose()
-        
-        if caminho_backup.endswith('.zip'):
-            with tempfile.TemporaryDirectory() as tmpdir:
-                # Extrai zip
-                with zipfile.ZipFile(caminho_backup, 'r') as zipf:
-                    zipf.extractall(tmpdir)
-                # Restaura DB
-                extracted_db = os.path.join(tmpdir, os.path.basename(db_path))
-                shutil.copy2(extracted_db, db_path)
-                # Restaura uploads
-                extracted_uploads = os.path.join(tmpdir, 'uploads')
-                if os.path.exists(extracted_uploads):
-                    # Copiar conteúdo, preservando estrutura
-                    if os.path.exists(UPLOADS_DIR):
-                        shutil.rmtree(UPLOADS_DIR)
-                    shutil.copytree(extracted_uploads, UPLOADS_DIR)
+        if db_type == 'postgresql':
+            # Restauração PostgreSQL
+            conn_info = _get_db_connection_info()
+            _restaurar_backup_postgresql(caminho_backup, conn_info)
+        elif db_type == 'sqlite':
+            # Restauração SQLite (método original)
+            db_uri = db.engine.url.database
+            if db_uri.startswith('/'):
+                db_path = db_uri
+            else:
+                db_path = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), db_uri)
+            
+            _restaurar_backup_sqlite(caminho_backup, db_path)
         else:
-            # backup antigo apenas do banco
-            shutil.copy2(caminho_backup, db_path)
+            raise Exception(f"Tipo de banco de dados não suportado para restauração: {db_type}")
         
         flash('Backup restaurado com sucesso! Por favor, reinicie a aplicação.', 'success')
     except Exception as e:
-        # Tentar restaurar o backup temporário em caso de falha
-        if os.path.exists(temp_backup):
-            try:
-                shutil.copy2(temp_backup, db_path)
-            except:
-                pass
-        
-        flash(f'Erro ao restaurar backup: {str(e)}', 'danger')
-    finally:
-        # Remover backup temporário
-        if os.path.exists(temp_backup):
-            os.remove(temp_backup)
+        error_msg = str(e)
+        if "pg_restore" in error_msg and ("not found" in error_msg or "não encontrado" in error_msg):
+            flash('Erro: pg_restore não encontrado. Para restaurar backups PostgreSQL, instale PostgreSQL client tools.', 'danger')
+        elif "backup_supabase.sql" in error_msg:
+            flash('Este backup contém dados SQL do Supabase. Use o painel do Supabase ou execute o arquivo SQL manualmente para restaurar.', 'warning')
+        else:
+            flash(f'Erro ao restaurar backup: {error_msg}', 'danger')
     
     return redirect(url_for('backup.listar_backups'))
 

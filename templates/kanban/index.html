@@ -2582,7 +2582,7 @@
         // Normalizar URL da imagem do item
         const imagemUrl = (data.item && data.item.imagem_path)
             ? (data.item.imagem_path.startsWith('supabase://')
-                ? `/uploads/${data.item.imagem_path}`
+                ? data.item.imagem_path.replace('supabase://', '/uploads/supabase:/')
                 : data.item.imagem_path)
             : null;
         

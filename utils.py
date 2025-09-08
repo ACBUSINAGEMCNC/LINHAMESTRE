@@ -225,6 +225,10 @@ def get_file_url(file_path):
     """Converte um caminho de arquivo em URL, seja local ou do Supabase"""
     if not file_path:
         return None
+    
+    # Verificar se já é uma URL completa (evitar loop infinito)
+    if file_path.startswith('http://') or file_path.startswith('https://'):
+        return file_path
         
     # Se for arquivo do Supabase Storage
     if file_path.startswith('supabase://'):

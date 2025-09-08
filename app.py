@@ -235,13 +235,23 @@ def create_app():
     app.register_blueprint(gabaritos_rosca)
     
     # Rota para redirecionar URLs Supabase
-    @app.route('/uploads/supabase://<path:file_path>')
+    @app.route('/uploads/supabase:/<path:file_path>')
     def supabase_redirect(file_path):
-        from utils import get_file_url
-        url = get_file_url(f'supabase://{file_path}')
-        from flask import current_app as _current_app
-        _current_app.logger.debug("Redirecionando acesso a arquivo Supabase: %s", url)
-        return redirect(url, code=302)
+        import os
+        from urllib.parse import quote
+        
+        # Construir URL pública direta sem usar get_file_url para evitar loop
+        bucket = os.environ.get('SUPABASE_BUCKET', 'uploads')
+        supabase_url = os.environ.get('SUPABASE_URL', '').rstrip('/')
+        
+        if supabase_url:
+            public_url = f"{supabase_url}/storage/v1/object/public/{bucket}/{quote(file_path)}"
+            from flask import current_app as _current_app
+            _current_app.logger.debug("Redirecionando para URL Supabase: %s", public_url)
+            return redirect(public_url, code=302)
+        else:
+            from flask import abort
+            abort(404)
     app.register_blueprint(folhas_processo)
     
     # Adicionar contexto global para templates
