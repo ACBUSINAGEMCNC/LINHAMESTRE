@@ -16,6 +16,13 @@ from urllib.parse import urlparse
 backup = Blueprint('backup', __name__)
 logger = logging.getLogger(__name__)
 
+# Configurar logging mais detalhado para o módulo de backup
+logger.setLevel(logging.DEBUG)
+if not logger.handlers:
+    handler = logging.StreamHandler()
+    formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+    handler.setFormatter(formatter)
+    logger.addHandler(handler)
 
 def _detect_database_type():
     """Detecta o tipo de banco de dados sendo usado."""
@@ -59,20 +66,56 @@ def _get_db_connection_info():
 
 def _criar_zip(arquivo_destino: str, db_path: str):
     """Gera um ZIP contendo o banco de dados e a pasta uploads."""
-    with tempfile.TemporaryDirectory() as tmpdir:
-        # Banco
-        tmp_db = os.path.join(tmpdir, os.path.basename(db_path))
-        shutil.copy2(db_path, tmp_db)
-        # Uploads
-        if os.path.exists(UPLOADS_DIR):
-            shutil.copytree(UPLOADS_DIR, os.path.join(tmpdir, 'uploads'))
-                # Compacta
-        with zipfile.ZipFile(arquivo_destino, 'w', zipfile.ZIP_DEFLATED) as zipf:
-            for root, _, files in os.walk(tmpdir):
-                for f in files:
-                    abs_path = os.path.join(root, f)
-                    rel_path = os.path.relpath(abs_path, tmpdir)
-                    zipf.write(abs_path, rel_path)
+    try:
+        # Verificar se o diretório de backup existe
+        backup_dir = os.path.dirname(arquivo_destino)
+        if not os.path.exists(backup_dir):
+            logger.info(f"Criando diretório de backup: {backup_dir}")
+            os.makedirs(backup_dir, exist_ok=True)
+            
+        with tempfile.TemporaryDirectory() as tmpdir:
+            logger.info(f"Diretório temporário criado: {tmpdir}")
+            
+            # Banco
+            tmp_db = os.path.join(tmpdir, os.path.basename(db_path))
+            logger.info(f"Copiando banco de dados: {db_path} -> {tmp_db}")
+            shutil.copy2(db_path, tmp_db)
+            
+            # Uploads
+            if os.path.exists(UPLOADS_DIR):
+                uploads_tmp = os.path.join(tmpdir, 'uploads')
+                logger.info(f"Copiando uploads: {UPLOADS_DIR} -> {uploads_tmp}")
+                shutil.copytree(UPLOADS_DIR, uploads_tmp)
+            else:
+                logger.warning(f"Diretório de uploads não encontrado: {UPLOADS_DIR}")
+                # Criar diretório vazio para uploads para manter a estrutura
+                os.makedirs(os.path.join(tmpdir, 'uploads'), exist_ok=True)
+                
+            # Compacta
+            logger.info(f"Criando arquivo ZIP: {arquivo_destino}")
+            with zipfile.ZipFile(arquivo_destino, 'w', zipfile.ZIP_DEFLATED) as zipf:
+                for root, _, files in os.walk(tmpdir):
+                    for f in files:
+                        abs_path = os.path.join(root, f)
+                        rel_path = os.path.relpath(abs_path, tmpdir)
+                        zipf.write(abs_path, rel_path)
+                        logger.debug(f"Adicionado ao ZIP: {rel_path}")
+    except Exception as e:
+        logger.error(f"Erro ao criar ZIP: {str(e)}")
+        # Em ambiente serverless, tentar usar o diretório /tmp diretamente
+        if not os.access(os.path.dirname(arquivo_destino), os.W_OK):
+            logger.info("Tentando usar /tmp diretamente para o backup")
+            novo_destino = os.path.join('/tmp', os.path.basename(arquivo_destino))
+            logger.info(f"Novo destino: {novo_destino}")
+            return _criar_zip(novo_destino, db_path)
+        raise
+
+
+def _criar_backup_sqlite(caminho_arquivo, db_path):
+    """Cria um backup do banco de dados SQLite e da pasta uploads."""
+    logger.info(f"Criando backup SQLite: {db_path} -> {caminho_arquivo}")
+    logger.info(f"UPLOADS_DIR para backup: {UPLOADS_DIR}, existe: {os.path.exists(UPLOADS_DIR)}")
+    _criar_zip(caminho_arquivo, db_path)
 
 
 def _criar_backup_supabase_alternativo(arquivo_destino: str, conn_info: dict):
@@ -577,11 +620,19 @@ def _restaurar_backup_sqlite(caminho_backup: str, db_path: str):
 
 # Configurações de diretórios
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-BACKUP_DIR = os.path.join(BASE_DIR, 'backups')
-UPLOADS_DIR = os.path.join(BASE_DIR, 'uploads')
+
+# Verificar se podemos escrever no BASE_DIR, senão usar /tmp (para serverless como Vercel)
+if os.access(BASE_DIR, os.W_OK):
+    BACKUP_DIR = os.path.join(BASE_DIR, 'backups')
+    UPLOADS_DIR = os.path.join(BASE_DIR, 'uploads')
+else:
+    # Ambiente serverless, usar /tmp
+    BACKUP_DIR = '/tmp/backups'
+    UPLOADS_DIR = '/tmp/uploads'  # Também usar /tmp para uploads em ambiente serverless
 
 try:
     os.makedirs(BACKUP_DIR, exist_ok=True)
+    os.makedirs(UPLOADS_DIR, exist_ok=True)
 except (PermissionError, OSError):
     pass  # Ignorar erros de permissão ou sistema de arquivos somente leitura
 
@@ -599,15 +650,23 @@ def listar_backups():
 def criar_backup():
     """Rota para criar um novo backup do banco de dados"""
     descricao = request.form.get('descricao', '')
+    
+    # Log do ambiente
+    logger.info(f"Iniciando backup. BASE_DIR: {BASE_DIR}")
+    logger.info(f"BACKUP_DIR: {BACKUP_DIR}, existe: {os.path.exists(BACKUP_DIR)}, permissão escrita: {os.access(BACKUP_DIR, os.W_OK) if os.path.exists(BACKUP_DIR) else 'N/A'}")
+    logger.info(f"UPLOADS_DIR: {UPLOADS_DIR}, existe: {os.path.exists(UPLOADS_DIR)}")
+    logger.info(f"Ambiente: {'Serverless' if not os.access(BASE_DIR, os.W_OK) else 'Local'}")
 
     # Gerar nome do arquivo de backup
     timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
     nome_arquivo = f"backup_{timestamp}.zip"
     caminho_arquivo = os.path.join(BACKUP_DIR, nome_arquivo)
+    logger.info(f"Caminho do arquivo de backup: {caminho_arquivo}")
 
     try:
         # Detectar tipo de banco de dados
         db_type = _detect_database_type()
+        logger.info(f"Tipo de banco de dados detectado: {db_type}")
 
         if db_type == 'postgresql':
             # Backup PostgreSQL
@@ -630,8 +689,25 @@ def criar_backup():
         else:
             raise Exception(f"Tipo de banco de dados não suportado: {db_type}")
 
+        # Verificar se o arquivo foi criado
+        if not os.path.exists(caminho_arquivo):
+            raise Exception(f"Arquivo de backup não foi criado em {caminho_arquivo}")
+            
+        # Listar conteúdo do arquivo ZIP para debug
+        logger.info(f"Verificando conteúdo do arquivo ZIP {caminho_arquivo}")
+        try:
+            with zipfile.ZipFile(caminho_arquivo, 'r') as zipf:
+                file_list = zipf.namelist()
+                logger.info(f"Arquivos no ZIP: {', '.join(file_list)}")
+                # Verificar se uploads estão incluídos
+                uploads_included = any(name.startswith('uploads/') for name in file_list)
+                logger.info(f"Uploads incluídos no backup: {uploads_included}")
+        except Exception as zip_error:
+            logger.error(f"Erro ao verificar conteúdo do ZIP: {zip_error}")
+            
         # Registrar backup no banco de dados
         tamanho = os.path.getsize(caminho_arquivo)
+        logger.info(f"Tamanho do arquivo de backup: {tamanho} bytes")
         novo_backup = Backup(
             nome_arquivo=nome_arquivo,
             data_criacao=datetime.now(),
@@ -643,6 +719,7 @@ def criar_backup():
 
         db.session.add(novo_backup)
         db.session.commit()
+        logger.info(f"Backup registrado no banco de dados com ID {novo_backup.id}")
 
         flash(f'Backup criado com sucesso! Tipo de banco: {db_type.upper()}', 'success')
     except Exception as e:
@@ -664,9 +741,36 @@ def restaurar_backup(backup_id):
     backup_obj = Backup.query.get_or_404(backup_id)
     caminho_backup = os.path.join(BACKUP_DIR, backup_obj.nome_arquivo)
     
+    # Verificar se o arquivo existe no caminho padrão
     if not os.path.exists(caminho_backup):
-        flash('Arquivo de backup não encontrado!', 'danger')
-        return redirect(url_for('backup.listar_backups'))
+        logger.warning(f"Arquivo de backup não encontrado no caminho padrão: {caminho_backup}")
+        
+        # Tentar encontrar em /tmp para ambientes serverless
+        caminho_tmp = os.path.join('/tmp', backup_obj.nome_arquivo)
+        if os.path.exists(caminho_tmp):
+            logger.info(f"Arquivo de backup encontrado em caminho alternativo: {caminho_tmp}")
+            caminho_backup = caminho_tmp
+        else:
+            # Verificar se existe em algum lugar no diretório /tmp
+            try:
+                encontrado = False
+                for root, _, files in os.walk('/tmp'):
+                    for file in files:
+                        if file == backup_obj.nome_arquivo:
+                            caminho_backup = os.path.join(root, file)
+                            logger.info(f"Arquivo de backup encontrado em: {caminho_backup}")
+                            encontrado = True
+                            break
+                    if encontrado:
+                        break
+                        
+                if not encontrado:
+                    flash('Arquivo de backup não encontrado!', 'danger')
+                    return redirect(url_for('backup.listar_backups'))
+            except Exception as e:
+                logger.error(f"Erro ao procurar backup em /tmp: {str(e)}")
+                flash('Arquivo de backup não encontrado!', 'danger')
+                return redirect(url_for('backup.listar_backups'))
     
     try:
         # Detectar tipo de banco de dados
@@ -708,10 +812,31 @@ def download_backup(backup_id):
     backup_obj = Backup.query.get_or_404(backup_id)
     caminho_backup = os.path.join(BACKUP_DIR, backup_obj.nome_arquivo)
     
+    # Verificar se o arquivo existe no caminho padrão
     if not os.path.exists(caminho_backup):
+        logger.warning(f"Arquivo de backup não encontrado no caminho padrão: {caminho_backup}")
+        
+        # Tentar encontrar em /tmp para ambientes serverless
+        caminho_tmp = os.path.join('/tmp', backup_obj.nome_arquivo)
+        if os.path.exists(caminho_tmp):
+            logger.info(f"Arquivo de backup encontrado em caminho alternativo: {caminho_tmp}")
+            return send_file(caminho_tmp, as_attachment=True)
+        
+        # Verificar se existe em algum lugar no diretório /tmp
+        try:
+            for root, _, files in os.walk('/tmp'):
+                for file in files:
+                    if file == backup_obj.nome_arquivo:
+                        caminho_encontrado = os.path.join(root, file)
+                        logger.info(f"Arquivo de backup encontrado em: {caminho_encontrado}")
+                        return send_file(caminho_encontrado, as_attachment=True)
+        except Exception as e:
+            logger.error(f"Erro ao procurar backup em /tmp: {str(e)}")
+        
         flash('Arquivo de backup não encontrado!', 'danger')
         return redirect(url_for('backup.listar_backups'))
     
+    logger.info(f"Enviando arquivo de backup: {caminho_backup}")
     return send_file(caminho_backup, as_attachment=True)
 
 @backup.route('/backups/excluir/<int:backup_id>', methods=['POST'])
