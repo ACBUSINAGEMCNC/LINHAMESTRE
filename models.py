@@ -467,6 +467,8 @@ class Backup(db.Model):
     usuario_id = db.Column(db.Integer, db.ForeignKey('usuario.id'))
     descricao = db.Column(db.Text)
     automatico = db.Column(db.Boolean, default=False)
+    storage_url = db.Column(db.String(500))  # URL do backup no Supabase Storage
+    storage_type = db.Column(db.String(50), default='local')  # 'local' ou 'supabase'
     
     usuario = relationship('Usuario', backref='backups')
     
