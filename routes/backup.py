@@ -3,6 +3,7 @@ from models import db, Backup, Usuario
 from routes.auth import login_required, permissao_requerida
 from datetime import datetime, date, time
 import os
+import sys
 import subprocess
 import shutil
 import tempfile
@@ -12,6 +13,8 @@ import logging
 from sqlalchemy import create_engine, text
 import psycopg2
 from urllib.parse import urlparse
+import requests
+import json
 
 backup = Blueprint('backup', __name__)
 logger = logging.getLogger(__name__)
@@ -24,6 +27,24 @@ if not logger.handlers:
     handler.setFormatter(formatter)
     logger.addHandler(handler)
 
+# Configurações de diretórios
+BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+
+# Verificar se podemos escrever no BASE_DIR, senão usar /tmp (para serverless como Vercel)
+if os.access(BASE_DIR, os.W_OK):
+    BACKUP_DIR = os.path.join(BASE_DIR, 'backups')
+    UPLOADS_DIR = os.path.join(BASE_DIR, 'uploads')
+else:
+    # Ambiente serverless, usar /tmp
+    BACKUP_DIR = '/tmp/backups'
+    UPLOADS_DIR = '/tmp/uploads'  # Também usar /tmp para uploads em ambiente serverless
+
+try:
+    os.makedirs(BACKUP_DIR, exist_ok=True)
+    os.makedirs(UPLOADS_DIR, exist_ok=True)
+except (PermissionError, OSError):
+    pass  # Ignorar erros de permissão ou sistema de arquivos somente leitura
+
 def _detect_database_type():
     """Detecta o tipo de banco de dados sendo usado."""
     db_url = str(db.engine.url)
@@ -33,6 +54,363 @@ def _detect_database_type():
         return 'postgresql'
     else:
         return 'unknown'
+
+
+def _download_supabase_storage_files(tmpdir):
+    """Baixa todos os arquivos do Supabase Storage para o backup."""
+    try:
+        logger.info("Iniciando download dos arquivos do Supabase Storage...")
+        
+        # Configurar cliente Supabase - tentar diferentes nomes de variáveis
+        supabase_url = os.getenv('SUPABASE_URL')
+        # Tentar diferentes nomes para a chave
+        supabase_key = (
+            os.getenv('SUPABASE_SERVICE_KEY') or 
+            os.getenv('SUPABASE_ANON_KEY') or 
+            os.getenv('SUPABASE_KEY')
+        )
+        bucket_name = os.getenv('SUPABASE_BUCKET', 'uploads')
+        
+        logger.info(f"Configurações Supabase:")
+        logger.info(f"  URL: {supabase_url[:50] + '...' if supabase_url else 'Não configurado'}")
+        logger.info(f"  KEY: {'Configurado' if supabase_key else 'Não configurado'}")
+        logger.info(f"  BUCKET: {bucket_name}")
+        
+        auth_key = supabase_key
+        
+        if not all([supabase_url, auth_key]):
+            logger.warning("Credenciais do Supabase Storage não encontradas. Configure SUPABASE_URL e SUPABASE_ANON_KEY (ou SUPABASE_SERVICE_KEY) no .env")
+            return
+        
+        # Criar diretório para arquivos do storage
+        storage_dir = os.path.join(tmpdir, 'supabase_storage')
+        os.makedirs(storage_dir, exist_ok=True)
+        
+        # Listar todos os arquivos no bucket
+        headers = {
+            'Authorization': f'Bearer {auth_key}',
+            'apikey': auth_key
+        }
+        
+        # Função para listar arquivos recursivamente
+        def list_files_recursive(prefix=''):
+            """Lista arquivos recursivamente no bucket"""
+            all_files = []
+            list_url = f"{supabase_url}/storage/v1/object/list/{bucket_name}"
+            
+            try:
+                response = requests.post(list_url, headers=headers, json={'prefix': prefix}, timeout=30)
+                if response.status_code == 200:
+                    items = response.json()
+                    
+                    for item in items:
+                        if item.get('name'):
+                            item_name = item['name']
+                            full_path = f"{prefix}{item_name}" if prefix else item_name
+                            
+                            # Se é um diretório (sem extensão), listar recursivamente
+                            if '.' not in item_name and not item.get('metadata'):
+                                logger.debug(f"Explorando diretório: {full_path}")
+                                sub_files = list_files_recursive(f"{full_path}/")
+                                all_files.extend(sub_files)
+                            else:
+                                # É um arquivo
+                                all_files.append({
+                                    'name': full_path,
+                                    'size': item.get('metadata', {}).get('size', 0),
+                                    'last_modified': item.get('updated_at')
+                                })
+                                
+            except Exception as e:
+                logger.error(f"Erro ao listar {prefix}: {str(e)}")
+                
+            return all_files
+        
+        # Listar todos os arquivos recursivamente
+        logger.info("Listando arquivos recursivamente...")
+        files = list_files_recursive()
+        
+        if not files:
+            logger.warning("Nenhum arquivo encontrado no Supabase Storage")
+            return
+            
+        logger.info(f"Processando {len(files)} arquivos do Supabase Storage")
+        
+        # Baixar cada arquivo
+        downloaded = 0
+        for file_info in files:
+            file_path = file_info['name']
+            download_url = f"{supabase_url}/storage/v1/object/public/{bucket_name}/{file_path}"
+            
+            try:
+                logger.debug(f"Baixando: {file_path}")
+                file_response = requests.get(download_url, timeout=30)
+                if file_response.status_code == 200:
+                    # Criar estrutura de diretórios
+                    local_file_path = os.path.join(storage_dir, file_path)
+                    os.makedirs(os.path.dirname(local_file_path), exist_ok=True)
+                    
+                    # Salvar arquivo
+                    with open(local_file_path, 'wb') as f:
+                        f.write(file_response.content)
+                    
+                    downloaded += 1
+                    file_size = len(file_response.content)
+                    logger.debug(f"Arquivo baixado: {file_path} ({file_size} bytes)")
+                    
+                    # Log de progresso a cada 10 arquivos
+                    if downloaded % 10 == 0:
+                        logger.info(f"Progresso: {downloaded}/{len(files)} arquivos baixados")
+                else:
+                    logger.warning(f"Erro ao baixar {file_path}: {file_response.status_code}")
+            except Exception as e:
+                logger.error(f"Erro ao baixar arquivo {file_path}: {str(e)}")
+        
+        logger.info(f"Download concluído: {downloaded}/{len(files)} arquivos baixados com sucesso")
+        
+        if downloaded == 0:
+            logger.warning("Nenhum arquivo foi baixado com sucesso!")
+        
+        # Criar arquivo de mapeamento
+        mapping_file = os.path.join(storage_dir, 'file_mapping.json')
+        with open(mapping_file, 'w', encoding='utf-8') as f:
+            json.dump({
+                'bucket': bucket_name,
+                'files': files,
+                'download_date': datetime.now().isoformat(),
+                'supabase_url': supabase_url,
+                'total_files': len(files),
+                'downloaded_files': downloaded
+            }, f, indent=2, ensure_ascii=False)
+        
+        logger.info(f"Arquivo de mapeamento criado: {mapping_file}")
+            
+    except Exception as e:
+        logger.error(f"Erro no download do Supabase Storage: {str(e)}")
+
+
+def _create_restore_script(tmpdir):
+    """Cria script de restauração automática."""
+    script_content = '''#!/usr/bin/env python3
+# -*- coding: utf-8 -*-
+"""
+Script de Restauração Automática - ACB Usinagem CNC
+Gerado automaticamente pelo sistema de backup
+"""
+
+import os
+import sys
+import shutil
+import sqlite3
+import json
+import requests
+from datetime import datetime
+
+def log(message):
+    print(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] {message}")
+
+def restore_database():
+    """Restaura o banco de dados."""
+    log("=== RESTAURAÇÃO DO BANCO DE DADOS ===")
+    
+    # Encontrar arquivo do banco no backup
+    db_files = [f for f in os.listdir('.') if f.endswith('.db') or f.endswith('.sqlite')]
+    
+    if not db_files:
+        log("ERRO: Nenhum arquivo de banco encontrado no backup!")
+        return False
+    
+    db_file = db_files[0]
+    log(f"Arquivo do banco encontrado: {db_file}")
+    
+    # Determinar destino baseado no ambiente
+    if os.path.exists('/tmp'):
+        # Ambiente serverless (Vercel)
+        dest_db = '/tmp/acb_usinagem.db'
+        log("Ambiente serverless detectado - usando /tmp")
+    else:
+        # Ambiente local
+        dest_db = 'acb_usinagem.db'
+        log("Ambiente local detectado")
+    
+    try:
+        shutil.copy2(db_file, dest_db)
+        log(f"Banco restaurado com sucesso: {dest_db}")
+        return True
+    except Exception as e:
+        log(f"ERRO ao restaurar banco: {str(e)}")
+        return False
+
+def restore_uploads():
+    """Restaura arquivos de upload locais."""
+    log("=== RESTAURAÇÃO DE UPLOADS LOCAIS ===")
+    
+    if os.path.exists('uploads'):
+        try:
+            if os.path.exists('../uploads'):
+                shutil.rmtree('../uploads')
+            shutil.copytree('uploads', '../uploads')
+            log("Uploads locais restaurados com sucesso")
+            return True
+        except Exception as e:
+            log(f"ERRO ao restaurar uploads: {str(e)}")
+            return False
+    else:
+        log("Nenhum diretório de uploads encontrado no backup")
+        return True
+
+def restore_supabase_storage():
+    """Restaura arquivos para o Supabase Storage."""
+    log("=== RESTAURAÇÃO DO SUPABASE STORAGE ===")
+    
+    storage_dir = 'supabase_storage'
+    mapping_file = os.path.join(storage_dir, 'file_mapping.json')
+    
+    if not os.path.exists(storage_dir) or not os.path.exists(mapping_file):
+        log("Nenhum backup do Supabase Storage encontrado")
+        return True
+    
+    # Ler configurações
+    try:
+        with open(mapping_file, 'r', encoding='utf-8') as f:
+            mapping = json.load(f)
+        
+        supabase_url = os.getenv('SUPABASE_URL')
+        supabase_key = os.getenv('SUPABASE_SERVICE_KEY')  # Precisa da service key para upload
+        bucket_name = mapping.get('bucket', 'uploads')
+        
+        if not all([supabase_url, supabase_key]):
+            log("AVISO: Credenciais do Supabase não configuradas. Configure SUPABASE_URL e SUPABASE_SERVICE_KEY")
+            return False
+        
+        headers = {
+            'Authorization': f'Bearer {supabase_key}',
+            'apikey': supabase_key
+        }
+        
+        # Upload de cada arquivo
+        uploaded = 0
+        for file_info in mapping.get('files', []):
+            if file_info.get('name'):
+                file_path = file_info['name']
+                local_file = os.path.join(storage_dir, file_path)
+                
+                if os.path.exists(local_file):
+                    try:
+                        with open(local_file, 'rb') as f:
+                            files = {'file': f}
+                            upload_url = f"{supabase_url}/storage/v1/object/{bucket_name}/{file_path}"
+                            
+                            response = requests.post(upload_url, headers=headers, files=files)
+                            
+                            if response.status_code in [200, 201]:
+                                uploaded += 1
+                                log(f"Arquivo enviado: {file_path}")
+                            else:
+                                log(f"ERRO ao enviar {file_path}: {response.status_code}")
+                    except Exception as e:
+                        log(f"ERRO ao processar {file_path}: {str(e)}")
+        
+        log(f"Restauração do Storage concluída: {uploaded} arquivos enviados")
+        return True
+        
+    except Exception as e:
+        log(f"ERRO na restauração do Storage: {str(e)}")
+        return False
+
+def main():
+    """Função principal de restauração."""
+    log("=== INICIANDO RESTAURAÇÃO AUTOMÁTICA ===")
+    log(f"Diretório atual: {os.getcwd()}")
+    log(f"Arquivos disponíveis: {os.listdir('.')}")
+    
+    success = True
+    
+    # Restaurar banco de dados
+    if not restore_database():
+        success = False
+    
+    # Restaurar uploads locais
+    if not restore_uploads():
+        success = False
+    
+    # Restaurar Supabase Storage
+    if not restore_supabase_storage():
+        log("AVISO: Falha na restauração do Supabase Storage (pode ser normal se credenciais não estiverem configuradas)")
+    
+    if success:
+        log("=== RESTAURAÇÃO CONCLUÍDA COM SUCESSO ===")
+        log("")
+        log("IMPORTANTE:")
+        log("1. Reinicie a aplicação para carregar o banco restaurado")
+        log("2. Verifique se as variáveis de ambiente estão configuradas")
+        log("3. Para Supabase Storage, configure SUPABASE_SERVICE_KEY se necessário")
+    else:
+        log("=== RESTAURAÇÃO CONCLUÍDA COM ERROS ===")
+        sys.exit(1)
+
+if __name__ == '__main__':
+    main()
+'''
+    
+    script_path = os.path.join(tmpdir, 'restore.py')
+    with open(script_path, 'w', encoding='utf-8') as f:
+        f.write(script_content)
+    
+    # Criar README com instruções
+    readme_content = '''# Backup ACB Usinagem CNC
+
+Este arquivo contém um backup completo do sistema ACB Usinagem CNC.
+
+## Conteúdo do Backup
+
+- **Banco de dados**: Arquivo .db com todos os dados
+- **Uploads locais**: Pasta `uploads/` com arquivos enviados localmente
+- **Supabase Storage**: Pasta `supabase_storage/` com arquivos do cloud
+- **Script de restauração**: `restore.py` para restauração automática
+
+## Como Restaurar
+
+### Método 1: Restauração Automática (Recomendado)
+
+1. Extraia este ZIP no diretório do projeto
+2. Configure as variáveis de ambiente (.env):
+   ```
+   SUPABASE_URL=sua_url_aqui
+   SUPABASE_SERVICE_KEY=sua_service_key_aqui
+   ```
+3. Execute o script de restauração:
+   ```bash
+   python restore.py
+   ```
+4. Reinicie a aplicação
+
+### Método 2: Restauração Manual
+
+1. Copie o arquivo .db para o diretório do projeto
+2. Copie a pasta `uploads/` para o diretório do projeto
+3. Para Supabase Storage, use o painel administrativo ou API
+
+## Informações do Backup
+
+- **Data de criação**: ''' + datetime.now().strftime('%d/%m/%Y %H:%M:%S') + '''
+- **Versão do sistema**: ACB Usinagem CNC v2.0
+- **Tipo de backup**: Completo (SQL + Arquivos)
+
+## Suporte
+
+Em caso de problemas na restauração, verifique:
+1. Permissões de escrita no diretório
+2. Variáveis de ambiente configuradas
+3. Conexão com internet (para Supabase)
+4. Logs do script de restauração
+'''
+    
+    readme_path = os.path.join(tmpdir, 'README.md')
+    with open(readme_path, 'w', encoding='utf-8') as f:
+        f.write(readme_content)
+    
+    logger.info("Script de restauração e documentação criados")
 
 
 def _get_db_connection_info():
@@ -81,15 +459,21 @@ def _criar_zip(arquivo_destino: str, db_path: str):
             logger.info(f"Copiando banco de dados: {db_path} -> {tmp_db}")
             shutil.copy2(db_path, tmp_db)
             
-            # Uploads
+            # Uploads locais
             if os.path.exists(UPLOADS_DIR):
                 uploads_tmp = os.path.join(tmpdir, 'uploads')
-                logger.info(f"Copiando uploads: {UPLOADS_DIR} -> {uploads_tmp}")
+                logger.info(f"Copiando uploads locais: {UPLOADS_DIR} -> {uploads_tmp}")
                 shutil.copytree(UPLOADS_DIR, uploads_tmp)
             else:
                 logger.warning(f"Diretório de uploads não encontrado: {UPLOADS_DIR}")
                 # Criar diretório vazio para uploads para manter a estrutura
                 os.makedirs(os.path.join(tmpdir, 'uploads'), exist_ok=True)
+            
+            # Baixar arquivos do Supabase Storage
+            _download_supabase_storage_files(tmpdir)
+            
+            # Criar script de restauração
+            _create_restore_script(tmpdir)
                 
             # Compacta
             logger.info(f"Criando arquivo ZIP: {arquivo_destino}")
@@ -119,7 +503,7 @@ def _criar_backup_sqlite(caminho_arquivo, db_path):
 
 
 def _criar_backup_supabase_alternativo(arquivo_destino: str, conn_info: dict):
-    """Backup alternativo para Supabase usando SQL queries diretas."""
+    """Backup alternativo para Supabase usando SQL queries diretas + Storage."""
     try:
         # Verificar se as credenciais estão disponíveis
         if not all([conn_info.get('username'), conn_info.get('password'), conn_info.get('host')]):
@@ -179,15 +563,11 @@ def _criar_backup_supabase_alternativo(arquivo_destino: str, conn_info: dict):
                                 f.write(f"INSERT INTO {table} VALUES ({', '.join(values)});\n")
                         f.write("\n")
 
-            # Backup dos arquivos do Supabase Storage
-            try:
-                _backup_supabase_storage(tmpdir)
-            except Exception as storage_error:
-                # Se falhar o backup do storage, continuar com o backup do banco
-                logger.warning(f"Falha no backup do Supabase Storage: {storage_error}")
-                with open(os.path.join(tmpdir, 'storage_error.txt'), 'w') as f:
-                    f.write(f"Erro no backup do Supabase Storage: {storage_error}\n")
-                    f.write("Apenas dados do banco foram salvos.\n")
+            # Baixar arquivos do Supabase Storage
+            _download_supabase_storage_files(tmpdir)
+            
+            # Criar script de restauração
+            _create_restore_script(tmpdir)
 
             # Uploads locais (fallback)
             if os.path.exists(UPLOADS_DIR):
@@ -600,6 +980,269 @@ def _restaurar_backup_supabase_manual(sql_file: str, conn_info: dict):
         raise Exception(f"Erro na restauração manual do Supabase: {str(e)}")
 
 
+def _restaurar_backup_completo(caminho_backup: str):
+    """Restauração completa: limpa tudo e reconstrói do zero."""
+    logger.info("=== INICIANDO RESTAURAÇÃO COMPLETA ===")
+    
+    try:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            logger.info(f"Extraindo backup para: {tmpdir}")
+            
+            # 1. Extrair ZIP
+            with zipfile.ZipFile(caminho_backup, 'r') as zipf:
+                zipf.extractall(tmpdir)
+            
+            # Listar conteúdo extraído
+            extracted_files = os.listdir(tmpdir)
+            logger.info(f"Arquivos extraídos: {extracted_files}")
+            
+            # 2. LIMPAR BANCO DE DADOS ATUAL
+            logger.info("Limpando banco de dados atual...")
+            db_type = _detect_database_type()
+            
+            if db_type == 'postgresql':
+                _limpar_banco_postgresql()
+            else:
+                _limpar_banco_sqlite()
+            
+            # 3. RESTAURAR BANCO DE DADOS
+            logger.info("Restaurando banco de dados...")
+            if db_type == 'postgresql':
+                _restaurar_banco_postgresql(tmpdir)
+            else:
+                _restaurar_banco_sqlite_completo(tmpdir)
+            
+            # 4. LIMPAR E RESTAURAR UPLOADS LOCAIS
+            logger.info("Restaurando uploads locais...")
+            _restaurar_uploads_locais(tmpdir)
+            
+            # 5. RESTAURAR SUPABASE STORAGE
+            logger.info("Restaurando Supabase Storage...")
+            storage_result = _restaurar_supabase_storage(tmpdir)
+            
+            # 6. EXECUTAR SCRIPT DE RESTAURAÇÃO SE EXISTIR
+            restore_script = os.path.join(tmpdir, 'restore.py')
+            if os.path.exists(restore_script):
+                logger.info("Executando script de restauração personalizado...")
+                try:
+                    import subprocess
+                    result = subprocess.run([sys.executable, restore_script], 
+                                          cwd=tmpdir, capture_output=True, text=True, timeout=300)
+                    if result.returncode == 0:
+                        logger.info("Script de restauração executado com sucesso")
+                    else:
+                        logger.warning(f"Script de restauração com avisos: {result.stderr}")
+                except Exception as e:
+                    logger.error(f"Erro ao executar script de restauração: {str(e)}")
+            
+            success_msg = "Restauração completa concluída com sucesso!"
+            if not storage_result:
+                success_msg += " (Supabase Storage não restaurado - verifique credenciais)"
+            
+            logger.info(success_msg)
+            return success_msg
+            
+    except Exception as e:
+        error_msg = f"Erro na restauração completa: {str(e)}"
+        logger.error(error_msg)
+        raise Exception(error_msg)
+
+
+def _limpar_banco_postgresql():
+    """Limpa todas as tabelas do PostgreSQL/Supabase."""
+    try:
+        conn_info = _get_db_connection_info()
+        connection_string = f"postgresql://{conn_info['username']}:{conn_info['password']}@{conn_info['host']}:{conn_info['port']}/{conn_info['database']}"
+        engine = create_engine(connection_string)
+        
+        with engine.connect() as conn:
+            # Listar todas as tabelas
+            result = conn.execute(text("SELECT tablename FROM pg_tables WHERE schemaname = 'public'"))
+            tables = [row[0] for row in result.fetchall()]
+            
+            logger.info(f"Limpando {len(tables)} tabelas do PostgreSQL")
+            
+            # Desabilitar foreign keys temporariamente
+            for table in tables:
+                try:
+                    conn.execute(text(f"DROP TABLE IF EXISTS {table} CASCADE"))
+                    logger.debug(f"Tabela {table} removida")
+                except Exception as e:
+                    logger.warning(f"Erro ao remover tabela {table}: {str(e)}")
+            
+            conn.commit()
+            logger.info("Banco PostgreSQL limpo com sucesso")
+            
+    except Exception as e:
+        logger.error(f"Erro ao limpar banco PostgreSQL: {str(e)}")
+        raise
+
+
+def _limpar_banco_sqlite():
+    """Limpa banco SQLite removendo o arquivo."""
+    try:
+        db_url = str(db.engine.url)
+        if 'sqlite:///' in db_url:
+            db_path = db_url.replace('sqlite:///', '')
+            if os.path.exists(db_path):
+                os.remove(db_path)
+                logger.info(f"Banco SQLite removido: {db_path}")
+    except Exception as e:
+        logger.error(f"Erro ao limpar banco SQLite: {str(e)}")
+        raise
+
+
+def _restaurar_banco_postgresql(tmpdir):
+    """Restaura banco PostgreSQL a partir do backup."""
+    try:
+        # Procurar arquivo SQL
+        sql_files = [f for f in os.listdir(tmpdir) if f.endswith('.sql')]
+        if not sql_files:
+            raise Exception("Nenhum arquivo SQL encontrado no backup")
+        
+        sql_file = os.path.join(tmpdir, sql_files[0])
+        logger.info(f"Restaurando a partir de: {sql_file}")
+        
+        conn_info = _get_db_connection_info()
+        connection_string = f"postgresql://{conn_info['username']}:{conn_info['password']}@{conn_info['host']}:{conn_info['port']}/{conn_info['database']}"
+        engine = create_engine(connection_string)
+        
+        # Executar SQL
+        with open(sql_file, 'r', encoding='utf-8') as f:
+            sql_content = f.read()
+        
+        # Dividir em comandos individuais
+        commands = [cmd.strip() for cmd in sql_content.split(';') if cmd.strip()]
+        
+        with engine.connect() as conn:
+            for i, command in enumerate(commands):
+                try:
+                    conn.execute(text(command))
+                    if i % 100 == 0:
+                        logger.debug(f"Executados {i}/{len(commands)} comandos SQL")
+                except Exception as e:
+                    logger.warning(f"Erro no comando SQL {i}: {str(e)[:100]}")
+            
+            conn.commit()
+        
+        logger.info(f"Banco PostgreSQL restaurado: {len(commands)} comandos executados")
+        
+    except Exception as e:
+        logger.error(f"Erro ao restaurar banco PostgreSQL: {str(e)}")
+        raise
+
+
+def _restaurar_banco_sqlite_completo(tmpdir):
+    """Restaura banco SQLite completo."""
+    try:
+        # Procurar arquivo .db
+        db_files = [f for f in os.listdir(tmpdir) if f.endswith('.db') or f.endswith('.sqlite')]
+        if not db_files:
+            raise Exception("Nenhum arquivo de banco encontrado no backup")
+        
+        source_db = os.path.join(tmpdir, db_files[0])
+        
+        # Determinar destino
+        db_url = str(db.engine.url)
+        if 'sqlite:///' in db_url:
+            target_db = db_url.replace('sqlite:///', '')
+        else:
+            target_db = 'acb_usinagem.db'
+        
+        shutil.copy2(source_db, target_db)
+        logger.info(f"Banco SQLite restaurado: {source_db} -> {target_db}")
+        
+    except Exception as e:
+        logger.error(f"Erro ao restaurar banco SQLite: {str(e)}")
+        raise
+
+
+def _restaurar_uploads_locais(tmpdir):
+    """Restaura uploads locais."""
+    try:
+        uploads_dir = os.path.join(tmpdir, 'uploads')
+        if os.path.exists(uploads_dir):
+            # Limpar uploads atuais
+            if os.path.exists(UPLOADS_DIR):
+                shutil.rmtree(UPLOADS_DIR)
+            
+            # Copiar uploads do backup
+            shutil.copytree(uploads_dir, UPLOADS_DIR)
+            logger.info(f"Uploads locais restaurados: {uploads_dir} -> {UPLOADS_DIR}")
+        else:
+            logger.info("Nenhum upload local encontrado no backup")
+            
+    except Exception as e:
+        logger.error(f"Erro ao restaurar uploads locais: {str(e)}")
+        # Não falhar por causa dos uploads
+
+
+def _restaurar_supabase_storage(tmpdir):
+    """Restaura arquivos para o Supabase Storage."""
+    try:
+        storage_dir = os.path.join(tmpdir, 'supabase_storage')
+        mapping_file = os.path.join(storage_dir, 'file_mapping.json')
+        
+        if not os.path.exists(storage_dir) or not os.path.exists(mapping_file):
+            logger.info("Nenhum backup do Supabase Storage encontrado")
+            return True
+        
+        # Ler configurações
+        with open(mapping_file, 'r', encoding='utf-8') as f:
+            mapping = json.load(f)
+        
+        supabase_url = os.getenv('SUPABASE_URL')
+        supabase_key = (
+            os.getenv('SUPABASE_SERVICE_KEY') or 
+            os.getenv('SUPABASE_ANON_KEY') or 
+            os.getenv('SUPABASE_KEY')
+        )
+        bucket_name = mapping.get('bucket', 'uploads')
+        
+        if not all([supabase_url, supabase_key]):
+            logger.warning("Credenciais do Supabase não configuradas. Pulando restauração do Storage")
+            return False
+        
+        headers = {
+            'Authorization': f'Bearer {supabase_key}',
+            'apikey': supabase_key
+        }
+        
+        # Upload de cada arquivo
+        uploaded = 0
+        total_files = len(mapping.get('files', []))
+        
+        for file_info in mapping.get('files', []):
+            if file_info.get('name'):
+                file_path = file_info['name']
+                local_file = os.path.join(storage_dir, file_path)
+                
+                if os.path.exists(local_file):
+                    try:
+                        with open(local_file, 'rb') as f:
+                            files = {'file': f}
+                            upload_url = f"{supabase_url}/storage/v1/object/{bucket_name}/{file_path}"
+                            
+                            # Tentar upload (pode sobrescrever)
+                            response = requests.post(upload_url, headers=headers, files=files, timeout=30)
+                            
+                            if response.status_code in [200, 201]:
+                                uploaded += 1
+                                if uploaded % 10 == 0:
+                                    logger.info(f"Progresso Storage: {uploaded}/{total_files} arquivos")
+                            else:
+                                logger.warning(f"Erro ao enviar {file_path}: {response.status_code}")
+                    except Exception as e:
+                        logger.error(f"Erro ao processar {file_path}: {str(e)}")
+        
+        logger.info(f"Restauração do Storage concluída: {uploaded}/{total_files} arquivos enviados")
+        return uploaded > 0
+        
+    except Exception as e:
+        logger.error(f"Erro na restauração do Storage: {str(e)}")
+        return False
+
+
 def _restaurar_backup_sqlite(caminho_backup: str, db_path: str):
     """Restaura backup do SQLite (método original)."""
     with tempfile.TemporaryDirectory() as tmpdir:
@@ -618,24 +1261,6 @@ def _restaurar_backup_sqlite(caminho_backup: str, db_path: str):
             shutil.copytree(extracted_uploads, UPLOADS_DIR)
 
 
-# Configurações de diretórios
-BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-
-# Verificar se podemos escrever no BASE_DIR, senão usar /tmp (para serverless como Vercel)
-if os.access(BASE_DIR, os.W_OK):
-    BACKUP_DIR = os.path.join(BASE_DIR, 'backups')
-    UPLOADS_DIR = os.path.join(BASE_DIR, 'uploads')
-else:
-    # Ambiente serverless, usar /tmp
-    BACKUP_DIR = '/tmp/backups'
-    UPLOADS_DIR = '/tmp/uploads'  # Também usar /tmp para uploads em ambiente serverless
-
-try:
-    os.makedirs(BACKUP_DIR, exist_ok=True)
-    os.makedirs(UPLOADS_DIR, exist_ok=True)
-except (PermissionError, OSError):
-    pass  # Ignorar erros de permissão ou sistema de arquivos somente leitura
-
 @backup.route('/backups')
 @login_required
 @permissao_requerida('admin')
@@ -643,6 +1268,63 @@ def listar_backups():
     """Rota para listar todos os backups disponíveis"""
     backups = Backup.query.order_by(Backup.data_criacao.desc()).all()
     return render_template('backup/listar.html', backups=backups)
+
+@backup.route('/backups/upload-restore', methods=['GET', 'POST'])
+@login_required
+@permissao_requerida('admin')
+def upload_restore_backup():
+    """Upload e restauração completa de backup ZIP"""
+    if request.method == 'GET':
+        return render_template('backup/upload_restore.html')
+    
+    try:
+        # Verificar se arquivo foi enviado
+        if 'backup_file' not in request.files:
+            flash('Nenhum arquivo foi selecionado!', 'error')
+            return redirect(request.url)
+        
+        file = request.files['backup_file']
+        if file.filename == '':
+            flash('Nenhum arquivo foi selecionado!', 'error')
+            return redirect(request.url)
+        
+        if not file.filename.endswith('.zip'):
+            flash('Apenas arquivos ZIP são aceitos!', 'error')
+            return redirect(request.url)
+        
+        logger.info(f"Iniciando restauração completa do arquivo: {file.filename}")
+        
+        # Salvar arquivo temporário
+        with tempfile.NamedTemporaryFile(delete=False, suffix='.zip') as temp_file:
+            file.save(temp_file.name)
+            temp_zip_path = temp_file.name
+        
+        try:
+            # Executar restauração completa
+            resultado = _restaurar_backup_completo(temp_zip_path)
+            
+            if "sucesso" in resultado.lower():
+                flash(f'Restauração concluída com sucesso! {resultado}', 'success')
+                logger.info(f"Restauração bem-sucedida: {resultado}")
+            else:
+                flash(f'Restauração concluída com avisos: {resultado}', 'warning')
+                logger.warning(f"Restauração com avisos: {resultado}")
+                
+        finally:
+            # Limpar arquivo temporário
+            try:
+                os.unlink(temp_zip_path)
+            except:
+                pass
+        
+        return redirect(url_for('backup.listar_backups'))
+        
+    except Exception as e:
+        error_msg = f"Erro na restauração: {str(e)}"
+        logger.error(error_msg)
+        flash(error_msg, 'error')
+        return redirect(request.url)
+
 
 @backup.route('/backups/criar', methods=['POST'])
 @login_required

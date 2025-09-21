@@ -1,0 +1,209 @@
+{% extends "base.html" %}
+
+{% block title %}Restauração Completa de Backup{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+    <div class="row">
+        <div class="col-12">
+            <div class="d-flex justify-content-between align-items-center mb-4">
+                <h1><i class="fas fa-upload text-warning"></i> Restauração Completa de Backup</h1>
+                <a href="{{ url_for('backup.listar_backups') }}" class="btn btn-secondary">
+                    <i class="fas fa-arrow-left"></i> Voltar
+                </a>
+            </div>
+
+            <!-- Aviso Importante -->
+            <div class="alert alert-danger" role="alert">
+                <h4 class="alert-heading"><i class="fas fa-exclamation-triangle"></i> ATENÇÃO - OPERAÇÃO DESTRUTIVA!</h4>
+                <p>Esta operação irá:</p>
+                <ul class="mb-0">
+                    <li><strong>APAGAR COMPLETAMENTE</strong> todo o banco de dados atual</li>
+                    <li><strong>REMOVER TODOS</strong> os uploads locais existentes</li>
+                    <li><strong>SUBSTITUIR TODOS</strong> os arquivos no Supabase Storage</li>
+                    <li><strong>RESTAURAR TUDO</strong> a partir do arquivo ZIP enviado</li>
+                </ul>
+                <hr>
+                <p class="mb-0"><strong>Esta ação é IRREVERSÍVEL!</strong> Certifique-se de ter um backup atual antes de prosseguir.</p>
+            </div>
+
+            <!-- Instruções -->
+            <div class="card mb-4">
+                <div class="card-header">
+                    <h5><i class="fas fa-info-circle text-info"></i> Como Funciona</h5>
+                </div>
+                <div class="card-body">
+                    <div class="row">
+                        <div class="col-md-6">
+                            <h6>📁 O que deve conter o ZIP:</h6>
+                            <ul>
+                                <li>Arquivo do banco (.db ou .sql)</li>
+                                <li>Pasta <code>uploads/</code> com arquivos locais</li>
+                                <li>Pasta <code>supabase_storage/</code> com arquivos do cloud</li>
+                                <li>Script <code>restore.py</code> (opcional)</li>
+                                <li>Arquivo <code>README.md</code> com instruções</li>
+                            </ul>
+                        </div>
+                        <div class="col-md-6">
+                            <h6>⚡ Processo de Restauração:</h6>
+                            <ol>
+                                <li>Extração do arquivo ZIP</li>
+                                <li>Limpeza completa do banco atual</li>
+                                <li>Restauração do banco do backup</li>
+                                <li>Restauração dos uploads locais</li>
+                                <li>Re-upload para Supabase Storage</li>
+                                <li>Execução de scripts personalizados</li>
+                            </ol>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Formulário de Upload -->
+            <div class="card">
+                <div class="card-header">
+                    <h5><i class="fas fa-cloud-upload-alt text-primary"></i> Enviar Backup para Restauração</h5>
+                </div>
+                <div class="card-body">
+                    <form method="POST" enctype="multipart/form-data" id="uploadForm">
+                        <div class="mb-3">
+                            <label for="backup_file" class="form-label">
+                                <i class="fas fa-file-archive"></i> Arquivo de Backup (ZIP)
+                            </label>
+                            <input type="file" class="form-control" id="backup_file" name="backup_file" 
+                                   accept=".zip" required>
+                            <div class="form-text">
+                                Selecione um arquivo ZIP gerado pelo sistema de backup do ACB Usinagem CNC.
+                            </div>
+                        </div>
+
+                        <!-- Confirmação -->
+                        <div class="mb-3">
+                            <div class="form-check">
+                                <input class="form-check-input" type="checkbox" id="confirmRestore" required>
+                                <label class="form-check-label text-danger fw-bold" for="confirmRestore">
+                                    Eu entendo que esta operação irá APAGAR TODOS os dados atuais e substituí-los pelo backup enviado.
+                                </label>
+                            </div>
+                        </div>
+
+                        <!-- Botões -->
+                        <div class="d-grid gap-2 d-md-flex justify-content-md-end">
+                            <button type="button" class="btn btn-secondary me-md-2" onclick="history.back()">
+                                <i class="fas fa-times"></i> Cancelar
+                            </button>
+                            <button type="submit" class="btn btn-danger" id="submitBtn" disabled>
+                                <i class="fas fa-exclamation-triangle"></i> RESTAURAR BACKUP
+                            </button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+
+            <!-- Informações Técnicas -->
+            <div class="card mt-4">
+                <div class="card-header">
+                    <h6><i class="fas fa-cogs text-secondary"></i> Informações Técnicas</h6>
+                </div>
+                <div class="card-body">
+                    <div class="row">
+                        <div class="col-md-4">
+                            <strong>Banco de Dados:</strong><br>
+                            <span class="text-muted">{{ 'PostgreSQL (Supabase)' if 'postgresql' in config.get('DATABASE_URL', '') else 'SQLite Local' }}</span>
+                        </div>
+                        <div class="col-md-4">
+                            <strong>Supabase Storage:</strong><br>
+                            <span class="text-muted">{{ 'Configurado' if config.get('SUPABASE_URL') else 'Não configurado' }}</span>
+                        </div>
+                        <div class="col-md-4">
+                            <strong>Ambiente:</strong><br>
+                            <span class="text-muted">{{ config.get('FLASK_ENV', 'development').title() }}</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Modal de Progresso -->
+<div class="modal fade" id="progressModal" tabindex="-1" data-bs-backdrop="static" data-bs-keyboard="false">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">
+                    <i class="fas fa-cog fa-spin text-warning"></i> Restaurando Backup...
+                </h5>
+            </div>
+            <div class="modal-body text-center">
+                <div class="progress mb-3">
+                    <div class="progress-bar progress-bar-striped progress-bar-animated" 
+                         role="progressbar" style="width: 100%"></div>
+                </div>
+                <p class="mb-0">
+                    <strong>Não feche esta página!</strong><br>
+                    A restauração pode levar alguns minutos dependendo do tamanho do backup.
+                </p>
+                <div class="mt-3">
+                    <small class="text-muted">
+                        Processando: Limpeza → Banco → Uploads → Storage → Scripts
+                    </small>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    const confirmCheckbox = document.getElementById('confirmRestore');
+    const submitBtn = document.getElementById('submitBtn');
+    const uploadForm = document.getElementById('uploadForm');
+    const progressModal = new bootstrap.Modal(document.getElementById('progressModal'));
+
+    // Habilitar botão apenas quando confirmado
+    confirmCheckbox.addEventListener('change', function() {
+        submitBtn.disabled = !this.checked;
+    });
+
+    // Mostrar modal de progresso ao enviar
+    uploadForm.addEventListener('submit', function(e) {
+        if (confirmCheckbox.checked) {
+            progressModal.show();
+            
+            // Desabilitar botão para evitar duplo envio
+            submitBtn.disabled = true;
+            submitBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Processando...';
+        }
+    });
+
+    // Validação de arquivo
+    document.getElementById('backup_file').addEventListener('change', function() {
+        const file = this.files[0];
+        if (file && !file.name.endsWith('.zip')) {
+            alert('Por favor, selecione apenas arquivos ZIP.');
+            this.value = '';
+        }
+    });
+});
+</script>
+
+<style>
+.alert-danger {
+    border-left: 5px solid #dc3545;
+}
+
+.card {
+    box-shadow: 0 0.125rem 0.25rem rgba(0, 0, 0, 0.075);
+}
+
+.progress-bar-animated {
+    animation: progress-bar-stripes 1s linear infinite;
+}
+
+@keyframes progress-bar-stripes {
+    0% { background-position: 1rem 0; }
+    100% { background-position: 0 0; }
+}
+</style>
+{% endblock %}

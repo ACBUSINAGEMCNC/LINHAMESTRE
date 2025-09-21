@@ -10,6 +10,9 @@
                 <button type="button" class="btn btn-success me-2" data-bs-toggle="modal" data-bs-target="#criarBackupModal">
                     <i class="fas fa-save"></i> Criar Backup
                 </button>
+                <a href="{{ url_for('backup.upload_restore_backup') }}" class="btn btn-danger me-2" title="Restauração Completa">
+                    <i class="fas fa-upload"></i> Restaurar ZIP
+                </a>
                 <button type="button" class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#importarBackupModal">
                     <i class="fas fa-file-import"></i> Importar Backup
                 </button>
