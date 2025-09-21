@@ -400,6 +400,170 @@ function limparTimersTrabalhoDaOS(ordemId) {
     });
 }
 
+// Função para sincronizar cronômetro do cartão fantasma com o cartão real
+function sincronizarCronometroFantasma(ordemId, containerFantasma) {
+    try {
+        console.debug(`[SYNC] Iniciando sincronização para OS ${ordemId}`);
+        
+        // Buscar cartão real da mesma OS - tentar vários seletores
+        let cartoesReais = document.querySelectorAll(`[data-ordem-id="${ordemId}"]:not(.fantasma)`);
+        if (cartoesReais.length === 0) {
+            cartoesReais = document.querySelectorAll(`[data-os-id="${ordemId}"]:not(.fantasma)`);
+        }
+        if (cartoesReais.length === 0) {
+            cartoesReais = document.querySelectorAll(`.kanban-card[data-ordem-id="${ordemId}"]:not(.fantasma)`);
+        }
+        // Tentar buscar por qualquer cartão que contenha a OS no ID
+        if (cartoesReais.length === 0) {
+            const todosCartoes = document.querySelectorAll('.kanban-card:not(.fantasma)');
+            cartoesReais = Array.from(todosCartoes).filter(cartao => {
+                const ordemAttr = cartao.dataset.ordemId || cartao.dataset.osId;
+                return ordemAttr == ordemId;
+            });
+        }
+        
+        console.debug(`[SYNC] Encontrados ${cartoesReais.length} cartões reais para OS ${ordemId}`);
+        
+        if (cartoesReais.length === 0) {
+            console.debug(`[SYNC] Nenhum cartão real encontrado para OS ${ordemId}`);
+            return;
+        }
+        
+        const cartaoReal = cartoesReais[0];
+        console.debug(`[SYNC] Cartão real encontrado:`, cartaoReal);
+        
+        // Buscar container de status no cartão real - tentar vários seletores
+        let containerReal = cartaoReal.querySelector('.apontamento-status');
+        if (!containerReal) {
+            containerReal = cartaoReal.querySelector('.status-apontamento');
+        }
+        if (!containerReal) {
+            containerReal = cartaoReal.querySelector(`#status-${ordemId}`);
+        }
+        if (!containerReal) {
+            containerReal = cartaoReal.querySelector(`[id*="status-${ordemId}"]`);
+        }
+        if (!containerReal) {
+            containerReal = cartaoReal.querySelector('[class*="apontamento"][class*="status"]');
+        }
+        
+        console.debug(`[SYNC] Container real encontrado:`, containerReal);
+        
+        if (!containerReal) {
+            console.debug(`[SYNC] Container real não encontrado para OS ${ordemId}`);
+            return;
+        }
+        
+        // Buscar todos os timers no cartão real e fantasma
+        const timersReais = containerReal.querySelectorAll('.apontamento-timer');
+        const timersFantasma = containerFantasma.querySelectorAll('.apontamento-timer');
+        
+        console.debug(`[SYNC] Timers encontrados - Reais: ${timersReais.length}, Fantasma: ${timersFantasma.length}`);
+        console.debug(`[SYNC] Timers reais:`, Array.from(timersReais).map(t => ({ id: t.id, text: t.textContent })));
+        console.debug(`[SYNC] Timers fantasma:`, Array.from(timersFantasma).map(t => ({ id: t.id, text: t.textContent })));
+        
+        // Sincronizar cada timer
+        let sincronizados = 0;
+        timersReais.forEach((timerReal, index) => {
+            const timerFantasma = timersFantasma[index];
+            if (timerFantasma && timerReal.textContent) {
+                const tempoAnterior = timerFantasma.textContent;
+                
+                // Copiar conteúdo e atributos
+                timerFantasma.textContent = timerReal.textContent;
+                timerFantasma.innerHTML = timerReal.innerHTML;
+                
+                // Forçar estilos de visibilidade
+                timerFantasma.style.display = 'inline-block';
+                timerFantasma.style.visibility = 'visible';
+                timerFantasma.style.opacity = '1';
+                timerFantasma.style.minWidth = '60px';
+                timerFantasma.style.textAlign = 'center';
+                timerFantasma.style.fontWeight = '700';
+                
+                // Copiar classes do timer real
+                timerFantasma.className = timerReal.className;
+                
+                // Forçar repaint
+                timerFantasma.offsetHeight;
+                
+                sincronizados++;
+                console.debug(`[SYNC] Timer ${index} sincronizado: ${tempoAnterior} -> ${timerReal.textContent}`);
+                console.debug(`[SYNC] Timer fantasma após sync:`, {
+                    display: timerFantasma.style.display,
+                    visibility: timerFantasma.style.visibility,
+                    content: timerFantasma.textContent,
+                    classes: timerFantasma.className
+                });
+            } else if (timerFantasma) {
+                console.debug(`[SYNC] Timer ${index} não sincronizado - Real: '${timerReal.textContent}', Fantasma existe: ${!!timerFantasma}`);
+            } else {
+                console.debug(`[SYNC] Timer fantasma ${index} não encontrado`);
+            }
+        });
+        
+        console.debug(`[SYNC] Total de timers sincronizados: ${sincronizados}`);
+        
+        // Configurar observador para manter sincronização contínua
+        if (!containerFantasma.dataset.syncObserver) {
+            const observer = new MutationObserver((mutations) => {
+                let shouldSync = false;
+                mutations.forEach((mutation) => {
+                    if (mutation.type === 'childList' || 
+                        (mutation.type === 'characterData' && mutation.target.parentElement && mutation.target.parentElement.classList.contains('apontamento-timer'))) {
+                        shouldSync = true;
+                    }
+                });
+                
+                if (shouldSync) {
+                    setTimeout(() => sincronizarCronometroFantasma(ordemId, containerFantasma), 50);
+                }
+            });
+            
+            observer.observe(containerReal, {
+                childList: true,
+                subtree: true,
+                characterData: true
+            });
+            
+            containerFantasma.dataset.syncObserver = 'true';
+            console.debug(`[SYNC] Observer configurado para OS ${ordemId}`);
+        }
+        
+    } catch (error) {
+        console.error(`[SYNC] Erro ao sincronizar cronômetro fantasma OS ${ordemId}:`, error);
+    }
+}
+
+// Função global para debug manual
+window.debugSyncFantasma = function(ordemId) {
+    console.log(`[DEBUG] Forçando sincronização manual para OS ${ordemId}`);
+    const containersFantasma = document.querySelectorAll(`[id*="status-fantasma-${ordemId}"], [id*="status-${ordemId}"]`);
+    console.log(`[DEBUG] Containers fantasma encontrados:`, containersFantasma);
+    
+    containersFantasma.forEach(container => {
+        if (container.closest('.fantasma')) {
+            console.log(`[DEBUG] Sincronizando container:`, container);
+            sincronizarCronometroFantasma(ordemId, container);
+        }
+    });
+};
+
+// Função para sincronizar todos os cartões fantasma visíveis
+window.debugSyncTodosFantasmas = function() {
+    const cartoesFantasma = document.querySelectorAll('.kanban-card.fantasma');
+    console.log(`[DEBUG] Sincronizando ${cartoesFantasma.length} cartões fantasma`);
+    
+    cartoesFantasma.forEach(cartao => {
+        const ordemId = cartao.dataset.fantasmaOrdemId || cartao.dataset.ordemId;
+        const container = cartao.querySelector('.apontamento-status');
+        if (ordemId && container) {
+            console.log(`[DEBUG] Sincronizando cartão fantasma OS ${ordemId}`);
+            sincronizarCronometroFantasma(ordemId, container);
+        }
+    });
+};
+
 // Renderiza chips no status com tipo de trabalho + operador + timer
 function renderizarChipsStatus(ordemId, ativosLista) {
     // Coletar possíveis nós e normalizar para o elemento do cartão real (.kanban-card)
@@ -580,19 +744,41 @@ function renderizarChipsStatus(ordemId, ativosLista) {
         }
         
         const isFantasma = index >= containersReais.length;
+        // Cartões fantasma agora mostram o mesmo conteúdo que os reais (sem badge "Fantasma")
+        container.innerHTML = htmlContent;
+        
         if (isFantasma) {
-            // Para cartões fantasma, adicionar indicador visual
-            const fantasmaContent = `<div class="d-flex align-items-center gap-2">
-                <span class="badge bg-light text-dark"><i class="fas fa-ghost me-1"></i>Fantasma</span>
-                <div class="flex-grow-1">${htmlContent}</div>
-            </div>`;
-            container.innerHTML = fantasmaContent;
+            // Para cartões fantasma, sincronizar cronômetro com cartão real
+            console.debug(`[SYNC] Configurando sincronização para cartão fantasma OS ${ordemId}`);
+            
+            // Sincronização inicial imediata
+            setTimeout(() => {
+                sincronizarCronometroFantasma(ordemId, container);
+            }, 50);
+            
+            // Sincronização adicional após 500ms para garantir
+            setTimeout(() => {
+                sincronizarCronometroFantasma(ordemId, container);
+            }, 500);
+            
+            // Configurar sincronização periódica a cada 1 segundo
+            const syncInterval = setInterval(() => {
+                if (document.contains(container)) {
+                    sincronizarCronometroFantasma(ordemId, container);
+                } else {
+                    // Container foi removido, limpar intervalo
+                    clearInterval(syncInterval);
+                    console.debug(`[SYNC] Limpando intervalo para OS ${ordemId} - container removido`);
+                }
+            }, 1000);
+            
+            // Armazenar referência do intervalo para limpeza posterior
+            container.dataset.syncInterval = syncInterval;
+            console.debug(`[SYNC] Intervalo configurado para OS ${ordemId}:`, syncInterval);
             
             // Garantir que o conteúdo não seja sobrescrito por outras atualizações
             container.dataset.statusLocked = 'true';
         } else {
-            container.innerHTML = htmlContent;
-            
             // Bloquear temporariamente cartões reais com status ativos para evitar sobrescrita
             if (htmlContent && htmlContent.trim() !== '') {
                 container.dataset.statusLocked = 'true';

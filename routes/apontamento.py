@@ -20,12 +20,23 @@ UTC = timezone.utc
 
 def to_brt_iso(dt):
     """Convert a datetime to America/Sao_Paulo ISO string with offset.
-    Assumes naive datetimes are in UTC (as stored), then converts to local tz.
+    Smart detection: if datetime seems to be from before timezone fix, treat as UTC.
     """
     if not dt:
         return None
+    
     if dt.tzinfo is None:
-        dt = dt.replace(tzinfo=UTC)
+        # Detectar se é um registro antigo (antes da correção) ou novo
+        # Registros criados hoje ou após a correção já estão em BRT
+        agora_brt = datetime.now(LOCAL_TZ).replace(tzinfo=None)
+        
+        # Se o datetime é muito recente (menos de 1 hora atrás), assumir que já está em BRT
+        if dt > agora_brt - timedelta(hours=1):
+            dt = dt.replace(tzinfo=LOCAL_TZ)
+        else:
+            # Registros mais antigos: assumir que são UTC e converter
+            dt = dt.replace(tzinfo=UTC)
+    
     try:
         return dt.astimezone(LOCAL_TZ).isoformat()
     except Exception:
@@ -686,7 +697,7 @@ def status_ativos():
                     }
 
                     tolerancia = 0.15  # 15%
-                    agora_utc = datetime.utcnow()
+                    agora_utc = datetime.now(LOCAL_TZ).replace(tzinfo=None)
 
                     if getattr(status, 'item_atual_id', None) and getattr(status, 'trabalho_atual_id', None):
                         # Estimativas do ItemTrabalho
@@ -2162,7 +2173,7 @@ def registrar_apontamento():
             db.session.add(status_os)
         
         # Atualizar status baseado na ação
-        agora = datetime.utcnow()
+        agora = datetime.now(LOCAL_TZ).replace(tzinfo=None)
         
         if tipo_acao == 'inicio_setup':
             status_os.status_atual = 'Setup em andamento'

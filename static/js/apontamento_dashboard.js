@@ -72,11 +72,11 @@
       'Produção em andamento': 'success',
       'Pausado': 'warning',
       'Finalizado': 'dark',
-      'Fantasma': 'light text-dark'
+      'Fantasma': 'secondary' // Fantasma agora usa mesmo estilo que Aguardando
     };
     const badgeClass = map[status] || 'secondary';
-    const ghostIcon = isGhost ? '<i class="fas fa-ghost me-1"></i>' : '';
-    return `<span class="badge bg-${badgeClass}">${ghostIcon}${status || 'Desconhecido'}</span>`;
+    // Remover ícone de fantasma - cartões fantasma mostram status igual aos reais
+    return `<span class="badge bg-${badgeClass}">${status === 'Fantasma' ? 'Aguardando' : (status || 'Desconhecido')}</span>`;
   }
 
   function perfBadge(valor) {
@@ -97,7 +97,9 @@
 
   function secondsSince(start) {
     if (!start) return 0;
-    return Math.floor((Date.now() - start.getTime()) / 1000);
+    // Usar horário atual do Brasil para calcular diferença corretamente
+    const agora = new Date();
+    return Math.floor((agora.getTime() - start.getTime()) / 1000);
   }
 
   // Build the detailed card HTML for a single status item (simplified view)
@@ -115,8 +117,7 @@
     const os = st.os_numero || `OS-${st.ordem_servico_id}`;
     const isGhost = st.is_ghost_card === true;
     const ativos = Array.isArray(st.ativos_por_trabalho) ? st.ativos_por_trabalho : [];
-    // Se for um cartão fantasma, ainda precisamos verificar status do cartão real
-    // mas ainda mantemos o badge específico para cartões fantasma
+    // Cartões fantasma agora também podem mostrar como "rodando" igual aos reais
     const isRunning = (st.cronometro && st.cronometro.tipo === 'producao') || 
                      st.status_atual === 'Produção em andamento' || 
                      (Array.isArray(ativos) && ativos.some(a => a.status === 'Produção em andamento'));
@@ -382,7 +383,14 @@
       const fila = principal
         ? items.filter(it => it !== principal).sort((a, b) => (getPos(a) - getPos(b)) || (getStatusRank(a.status_atual) - getStatusRank(b.status_atual)))
         : [];
-      const isRunningMachine = items.some(x => (x.cronometro && x.cronometro.tipo === 'producao') || x.status_atual === 'Produção em andamento' || (Array.isArray(x.ativos_por_trabalho) && x.ativos_por_trabalho.some(a => a.status === 'Produção em andamento')));
+      // Máquina está rodando se houver cartões REAIS (não fantasma) em produção
+      const isRunningMachine = items.some(x => 
+        !x.is_ghost_card && (
+          (x.cronometro && x.cronometro.tipo === 'producao') || 
+          x.status_atual === 'Produção em andamento' || 
+          (Array.isArray(x.ativos_por_trabalho) && x.ativos_por_trabalho.some(a => a.status === 'Produção em andamento'))
+        )
+      );
       
       // Informações da máquina (cor e tipo do primeiro item ou padrões)
       const cor = principal?.lista_cor || '';
@@ -404,7 +412,10 @@
            <div class="fw-semibold mb-2"><i class="fas fa-list me-1"></i>Na fila (${fila.length})</div>
            <ul class="list-group">
              ${fila.map(it => {
-               const itRunning = (it.cronometro && it.cronometro.tipo === 'producao') || it.status_atual === 'Produção em andamento' || (Array.isArray(it.ativos_por_trabalho) && it.ativos_por_trabalho.some(a => a.status === 'Produção em andamento'));
+               // Cartões fantasma agora também podem aparecer como "rodando"
+               const itRunning = (it.cronometro && it.cronometro.tipo === 'producao') || 
+                 it.status_atual === 'Produção em andamento' || 
+                 (Array.isArray(it.ativos_por_trabalho) && it.ativos_por_trabalho.some(a => a.status === 'Produção em andamento'));
                const imgFila = it.item_imagem_path ? `<img src="${it.item_imagem_path}" alt="Imagem" class="rounded border me-2 ${itRunning ? 'thumb-running' : ''}" style="width:36px;height:36px;object-fit:cover;">` : '';
                // Quantidade da fila também não deve regredir: cache por OS
               const keyOSFila = osKey(it);
@@ -525,7 +536,7 @@
     
     // Aplicar status em cada cartão (real ou fantasma)
     for (const card of allCards) {
-      const isGhostCard = card.classList.contains('fantasma');
+      const isGhostCard = card.classList.contains('status-fantasma');
       
       // Encontrar container de status no cartão
       let statusContainer = card.querySelector('.card-header .col-4.text-end');
@@ -534,41 +545,40 @@
         continue;
       }
       
+      // Limpar badges existentes para evitar sobreposição
+      const existingBadges = statusContainer.querySelectorAll('.badge');
+      existingBadges.forEach(badge => badge.remove());
+      
       // Atualizar status com badges apropriados
       let statusHTML = '';
       
-      if (isGhostCard) {
-        // Para cartões fantasma, mostrar badge fantasma mas também o status atual
-        statusHTML = `<span class="badge bg-light text-dark"><i class="fas fa-ghost me-1"></i>Fantasma</span>`;
-        if (statusInfo.emProducao) {
-          statusHTML += ` <span class="badge bg-success">Produção</span>`;
-        } else if (statusInfo.emSetup) {
-          statusHTML += ` <span class="badge bg-info">Setup</span>`;
-        } else if (statusInfo.pausado) {
-          statusHTML += ` <span class="badge bg-warning">Pausado</span>`;
-        }
+      // Tanto cartões reais quanto fantasma mostram o mesmo status/cronômetro
+      if (statusInfo.emProducao) {
+        statusHTML = `<span class="badge bg-success">Produção em andamento</span>`;
+      } else if (statusInfo.emSetup) {
+        statusHTML = `<span class="badge bg-info">Setup em andamento</span>`;
+      } else if (statusInfo.pausado) {
+        statusHTML = `<span class="badge bg-warning">Pausado</span>`;
       } else {
-        // Para cartões reais, mostrar badge adequado ao status atual
-        if (statusInfo.emProducao) {
-          statusHTML = `<span class="badge bg-success">Produção em andamento</span>`;
-        } else if (statusInfo.emSetup) {
-          statusHTML = `<span class="badge bg-info">Setup em andamento</span>`;
-        } else if (statusInfo.pausado) {
-          statusHTML = `<span class="badge bg-warning">Pausado</span>`;
-        } else {
-          statusHTML = `<span class="badge bg-secondary">Aguardando</span>`;
+        statusHTML = `<span class="badge bg-secondary">Aguardando</span>`;
+      }
+      
+      // Para cartões fantasma, adicionar informações de posição se disponível
+      if (isGhostCard) {
+        const posicaoDiv = statusContainer.querySelector('.small.text-muted');
+        if (!posicaoDiv) {
+          const ghostInfo = card.querySelector('.alert-light');
+          if (ghostInfo) {
+            const posicaoText = ghostInfo.textContent.match(/Posição na fila:\s*(\d+)/);
+            if (posicaoText) {
+              statusHTML += `<div class="small text-muted mt-1">Posição: ${posicaoText[1]}</div>`;
+            }
+          }
         }
       }
       
-      // Atualizar os chips de status no cartão
-      const firstChild = statusContainer.firstChild;
-      if (firstChild && firstChild.tagName === 'SPAN' && firstChild.classList.contains('badge')) {
-        // Substituir primeiro badge existente
-        firstChild.outerHTML = statusHTML;
-      } else {
-        // Adicionar no início do container
-        statusContainer.innerHTML = statusHTML + statusContainer.innerHTML;
-      }
+      // Inserir o novo status
+      statusContainer.innerHTML = statusHTML;
     }
   }
   

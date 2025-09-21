@@ -205,6 +205,34 @@
         }
         .apontamento-chip.chip-pausa .apontamento-timer { background-color: rgba(0,0,0,0.1); }
         
+        /* Garantir que chips em cartões fantasma tenham mesmo tamanho e visibilidade */
+        .kanban-card.fantasma .apontamento-chip {
+            display: inline-block !important;
+            min-width: 200px;
+            width: auto;
+        }
+        .kanban-card.fantasma .apontamento-chip .chip-row {
+            display: flex !important;
+            align-items: center !important;
+            gap: 10px !important;
+        }
+        .kanban-card.fantasma .apontamento-chip .chip-col {
+            display: flex !important;
+            flex-direction: column !important;
+            gap: 2px !important;
+            min-width: 120px !important;
+            flex-grow: 1;
+        }
+        .kanban-card.fantasma .apontamento-timer {
+            display: inline-block !important;
+            margin-left: auto !important;
+            padding: 2px 6px !important;
+            border-radius: 4px !important;
+            font-weight: 700 !important;
+            min-width: 60px !important;
+            text-align: center !important;
+        }
+        
         /* Remover o indicador de status do cabeçalho */
         .status-indicador {
             display: none;
