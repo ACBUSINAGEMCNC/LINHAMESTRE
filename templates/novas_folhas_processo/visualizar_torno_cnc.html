@@ -25,7 +25,23 @@
                             </div>
                         </div>
                         <div>
-                            <a href="{{ url_for('novas_folhas_processo.editar_torno_cnc', folha_id=folha.id) }}" class="btn btn-outline-dark">
+                            <div class="btn-group me-2" role="group">
+                                <button type="button" class="btn btn-success" onclick="abrirModalImpressao()">
+                                    <i class="fas fa-print"></i> Imprimir
+                                </button>
+                                <button type="button" class="btn btn-outline-success dropdown-toggle dropdown-toggle-split" data-bs-toggle="dropdown">
+                                    <span class="visually-hidden">Toggle Dropdown</span>
+                                </button>
+                                <ul class="dropdown-menu">
+                                    <li><a class="dropdown-item" href="#" onclick="imprimirFolha()"><i class="fas fa-file-alt me-2"></i>Apenas Folha</a></li>
+                                    <li><a class="dropdown-item" href="#" onclick="abrirModalImpressao()"><i class="fas fa-cog me-2"></i>Opções Avançadas</a></li>
+                                    {% if folha.item and folha.item.desenho_path %}
+                                    <li><hr class="dropdown-divider"></li>
+                                    <li><a class="dropdown-item" href="{{ get_file_url(folha.item.desenho_path) }}" target="_blank"><i class="fas fa-drafting-compass me-2"></i>Ver Desenho Técnico</a></li>
+                                    {% endif %}
+                                </ul>
+                            </div>
+                            <a href="{{ url_for('novas_folhas_processo.editar_torno_cnc', folha_id=folha.id) }}" class="btn btn-outline-dark me-2">
                                 <i class="fas fa-edit"></i> Editar
                             </a>
                             <a href="{{ url_for('novas_folhas_processo.listar_folhas') }}" class="btn btn-outline-dark">
@@ -296,22 +312,192 @@
     </div>
     {% endif %}
 </div>
+
+<!-- Modal de Impressão Avançada -->
+<div class="modal fade" id="modalImpressao" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title"><i class="fas fa-print me-2"></i>Opções de Impressão</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <div class="mb-3">
+                    <h6><i class="fas fa-file-alt me-2"></i>Conteúdo da Impressão</h6>
+                    <div class="form-check">
+                        <input class="form-check-input" type="checkbox" id="incluirFolha" checked>
+                        <label class="form-check-label" for="incluirFolha">
+                            <strong>Folha de Processo</strong> - Documento principal
+                        </label>
+                    </div>
+                    {% if folha.item and folha.item.desenho_path %}
+                    <div class="form-check">
+                        <input class="form-check-input" type="checkbox" id="incluirDesenho">
+                        <label class="form-check-label" for="incluirDesenho">
+                            <strong>Desenho Técnico</strong> - Anexar desenho do item
+                        </label>
+                    </div>
+                    {% endif %}
+                </div>
+                
+                {% if folha_torno and folha_torno.programa_cnc %}
+                <div class="mb-3">
+                    <h6><i class="fas fa-code me-2"></i>Programa CNC</h6>
+                    <div class="form-check">
+                        <input class="form-check-input" type="checkbox" id="incluirPrograma">
+                        <label class="form-check-label" for="incluirPrograma">
+                            <strong>Incluir Programa CNC</strong> - Anexar código do programa
+                        </label>
+                    </div>
+                    <div class="form-check">
+                        <input class="form-check-input" type="checkbox" id="baixarPrograma">
+                        <label class="form-check-label" for="baixarPrograma">
+                            <strong>Baixar Programa</strong> - Download do arquivo .cnc
+                        </label>
+                    </div>
+                </div>
+                {% endif %}
+                
+                <div class="mb-3">
+                    <h6><i class="fas fa-cog me-2"></i>Configurações</h6>
+                    <div class="form-check">
+                        <input class="form-check-input" type="checkbox" id="abrirNovaAba" checked>
+                        <label class="form-check-label" for="abrirNovaAba">
+                            Abrir em nova aba para impressão
+                        </label>
+                    </div>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
+                <button type="button" class="btn btn-success" onclick="executarImpressaoAvancada()">
+                    <i class="fas fa-print me-1"></i>Imprimir
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
 {% endblock %}
 
 {% block scripts %}
+<!-- Configuração do template -->
+<script id="template-config" type="application/json">
+{
+    "temPrograma": {{ 'true' if folha_torno and folha_torno.programa_cnc else 'false' }},
+    "desenhoPath": "{{ get_file_url(folha.item.desenho_path) if folha.item and folha.item.desenho_path else '' }}",
+    "nomeArquivo": "{{ (folha.item.codigo_acb or 'programa') + '_' + folha.titulo_servico.replace(' ', '_') }}.cnc",
+    "programaCNC": {{ folha_torno.programa_cnc|tojson if folha_torno and folha_torno.programa_cnc else '""' }}
+}
+</script>
+
 <script>
-// Função para imprimir a folha
+
+// Função para imprimir a folha simples
 function imprimirFolha() {
     window.print();
 }
 
+// Função para abrir modal de impressão
+function abrirModalImpressao() {
+    new bootstrap.Modal(document.getElementById('modalImpressao')).show();
+}
+
+// Carregar configuração do template
+function getTemplateConfig() {
+    const configScript = document.getElementById('template-config');
+    return JSON.parse(configScript.textContent);
+}
+
+// Função para executar impressão avançada
+function executarImpressaoAvancada() {
+    const config = getTemplateConfig();
+    const incluirFolha = document.getElementById('incluirFolha').checked;
+    const incluirDesenho = document.getElementById('incluirDesenho')?.checked || false;
+    const incluirPrograma = document.getElementById('incluirPrograma')?.checked || false;
+    const baixarPrograma = document.getElementById('baixarPrograma')?.checked || false;
+    const abrirNovaAba = document.getElementById('abrirNovaAba').checked;
+    
+    // Fechar modal
+    bootstrap.Modal.getInstance(document.getElementById('modalImpressao')).hide();
+    
+    // Baixar programa CNC se solicitado
+    if (baixarPrograma && config.temPrograma) {
+        baixarProgramaCNC();
+    }
+    
+    // Preparar impressão
+    if (incluirFolha) {
+        if (abrirNovaAba) {
+            // Abrir em nova aba com parâmetros
+            const params = new URLSearchParams();
+            if (incluirDesenho) params.append('incluir_desenho', '1');
+            if (incluirPrograma) params.append('incluir_programa', '1');
+            
+            const url = window.location.href + (window.location.href.includes('?') ? '&' : '?') + params.toString();
+            window.open(url, '_blank');
+        } else {
+            // Imprimir na mesma aba
+            window.print();
+        }
+    }
+    
+    // Abrir desenho técnico se solicitado
+    if (incluirDesenho && !incluirFolha && config.desenhoPath) {
+        window.open(config.desenhoPath, '_blank');
+    }
+}
+
+// Função para baixar programa CNC
+function baixarProgramaCNC() {
+    const config = getTemplateConfig();
+    
+    if (!config.temPrograma || !config.programaCNC) {
+        alert('Nenhum programa CNC disponível para download.');
+        return;
+    }
+    
+    const programa = config.programaCNC;
+    const nomeArquivo = config.nomeArquivo;
+    
+    const blob = new Blob([programa], { type: 'text/plain' });
+    const url = window.URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.style.display = 'none';
+    a.href = url;
+    a.download = nomeArquivo;
+    document.body.appendChild(a);
+    a.click();
+    window.URL.revokeObjectURL(url);
+    document.body.removeChild(a);
+    
+    // Mostrar notificação
+    if (typeof showToast === 'function') {
+        showToast('Programa CNC baixado com sucesso!', 'success');
+    } else {
+        alert('Programa CNC baixado com sucesso!');
+    }
+}
+
 // Botão flutuante de impressão
 $(document).ready(function() {
+    // Remover botão flutuante antigo se existir
+    $('.position-fixed .btn-lg.rounded-circle').parent().remove();
+    
+    // Adicionar novo botão flutuante com dropdown
     $('body').append(`
         <div class="position-fixed bottom-0 end-0 p-3" style="z-index: 999;">
-            <button type="button" class="btn btn-primary btn-lg rounded-circle shadow" onclick="imprimirFolha()">
-                <i class="fas fa-print"></i>
-            </button>
+            <div class="btn-group dropup">
+                <button type="button" class="btn btn-success btn-lg rounded-circle shadow" onclick="imprimirFolha()" title="Impressão rápida">
+                    <i class="fas fa-print"></i>
+                </button>
+                <button type="button" class="btn btn-success btn-lg dropdown-toggle dropdown-toggle-split rounded-circle shadow ms-1" data-bs-toggle="dropdown" title="Opções de impressão">
+                    <span class="visually-hidden">Toggle Dropdown</span>
+                </button>
+                <ul class="dropdown-menu">
+                    <li><a class="dropdown-item" href="#" onclick="imprimirFolha()"><i class="fas fa-print me-2"></i>Impressão Rápida</a></li>
+                    <li><a class="dropdown-item" href="#" onclick="abrirModalImpressao()"><i class="fas fa-cog me-2"></i>Opções Avançadas</a></li>
+                </ul>
+            </div>
         </div>
     `);
 });

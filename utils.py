@@ -235,14 +235,24 @@ def get_file_url(file_path):
     if file_path.startswith('supabase://') or file_path.startswith('supabase:/'):
         # Extrair caminho após o prefixo
         file_name = file_path.replace('supabase://', '').replace('supabase:/', '').lstrip('/')
+        
         # Se caminho não inclui bucket (legado), prefixar SUPABASE_BUCKET
         KNOWN_FOLDERS = {'imagens', 'desenhos', 'instrucoes', 'cnc_files', 'maquinas', 'castanhas', 'gabaritos', 'folhas_processo'}
         parts = file_name.split('/', 1)
+        
+        # Verificar se precisa adicionar bucket para caminhos legados
         if parts and parts[0] in KNOWN_FOLDERS:
+            # Caminho legado: imagens/file.jpg -> uploads/imagens/file.jpg
             bucket_env = os.environ.get('SUPABASE_BUCKET', 'uploads')
             file_name = f"{bucket_env}/{file_name}"
+        
+        # Se o file_name já contém o bucket (ex: uploads/imagens/file.jpg), 
+        # remover o bucket para evitar duplicação na URL final
+        if file_name.startswith('uploads/'):
+            file_name = file_name[len('uploads/'):]
+        
         # Usar rota local de redirecionamento que já faz o quote adequado.
-        # Ex.: /uploads/supabase:/<bucket>/imagens/uuid_nome.ext
+        # Ex.: /uploads/supabase:/imagens/uuid_nome.ext
         return f"/uploads/supabase:/{file_name}"
     else:
         # Arquivo local - construir URL relativa normalizando separadores

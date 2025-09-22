@@ -489,6 +489,15 @@
                             </div>
                             <div class="card-header-actions">
                                 {% if lista != 'Expedição' %}
+                                    <!-- Botão folha de processo direto -->
+                                    {% if ordem.pedidos and ordem.pedidos[0].pedido.item_id %}
+                                    <button class="btn btn-sm btn-outline-info" 
+                                            type="button" 
+                                            onclick="event.stopPropagation(); window.open('/folhas-processo-novas?item_id={{ ordem.pedidos[0].pedido.item_id }}', '_blank')" 
+                                            title="Ver folhas de processo do item">
+                                        <i class="fas fa-clipboard-list"></i>
+                                    </button>
+                                    {% endif %}
                                     <!-- Botão fantasma direto -->
                                     <button class="btn btn-sm btn-outline-purple btn-criar-fantasma-direto" 
                                             type="button" 

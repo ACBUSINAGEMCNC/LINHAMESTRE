@@ -26,7 +26,7 @@
                                         {% for pedido_os in ordem.pedidos %}
                                             {% if pedido_os.pedido.item_id %}
                                                 <li>
-                                                    <a class="dropdown-item" href="{{ url_for('folhas_processo.listar_folhas', item_id=pedido_os.pedido.item_id) }}">
+                                                    <a class="dropdown-item" href="{{ url_for('novas_folhas_processo.listar_folhas', item_id=pedido_os.pedido.item_id) }}">
                                                         <i class="fas fa-file-alt"></i> {{ pedido_os.pedido.item.codigo_acb }}
                                                     </a>
                                                 </li>

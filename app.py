@@ -259,10 +259,16 @@ def create_app():
     def supabase_redirect(file_path):
         import os
         from urllib.parse import quote
+        from flask import current_app as _current_app
         
         # Construir URL pública direta sem usar get_file_url para evitar loop
         bucket_env = os.environ.get('SUPABASE_BUCKET', 'uploads')
         supabase_url = os.environ.get('SUPABASE_URL', '').rstrip('/')
+        
+        # Log da tentativa de redirecionamento
+        _current_app.logger.info("Tentativa de redirecionamento Supabase para: %s", file_path)
+        _current_app.logger.debug("SUPABASE_URL configurado: %s", 'Sim' if supabase_url else 'Não')
+        _current_app.logger.debug("SUPABASE_BUCKET: %s", bucket_env)
         
         if supabase_url:
             # Remover qualquer '/' inicial para evitar '//'
@@ -283,11 +289,42 @@ def create_app():
             # Não codificar as barras do caminho
             rel_encoded = quote(rel_path, safe='/')
             public_url = f"{supabase_url}/storage/v1/object/public/{bucket}/{rel_encoded}"
-            from flask import current_app as _current_app
-            _current_app.logger.debug("Redirecionando para URL Supabase: %s", public_url)
+            _current_app.logger.info("Redirecionando para URL Supabase: %s", public_url)
             return redirect(public_url, code=302)
         else:
+            # Log do erro de configuração
+            _current_app.logger.error("SUPABASE_URL não configurado! Não é possível redirecionar para: %s", file_path)
+            _current_app.logger.error("Configure a variável de ambiente SUPABASE_URL para usar o Supabase Storage")
+            
+            # Em vez de retornar 404, tentar servir arquivo local como fallback
+            _current_app.logger.info("Tentando fallback para arquivo local...")
+            
+            # Extrair apenas o nome do arquivo e pasta
+            path_clean = file_path.lstrip('/')
+            parts = path_clean.split('/', 1)
+            
+            if len(parts) >= 2:
+                folder = parts[0]  # ex: 'imagens'
+                filename = parts[1]  # ex: 'df879b3c_POLIA_TENSORA.jpg'
+                
+                # Tentar servir arquivo local
+                if folder == 'imagens':
+                    local_path = os.path.join(_current_app.config['UPLOAD_FOLDER_IMAGENS'], filename)
+                elif folder == 'desenhos':
+                    local_path = os.path.join(_current_app.config['UPLOAD_FOLDER_DESENHOS'], filename)
+                elif folder == 'instrucoes':
+                    local_path = os.path.join(_current_app.config['UPLOAD_FOLDER_INSTRUCOES'], filename)
+                else:
+                    local_path = None
+                
+                if local_path and os.path.exists(local_path):
+                    _current_app.logger.info("Arquivo local encontrado, servindo: %s", local_path)
+                    return send_file(local_path)
+                else:
+                    _current_app.logger.warning("Arquivo local não encontrado: %s", local_path if local_path else 'caminho inválido')
+            
             from flask import abort
+            _current_app.logger.error("Retornando 404 para: %s", file_path)
             abort(404)
     
     app.register_blueprint(folhas_processo)
