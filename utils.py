@@ -236,7 +236,7 @@ def get_file_url(file_path):
         # Extrair caminho após o prefixo
         file_name = file_path.replace('supabase://', '').replace('supabase:/', '').lstrip('/')
         # Se caminho não inclui bucket (legado), prefixar SUPABASE_BUCKET
-        KNOWN_FOLDERS = {'imagens', 'desenhos', 'instrucoes', 'cnc_files'}
+        KNOWN_FOLDERS = {'imagens', 'desenhos', 'instrucoes', 'cnc_files', 'maquinas', 'castanhas', 'gabaritos'}
         parts = file_name.split('/', 1)
         if parts and parts[0] in KNOWN_FOLDERS:
             bucket_env = os.environ.get('SUPABASE_BUCKET', 'uploads')

@@ -269,7 +269,7 @@ def create_app():
             # Detectar se o caminho já inclui o bucket como primeiro segmento.
             # Mantém compatibilidade com caminhos antigos: 'imagens/arquivo.jpg'
             # e novos: '<bucket>/imagens/arquivo.jpg'
-            KNOWN_FOLDERS = {'imagens', 'desenhos', 'instrucoes', 'cnc_files'}
+            KNOWN_FOLDERS = {'imagens', 'desenhos', 'instrucoes', 'cnc_files', 'maquinas', 'castanhas', 'gabaritos'}
             parts = path_clean.split('/', 1)
             if len(parts) > 1 and parts[0] not in KNOWN_FOLDERS:
                 bucket = parts[0]
