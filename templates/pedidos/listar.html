@@ -216,10 +216,14 @@
                                     <td>{{ pedido.unidade_entrega.nome }}</td>
                                     <td>
                                         {% if pedido.item_id %}
-                                            <a tabindex="0" class="item-popover" data-bs-toggle="popover" data-bs-trigger="hover focus" data-bs-html="true"
-                                               data-bs-content="<img src='{{ pedido.item.imagem_path }}' width='100'>">
-                                                {{ pedido.item.codigo_acb }}
-                                            </a>
+                                            {% if pedido.item.imagem_path %}
+                                                <a tabindex="0" class="item-popover" data-bs-toggle="popover" data-bs-trigger="hover focus" data-bs-html="true"
+                                                   data-bs-content="<img src='{{ pedido.item.imagem_path }}' width='100' class='img-fluid'>">
+                                                    {{ pedido.item.codigo_acb }}
+                                                </a>
+                                            {% else %}
+                                                <span class="text-primary">{{ pedido.item.codigo_acb }}</span>
+                                            {% endif %}
                                         {% else %}
                                             <span class="badge bg-warning">Sem cadastro</span>
                                         {% endif %}
@@ -255,8 +259,8 @@
                                             <a href="/pedidos/editar/{{ pedido.id }}" class="btn btn-sm btn-primary ml-1" title="Editar" data-bs-toggle="tooltip" onclick="event.stopPropagation();">
                                                 <i class="fas fa-edit"></i>
                                             </a>
-                                            {% if pedido.item_id and pedido.item.desenho_tecnico %}
-                                            <a href="/uploads/{{ pedido.item.desenho_tecnico }}" target="_blank" class="btn btn-sm btn-info" title="Ver desenho" data-bs-toggle="tooltip">
+                                            {% if pedido.item_id and pedido.item.desenho_tecnico_path %}
+                                            <a href="{{ pedido.item.desenho_tecnico_path }}" target="_blank" class="btn btn-sm btn-info" title="Ver desenho" data-bs-toggle="tooltip">
                                                 <i class="fas fa-file-pdf"></i>
                                             </a>
                                             {% endif %}
@@ -320,6 +324,12 @@
                 // Mostrar modal
                 modal.style.display = 'block';
                 document.body.style.overflow = 'hidden'; // Prevenir scroll
+            });
+            // Inicializar popovers após DataTable pronto
+            initItemPopovers();
+            // Re-inicializar ao paginar/ordenar/filtrar
+            $('#pedidosTable').on('draw.dt', function () {
+                initItemPopovers();
             });
         });
         
@@ -392,6 +402,25 @@
             var tooltipList = tooltipTriggerList.map(function (tooltipTriggerEl) {
                 return new bootstrap.Tooltip(tooltipTriggerEl);
             });
+
+            // Função para inicializar popovers (necessária após DataTables redraw)
+            function initItemPopovers() {
+                // Destruir popovers antigos antes de recriar (evitar duplicados)
+                document.querySelectorAll('.item-popover').forEach(function (el) {
+                    var existing = bootstrap.Popover.getInstance(el);
+                    if (existing) { existing.dispose(); }
+                });
+                // Criar popovers
+                var popoverTriggerList = [].slice.call(document.querySelectorAll('.item-popover'));
+                popoverTriggerList.map(function (popoverTriggerEl) {
+                    return new bootstrap.Popover(popoverTriggerEl, {
+                        container: 'body',
+                        html: true,
+                        sanitize: false, // permitir imagem no conteúdo
+                        trigger: 'hover focus'
+                    });
+                });
+            }
             
             // Inicializar Select2
             $('.select2').select2({

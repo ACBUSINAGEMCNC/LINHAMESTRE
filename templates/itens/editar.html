@@ -162,7 +162,7 @@
                                     <input type="file" class="form-control" id="desenho_tecnico" name="desenho_tecnico" accept=".pdf">
                                     {% if item.desenho_tecnico %}
                                     <div class="mt-2">
-                                        <a href="/uploads/{{ item.desenho_tecnico }}" target="_blank" class="btn btn-sm btn-info">
+                                        <a href="{{ item.desenho_tecnico_path }}" target="_blank" class="btn btn-sm btn-info">
                                             <i class="fas fa-file-pdf"></i> Ver desenho atual
                                         </a>
                                     </div>
@@ -173,7 +173,7 @@
                                     <input type="file" class="form-control" id="imagem" name="imagem" accept="image/*">
                                     {% if item.imagem %}
                                     <div class="mt-2">
-                                        <a href="/uploads/{{ item.imagem }}" target="_blank" class="btn btn-sm btn-info">
+                                        <a href="{{ item.imagem_path }}" target="_blank" class="btn btn-sm btn-info">
                                             <i class="fas fa-image"></i> Ver imagem atual
                                         </a>
                                     </div>
@@ -184,7 +184,7 @@
                                     <input type="file" class="form-control" id="instrucoes_trabalho" name="instrucoes_trabalho" accept=".pdf">
                                     {% if item.instrucoes_trabalho %}
                                     <div class="mt-2">
-                                        <a href="/uploads/{{ item.instrucoes_trabalho }}" target="_blank" class="btn btn-sm btn-info">
+                                        <a href="{{ item.instrucoes_trabalho_path }}" target="_blank" class="btn btn-sm btn-info">
                                             <i class="fas fa-file-pdf"></i> Ver instruções atuais
                                         </a>
                                     </div>

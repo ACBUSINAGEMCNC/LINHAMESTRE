@@ -25,35 +25,53 @@ def verificar_inicializar_banco():
     """Verifica se o banco de dados existe e o inicializa se necessário."""
     database_url = os.getenv('DATABASE_URL', '')
     
-    # Se for PostgreSQL (Supabase), usar script de migração específico
-    if database_url.startswith('postgresql://'):        
+    # Se for PostgreSQL (Supabase), usar script de migração rápido
+    if database_url.startswith('postgresql://'):
         logger.info("Usando PostgreSQL (Supabase) - verificando tabelas de apontamento...")
         try:
-            subprocess.run([sys.executable, 'migrate_apontamento_supabase.py'], check=True)
-            logger.info("Tabelas PostgreSQL verificadas/criadas com sucesso.")
+            # Usar script rápido com timeout
+            result = subprocess.run(
+                [sys.executable, 'migrate_apontamento_supabase_fast.py'], 
+                timeout=15,  # Timeout de 15 segundos
+                capture_output=True, 
+                text=True
+            )
             
-            # Executar migração para adicionar coluna categoria_trabalho
-            try:
-                from migrations.add_categoria_trabalho import migrate_postgres
-                if migrate_postgres():
-                    logger.info("Coluna categoria_trabalho verificada/adicionada com sucesso.")
-                else:
-                    logger.warning("Falha ao verificar/adicionar coluna categoria_trabalho.")
-            except Exception as col_err:
-                logger.warning(f"Erro ao migrar coluna categoria_trabalho: {str(col_err)}")
-                
-            # Executar migração para adicionar colunas imagem e data_cadastro
-            try:
-                from migrations.add_columns_maquina import migrate_postgres as migrate_colunas_postgres
-                if migrate_colunas_postgres():
-                    logger.info("Colunas imagem e data_cadastro verificadas/adicionadas com sucesso.")
-                else:
-                    logger.warning("Falha ao verificar/adicionar colunas imagem e data_cadastro.")
-            except Exception as cols_err:
-                logger.warning(f"Erro ao migrar colunas imagem e data_cadastro: {str(cols_err)}")
+            if result.returncode == 0:
+                logger.info("Tabelas PostgreSQL verificadas/criadas com sucesso.")
+            else:
+                logger.warning(f"Script de migração retornou código {result.returncode}")
+                if result.stderr:
+                    logger.warning(f"Stderr: {result.stderr[:200]}")
+                    
+        except subprocess.TimeoutExpired:
+            logger.warning("Timeout na migração PostgreSQL - continuando sem migração")
                 
         except subprocess.CalledProcessError as e:
             logger.warning(f"Migração retornou código {e.returncode}, mas pode estar OK")
+        except Exception as e:
+            logger.warning(f"Erro na migração PostgreSQL: {str(e)[:100]} - continuando")
+            
+        # Executar migrações adicionais para PostgreSQL
+        try:
+            from migrations.add_categoria_trabalho import migrate_postgres
+            if migrate_postgres():
+                logger.info("Coluna categoria_trabalho verificada/adicionada com sucesso.")
+            else:
+                logger.warning("Falha ao verificar/adicionar coluna categoria_trabalho.")
+        except Exception as col_err:
+            logger.warning(f"Erro ao migrar coluna categoria_trabalho: {str(col_err)}")
+            
+        # Executar migração para adicionar colunas imagem e data_cadastro
+        try:
+            from migrations.add_columns_maquina import migrate_postgres as migrate_colunas_postgres
+            if migrate_colunas_postgres():
+                logger.info("Colunas imagem e data_cadastro verificadas/adicionadas com sucesso.")
+            else:
+                logger.warning("Falha ao verificar/adicionar colunas imagem e data_cadastro.")
+        except Exception as cols_err:
+            logger.warning(f"Erro ao migrar colunas imagem e data_cadastro: {str(cols_err)}")
+            
         return
     
     # Para SQLite, verificar se arquivo existe
@@ -241,17 +259,35 @@ def create_app():
         from urllib.parse import quote
         
         # Construir URL pública direta sem usar get_file_url para evitar loop
-        bucket = os.environ.get('SUPABASE_BUCKET', 'uploads')
+        bucket_env = os.environ.get('SUPABASE_BUCKET', 'uploads')
         supabase_url = os.environ.get('SUPABASE_URL', '').rstrip('/')
         
         if supabase_url:
-            public_url = f"{supabase_url}/storage/v1/object/public/{bucket}/{quote(file_path)}"
+            # Remover qualquer '/' inicial para evitar '//'
+            path_clean = file_path.lstrip('/')
+            
+            # Detectar se o caminho já inclui o bucket como primeiro segmento.
+            # Mantém compatibilidade com caminhos antigos: 'imagens/arquivo.jpg'
+            # e novos: '<bucket>/imagens/arquivo.jpg'
+            KNOWN_FOLDERS = {'imagens', 'desenhos', 'instrucoes', 'cnc_files'}
+            parts = path_clean.split('/', 1)
+            if len(parts) > 1 and parts[0] not in KNOWN_FOLDERS:
+                bucket = parts[0]
+                rel_path = parts[1]
+            else:
+                bucket = bucket_env
+                rel_path = path_clean
+
+            # Não codificar as barras do caminho
+            rel_encoded = quote(rel_path, safe='/')
+            public_url = f"{supabase_url}/storage/v1/object/public/{bucket}/{rel_encoded}"
             from flask import current_app as _current_app
             _current_app.logger.debug("Redirecionando para URL Supabase: %s", public_url)
             return redirect(public_url, code=302)
         else:
             from flask import abort
             abort(404)
+    
     app.register_blueprint(folhas_processo)
     
     # Adicionar contexto global para templates

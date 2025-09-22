@@ -1,5 +1,5 @@
 from flask import Blueprint, render_template, request, redirect, url_for, flash, jsonify, current_app
-from models import db, Pedido, Cliente, UnidadeEntrega, Item, PedidoOrdemServico, OrdemServico, Material, Trabalho, PedidoMaterial, ItemPedidoMaterial, ItemMaterial
+from models import db, Pedido, Cliente, UnidadeEntrega, Item, PedidoOrdemServico, OrdemServico, Material, Trabalho, PedidoMaterial, ItemPedidoMaterial, ItemMaterial, ItemComposto
 from utils import validate_form_data, parse_json_field, generate_next_code, generate_next_os_code
 from datetime import datetime
 import logging
@@ -59,6 +59,22 @@ def gerar_ordem_servico_multipla():
         db.session.commit()
         flash(f'Ordem de Serviço {existing_num} já existe para este item', 'warning')
         return redirect(url_for('pedidos.listar_pedidos'))
+    # Verificar se o item é composto
+    item_principal = Item.query.get(pedidos_grupo[0].item_id)
+    print(f"🔍 VERIFICANDO TIPO DE ITEM: {item_principal.codigo_acb}")
+    print(f"   É composto: {item_principal.eh_composto}")
+    
+    if item_principal.eh_composto:
+        print("   ➡️  REDIRECIONANDO PARA DESMEMBRAMENTO")
+        # ITEM COMPOSTO: Desmembrar em múltiplas OS
+        return gerar_os_item_composto(pedidos_grupo, item_principal)
+    else:
+        print("   ➡️  GERANDO OS SIMPLES")
+        # ITEM SIMPLES: Gerar OS normal
+        return gerar_os_item_simples(pedidos_grupo)
+
+def gerar_os_item_simples(pedidos_grupo):
+    """Gera uma OS normal para item simples"""
     # Gerar número de OS
     numero_os = generate_next_os_code()
     # Criar Ordem de Serviço
@@ -73,6 +89,105 @@ def gerar_ordem_servico_multipla():
     db.session.commit()
     flash(f'Ordem de Serviço {numero_os} gerada com sucesso', 'success')
     return redirect(url_for('pedidos.listar_pedidos'))
+
+def gerar_os_item_composto(pedidos_grupo, item_composto):
+    """Gera múltiplas OS desmembrando um item composto"""
+    try:
+        print(f"🔄 INICIANDO DESMEMBRAMENTO DE ITEM COMPOSTO: {item_composto.codigo_acb}")
+        print(f"   Pedidos no grupo: {len(pedidos_grupo)}")
+        print(f"   Componentes do item: {len(item_composto.componentes)}")
+        
+        os_geradas = []
+        
+        # Calcular quantidade total do item composto
+        quantidade_total_composto = sum(pedido.quantidade for pedido in pedidos_grupo)
+        print(f"   Quantidade total: {quantidade_total_composto}")
+        
+        # Para cada componente do item composto
+        for componente_rel in item_composto.componentes:
+            item_componente = componente_rel.item_componente
+            quantidade_componente = componente_rel.quantidade * quantidade_total_composto
+            
+            print(f"   📦 Processando componente: {item_componente.codigo_acb}")
+            print(f"      Quantidade necessária: {quantidade_componente}")
+            
+            # Gerar número de OS para este componente
+            numero_os = generate_next_os_code()
+            print(f"      Número OS gerado: {numero_os}")
+            
+            # Criar Ordem de Serviço para o componente
+            os_componente = OrdemServico(
+                numero=numero_os, 
+                data_criacao=datetime.now().date(),
+                status='Entrada'
+            )
+            # Posicionar no final da lista 'Entrada' no Kanban
+            try:
+                max_pos = db.session.query(db.func.max(OrdemServico.posicao)).filter_by(status='Entrada').scalar()
+                os_componente.posicao = (max_pos or 0) + 1
+            except Exception as e:
+                print(f"      Aviso: não foi possível calcular posição no Kanban (usando padrão 0). Erro: {e}")
+                os_componente.posicao = 0
+            db.session.add(os_componente)
+            db.session.flush()
+            
+            # Criar pedido virtual para o componente
+            pedido_virtual = Pedido(
+                cliente_id=pedidos_grupo[0].cliente_id,
+                unidade_entrega_id=pedidos_grupo[0].unidade_entrega_id,
+                item_id=item_componente.id,
+                nome_item=f"{item_componente.nome} (Componente de {item_composto.nome})",
+                descricao=f"Componente gerado automaticamente do item composto {item_composto.codigo_acb}",
+                quantidade=quantidade_componente,
+                data_entrada=datetime.now().date(),
+                numero_pedido=f"AUTO-{numero_os}",
+                previsao_entrega=pedidos_grupo[0].previsao_entrega,
+                numero_oc=numero_os
+            )
+            db.session.add(pedido_virtual)
+            db.session.flush()
+            
+            # Associar pedido virtual à OS
+            assoc = PedidoOrdemServico(
+                pedido_id=pedido_virtual.id, 
+                ordem_servico_id=os_componente.id
+            )
+            db.session.add(assoc)
+            
+            os_geradas.append({
+                'numero': numero_os,
+                'componente': item_componente.nome,
+                'quantidade': quantidade_componente
+            })
+        
+        # Atualizar pedidos originais com referência às OS geradas
+        numeros_os = [os['numero'] for os in os_geradas]
+        # Resumo curto para caber no campo numero_oc (20 chars).
+        # Ex.: "OS-2025-09-018" ou "OS-2025-09-018 (+2)"
+        resumo = None
+        if numeros_os:
+            primeiro = numeros_os[0]
+            extra = len(numeros_os) - 1
+            resumo = primeiro if extra <= 0 else f"{primeiro} (+{extra})"
+        for pedido in pedidos_grupo:
+            if resumo:
+                pedido.numero_oc = resumo[:20]
+        
+        db.session.commit()
+        print(f"✅ DESMEMBRAMENTO CONCLUÍDO: {len(os_geradas)} OS geradas")
+        
+        # Mensagem de sucesso detalhada
+        detalhes = []
+        for os_info in os_geradas:
+            detalhes.append(f"OS {os_info['numero']}: {os_info['componente']} (Qtd: {os_info['quantidade']})")
+        
+        flash(f'Item composto desmembrado com sucesso! Geradas {len(os_geradas)} OS: {"; ".join(detalhes)}', 'success')
+        return redirect(url_for('pedidos.listar_pedidos'))
+        
+    except Exception as e:
+        db.session.rollback()
+        flash(f'Erro ao desmembrar item composto: {str(e)}', 'danger')
+        return redirect(url_for('pedidos.listar_pedidos'))
 
 @pedidos.route('/pedidos/gerar-pedido-material-multiplo', methods=['POST'])
 def gerar_pedido_material_multiplo():
@@ -158,15 +273,36 @@ def gerar_pedido_material_multiplo():
         flash('Não há pedidos com itens válidos para gerar pedido de material', 'danger')
         return redirect(url_for('pedidos.listar_pedidos'))
     
-    # Agregar materiais de todos os pedidos válidos
+    # Agregar materiais de todos os pedidos válidos (incluindo desmembramento de itens compostos)
     materiais_agrupados = {}
     for pedido in pedidos_para_processar:
-        item_materiais = ItemMaterial.query.filter_by(item_id=pedido.item_id).all()
-        for item_material in item_materiais:
-            if item_material.material_id in materiais_agrupados:
-                materiais_agrupados[item_material.material_id] += item_material.comprimento * pedido.quantidade if item_material.comprimento and pedido.quantidade else 0
-            else:
-                materiais_agrupados[item_material.material_id] = item_material.comprimento * pedido.quantidade if item_material.comprimento and pedido.quantidade else 0
+        item = Item.query.get(pedido.item_id)
+        
+        if item.eh_composto:
+            # ITEM COMPOSTO: Desmembrar e agregar materiais dos componentes
+            for componente_rel in item.componentes:
+                item_componente = componente_rel.item_componente
+                quantidade_componente = componente_rel.quantidade * pedido.quantidade
+                
+                # Buscar materiais do componente
+                item_materiais = ItemMaterial.query.filter_by(item_id=item_componente.id).all()
+                for item_material in item_materiais:
+                    comprimento_necessario = (item_material.comprimento or 0) * quantidade_componente
+                    
+                    if item_material.material_id in materiais_agrupados:
+                        materiais_agrupados[item_material.material_id] += comprimento_necessario
+                    else:
+                        materiais_agrupados[item_material.material_id] = comprimento_necessario
+        else:
+            # ITEM SIMPLES: Processar normalmente
+            item_materiais = ItemMaterial.query.filter_by(item_id=pedido.item_id).all()
+            for item_material in item_materiais:
+                comprimento_necessario = (item_material.comprimento or 0) * pedido.quantidade
+                
+                if item_material.material_id in materiais_agrupados:
+                    materiais_agrupados[item_material.material_id] += comprimento_necessario
+                else:
+                    materiais_agrupados[item_material.material_id] = comprimento_necessario
     
     if not materiais_agrupados:
         flash('Nenhum material associado aos itens dos pedidos selecionados', 'warning')

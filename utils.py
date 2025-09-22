@@ -48,7 +48,8 @@ def save_file(file, folder):
         
         filepath = os.path.join(upload_folder, filename)
         file.save(filepath)
-        return os.path.join(folder, filename)
+        # Retornar caminho relativo com separadores POSIX para uso em URL
+        return f"{folder}/{filename}"
 
 def upload_to_supabase(file, folder):
     """Faz upload de um arquivo para o Supabase Storage usando a API Storage REST"""
@@ -153,8 +154,8 @@ def upload_to_supabase(file, folder):
                 public_url = f"{supabase_url}/storage/v1/object/public/{bucket}/{quote(storage_path)}"
                 logger.debug("URL pública do arquivo: %s", public_url)
                 
-                # Retornar caminho do arquivo no formato supabase:// para referência futura
-                return f"supabase://{storage_path}"
+                # Retornar caminho do arquivo no formato supabase://<bucket>/<path> para referência futura
+                return f"supabase://{bucket}/{storage_path}"
             else:
                 error_msg = f"Erro ao fazer upload para o Supabase: {response.status_code} {response.reason} - {response.text}"
                 logger.error(error_msg)
@@ -230,23 +231,26 @@ def get_file_url(file_path):
     if file_path.startswith('http://') or file_path.startswith('https://'):
         return file_path
         
-    # Se for arquivo do Supabase Storage
-    if file_path.startswith('supabase://'):
-        bucket = os.environ.get('SUPABASE_BUCKET', 'uploads')
-        supabase_url = os.environ.get('SUPABASE_URL')
-        file_name = file_path.replace('supabase://', '')
-        
-        # Remover possível barra no final da URL
-        if supabase_url and supabase_url.endswith('/'):
-            supabase_url = supabase_url[:-1]
-        
-        # Retornar URL pública direta do Supabase
-        public_url = f"{supabase_url}/storage/v1/object/public/{bucket}/{file_name}"
-        logger.debug("URL pública de arquivo: %s", public_url)
-        return public_url
+    # Se for arquivo do Supabase Storage (suportar 'supabase://' e legado 'supabase:/')
+    if file_path.startswith('supabase://') or file_path.startswith('supabase:/'):
+        # Extrair caminho após o prefixo
+        file_name = file_path.replace('supabase://', '').replace('supabase:/', '').lstrip('/')
+        # Se caminho não inclui bucket (legado), prefixar SUPABASE_BUCKET
+        KNOWN_FOLDERS = {'imagens', 'desenhos', 'instrucoes', 'cnc_files'}
+        parts = file_name.split('/', 1)
+        if parts and parts[0] in KNOWN_FOLDERS:
+            bucket_env = os.environ.get('SUPABASE_BUCKET', 'uploads')
+            file_name = f"{bucket_env}/{file_name}"
+        # Usar rota local de redirecionamento que já faz o quote adequado.
+        # Ex.: /uploads/supabase:/<bucket>/imagens/uuid_nome.ext
+        return f"/uploads/supabase:/{file_name}"
     else:
-        # Arquivo local - construir URL relativa
-        return f"/uploads/{file_path}"
+        # Arquivo local - construir URL relativa normalizando separadores
+        normalized = file_path.replace('\\', '/').lstrip('/')
+        # Evitar duplicar 'uploads/' se já vier no caminho salvo
+        if normalized.startswith('uploads/'):
+            normalized = normalized[len('uploads/'):]
+        return f"/uploads/{normalized}"
 
 def generate_next_code(model, prefix, code_field, padding=5):
     """Gera o próximo código sequencial para um modelo"""

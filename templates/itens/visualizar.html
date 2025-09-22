@@ -215,7 +215,7 @@
                         {% if item.desenho_tecnico %}
                         <div class="mb-3">
                             <h6>Desenho Técnico</h6>
-                            <a href="/uploads/{{ item.desenho_tecnico }}" class="btn btn-sm btn-outline-primary" target="_blank">
+                            <a href="{{ item.desenho_tecnico_path }}" class="btn btn-sm btn-outline-primary" target="_blank">
                                 <i class="fas fa-file-pdf"></i> Visualizar Desenho
                             </a>
                         </div>
@@ -224,8 +224,8 @@
                         {% if item.imagem %}
                         <div class="mb-3">
                             <h6>Imagem</h6>
-                            <img src="/uploads/{{ item.imagem }}" class="img-fluid rounded mb-2" alt="{{ item.nome }}">
-                            <a href="/uploads/{{ item.imagem }}" class="btn btn-sm btn-outline-primary" target="_blank">
+                            <img src="{{ item.imagem_path }}" class="img-fluid rounded mb-2" alt="{{ item.nome }}">
+                            <a href="{{ item.imagem_path }}" class="btn btn-sm btn-outline-primary" target="_blank">
                                 <i class="fas fa-image"></i> Visualizar Imagem
                             </a>
                         </div>
@@ -234,7 +234,7 @@
                         {% if item.instrucoes_trabalho %}
                         <div class="mb-3">
                             <h6>Instruções de Trabalho</h6>
-                            <a href="/uploads/{{ item.instrucoes_trabalho }}" class="btn btn-sm btn-outline-primary" target="_blank">
+                            <a href="{{ item.instrucoes_trabalho_path }}" class="btn btn-sm btn-outline-primary" target="_blank">
                                 <i class="fas fa-file-alt"></i> Visualizar Instruções
                             </a>
                         </div>

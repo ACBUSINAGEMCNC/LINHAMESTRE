@@ -3,7 +3,7 @@ from werkzeug.utils import secure_filename
 import os
 import json
 from datetime import datetime
-from models import db, Item, Material, Trabalho, ItemMaterial, ItemTrabalho, Pedido, ArquivoCNC
+from models import db, Item, Material, Trabalho, ItemMaterial, ItemTrabalho, Pedido, ArquivoCNC, ItemComposto
 from utils import validate_form_data, save_file, generate_next_code, parse_json_field
 from flask import current_app
 
@@ -414,3 +414,208 @@ def api_item(item_id):
         'nome': item.nome,
         'codigo_acb': item.codigo_acb
     })
+
+# ==========================================
+# ROTAS PARA ITENS COMPOSTOS
+# ==========================================
+
+@itens.route('/itens/composto/novo', methods=['GET', 'POST'])
+def novo_item_composto():
+    """Rota para cadastrar um novo item composto"""
+    if request.method == 'POST':
+        # Validação de dados
+        errors = validate_form_data(request.form, ['nome'])
+        if errors:
+            for error in errors:
+                flash(error, 'danger')
+            itens_disponiveis = Item.query.filter_by(eh_composto=False).all()
+            return render_template('itens/composto_novo.html', itens_disponiveis=itens_disponiveis)
+        
+        nome = request.form['nome']
+        
+        # Verificar se já existe um item com o mesmo nome
+        item_existente = Item.query.filter_by(nome=nome).first()
+        if item_existente:
+            flash('Já existe um item com este nome!', 'danger')
+            itens_disponiveis = Item.query.filter_by(eh_composto=False).all()
+            return render_template('itens/composto_novo.html', itens_disponiveis=itens_disponiveis)
+        
+        # Gerar código ACB automaticamente
+        novo_codigo = generate_next_code(Item, "ACB", "codigo_acb")
+        
+        # Criar o item composto
+        item = Item(
+            nome=nome,
+            codigo_acb=novo_codigo,
+            eh_composto=True,  # Marcar como item composto
+            tipo_embalagem=request.form.get('tipo_embalagem', ''),
+            tempera='tempera' in request.form,
+            tipo_tempera=request.form.get('tipo_tempera', ''),
+            retifica='retifica' in request.form,
+            pintura='pintura' in request.form,
+            tipo_pintura=request.form.get('tipo_pintura', ''),
+            cor_pintura=request.form.get('cor_pintura', ''),
+            oleo_protetivo='oleo_protetivo' in request.form,
+            zincagem='zincagem' in request.form,
+            tipo_zincagem=request.form.get('tipo_zincagem', '')
+        )
+        
+        # Upload de arquivos
+        if 'desenho_tecnico' in request.files:
+            item.desenho_tecnico = save_file(request.files['desenho_tecnico'], 'desenhos')
+        
+        if 'imagem' in request.files:
+            item.imagem = save_file(request.files['imagem'], 'imagens')
+        
+        if 'instrucoes_trabalho' in request.files:
+            item.instrucoes_trabalho = save_file(request.files['instrucoes_trabalho'], 'instrucoes')
+        
+        db.session.add(item)
+        db.session.commit()
+        
+        # Adicionar componentes
+        componentes_json = parse_json_field(request.form, 'componentes')
+        for comp in componentes_json:
+            try:
+                # Verificar se não está tentando adicionar o próprio item como componente
+                if int(comp['id']) == item.id:
+                    flash('Um item não pode ser componente de si mesmo!', 'danger')
+                    continue
+                
+                item_composto = ItemComposto(
+                    item_pai_id=item.id,
+                    item_componente_id=int(comp['id']),
+                    quantidade=int(comp.get('quantidade', 1) or 1),
+                    observacoes=comp.get('observacoes', '')
+                )
+                db.session.add(item_composto)
+            except (ValueError, KeyError) as e:
+                flash(f'Erro ao processar componente: {str(e)}', 'danger')
+        
+        db.session.commit()
+        flash('Item composto cadastrado com sucesso!', 'success')
+        return redirect(url_for('itens.listar_itens'))
+    
+    # GET - mostrar formulário
+    itens_disponiveis = Item.query.filter_by(eh_composto=False).all()
+    return render_template('itens/composto_novo.html', itens_disponiveis=itens_disponiveis)
+
+@itens.route('/itens/composto/editar/<int:item_id>', methods=['GET', 'POST'])
+def editar_item_composto(item_id):
+    """Rota para editar um item composto existente"""
+    item = Item.query.get_or_404(item_id)
+    
+    if not item.eh_composto:
+        flash('Este item não é um item composto!', 'danger')
+        return redirect(url_for('itens.listar_itens'))
+    
+    if request.method == 'POST':
+        # Validação de dados
+        errors = validate_form_data(request.form, ['nome'])
+        if errors:
+            for error in errors:
+                flash(error, 'danger')
+            itens_disponiveis = Item.query.filter_by(eh_composto=False).all()
+            return render_template('itens/composto_editar.html', item=item, itens_disponiveis=itens_disponiveis)
+        
+        nome = request.form['nome']
+        
+        # Verificar se já existe outro item com o mesmo nome (exceto o atual)
+        item_existente = Item.query.filter(Item.nome == nome, Item.id != item_id).first()
+        if item_existente:
+            flash('Já existe um item com este nome!', 'danger')
+            itens_disponiveis = Item.query.filter_by(eh_composto=False).all()
+            return render_template('itens/composto_editar.html', item=item, itens_disponiveis=itens_disponiveis)
+        
+        # Atualizar dados do item
+        item.nome = nome
+        item.tipo_embalagem = request.form.get('tipo_embalagem', '')
+        item.tempera = 'tempera' in request.form
+        item.tipo_tempera = request.form.get('tipo_tempera', '')
+        item.retifica = 'retifica' in request.form
+        item.pintura = 'pintura' in request.form
+        item.tipo_pintura = request.form.get('tipo_pintura', '')
+        item.cor_pintura = request.form.get('cor_pintura', '')
+        item.oleo_protetivo = 'oleo_protetivo' in request.form
+        item.zincagem = 'zincagem' in request.form
+        item.tipo_zincagem = request.form.get('tipo_zincagem', '')
+        
+        # Upload de arquivos
+        if 'desenho_tecnico' in request.files and request.files['desenho_tecnico'].filename:
+            item.desenho_tecnico = save_file(request.files['desenho_tecnico'], 'desenhos')
+        
+        if 'imagem' in request.files and request.files['imagem'].filename:
+            item.imagem = save_file(request.files['imagem'], 'imagens')
+        
+        if 'instrucoes_trabalho' in request.files and request.files['instrucoes_trabalho'].filename:
+            item.instrucoes_trabalho = save_file(request.files['instrucoes_trabalho'], 'instrucoes')
+        
+        # Atualizar componentes
+        componentes_json = parse_json_field(request.form, 'componentes')
+        
+        # Remover componentes existentes
+        ItemComposto.query.filter_by(item_pai_id=item.id).delete()
+        
+        # Adicionar novos componentes
+        for comp in componentes_json:
+            try:
+                # Verificar se não está tentando adicionar o próprio item como componente
+                if int(comp['id']) == item.id:
+                    flash('Um item não pode ser componente de si mesmo!', 'danger')
+                    continue
+                
+                item_composto = ItemComposto(
+                    item_pai_id=item.id,
+                    item_componente_id=int(comp['id']),
+                    quantidade=int(comp.get('quantidade', 1) or 1),
+                    observacoes=comp.get('observacoes', '')
+                )
+                db.session.add(item_composto)
+            except (ValueError, KeyError) as e:
+                flash(f'Erro ao processar componente: {str(e)}', 'danger')
+        
+        db.session.commit()
+        flash('Item composto atualizado com sucesso!', 'success')
+        return redirect(url_for('itens.listar_itens'))
+    
+    # GET - mostrar formulário preenchido
+    itens_disponiveis = Item.query.filter_by(eh_composto=False).all()
+    
+    # Obter componentes do item para preencher o formulário
+    item_componentes = []
+    for ic in item.componentes:
+        componente = Item.query.get(ic.item_componente_id)
+        item_componentes.append({
+            'id': ic.item_componente_id,
+            'nome': componente.nome,
+            'codigo_acb': componente.codigo_acb,
+            'quantidade': ic.quantidade,
+            'observacoes': ic.observacoes or ''
+        })
+    
+    return render_template('itens/composto_editar.html', 
+                          item=item, 
+                          itens_disponiveis=itens_disponiveis,
+                          item_componentes=json.dumps(item_componentes))
+
+@itens.route('/itens/composto/visualizar/<int:item_id>')
+def visualizar_item_composto(item_id):
+    """Rota para visualizar detalhes de um item composto"""
+    item = Item.query.get_or_404(item_id)
+    
+    if not item.eh_composto:
+        flash('Este item não é um item composto!', 'danger')
+        return redirect(url_for('itens.listar_itens'))
+    
+    return render_template('itens/composto_visualizar.html', item=item)
+
+@itens.route('/api/itens/nao-compostos')
+def api_itens_nao_compostos():
+    """API para obter lista de itens que não são compostos (para usar como componentes)"""
+    itens = Item.query.filter_by(eh_composto=False).all()
+    return jsonify([{
+        'id': item.id,
+        'nome': item.nome,
+        'codigo_acb': item.codigo_acb,
+        'peso': item.peso or 0
+    } for item in itens])

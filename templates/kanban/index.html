@@ -534,7 +534,7 @@
                                     {% set item_key = pedido_os.pedido.item_id if pedido_os.pedido.item_id else pedido_os.pedido.nome_item %}
                                     {% set item_name = pedido_os.pedido.item.codigo_acb ~ ' - ' ~ pedido_os.pedido.item.nome if pedido_os.pedido.item_id else pedido_os.pedido.nome_item %}
                                     
-                                    {% if pedido_os.pedido.item and pedido_os.pedido.item.desenho_path %}
+                                    {% if pedido_os.pedido.item and pedido_os.pedido.item.desenho_tecnico_path %}
                                         {% set tem_desenho = true %}
                                     {% endif %}
                                     
@@ -574,12 +574,12 @@
                                 </div>
                                 
                                 <!-- Container de desenho (oculto por padrão) -->
-                                {% if tem_desenho and pedido_primeiro and pedido_primeiro.pedido.item.desenho_path %}
+                                {% if tem_desenho and pedido_primeiro and pedido_primeiro.pedido.item.desenho_tecnico_path %}
                                 <div id="pdf-container-{{ ordem.id }}" class="document-container pdf-container">
                                     <div class="mb-2">
                                         <strong>Desenho do Item:</strong>
                                     </div>
-                                    <a href="{{ pedido_primeiro.pedido.item.desenho_path }}" class="file-link" target="_blank">
+                                    <a href="{{ pedido_primeiro.pedido.item.desenho_tecnico_path }}" class="file-link" target="_blank">
                                         <i class="fas fa-file-pdf pdf-icon"></i>
                                         Visualizar PDF
                                     </a>

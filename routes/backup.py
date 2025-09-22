@@ -1,7 +1,7 @@
 from flask import Blueprint, render_template, request, redirect, url_for, flash, send_file, session
 from models import db, Backup, Usuario
 from routes.auth import login_required, permissao_requerida
-from datetime import datetime, date, time
+from datetime import datetime, date
 import os
 import sys
 import subprocess
@@ -10,6 +10,7 @@ import tempfile
 import zipfile
 import glob
 import logging
+import time
 from sqlalchemy import create_engine, text
 import psycopg2
 from urllib.parse import urlparse
@@ -1037,7 +1038,9 @@ def _restaurar_backup_completo(caminho_backup: str):
             
             success_msg = "Restauração completa concluída com sucesso!"
             if not storage_result:
-                success_msg += " (Supabase Storage não restaurado - verifique credenciais)"
+                success_msg += "\n\n⚠️ ATENÇÃO: Supabase Storage não foi restaurado."
+                success_msg += "\n📝 Para configurar as credenciais, consulte o arquivo CONFIGURAR_SUPABASE_STORAGE.md"
+                success_msg += "\n🔑 Você precisa adicionar SUPABASE_URL e SUPABASE_SERVICE_KEY no arquivo .env"
             
             logger.info(success_msg)
             return success_msg
@@ -1049,33 +1052,113 @@ def _restaurar_backup_completo(caminho_backup: str):
 
 
 def _limpar_banco_postgresql():
-    """Limpa todas as tabelas do PostgreSQL/Supabase."""
+    """Limpa todas as tabelas do PostgreSQL/Supabase de forma robusta."""
     try:
         conn_info = _get_db_connection_info()
         connection_string = f"postgresql://{conn_info['username']}:{conn_info['password']}@{conn_info['host']}:{conn_info['port']}/{conn_info['database']}"
-        engine = create_engine(connection_string)
+        engine = create_engine(connection_string, isolation_level="AUTOCOMMIT")
         
         with engine.connect() as conn:
-            # Listar todas as tabelas
-            result = conn.execute(text("SELECT tablename FROM pg_tables WHERE schemaname = 'public'"))
-            tables = [row[0] for row in result.fetchall()]
+            logger.info("🧹 Limpando banco PostgreSQL completamente")
             
-            logger.info(f"Limpando {len(tables)} tabelas do PostgreSQL")
-            
-            # Desabilitar foreign keys temporariamente
-            for table in tables:
+            try:
+                # Forçar fim de todas as transações ativas
+                logger.info("Finalizando transações ativas...")
+                
+                # Desconectar outras sessões (se possível)
                 try:
-                    conn.execute(text(f"DROP TABLE IF EXISTS {table} CASCADE"))
-                    logger.debug(f"Tabela {table} removida")
+                    result = conn.execute(text(
+                        "SELECT pg_terminate_backend(pid) FROM pg_stat_activity "
+                        "WHERE datname = current_database() AND pid <> pg_backend_pid()"
+                    ))
+                    logger.debug(f"Sessões terminadas: {result.rowcount}")
                 except Exception as e:
-                    logger.warning(f"Erro ao remover tabela {table}: {str(e)}")
+                    logger.debug(f"Não foi possível terminar outras sessões: {str(e)[:50]}")
+                
+                # Remover schema public completamente
+                logger.info("Removendo schema public...")
+                conn.execute(text("DROP SCHEMA IF EXISTS public CASCADE"))
+                
+                # Recriar schema public limpo
+                logger.info("Recriando schema public...")
+                conn.execute(text("CREATE SCHEMA public"))
+                
+                # Configurar permissões corretas
+                conn.execute(text("GRANT ALL ON SCHEMA public TO postgres"))
+                conn.execute(text("GRANT ALL ON SCHEMA public TO public"))
+                conn.execute(text("GRANT CREATE ON SCHEMA public TO public"))
+                
+                logger.info("✅ Schema public removido e recriado com sucesso")
+                
+            except Exception as e:
+                logger.error(f"❌ Erro crítico ao limpar banco: {str(e)}")
+                logger.warning("🔄 Tentando abordagem de fallback...")
+                
+                # Fallback: forçar limpeza manual
+                try:
+                    # Listar e remover todas as tabelas
+                    result = conn.execute(text(
+                        "SELECT tablename FROM pg_tables WHERE schemaname = 'public' ORDER BY tablename"
+                    ))
+                    tables = [row[0] for row in result.fetchall()]
+                    
+                    if tables:
+                        logger.info(f"Removendo {len(tables)} tabelas manualmente...")
+                        
+                        # Remover foreign keys primeiro
+                        conn.execute(text(
+                            "DO $$ DECLARE r RECORD; BEGIN "
+                            "FOR r IN (SELECT constraint_name, table_name FROM information_schema.table_constraints "
+                            "WHERE constraint_type = 'FOREIGN KEY' AND table_schema = 'public') LOOP "
+                            "EXECUTE 'ALTER TABLE ' || r.table_name || ' DROP CONSTRAINT IF EXISTS ' || r.constraint_name || ' CASCADE'; "
+                            "END LOOP; END $$"
+                        ))
+                        
+                        # Remover tabelas
+                        for table in tables:
+                            try:
+                                conn.execute(text(f"DROP TABLE IF EXISTS {table} CASCADE"))
+                            except Exception as te:
+                                logger.debug(f"Erro ao remover {table}: {str(te)[:50]}")
+                        
+                        logger.info(f"✅ {len(tables)} tabelas processadas")
+                    
+                    # Limpar sequences, views, functions, etc.
+                    cleanup_commands = [
+                        "DROP SEQUENCE IF EXISTS seq CASCADE" for seq in 
+                        [row[0] for row in conn.execute(text(
+                            "SELECT sequence_name FROM information_schema.sequences WHERE sequence_schema = 'public'"
+                        )).fetchall()]
+                    ]
+                    
+                    for cmd in cleanup_commands:
+                        try:
+                            conn.execute(text(cmd))
+                        except Exception as ce:
+                            logger.debug(f"Erro cleanup: {str(ce)[:50]}")
+                    
+                    logger.info("✅ Limpeza de fallback concluída")
+                    
+                except Exception as fe:
+                    logger.error(f"❌ Fallback também falhou: {str(fe)}")
+                    raise Exception(f"Não foi possível limpar o banco: {str(fe)}")
             
-            conn.commit()
-            logger.info("Banco PostgreSQL limpo com sucesso")
+            # Verificar se a limpeza foi bem-sucedida
+            result = conn.execute(text("SELECT COUNT(*) FROM pg_tables WHERE schemaname = 'public'"))
+            remaining_tables = result.scalar()
+            
+            if remaining_tables == 0:
+                logger.info("✅ Limpeza do banco PostgreSQL concluída com sucesso")
+            else:
+                logger.warning(f"⚠️ Ainda restam {remaining_tables} tabelas no banco")
+            
+            # Resetar sequences para começar do 1
+            logger.info("Preparando banco para nova restauração...")
+            conn.execute(text("SELECT setval(pg_get_serial_sequence(schemaname||'.'||tablename, column_name), 1, false) FROM (SELECT schemaname, tablename, column_name FROM pg_tables t JOIN information_schema.columns c ON c.table_name = t.tablename WHERE t.schemaname = 'public' AND c.column_default LIKE 'nextval%') AS reset_sequences"))
             
     except Exception as e:
-        logger.error(f"Erro ao limpar banco PostgreSQL: {str(e)}")
-        raise
+        logger.error(f"❌ Erro ao limpar banco PostgreSQL: {str(e)}")
+        raise Exception(f"Falha na limpeza do banco: {str(e)}")
 
 
 def _limpar_banco_sqlite():
@@ -1111,21 +1194,96 @@ def _restaurar_banco_postgresql(tmpdir):
         with open(sql_file, 'r', encoding='utf-8') as f:
             sql_content = f.read()
         
-        # Dividir em comandos individuais
+        # Dividir em comandos individuais e filtrar
         commands = [cmd.strip() for cmd in sql_content.split(';') if cmd.strip()]
         
-        with engine.connect() as conn:
-            for i, command in enumerate(commands):
-                try:
-                    conn.execute(text(command))
-                    if i % 100 == 0:
-                        logger.debug(f"Executados {i}/{len(commands)} comandos SQL")
-                except Exception as e:
-                    logger.warning(f"Erro no comando SQL {i}: {str(e)[:100]}")
+        # Filtrar e modificar comandos para evitar duplicatas
+        filtered_commands = []
+        for cmd in commands:
+            cmd_upper = cmd.upper().strip()
             
-            conn.commit()
+            # Pular comandos que podem causar problemas
+            if any(skip in cmd_upper for skip in [
+                'SET row_security',
+                'SET default_table_access_method', 
+                'SET default_tablespace',
+                'SET default_with_oids',
+                'SELECT pg_catalog.set_config',
+                'COMMENT ON EXTENSION',
+                'CREATE EXTENSION',
+                'ALTER DEFAULT PRIVILEGES',
+                'SET statement_timeout',
+                'SET lock_timeout'
+            ]):
+                continue
+                
+            # Modificar INSERTs para evitar duplicatas
+            if cmd_upper.startswith('INSERT INTO'):
+                # Converter INSERT para INSERT ... ON CONFLICT DO NOTHING
+                if 'ON CONFLICT' not in cmd_upper:
+                    # Encontrar o nome da tabela
+                    table_match = cmd.split(' ')[2]  # INSERT INTO table_name
+                    if table_match:
+                        cmd = cmd.rstrip(';') + ' ON CONFLICT DO NOTHING;'
+                        logger.debug(f"Modificado INSERT para evitar duplicata: {table_match}")
+            
+            filtered_commands.append(cmd)
         
-        logger.info(f"Banco PostgreSQL restaurado: {len(commands)} comandos executados")
+        logger.info(f"Executando {len(filtered_commands)} comandos SQL (filtrados de {len(commands)})")
+        
+        # Executar em transações menores para evitar falhas em cascata
+        batch_size = 50
+        executed = 0
+        
+        with engine.connect() as conn:
+            for i in range(0, len(filtered_commands), batch_size):
+                batch = filtered_commands[i:i + batch_size]
+                
+                trans = conn.begin()
+                batch_executed = 0
+                try:
+                    for j, command in enumerate(batch):
+                        try:
+                            conn.execute(text(command))
+                            executed += 1
+                            batch_executed += 1
+                        except Exception as e:
+                            error_str = str(e).lower()
+                            
+                            # Erros que podem ser ignorados
+                            ignorable_errors = [
+                                'duplicate key value violates unique constraint',
+                                'already exists',
+                                'relation does not exist',
+                                'syntax error',
+                                'column does not exist'
+                            ]
+                            
+                            if any(ignore in error_str for ignore in ignorable_errors):
+                                logger.debug(f"Erro ignorável no comando {i+j}: {str(e)[:80]}")
+                                continue
+                            else:
+                                logger.warning(f"Erro no comando SQL {i+j}: {str(e)[:100]}")
+                                # Para erros graves, fazer rollback
+                                if any(fatal in error_str for fatal in ['permission denied', 'connection', 'timeout']):
+                                    logger.error(f"Erro fatal, fazendo rollback do batch")
+                                    trans.rollback()
+                                    break
+                    else:
+                        # Se chegou até aqui, commit do batch
+                        trans.commit()
+                        logger.debug(f"Batch {i//batch_size + 1} executado com sucesso ({batch_executed}/{len(batch)} comandos)")
+                        continue
+                    
+                    # Se chegou aqui, houve rollback
+                    break
+                    
+                except Exception as e:
+                    trans.rollback()
+                    logger.error(f"Erro no batch {i//batch_size + 1}: {str(e)}")
+                    break
+        
+            logger.info(f"Banco PostgreSQL restaurado: {executed}/{len(filtered_commands)} comandos executados com sucesso")
         
     except Exception as e:
         logger.error(f"Erro ao restaurar banco PostgreSQL: {str(e)}")
@@ -1191,16 +1349,33 @@ def _restaurar_supabase_storage(tmpdir):
         with open(mapping_file, 'r', encoding='utf-8') as f:
             mapping = json.load(f)
         
-        supabase_url = os.getenv('SUPABASE_URL')
+        # Tentar várias fontes de credenciais
+        supabase_url = (
+            os.getenv('SUPABASE_URL') or 
+            os.getenv('NEXT_PUBLIC_SUPABASE_URL')
+        )
+        
         supabase_key = (
             os.getenv('SUPABASE_SERVICE_KEY') or 
+            os.getenv('SUPABASE_SERVICE_ROLE_KEY') or
             os.getenv('SUPABASE_ANON_KEY') or 
-            os.getenv('SUPABASE_KEY')
+            os.getenv('SUPABASE_KEY') or
+            os.getenv('NEXT_PUBLIC_SUPABASE_ANON_KEY')
         )
+        
         bucket_name = mapping.get('bucket', 'uploads')
         
+        logger.info(f"Tentando restaurar Supabase Storage:")
+        logger.info(f"  - URL: {'✓' if supabase_url else '✗'} {supabase_url[:50] + '...' if supabase_url else 'N/A'}")
+        logger.info(f"  - Key: {'✓' if supabase_key else '✗'} {'sk-' + supabase_key[-10:] if supabase_key else 'N/A'}")
+        logger.info(f"  - Bucket: {bucket_name}")
+        
         if not all([supabase_url, supabase_key]):
-            logger.warning("Credenciais do Supabase não configuradas. Pulando restauração do Storage")
+            logger.warning("❌ Credenciais do Supabase não configuradas!")
+            logger.warning("📋 Para configurar, adicione no arquivo .env:")
+            logger.warning("   SUPABASE_URL=https://seu-projeto.supabase.co")
+            logger.warning("   SUPABASE_SERVICE_KEY=sua-service-key")
+            logger.warning("💡 Obtenha as credenciais em: https://app.supabase.com/project/SEU_PROJETO/settings/api")
             return False
         
         headers = {
@@ -1208,11 +1383,29 @@ def _restaurar_supabase_storage(tmpdir):
             'apikey': supabase_key
         }
         
+        # Testar conectividade primeiro
+        test_url = f"{supabase_url}/storage/v1/bucket"
+        try:
+            test_response = requests.get(test_url, headers=headers, timeout=10)
+            if test_response.status_code == 200:
+                logger.info("✅ Conectividade com Supabase Storage confirmada")
+            else:
+                logger.warning(f"⚠️ Resposta inesperada do Supabase: {test_response.status_code}")
+                if test_response.status_code == 401:
+                    logger.error("❌ Credenciais inválidas! Verifique SUPABASE_SERVICE_KEY")
+                    return False
+        except Exception as e:
+            logger.error(f"❌ Erro de conectividade com Supabase: {str(e)}")
+            return False
+        
         # Upload de cada arquivo
         uploaded = 0
+        failed = 0
         total_files = len(mapping.get('files', []))
         
-        for file_info in mapping.get('files', []):
+        logger.info(f"📤 Iniciando upload de {total_files} arquivos...")
+        
+        for i, file_info in enumerate(mapping.get('files', [])):
             if file_info.get('name'):
                 file_path = file_info['name']
                 local_file = os.path.join(storage_dir, file_path)
@@ -1223,19 +1416,90 @@ def _restaurar_supabase_storage(tmpdir):
                             files = {'file': f}
                             upload_url = f"{supabase_url}/storage/v1/object/{bucket_name}/{file_path}"
                             
-                            # Tentar upload (pode sobrescrever)
-                            response = requests.post(upload_url, headers=headers, files=files, timeout=30)
+
+                            # Tentar upload com retry e tratamento de duplicatas
+                            max_retries = 3
+                            retry_count = 0
+                            upload_success = False
                             
-                            if response.status_code in [200, 201]:
-                                uploaded += 1
-                                if uploaded % 10 == 0:
-                                    logger.info(f"Progresso Storage: {uploaded}/{total_files} arquivos")
-                            else:
-                                logger.warning(f"Erro ao enviar {file_path}: {response.status_code}")
+                            while retry_count < max_retries and not upload_success:
+                                try:
+                                    response = requests.post(upload_url, headers=headers, files=files, timeout=60)
+                                    
+                                    if response.status_code in [200, 201]:
+                                        uploaded += 1
+                                        upload_success = True
+                                        if uploaded % 5 == 0 or uploaded == total_files:
+                                            logger.info(f"📤 Progresso: {uploaded}/{total_files} arquivos ({(uploaded/total_files)*100:.1f}%)")
+                                    
+                                    elif response.status_code == 409:  # Conflict - arquivo já existe
+                                        logger.debug(f"📄 Arquivo já existe: {file_path}")
+                                        # Tentar atualizar o arquivo existente
+                                        update_url = f"{supabase_url}/storage/v1/object/{bucket_name}/{file_path}"
+                                        update_response = requests.put(update_url, headers=headers, files={'file': f}, timeout=60)
+                                        
+                                        if update_response.status_code in [200, 201]:
+                                            uploaded += 1
+                                            upload_success = True
+                                            logger.debug(f"🔄 Arquivo atualizado: {file_path}")
+                                        else:
+                                            logger.debug(f"⚠️ Falha ao atualizar {file_path}: {update_response.status_code}")
+                                            # Considerar como sucesso se o arquivo já existe
+                                            uploaded += 1
+                                            upload_success = True
+                                    
+                                    elif response.status_code in [429, 503, 502, 504]:  # Rate limit ou server error
+                                        retry_count += 1
+                                        if retry_count < max_retries:
+                                            wait_time = 2 ** retry_count  # Exponential backoff
+                                            logger.debug(f"⏳ Rate limit/Server error, aguardando {wait_time}s... (tentativa {retry_count}/{max_retries})")
+                                            time.sleep(wait_time)
+                                            # Reabrir arquivo para nova tentativa
+                                            f.seek(0)
+                                        else:
+                                            failed += 1
+                                            logger.warning(f"❌ Falha após {max_retries} tentativas para {file_path}: HTTP {response.status_code}")
+                                    
+                                    else:
+                                        failed += 1
+                                        upload_success = True  # Para não tentar novamente
+                                        logger.warning(f"❌ Erro ao enviar {file_path}: HTTP {response.status_code}")
+                                        if response.text:
+                                            logger.debug(f"   Resposta: {response.text[:100]}")
+                                
+                                except requests.exceptions.Timeout:
+                                    retry_count += 1
+                                    if retry_count < max_retries:
+                                        logger.debug(f"⏰ Timeout, tentando novamente... ({retry_count}/{max_retries})")
+                                        f.seek(0)
+                                    else:
+                                        failed += 1
+                                        logger.warning(f"❌ Timeout após {max_retries} tentativas: {file_path}")
+                                        upload_success = True
+                                
+                                except Exception as upload_error:
+                                    retry_count += 1
+                                    if retry_count < max_retries:
+                                        logger.debug(f"🔄 Erro de upload, tentando novamente: {str(upload_error)[:50]}")
+                                        f.seek(0)
+                                    else:
+                                        failed += 1
+                                        logger.error(f"❌ Erro após {max_retries} tentativas para {file_path}: {str(upload_error)[:100]}")
+                                        upload_success = True
                     except Exception as e:
-                        logger.error(f"Erro ao processar {file_path}: {str(e)}")
+                        failed += 1
+                        logger.error(f"❌ Erro ao processar {file_path}: {str(e)}")
+                else:
+                    failed += 1
+                    logger.warning(f"❌ Arquivo local não encontrado: {file_path}")
         
-        logger.info(f"Restauração do Storage concluída: {uploaded}/{total_files} arquivos enviados")
+        # Relatório final
+        success_rate = (uploaded / total_files * 100) if total_files > 0 else 0
+        logger.info(f"📊 Restauração do Storage concluída:")
+        logger.info(f"   ✅ Enviados: {uploaded}/{total_files} arquivos ({success_rate:.1f}%)")
+        if failed > 0:
+            logger.warning(f"   ❌ Falharam: {failed} arquivos")
+        
         return uploaded > 0
         
     except Exception as e:

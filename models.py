@@ -70,7 +70,9 @@ class Maquina(db.Model):
     @property
     def imagem_path(self):
         if self.imagem:
-            return f'/uploads/{self.imagem}'
+            # Usar conversor unificado de URL (local ou Supabase)
+            from utils import get_file_url
+            return get_file_url(self.imagem)
         return None
 
 class Castanha(db.Model):
@@ -93,7 +95,8 @@ class Castanha(db.Model):
     @property
     def imagem_path(self):
         if self.imagem:
-            return f'/uploads/{self.imagem}'
+            from utils import get_file_url
+            return get_file_url(self.imagem)
         return None
 
 class GabaritoCentroUsinagem(db.Model):
@@ -111,7 +114,8 @@ class GabaritoCentroUsinagem(db.Model):
     @property
     def imagem_path(self):
         if self.imagem:
-            return f'/uploads/{self.imagem}'
+            from utils import get_file_url
+            return get_file_url(self.imagem)
         return None
 
 class GabaritoRosca(db.Model):
@@ -128,7 +132,8 @@ class GabaritoRosca(db.Model):
     @property
     def imagem_path(self):
         if self.imagem:
-            return f'/uploads/{self.imagem}'
+            from utils import get_file_url
+            return get_file_url(self.imagem)
         return None
     
 class ItemTrabalho(db.Model):
@@ -206,10 +211,16 @@ class Item(db.Model):
     tipo_zincagem = db.Column(db.String(50))
     tipo_embalagem = db.Column(db.String(50))
     peso = db.Column(db.Float)
+    # Novo campo para identificar se é item composto
+    eh_composto = db.Column(db.Boolean, default=False)
+    data_criacao = db.Column(db.DateTime, default=datetime.utcnow)
     materiais = relationship('ItemMaterial', backref='item', lazy=True, cascade="all, delete-orphan")
     trabalhos = relationship('ItemTrabalho', backref='item', lazy=True, cascade="all, delete-orphan")
     pedidos = relationship('Pedido', backref='item', lazy=True)
     arquivos_cnc = relationship('ArquivoCNC', backref='item', lazy=True, cascade="all, delete-orphan")
+    # Relacionamentos para item composto
+    componentes = relationship('ItemComposto', foreign_keys='ItemComposto.item_pai_id', backref='item_pai', lazy=True, cascade="all, delete-orphan")
+    usado_em = relationship('ItemComposto', foreign_keys='ItemComposto.item_componente_id', backref='item_componente', lazy=True)
     
     def __repr__(self):
         return f'<Item {self.nome}>'
@@ -217,19 +228,22 @@ class Item(db.Model):
     @property
     def desenho_tecnico_path(self):
         if self.desenho_tecnico:
-            return f'/uploads/{self.desenho_tecnico}'
+            from utils import get_file_url
+            return get_file_url(self.desenho_tecnico)
         return None
     
     @property
     def imagem_path(self):
         if self.imagem:
-            return f'/uploads/{self.imagem}'
+            from utils import get_file_url
+            return get_file_url(self.imagem)
         return None
     
     @property
     def instrucoes_trabalho_path(self):
         if self.instrucoes_trabalho:
-            return f'/uploads/{self.instrucoes_trabalho}'
+            from utils import get_file_url
+            return get_file_url(self.instrucoes_trabalho)
         return None
     
     @property
@@ -245,6 +259,44 @@ class Item(db.Model):
         minutos = tempo_total // 60
         segundos = tempo_total % 60
         return f"{minutos}:{segundos:02d}"
+    
+    @property
+    def total_componentes(self):
+        """Retorna o número total de componentes se for item composto"""
+        if self.eh_composto:
+            return len(self.componentes)
+        return 0
+    
+    @property
+    def peso_total_composto(self):
+        """Calcula o peso total considerando todos os componentes"""
+        if not self.eh_composto:
+            return self.peso or 0
+        
+        peso_total = 0
+        for componente in self.componentes:
+            peso_componente = componente.item_componente.peso or 0
+            peso_total += peso_componente * componente.quantidade
+        
+        return peso_total
+
+# Modelo para relacionamento entre item pai e seus componentes
+class ItemComposto(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    item_pai_id = db.Column(db.Integer, db.ForeignKey('item.id'), nullable=False)
+    item_componente_id = db.Column(db.Integer, db.ForeignKey('item.id'), nullable=False)
+    quantidade = db.Column(db.Integer, nullable=False, default=1)
+    observacoes = db.Column(db.Text)
+    data_criacao = db.Column(db.DateTime, default=datetime.utcnow)
+    
+    def __repr__(self):
+        return f'<ItemComposto {self.item_pai_id}->{self.item_componente_id}>'
+    
+    @property
+    def peso_total_componente(self):
+        """Calcula o peso total deste componente considerando a quantidade"""
+        peso_unitario = self.item_componente.peso or 0
+        return peso_unitario * self.quantidade
     
 class ArquivoCNC(db.Model):
     id = db.Column(db.Integer, primary_key=True)

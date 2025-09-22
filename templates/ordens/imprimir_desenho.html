@@ -75,7 +75,7 @@
             
             {% if pedido_os.pedido.item.desenho_tecnico %}
             <div class="text-center mt-4">
-                <img src="/uploads/{{ pedido_os.pedido.item.desenho_tecnico }}" alt="Desenho Técnico" class="desenho-img">
+                <img src="{{ pedido_os.pedido.item.desenho_tecnico_path }}" alt="Desenho Técnico" class="desenho-img">
             </div>
             {% else %}
             <div class="alert alert-warning">
