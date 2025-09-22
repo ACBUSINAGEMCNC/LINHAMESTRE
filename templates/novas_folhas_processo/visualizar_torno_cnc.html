@@ -1,0 +1,319 @@
+{% extends 'base.html' %}
+
+{% block title %}{{ folha.titulo_completo }} - Visualizar{% endblock %}
+
+{% block content %}
+<div class="container-fluid mt-4">
+    <!-- Cabeçalho -->
+    <div class="row mb-4">
+        <div class="col-12">
+            <div class="card bg-warning text-dark">
+                <div class="card-body">
+                    <div class="d-flex align-items-center justify-content-between">
+                        <div class="d-flex align-items-center">
+                            {% if folha.maquina.imagem_path %}
+                            <img src="{{ folha.maquina.imagem_path }}" alt="Máquina" class="rounded me-3" style="max-height: 80px; max-width: 80px;">
+                            {% else %}
+                            <i class="fas fa-cog fa-4x me-3"></i>
+                            {% endif %}
+                            <div>
+                                <h3 class="mb-1">{{ folha.titulo_completo }}</h3>
+                                <p class="mb-0">
+                                    <i class="fas fa-tag me-1"></i>Categoria: {{ folha.categoria_maquina.title() }} | 
+                                    <i class="fas fa-calendar me-1"></i>Criado: {{ folha.data_criacao.strftime('%d/%m/%Y') }}
+                                </p>
+                            </div>
+                        </div>
+                        <div>
+                            <a href="{{ url_for('novas_folhas_processo.editar_torno_cnc', folha_id=folha.id) }}" class="btn btn-outline-dark">
+                                <i class="fas fa-edit"></i> Editar
+                            </a>
+                            <a href="{{ url_for('novas_folhas_processo.listar_folhas') }}" class="btn btn-outline-dark">
+                                <i class="fas fa-list"></i> Voltar
+                            </a>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="row">
+        <!-- Coluna Esquerda -->
+        <div class="col-lg-6">
+            <!-- Castanha -->
+            {% if folha_torno and folha_torno.castanha %}
+            <div class="card mb-4">
+                <div class="card-header bg-primary text-white">
+                    <h5 class="mb-0"><i class="fas fa-circle-notch me-2"></i>Castanha Utilizada</h5>
+                </div>
+                <div class="card-body">
+                    <div class="row align-items-center">
+                        {% if folha_torno.castanha.imagem_path %}
+                        <div class="col-auto">
+                            <img src="{{ folha_torno.castanha.imagem_path }}" alt="Castanha" class="rounded" style="max-height: 80px;">
+                        </div>
+                        {% endif %}
+                        <div class="col">
+                            <h6>{{ folha_torno.castanha.codigo }}</h6>
+                            <p class="mb-0">
+                                <strong>Diâmetro:</strong> {{ folha_torno.castanha.diametro or '?' }}mm<br>
+                                <strong>Comprimento:</strong> {{ folha_torno.castanha.comprimento or '?' }}mm
+                            </p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            {% endif %}
+
+            <!-- Ferramentas -->
+            {% if ferramentas %}
+            <div class="card mb-4">
+                <div class="card-header bg-success text-white">
+                    <h5 class="mb-0"><i class="fas fa-tools me-2"></i>Ferramental ({{ ferramentas|length }})</h5>
+                </div>
+                <div class="card-body">
+                    {% for ferramenta in ferramentas %}
+                    <div class="border rounded p-3 mb-2">
+                        <div class="row align-items-center">
+                            <div class="col-2">
+                                <strong class="badge bg-dark">{{ ferramenta.posicao }}</strong>
+                            </div>
+                            <div class="col-5">
+                                <strong>{{ ferramenta.descricao }}</strong>
+                            </div>
+                            <div class="col-5">
+                                <small class="text-muted">{{ ferramenta.configuracao }}</small>
+                            </div>
+                        </div>
+                        {% if ferramenta.imagem %}
+                        <div class="row mt-2">
+                            <div class="col-12">
+                                <img src="{{ get_file_url(ferramenta.imagem) }}" alt="Ferramenta" class="img-thumbnail" style="max-height: 60px;">
+                            </div>
+                        </div>
+                        {% endif %}
+                    </div>
+                    {% endfor %}
+                </div>
+            </div>
+            {% endif %}
+
+            <!-- Programa CNC -->
+            {% if folha_torno and folha_torno.programa_cnc %}
+            <div class="card mb-4">
+                <div class="card-header bg-info text-white">
+                    <h5 class="mb-0"><i class="fas fa-file-code me-2"></i>Programa CNC</h5>
+                </div>
+                <div class="card-body">
+                    {% if folha_torno.nome_programa %}
+                    <h6><i class="fas fa-tag me-1"></i>{{ folha_torno.nome_programa }}</h6>
+                    {% endif %}
+                    <div class="bg-dark text-light p-3 rounded font-monospace" style="max-height: 300px; overflow-y: auto;">
+                        <pre class="mb-0 text-light">{{ folha_torno.programa_cnc }}</pre>
+                    </div>
+                </div>
+            </div>
+            {% endif %}
+        </div>
+
+        <!-- Coluna Direita -->
+        <div class="col-lg-6">
+            <!-- Gabarito de Rosca -->
+            {% if folha_torno and folha_torno.gabarito_rosca %}
+            <div class="card mb-4">
+                <div class="card-header bg-secondary text-white">
+                    <h5 class="mb-0"><i class="fas fa-cog me-2"></i>Gabarito de Rosca</h5>
+                </div>
+                <div class="card-body">
+                    <div class="row align-items-center">
+                        {% if folha_torno.gabarito_rosca.imagem_path %}
+                        <div class="col-auto">
+                            <img src="{{ folha_torno.gabarito_rosca.imagem_path }}" alt="Gabarito" class="rounded" style="max-height: 80px;">
+                        </div>
+                        {% endif %}
+                        <div class="col">
+                            <h6>{{ folha_torno.gabarito_rosca.codigo }}</h6>
+                            <p class="mb-0"><strong>Tipo de Rosca:</strong> {{ folha_torno.gabarito_rosca.tipo_rosca }}</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            {% endif %}
+
+            <!-- Imagens -->
+            {% if folha_torno and (folha_torno.imagem_torre_montada or folha_torno.imagem_peca_fixa or folha_torno.imagem_bucha_guia or folha_torno.imagem_encosto) %}
+            <div class="card mb-4">
+                <div class="card-header bg-warning text-dark">
+                    <h5 class="mb-0"><i class="fas fa-camera me-2"></i>Imagens do Processo</h5>
+                </div>
+                <div class="card-body">
+                    <div class="row">
+                        {% if folha_torno.imagem_torre_montada %}
+                        <div class="col-6 mb-3">
+                            <div class="text-center">
+                                <img src="{{ get_file_url(folha_torno.imagem_torre_montada) }}" alt="Torre Montada" class="img-fluid rounded border">
+                                <small class="d-block text-muted mt-1">Torre Montada</small>
+                            </div>
+                        </div>
+                        {% endif %}
+                        {% if folha_torno.imagem_peca_fixa %}
+                        <div class="col-6 mb-3">
+                            <div class="text-center">
+                                <img src="{{ get_file_url(folha_torno.imagem_peca_fixa) }}" alt="Peça Fixa" class="img-fluid rounded border">
+                                <small class="d-block text-muted mt-1">Peça Fixa na Castanha</small>
+                            </div>
+                        </div>
+                        {% endif %}
+                        {% if folha_torno.imagem_bucha_guia %}
+                        <div class="col-6 mb-3">
+                            <div class="text-center">
+                                <img src="{{ get_file_url(folha_torno.imagem_bucha_guia) }}" alt="Bucha Guia" class="img-fluid rounded border">
+                                <small class="d-block text-muted mt-1">Bucha Guia</small>
+                            </div>
+                        </div>
+                        {% endif %}
+                        {% if folha_torno.imagem_encosto %}
+                        <div class="col-6 mb-3">
+                            <div class="text-center">
+                                <img src="{{ get_file_url(folha_torno.imagem_encosto) }}" alt="Encosto" class="img-fluid rounded border">
+                                <small class="d-block text-muted mt-1">Encosto</small>
+                            </div>
+                        </div>
+                        {% endif %}
+                    </div>
+                </div>
+            </div>
+            {% endif %}
+
+            <!-- Bucha e Encosto -->
+            {% if folha_torno and (folha_torno.jogo_bucha_guia or folha_torno.encosto) %}
+            <div class="card mb-4">
+                <div class="card-header bg-danger text-white">
+                    <h5 class="mb-0"><i class="fas fa-arrows-alt me-2"></i>Bucha Guia e Encosto</h5>
+                </div>
+                <div class="card-body">
+                    {% if folha_torno.jogo_bucha_guia %}
+                    <div class="mb-3">
+                        <strong><i class="fas fa-circle me-1"></i>Jogo de Bucha Guia:</strong> {{ folha_torno.jogo_bucha_guia }}<br>
+                        {% if folha_torno.local_armazenagem_bucha %}
+                        <small class="text-muted"><i class="fas fa-map-marker-alt me-1"></i>{{ folha_torno.local_armazenagem_bucha }}</small>
+                        {% endif %}
+                    </div>
+                    {% endif %}
+                    
+                    {% if folha_torno.encosto %}
+                    <div class="mb-0">
+                        <strong><i class="fas fa-square me-1"></i>Encosto:</strong> {{ folha_torno.encosto }}<br>
+                        {% if folha_torno.local_armazenagem_encosto %}
+                        <small class="text-muted"><i class="fas fa-map-marker-alt me-1"></i>{{ folha_torno.local_armazenagem_encosto }}</small>
+                        {% endif %}
+                    </div>
+                    {% endif %}
+                </div>
+            </div>
+            {% endif %}
+        </div>
+    </div>
+
+    <!-- Medidas Críticas -->
+    {% if medidas %}
+    <div class="row">
+        <div class="col-12">
+            <div class="card mb-4">
+                <div class="card-header bg-primary text-white">
+                    <h5 class="mb-0"><i class="fas fa-ruler me-2"></i>Medidas Críticas ({{ medidas|length }})</h5>
+                </div>
+                <div class="card-body">
+                    <div class="table-responsive">
+                        <table class="table table-sm">
+                            <thead>
+                                <tr>
+                                    <th>Descrição</th>
+                                    <th>Valor</th>
+                                    <th>Tolerância</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for medida in medidas %}
+                                <tr>
+                                    <td><strong>{{ medida.descricao }}</strong></td>
+                                    <td>{{ medida.valor }}</td>
+                                    <td><span class="badge bg-warning text-dark">{{ medida.tolerancia }}</span></td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    {% endif %}
+
+    <!-- Imagens de Peças -->
+    {% if imagens_peca %}
+    <div class="row">
+        <div class="col-12">
+            <div class="card mb-4">
+                <div class="card-header bg-success text-white">
+                    <h5 class="mb-0"><i class="fas fa-images me-2"></i>Imagens de Peças ({{ imagens_peca|length }})</h5>
+                </div>
+                <div class="card-body">
+                    <div class="row">
+                        {% for imagem in imagens_peca %}
+                        <div class="col-md-4 mb-3">
+                            <div class="card">
+                                <img src="{{ get_file_url(imagem.imagem) }}" alt="Peça" class="card-img-top">
+                                {% if imagem.observacao %}
+                                <div class="card-body p-2">
+                                    <small class="text-muted">{{ imagem.observacao }}</small>
+                                </div>
+                                {% endif %}
+                            </div>
+                        </div>
+                        {% endfor %}
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    {% endif %}
+
+    <!-- Observações -->
+    {% if folha_torno and folha_torno.observacoes %}
+    <div class="row">
+        <div class="col-12">
+            <div class="card mb-4">
+                <div class="card-header bg-dark text-white">
+                    <h5 class="mb-0"><i class="fas fa-sticky-note me-2"></i>Observações</h5>
+                </div>
+                <div class="card-body">
+                    <p class="mb-0">{{ folha_torno.observacoes|nl2br }}</p>
+                </div>
+            </div>
+        </div>
+    </div>
+    {% endif %}
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+// Função para imprimir a folha
+function imprimirFolha() {
+    window.print();
+}
+
+// Botão flutuante de impressão
+$(document).ready(function() {
+    $('body').append(`
+        <div class="position-fixed bottom-0 end-0 p-3" style="z-index: 999;">
+            <button type="button" class="btn btn-primary btn-lg rounded-circle shadow" onclick="imprimirFolha()">
+                <i class="fas fa-print"></i>
+            </button>
+        </div>
+    `);
+});
+</script>
+{% endblock %}

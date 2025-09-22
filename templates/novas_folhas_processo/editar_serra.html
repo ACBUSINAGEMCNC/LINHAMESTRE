@@ -1,0 +1,217 @@
+{% extends 'base.html' %}
+
+{% block title %}{{ folha.titulo_completo }} - Editar{% endblock %}
+
+{% block content %}
+<div class="container-fluid mt-4">
+    <div class="row">
+        <!-- Cabeçalho com informações da máquina -->
+        <div class="col-12 mb-4">
+            <div class="card bg-info text-white">
+                <div class="card-body">
+                    <div class="d-flex align-items-center">
+                        {% if folha.maquina.imagem_path %}
+                        <img src="{{ folha.maquina.imagem_path }}" alt="Máquina" class="rounded me-3" style="max-height: 80px; max-width: 80px;">
+                        {% else %}
+                        <i class="fas fa-saw-blade fa-4x me-3"></i>
+                        {% endif %}
+                        <div>
+                            <h3 class="mb-1">{{ folha.titulo_completo }}</h3>
+                            <p class="mb-0">
+                                <i class="fas fa-tag me-1"></i>Categoria: {{ folha.categoria_maquina.title() }} | 
+                                <i class="fas fa-calendar me-1"></i>Criado: {{ folha.data_criacao.strftime('%d/%m/%Y') }}
+                            </p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <form method="POST" enctype="multipart/form-data">
+        <div class="row">
+            <!-- Coluna da Esquerda - Informações do Corte -->
+            <div class="col-lg-6 mb-4">
+                <div class="card h-100">
+                    <div class="card-header bg-primary text-white">
+                        <h5 class="mb-0"><i class="fas fa-cut me-2"></i>Informações sobre o Corte</h5>
+                    </div>
+                    <div class="card-body">
+                        <div class="mb-3">
+                            <label for="tamanho_corte" class="form-label">
+                                <i class="fas fa-ruler me-1"></i>Tamanho do Corte
+                            </label>
+                            <input type="text" class="form-control" id="tamanho_corte" name="tamanho_corte" 
+                                   value="{{ folha_serra.tamanho_corte or '' }}" 
+                                   placeholder="Ex: 100mm x 50mm">
+                        </div>
+
+                        <div class="mb-3">
+                            <label for="diametro_material" class="form-label">
+                                <i class="fas fa-circle me-1"></i>Diâmetro do Material (mm)
+                            </label>
+                            <input type="number" step="0.01" class="form-control" id="diametro_material" name="diametro_material" 
+                                   value="{{ folha_serra.diametro_material or '' }}" 
+                                   placeholder="Ex: 25.4">
+                        </div>
+
+                        <div class="mb-3">
+                            <label for="tipo_material" class="form-label">
+                                <i class="fas fa-cube me-1"></i>Tipo de Material
+                            </label>
+                            <input type="text" class="form-control" id="tipo_material" name="tipo_material" 
+                                   value="{{ folha_serra.tipo_material or '' }}" 
+                                   placeholder="Ex: Aço 1045, Alumínio 6061, etc.">
+                        </div>
+
+                        <div class="mb-3">
+                            <label for="como_cortar" class="form-label">
+                                <i class="fas fa-tools me-1"></i>Como Cortar
+                            </label>
+                            <textarea class="form-control" id="como_cortar" name="como_cortar" rows="4"
+                                      placeholder="Descreva detalhadamente como deve ser feito o corte...">{{ folha_serra.como_cortar or '' }}</textarea>
+                        </div>
+
+                        <div class="mb-0">
+                            <label for="observacoes" class="form-label">
+                                <i class="fas fa-sticky-note me-1"></i>Observações
+                            </label>
+                            <textarea class="form-control" id="observacoes" name="observacoes" rows="3"
+                                      placeholder="Observações importantes sobre o processo...">{{ folha_serra.observacoes or '' }}</textarea>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Coluna da Direita - Imagens -->
+            <div class="col-lg-6 mb-4">
+                <div class="card h-100">
+                    <div class="card-header bg-success text-white">
+                        <h5 class="mb-0"><i class="fas fa-images me-2"></i>Imagem da Peça Bruta</h5>
+                    </div>
+                    <div class="card-body">
+                        <!-- Visualização da imagem atual -->
+                        {% if folha_serra.imagem_peca_bruta %}
+                        <div class="mb-3">
+                            <label class="form-label">Imagem Atual:</label>
+                            <div class="text-center">
+                                <img src="{{ get_file_url(folha_serra.imagem_peca_bruta) }}" 
+                                     alt="Peça Bruta" class="img-fluid rounded border" style="max-height: 300px;">
+                            </div>
+                        </div>
+                        {% endif %}
+
+                        <!-- Upload de nova imagem -->
+                        <div class="mb-3">
+                            <label for="imagem_peca_bruta" class="form-label">
+                                <i class="fas fa-upload me-1"></i>
+                                {% if folha_serra.imagem_peca_bruta %}Alterar Imagem{% else %}Enviar Imagem{% endif %}
+                            </label>
+                            <input type="file" class="form-control" id="imagem_peca_bruta" name="imagem_peca_bruta" 
+                                   accept="image/*" onchange="previewImagem(this, 'preview-peca-bruta')">
+                            <div class="form-text">
+                                <i class="fas fa-info-circle me-1"></i>
+                                Formatos aceitos: JPG, PNG, GIF. Tamanho máximo: 10MB
+                            </div>
+                        </div>
+
+                        <!-- Preview da nova imagem -->
+                        <div id="preview-peca-bruta" class="text-center" style="display: none;">
+                            <label class="form-label">Preview da Nova Imagem:</label>
+                            <div>
+                                <img id="img-preview-peca-bruta" class="img-fluid rounded border" style="max-height: 200px;">
+                            </div>
+                        </div>
+
+                        <!-- Dicas visuais -->
+                        <div class="alert alert-info">
+                            <i class="fas fa-lightbulb me-2"></i>
+                            <strong>Dica:</strong> A imagem da peça bruta ajuda o operador a identificar 
+                            o material correto e posicioná-lo adequadamente na serra.
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Botões de Ação -->
+        <div class="row">
+            <div class="col-12">
+                <div class="card">
+                    <div class="card-body">
+                        <div class="d-flex justify-content-between">
+                            <div>
+                                <a href="{{ url_for('novas_folhas_processo.listar_folhas') }}" class="btn btn-secondary me-2">
+                                    <i class="fas fa-list me-1"></i>Voltar à Lista
+                                </a>
+                                <a href="{{ url_for('novas_folhas_processo.visualizar_folha', folha_id=folha.id) }}" class="btn btn-outline-primary">
+                                    <i class="fas fa-eye me-1"></i>Visualizar
+                                </a>
+                            </div>
+                            <div>
+                                <button type="submit" class="btn btn-success">
+                                    <i class="fas fa-save me-1"></i>Salvar Alterações
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </form>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+function previewImagem(input, previewId) {
+    const previewDiv = document.getElementById(previewId);
+    const previewImg = document.getElementById('img-' + previewId);
+    
+    if (input.files && input.files[0]) {
+        const reader = new FileReader();
+        
+        reader.onload = function(e) {
+            previewImg.src = e.target.result;
+            previewDiv.style.display = 'block';
+        }
+        
+        reader.readAsDataURL(input.files[0]);
+    } else {
+        previewDiv.style.display = 'none';
+    }
+}
+
+// Auto-save (opcional)
+let autoSaveTimeout;
+document.querySelectorAll('input, textarea').forEach(element => {
+    element.addEventListener('input', function() {
+        clearTimeout(autoSaveTimeout);
+        autoSaveTimeout = setTimeout(function() {
+            // Implementar auto-save se necessário
+            console.log('Auto-save seria executado aqui');
+        }, 5000); // 5 segundos após parar de digitar
+    });
+});
+
+// Confirmation antes de sair sem salvar
+let formModified = false;
+document.querySelectorAll('input, textarea, select').forEach(element => {
+    element.addEventListener('change', function() {
+        formModified = true;
+    });
+});
+
+window.addEventListener('beforeunload', function(e) {
+    if (formModified) {
+        e.preventDefault();
+        e.returnValue = '';
+    }
+});
+
+// Limpar flag quando form é submetido
+document.querySelector('form').addEventListener('submit', function() {
+    formModified = false;
+});
+</script>
+{% endblock %}

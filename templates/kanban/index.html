@@ -505,6 +505,15 @@
                                             <i class="fas fa-ellipsis-v"></i>
                                         </button>
                                         <ul class="dropdown-menu dropdown-menu-end" aria-labelledby="dropdownMenuButton{{ ordem.id }}">
+                                            {% if ordem.pedidos and ordem.pedidos[0].pedido.item_id %}
+                                            <li><a class="dropdown-item" href="/folhas-processo-novas?item_id={{ ordem.pedidos[0].pedido.item_id }}" target="_blank">
+                                                <i class="fas fa-file-alt me-2"></i>Ver Folhas do Item
+                                            </a></li>
+                                            <li><a class="dropdown-item" href="/folhas-processo-novas/nova/{{ ordem.pedidos[0].pedido.item_id }}" target="_blank">
+                                                <i class="fas fa-plus me-2"></i>Nova Folha do Item
+                                            </a></li>
+                                            <li><hr class="dropdown-divider"></li>
+                                            {% endif %}
                                             {% for lista_destino in listas %}
                                                 {% if lista_destino != lista and lista_destino not in ['Entrada','Expedição'] %}
                                                     <li><a class="dropdown-item btn-mover" href="#" data-ordem-id="{{ ordem.id }}" data-lista-destino="{{ lista_destino }}">Mover para {{ lista_destino }}</a></li>

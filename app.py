@@ -231,6 +231,7 @@ def create_app():
     from routes.castanhas import castanhas
     from routes.gabaritos_centro import gabaritos_centro
     from routes.gabaritos_rosca import gabaritos_rosca
+    from routes.novas_folhas_processo import novas_folhas_processo
     
     app.register_blueprint(clientes)
     app.register_blueprint(materiais)
@@ -251,6 +252,7 @@ def create_app():
     app.register_blueprint(castanhas)
     app.register_blueprint(gabaritos_centro)
     app.register_blueprint(gabaritos_rosca)
+    app.register_blueprint(novas_folhas_processo)
     
     # Rota para redirecionar URLs Supabase
     @app.route('/uploads/supabase:/<path:file_path>')
@@ -269,7 +271,7 @@ def create_app():
             # Detectar se o caminho já inclui o bucket como primeiro segmento.
             # Mantém compatibilidade com caminhos antigos: 'imagens/arquivo.jpg'
             # e novos: '<bucket>/imagens/arquivo.jpg'
-            KNOWN_FOLDERS = {'imagens', 'desenhos', 'instrucoes', 'cnc_files', 'maquinas', 'castanhas', 'gabaritos'}
+            KNOWN_FOLDERS = {'imagens', 'desenhos', 'instrucoes', 'cnc_files', 'maquinas', 'castanhas', 'gabaritos', 'folhas_processo'}
             parts = path_clean.split('/', 1)
             if len(parts) > 1 and parts[0] not in KNOWN_FOLDERS:
                 bucket = parts[0]
@@ -293,6 +295,7 @@ def create_app():
     # Adicionar contexto global para templates
     @app.context_processor
     def inject_user():
+        from utils import get_file_url
         user_data = {
             'usuario_nome': session.get('usuario_nome', 'Visitante'),
             'usuario_nivel': session.get('usuario_nivel', None),
@@ -301,7 +304,8 @@ def create_app():
             'acesso_estoque': session.get('acesso_estoque', False),
             'acesso_cadastros': session.get('acesso_cadastros', False),
             'pode_finalizar_os': session.get('pode_finalizar_os', False),
-        'acesso_finalizar_os': session.get('pode_finalizar_os', False)
+            'acesso_finalizar_os': session.get('pode_finalizar_os', False),
+            'get_file_url': get_file_url  # Adicionar função para templates
         }
         return user_data
     
@@ -311,6 +315,25 @@ def create_app():
         def now():
             return datetime.datetime.now()
         return dict(now=now)
+    
+    # Adicionar filtros customizados
+    @app.template_filter('nl2br')
+    def nl2br_filter(s):
+        """Converte quebras de linha em tags <br>"""
+        if s is None:
+            return ''
+        from markupsafe import Markup, escape
+        # Escapar HTML primeiro, depois converter quebras de linha
+        escaped = escape(str(s))
+        return Markup(str(escaped).replace('\n', '<br>\n'))
+    
+    @app.template_filter('safe')
+    def safe_filter(s):
+        """Marca string como segura para HTML"""
+        if s is None:
+            return ''
+        from markupsafe import Markup
+        return Markup(str(s))
     
     # Adicionar manipuladores de erro
     @app.errorhandler(404)

@@ -1,0 +1,271 @@
+{% extends 'base.html' %}
+
+{% block title %}Nova Folha de Processo{% endblock %}
+
+{% block content %}
+<div class="container mt-4">
+    <div class="row justify-content-center">
+        <div class="col-md-8">
+            <div class="card shadow">
+                <div class="card-header bg-primary text-white">
+                    <h4 class="mb-0"><i class="fas fa-plus-circle me-2"></i>Nova Folha de Processo</h4>
+                </div>
+                <div class="card-body">
+                    <div class="alert alert-info">
+                        <i class="fas fa-info-circle me-2"></i>
+                        <strong>Como funciona:</strong> Primeiro selecione a máquina, depois informe o tipo de serviço. 
+                        O sistema criará automaticamente um formulário personalizado baseado na categoria da máquina.
+                    </div>
+                    
+                    <form method="POST">
+                        <div class="row">
+                            <!-- Seleção de Item -->
+                            <div class="col-md-12 mb-3">
+                                <label for="item_id" class="form-label">
+                                    <i class="fas fa-cube me-1"></i>Vincular ao Item (Opcional)
+                                </label>
+                                <select class="form-select" id="item_id" name="item_id" onchange="atualizarPreviewItem()">
+                                    <option value="">Folha genérica (não vinculada a um item específico)</option>
+                                    {% for item in itens %}
+                                    <option value="{{ item.id }}" 
+                                            {% if item_selecionado_id and item.id|string == item_selecionado_id %}selected{% endif %}
+                                            data-numero="{{ item.id }}"
+                                            data-nome="{{ item.nome }}"
+                                            data-imagem="{{ item.imagem_path if item.imagem_path else '' }}">
+                                        #{{ item.id }} - {{ item.nome }}
+                                    </option>
+                                    {% endfor %}
+                                </select>
+                                <div class="form-text">
+                                    <i class="fas fa-info-circle me-1"></i>
+                                    Ao vincular a um item, esta folha ficará organizada junto ao item no kanban
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <!-- Preview do Item Selecionado -->
+                        <div class="row" id="preview-item-container" style="display: none;">
+                            <div class="col-12 mb-3">
+                                <div class="card bg-success bg-opacity-10 border-success">
+                                    <div class="card-body py-2">
+                                        <div class="d-flex align-items-center">
+                                            <div id="preview-item-imagem" class="me-3">
+                                                <i class="fas fa-cube fa-2x text-success"></i>
+                                            </div>
+                                            <div>
+                                                <small class="text-success fw-bold">Folha vinculada ao item:</small>
+                                                <div id="preview-item-titulo" class="fw-bold"></div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <div class="row">
+                            <div class="col-md-6 mb-3">
+                                <label for="maquina_id" class="form-label">
+                                    <i class="fas fa-cogs me-1"></i>Selecione a Máquina <span class="text-danger">*</span>
+                                </label>
+                                <select class="form-select" id="maquina_id" name="maquina_id" required onchange="atualizarPreview()">
+                                    <option value="">Escolha uma máquina...</option>
+                                    {% for maquina in maquinas %}
+                                    <option value="{{ maquina.id }}" 
+                                            data-nome="{{ maquina.nome }}"
+                                            data-categoria="{{ maquina.categoria_trabalho }}"
+                                            data-imagem="{{ maquina.imagem_path if maquina.imagem_path else '' }}">
+                                        {{ maquina.codigo }} - {{ maquina.nome }} ({{ maquina.categoria_trabalho }})
+                                    </option>
+                                    {% endfor %}
+                                </select>
+                            </div>
+                            
+                            <div class="col-md-6 mb-3">
+                                <label for="titulo_servico" class="form-label">
+                                    <i class="fas fa-tag me-1"></i>Tipo de Serviço <span class="text-danger">*</span>
+                                </label>
+                                <input type="text" class="form-control" id="titulo_servico" name="titulo_servico" 
+                                       placeholder="Ex: Usinagem de Eixo, Corte de Barra, etc..." required onkeyup="atualizarPreview()">
+                                <div class="form-text">
+                                    Descreva que tipo de serviço será executado nesta máquina
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <!-- Preview do título -->
+                        <div class="row">
+                            <div class="col-12 mb-4">
+                                <div class="card bg-light">
+                                    <div class="card-body">
+                                        <h6 class="card-title mb-3">
+                                            <i class="fas fa-eye me-2"></i>Preview do Título da Folha de Processo:
+                                        </h6>
+                                        <div class="d-flex align-items-center">
+                                            <div id="preview-imagem" class="me-3">
+                                                <i class="fas fa-cogs fa-3x text-muted"></i>
+                                            </div>
+                                            <div>
+                                                <h5 id="preview-titulo" class="mb-1 text-muted">Selecione uma máquina e informe o tipo de serviço</h5>
+                                                <span id="preview-categoria" class="badge bg-secondary"></span>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <div class="d-flex justify-content-between">
+                            <a href="{{ url_for('novas_folhas_processo.listar_folhas') }}" class="btn btn-secondary">
+                                <i class="fas fa-arrow-left me-1"></i>Voltar
+                            </a>
+                            <button type="submit" class="btn btn-primary">
+                                <i class="fas fa-arrow-right me-1"></i>Continuar
+                            </button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+            
+            <!-- Card explicativo sobre as categorias -->
+            <div class="card mt-4">
+                <div class="card-header">
+                    <h6 class="mb-0"><i class="fas fa-question-circle me-2"></i>Tipos de Formulário por Categoria</h6>
+                </div>
+                <div class="card-body">
+                    <div class="row">
+                        <div class="col-md-6 mb-3">
+                            <div class="border rounded p-3">
+                                <h6><span class="badge bg-info me-2">Serra</span></h6>
+                                <ul class="list-unstyled small mb-0">
+                                    <li><i class="fas fa-check text-success me-1"></i>Informações sobre o corte</li>
+                                    <li><i class="fas fa-check text-success me-1"></i>Tamanho, diâmetro, material</li>
+                                    <li><i class="fas fa-check text-success me-1"></i>Imagem da peça bruta</li>
+                                    <li><i class="fas fa-check text-success me-1"></i>Como cortar e observações</li>
+                                </ul>
+                            </div>
+                        </div>
+                        <div class="col-md-6 mb-3">
+                            <div class="border rounded p-3">
+                                <h6><span class="badge bg-warning me-2">Torno CNC</span></h6>
+                                <ul class="list-unstyled small mb-0">
+                                    <li><i class="fas fa-check text-success me-1"></i>Seleção de castanha</li>
+                                    <li><i class="fas fa-check text-success me-1"></i>Ferramental e configurações</li>
+                                    <li><i class="fas fa-check text-success me-1"></i>Upload do programa CNC</li>
+                                    <li><i class="fas fa-check text-success me-1"></i>Gabaritos, buchas e medidas</li>
+                                </ul>
+                            </div>
+                        </div>
+                        <div class="col-md-6 mb-3">
+                            <div class="border rounded p-3">
+                                <h6><span class="badge bg-success me-2">Centro de Usinagem</span></h6>
+                                <ul class="list-unstyled small mb-0">
+                                    <li><i class="fas fa-check text-success me-1"></i>Seleção de gabarito</li>
+                                    <li><i class="fas fa-check text-success me-1"></i>Ferramental e zeramento</li>
+                                    <li><i class="fas fa-check text-success me-1"></i>Imagens do setup</li>
+                                    <li><i class="fas fa-check text-success me-1"></i>Medidas críticas</li>
+                                </ul>
+                            </div>
+                        </div>
+                        <div class="col-md-6 mb-3">
+                            <div class="border rounded p-3">
+                                <h6><span class="badge bg-danger me-2">Manual/Acabamento</span></h6>
+                                <ul class="list-unstyled small mb-0">
+                                    <li><i class="fas fa-check text-success me-1"></i>Imagens do processo</li>
+                                    <li><i class="fas fa-check text-success me-1"></i>Controles de têmpera</li>
+                                    <li><i class="fas fa-check text-success me-1"></i>Forno ou indução</li>
+                                    <li><i class="fas fa-check text-success me-1"></i>Medições de dureza</li>
+                                </ul>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+// Inicializar preview do item se há um pré-selecionado
+document.addEventListener('DOMContentLoaded', function() {
+    atualizarPreviewItem();
+});
+
+function atualizarPreviewItem() {
+    const selectItem = document.getElementById('item_id');
+    const previewContainer = document.getElementById('preview-item-container');
+    const previewImagem = document.getElementById('preview-item-imagem');
+    const previewTitulo = document.getElementById('preview-item-titulo');
+    
+    const opcaoSelecionada = selectItem.options[selectItem.selectedIndex];
+    
+    if (selectItem.value) {
+        const numero = opcaoSelecionada.getAttribute('data-numero');
+        const nome = opcaoSelecionada.getAttribute('data-nome');
+        const imagemUrl = opcaoSelecionada.getAttribute('data-imagem');
+        
+        // Mostrar container
+        previewContainer.style.display = 'block';
+        
+        // Atualizar título
+        previewTitulo.textContent = `#${numero} - ${nome}`;
+        
+        // Atualizar imagem
+        if (imagemUrl) {
+            previewImagem.innerHTML = `<img src="${imagemUrl}" alt="Item" class="rounded" style="max-height: 40px; max-width: 40px;">`;
+        } else {
+            previewImagem.innerHTML = '<i class="fas fa-cube fa-2x text-success"></i>';
+        }
+    } else {
+        previewContainer.style.display = 'none';
+    }
+}
+
+function atualizarPreview() {
+    const selectMaquina = document.getElementById('maquina_id');
+    const inputServico = document.getElementById('titulo_servico');
+    const previewImagem = document.getElementById('preview-imagem');
+    const previewTitulo = document.getElementById('preview-titulo');
+    const previewCategoria = document.getElementById('preview-categoria');
+    
+    const opcaoSelecionada = selectMaquina.options[selectMaquina.selectedIndex];
+    const tipoServico = inputServico.value.trim();
+    
+    if (selectMaquina.value && tipoServico) {
+        const nomeMaquina = opcaoSelecionada.getAttribute('data-nome');
+        const categoria = opcaoSelecionada.getAttribute('data-categoria');
+        const imagemUrl = opcaoSelecionada.getAttribute('data-imagem');
+        
+        // Atualizar título
+        previewTitulo.textContent = `${nomeMaquina} - ${tipoServico}`;
+        previewTitulo.classList.remove('text-muted');
+        
+        // Atualizar categoria
+        previewCategoria.textContent = categoria;
+        previewCategoria.className = 'badge ' + obterClasseCategoria(categoria);
+        
+        // Atualizar imagem
+        if (imagemUrl) {
+            previewImagem.innerHTML = `<img src="${imagemUrl}" alt="Máquina" class="rounded" style="max-height: 60px; max-width: 60px;">`;
+        } else {
+            previewImagem.innerHTML = '<i class="fas fa-cogs fa-3x text-primary"></i>';
+        }
+    } else {
+        previewTitulo.textContent = 'Selecione uma máquina e informe o tipo de serviço';
+        previewTitulo.classList.add('text-muted');
+        previewCategoria.textContent = '';
+        previewImagem.innerHTML = '<i class="fas fa-cogs fa-3x text-muted"></i>';
+    }
+}
+
+function obterClasseCategoria(categoria) {
+    switch(categoria.toLowerCase()) {
+        case 'serra': return 'bg-info';
+        case 'torno cnc': return 'bg-warning';
+        case 'centro de usinagem': return 'bg-success';
+        default: return 'bg-danger';
+    }
+}
+</script>
+{% endblock %}

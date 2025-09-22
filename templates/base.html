@@ -70,6 +70,8 @@
                             <li><a class="dropdown-item" href="/materiais">Materiais</a></li>
                             <li><a class="dropdown-item" href="/trabalhos">Trabalhos</a></li>
                             <li><a class="dropdown-item" href="/itens">Itens</a></li>
+                            <li><hr class="dropdown-divider"></li>
+                            <li><a class="dropdown-item" href="/folhas-processo-novas"><i class="fas fa-file-alt text-success"></i> Folhas de Processo</a></li>
                         </ul>
                     </li>
                     {% endif %}
@@ -123,5 +125,6 @@
         document.getElementById('current-year').textContent = new Date().getFullYear();
     </script>
     {% block extra_js %}{% endblock %}
+    {% block scripts %}{% endblock %}
 </body>
 </html>

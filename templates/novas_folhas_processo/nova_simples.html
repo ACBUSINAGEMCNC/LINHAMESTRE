@@ -1,0 +1,159 @@
+{% extends 'base.html' %}
+
+{% block title %}Nova Folha de Processo - {{ item.nome }}{% endblock %}
+
+{% block content %}
+<div class="container mt-4">
+    <div class="row justify-content-center">
+        <div class="col-md-8">
+            <!-- Cabeçalho do Item -->
+            <div class="card mb-4 border-success">
+                <div class="card-header bg-success text-white">
+                    <div class="d-flex align-items-center">
+                        {% if item.imagem_path %}
+                        <img src="{{ get_file_url(item.imagem_path) }}" alt="Item" class="rounded me-3" style="max-height: 60px; max-width: 60px;">
+                        {% else %}
+                        <i class="fas fa-cube fa-3x me-3"></i>
+                        {% endif %}
+                        <div>
+                            <h4 class="mb-1">Criar Folha de Processo</h4>
+                            <p class="mb-0"><strong>Item #{{ item.id }} - {{ item.nome }}</strong></p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="card shadow">
+                <div class="card-header bg-primary text-white">
+                    <h4 class="mb-0"><i class="fas fa-plus-circle me-2"></i>Selecionar Máquina e Serviço</h4>
+                </div>
+                <div class="card-body">
+                    <div class="alert alert-info">
+                        <i class="fas fa-info-circle me-2"></i>
+                        <strong>Simples e direto:</strong> Selecione a máquina e descreva o tipo de serviço. 
+                        A folha será automaticamente vinculada ao item <strong>#{{ item.id }}</strong>.
+                    </div>
+                    
+                    <form method="POST">
+                        <div class="row">
+                            <div class="col-md-6 mb-3">
+                                <label for="maquina_id" class="form-label">
+                                    <i class="fas fa-cogs me-1"></i>Selecione a Máquina <span class="text-danger">*</span>
+                                </label>
+                                <select class="form-select" id="maquina_id" name="maquina_id" required onchange="atualizarPreview()">
+                                    <option value="">Escolha uma máquina...</option>
+                                    {% for maquina in maquinas %}
+                                    <option value="{{ maquina.id }}" 
+                                            data-nome="{{ maquina.nome }}"
+                                            data-categoria="{{ maquina.categoria_trabalho }}"
+                                            data-imagem="{{ maquina.imagem_path if maquina.imagem_path else '' }}">
+                                        {{ maquina.codigo }} - {{ maquina.nome }} ({{ maquina.categoria_trabalho }})
+                                    </option>
+                                    {% endfor %}
+                                </select>
+                            </div>
+                            
+                            <div class="col-md-6 mb-3">
+                                <label for="titulo_servico" class="form-label">
+                                    <i class="fas fa-tag me-1"></i>Tipo de Serviço <span class="text-danger">*</span>
+                                </label>
+                                <input type="text" class="form-control" id="titulo_servico" name="titulo_servico" 
+                                       placeholder="Ex: Usinagem de Eixo, Corte de Barra, etc..." required onkeyup="atualizarPreview()">
+                                <div class="form-text">
+                                    Descreva que tipo de serviço será executado
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <!-- Preview do título -->
+                        <div class="row">
+                            <div class="col-12 mb-4">
+                                <div class="card bg-light">
+                                    <div class="card-body">
+                                        <h6 class="card-title mb-3">
+                                            <i class="fas fa-eye me-2"></i>Preview da Folha:
+                                        </h6>
+                                        <div class="d-flex align-items-center">
+                                            <div id="preview-imagem" class="me-3">
+                                                <i class="fas fa-cogs fa-3x text-muted"></i>
+                                            </div>
+                                            <div>
+                                                <h5 id="preview-titulo" class="mb-1 text-muted">Selecione uma máquina e informe o tipo de serviço</h5>
+                                                <span id="preview-categoria" class="badge bg-secondary"></span>
+                                                <div class="mt-2">
+                                                    <small class="text-success">
+                                                        <i class="fas fa-link me-1"></i>Vinculada ao item: <strong>#{{ item.id }} - {{ item.nome }}</strong>
+                                                    </small>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <div class="d-flex justify-content-between">
+                            <a href="{{ url_for('novas_folhas_processo.listar_folhas', item_id=item.id) }}" class="btn btn-secondary">
+                                <i class="fas fa-arrow-left me-1"></i>Voltar para Folhas
+                            </a>
+                            <button type="submit" class="btn btn-success">
+                                <i class="fas fa-arrow-right me-1"></i>Criar Folha
+                            </button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+function atualizarPreview() {
+    const selectMaquina = document.getElementById('maquina_id');
+    const inputServico = document.getElementById('titulo_servico');
+    const previewImagem = document.getElementById('preview-imagem');
+    const previewTitulo = document.getElementById('preview-titulo');
+    const previewCategoria = document.getElementById('preview-categoria');
+    
+    const opcaoSelecionada = selectMaquina.options[selectMaquina.selectedIndex];
+    const tipoServico = inputServico.value.trim();
+    
+    if (selectMaquina.value && tipoServico) {
+        const nomeMaquina = opcaoSelecionada.getAttribute('data-nome');
+        const categoria = opcaoSelecionada.getAttribute('data-categoria');
+        const imagemUrl = opcaoSelecionada.getAttribute('data-imagem');
+        
+        // Atualizar título
+        previewTitulo.textContent = `${nomeMaquina} - ${tipoServico}`;
+        previewTitulo.classList.remove('text-muted');
+        
+        // Atualizar categoria
+        previewCategoria.textContent = categoria;
+        previewCategoria.className = 'badge ' + obterClasseCategoria(categoria);
+        
+        // Atualizar imagem
+        if (imagemUrl) {
+            previewImagem.innerHTML = `<img src="${imagemUrl}" alt="Máquina" class="rounded" style="max-height: 60px; max-width: 60px;">`;
+        } else {
+            previewImagem.innerHTML = '<i class="fas fa-cogs fa-3x text-primary"></i>';
+        }
+    } else {
+        previewTitulo.textContent = 'Selecione uma máquina e informe o tipo de serviço';
+        previewTitulo.classList.add('text-muted');
+        previewCategoria.textContent = '';
+        previewImagem.innerHTML = '<i class="fas fa-cogs fa-3x text-muted"></i>';
+    }
+}
+
+function obterClasseCategoria(categoria) {
+    switch(categoria.toLowerCase()) {
+        case 'serra': return 'bg-info';
+        case 'torno cnc': return 'bg-warning';
+        case 'centro de usinagem': return 'bg-success';
+        default: return 'bg-danger';
+    }
+}
+</script>
+{% endblock %}

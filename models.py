@@ -819,3 +819,210 @@ class StatusProducaoOS(db.Model):
         # Fallback: usar tempo estimado do item
         tempo_estimado_restante = quantidade_restante * (self.item_trabalho_atual.tempo_peca or 0)
         return datetime.utcnow() + datetime.timedelta(seconds=tempo_estimado_restante)
+
+# ================= NOVOS MODELOS PARA FOLHAS DE PROCESSO REFORMULADAS =================
+
+class NovaFolhaProcesso(db.Model):
+    """Modelo principal para as novas folhas de processo personalizadas por categoria"""
+    __tablename__ = 'nova_folha_processo'
+    
+    id = db.Column(db.Integer, primary_key=True)
+    item_id = db.Column(db.Integer, db.ForeignKey('item.id'), nullable=True)  # Atrelar folha ao item específico
+    maquina_id = db.Column(db.Integer, db.ForeignKey('maquina.id'), nullable=False)
+    categoria_maquina = db.Column(db.String(50), nullable=False)  # serra, torno_cnc, centro_usinagem, manual, acabamento, outros
+    titulo_servico = db.Column(db.String(200), nullable=False)  # Tipo de serviço informado pelo usuário
+    data_criacao = db.Column(db.DateTime, default=datetime.utcnow)
+    data_atualizacao = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    usuario_criacao_id = db.Column(db.Integer, db.ForeignKey('usuario.id'))
+    ativo = db.Column(db.Boolean, default=True)
+    
+    # Relacionamentos
+    item = db.relationship('Item', backref='novas_folhas_processo_item')
+    maquina = db.relationship('Maquina', backref='novas_folhas_processo')
+    usuario_criacao = db.relationship('Usuario', backref='novas_folhas_criadas')
+    
+    @property
+    def titulo_completo(self):
+        """Retorna o título completo: Nome da Máquina + Tipo de Serviço"""
+        return f"{self.maquina.nome} - {self.titulo_servico}"
+    
+    def __repr__(self):
+        return f'<NovaFolhaProcesso {self.titulo_completo}>'
+
+class FolhaProcessoSerra(db.Model):
+    """Folha de processo específica para categoria Serra"""
+    __tablename__ = 'folha_processo_serra'
+    
+    id = db.Column(db.Integer, primary_key=True)
+    nova_folha_id = db.Column(db.Integer, db.ForeignKey('nova_folha_processo.id'), nullable=False)
+    
+    # Informações sobre o corte
+    tamanho_corte = db.Column(db.String(100))
+    diametro_material = db.Column(db.Float)
+    tipo_material = db.Column(db.String(100))
+    como_cortar = db.Column(db.Text)
+    observacoes = db.Column(db.Text)
+    
+    # Imagens
+    imagem_peca_bruta = db.Column(db.String(255))  # Path para imagem da peça bruta
+    
+    # Relacionamento
+    nova_folha = db.relationship('NovaFolhaProcesso', backref=db.backref('folha_serra', uselist=False))
+
+class FolhaProcessoTornoCNC(db.Model):
+    """Folha de processo específica para categoria Torno CNC"""
+    __tablename__ = 'folha_processo_torno_cnc'
+    
+    id = db.Column(db.Integer, primary_key=True)
+    nova_folha_id = db.Column(db.Integer, db.ForeignKey('nova_folha_processo.id'), nullable=False)
+    
+    # Castanha utilizada
+    castanha_id = db.Column(db.Integer, db.ForeignKey('castanha.id'))
+    
+    # Gabarito de rosca (opcional)
+    gabarito_rosca_id = db.Column(db.Integer, db.ForeignKey('gabarito_rosca.id'))
+    
+    # Programa CNC
+    programa_cnc = db.Column(db.Text)  # Conteúdo do programa
+    nome_programa = db.Column(db.String(200))
+    
+    # Bucha guia e encosto
+    jogo_bucha_guia = db.Column(db.String(200))
+    local_armazenagem_bucha = db.Column(db.String(200))
+    encosto = db.Column(db.String(200))
+    local_armazenagem_encosto = db.Column(db.String(200))
+    
+    # Observações
+    observacoes = db.Column(db.Text)
+    
+    # Imagens
+    imagem_torre_montada = db.Column(db.String(255))
+    imagem_peca_fixa = db.Column(db.String(255))
+    imagem_bucha_guia = db.Column(db.String(255))
+    imagem_encosto = db.Column(db.String(255))
+    
+    # Relacionamentos
+    nova_folha = db.relationship('NovaFolhaProcesso', backref=db.backref('folha_torno_cnc', uselist=False))
+    castanha = db.relationship('Castanha', backref='folhas_processo_torno')
+    gabarito_rosca = db.relationship('GabaritoRosca', backref='folhas_processo_torno')
+
+class FolhaProcessoCentroUsinagem(db.Model):
+    """Folha de processo específica para categoria Centro de Usinagem"""
+    __tablename__ = 'folha_processo_centro_usinagem'
+    
+    id = db.Column(db.Integer, primary_key=True)
+    nova_folha_id = db.Column(db.Integer, db.ForeignKey('nova_folha_processo.id'), nullable=False)
+    
+    # Gabarito (opcional)
+    gabarito_centro_id = db.Column(db.Integer, db.ForeignKey('gabarito_centro_usinagem.id'))
+    
+    # Zeramento
+    como_zeramento = db.Column(db.Text)
+    
+    # Observações
+    observacoes = db.Column(db.Text)
+    
+    # Imagens
+    imagem_gabarito_montado = db.Column(db.String(255))
+    imagem_zeramento = db.Column(db.String(255))
+    
+    # Relacionamentos
+    nova_folha = db.relationship('NovaFolhaProcesso', backref=db.backref('folha_centro_usinagem', uselist=False))
+    gabarito_centro = db.relationship('GabaritoCentroUsinagem', backref='folhas_processo_centro')
+
+class FolhaProcessoManualAcabamento(db.Model):
+    """Folha de processo específica para categorias Manual, Acabamento e Outros"""
+    __tablename__ = 'folha_processo_manual_acabamento'
+    
+    id = db.Column(db.Integer, primary_key=True)
+    nova_folha_id = db.Column(db.Integer, db.ForeignKey('nova_folha_processo.id'), nullable=False)
+    
+    # Têmpera
+    possui_tempera = db.Column(db.Boolean, default=False)
+    tipo_tempera = db.Column(db.String(20))  # 'forno' ou 'inducao'
+    
+    # Têmpera por Indução
+    programa_inducao = db.Column(db.String(200))
+    indutor_utilizado = db.Column(db.String(200))
+    local_armazenagem_gabarito_inducao = db.Column(db.String(200))
+    dureza_inducao = db.Column(db.String(100))
+    
+    # Têmpera por Forno
+    dureza_forno = db.Column(db.String(100))
+    
+    # Observações
+    observacoes = db.Column(db.Text)
+    
+    # Imagens gerais
+    imagem_gabarito_inducao = db.Column(db.String(255))
+    imagem_indutor = db.Column(db.String(255))
+    imagem_montagem_inducao = db.Column(db.String(255))
+    imagem_dureza_inducao = db.Column(db.String(255))
+    imagem_peca_temperada_forno = db.Column(db.String(255))
+    imagem_dureza_forno = db.Column(db.String(255))
+    
+    # Relacionamento
+    nova_folha = db.relationship('NovaFolhaProcesso', backref=db.backref('folha_manual_acabamento', uselist=False))
+
+# Tabelas auxiliares para múltiplas entradas
+
+class FerramentaTorno(db.Model):
+    """Ferramentas utilizadas no Torno CNC"""
+    __tablename__ = 'ferramenta_torno'
+    
+    id = db.Column(db.Integer, primary_key=True)
+    folha_torno_id = db.Column(db.Integer, db.ForeignKey('folha_processo_torno_cnc.id'), nullable=False)
+    posicao = db.Column(db.String(10))  # Ex: T01, T02, etc
+    descricao = db.Column(db.String(200))  # Ex: TNMEG R01 9
+    configuracao = db.Column(db.String(200))
+    imagem = db.Column(db.String(255))
+    
+    # Relacionamento
+    folha_torno = db.relationship('FolhaProcessoTornoCNC', backref='ferramentas')
+
+class FerramentaCentro(db.Model):
+    """Ferramentas utilizadas no Centro de Usinagem"""
+    __tablename__ = 'ferramenta_centro'
+    
+    id = db.Column(db.Integer, primary_key=True)
+    folha_centro_id = db.Column(db.Integer, db.ForeignKey('folha_processo_centro_usinagem.id'), nullable=False)
+    posicao = db.Column(db.String(10))  # Ex: T01, T02, etc
+    descricao = db.Column(db.String(200))
+    configuracao = db.Column(db.String(200))
+    imagem = db.Column(db.String(255))
+    
+    # Relacionamento
+    folha_centro = db.relationship('FolhaProcessoCentroUsinagem', backref='ferramentas')
+
+class MedidaCritica(db.Model):
+    """Medidas críticas para Torno e Centro de Usinagem"""
+    __tablename__ = 'medida_critica'
+    
+    id = db.Column(db.Integer, primary_key=True)
+    folha_tipo = db.Column(db.String(20))  # 'torno' ou 'centro'
+    folha_id = db.Column(db.Integer)  # ID da folha específica
+    descricao = db.Column(db.String(200))  # Ex: "Diâmetro externo"
+    valor = db.Column(db.String(100))  # Ex: "50mm"
+    tolerancia = db.Column(db.String(100))  # Ex: "+0.1/-0.05"
+
+class ImagemPecaProcesso(db.Model):
+    """Imagens de peças com observações para Torno e Centro"""
+    __tablename__ = 'imagem_peca_processo'
+    
+    id = db.Column(db.Integer, primary_key=True)
+    folha_tipo = db.Column(db.String(20))  # 'torno' ou 'centro'
+    folha_id = db.Column(db.Integer)  # ID da folha específica
+    imagem = db.Column(db.String(255))
+    observacao = db.Column(db.Text)  # Ex: "Cuidar acabamento nessa área"
+
+class ImagemProcessoGeral(db.Model):
+    """Imagens gerais para Manual/Acabamento/Outros"""
+    __tablename__ = 'imagem_processo_geral'
+    
+    id = db.Column(db.Integer, primary_key=True)
+    folha_manual_id = db.Column(db.Integer, db.ForeignKey('folha_processo_manual_acabamento.id'), nullable=False)
+    imagem = db.Column(db.String(255))
+    observacao = db.Column(db.Text)
+    
+    # Relacionamento
+    folha_manual = db.relationship('FolhaProcessoManualAcabamento', backref='imagens_processo')

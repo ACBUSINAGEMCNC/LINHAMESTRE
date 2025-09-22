@@ -1,0 +1,1218 @@
+{% extends 'base.html' %}
+
+{% block title %}{{ folha.titulo_completo }} - Editar Torno CNC{% endblock %}
+
+{% block content %}
+<div class="container-fluid mt-4">
+    <!-- Cabeçalho -->
+    <div class="row mb-4">
+        <div class="col-12">
+            <div class="card bg-warning text-dark">
+                <div class="card-body">
+                    <div class="d-flex align-items-center">
+                        {% if folha.maquina.imagem_path %}
+                        <img src="{{ folha.maquina.imagem_path }}" alt="Máquina" class="rounded me-3" style="max-height: 80px; max-width: 80px;">
+                        {% else %}
+                        <i class="fas fa-cog fa-4x me-3"></i>
+                        {% endif %}
+                        <div>
+                            <h3 class="mb-1">{{ folha.titulo_completo }}</h3>
+                            <p class="mb-0">
+                                <i class="fas fa-tag me-1"></i>Categoria: {{ folha.categoria_maquina.title() }} | 
+                                <i class="fas fa-calendar me-1"></i>Criado: {{ folha.data_criacao.strftime('%d/%m/%Y') }}
+                            </p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <form method="POST" enctype="multipart/form-data">
+        <div class="row">
+            <!-- Coluna Esquerda -->
+            <div class="col-lg-6">
+                <!-- Castanha -->
+                <div class="card mb-4">
+                    <div class="card-header bg-primary text-white">
+                        <h5 class="mb-0"><i class="fas fa-circle-notch me-2"></i>Castanha Utilizada</h5>
+                    </div>
+                    <div class="card-body">
+                        <div class="mb-3">
+                            <label for="castanha_id" class="form-label">
+                                <i class="fas fa-search me-1"></i>Selecionar Castanha
+                            </label>
+                            <select class="form-select" id="castanha_id" name="castanha_id" onchange="mostrarInfoCastanha()">
+                                <option value="">Nenhuma castanha selecionada</option>
+                                {% for castanha in castanhas %}
+                                <option value="{{ castanha.id }}" 
+                                        data-diametro="{{ castanha.diametro or '' }}"
+                                        data-comprimento="{{ castanha.comprimento or '' }}"
+                                        data-imagem="{{ castanha.imagem_path if castanha.imagem_path else '' }}"
+                                        {% if folha_torno.castanha_id == castanha.id %}selected{% endif %}>
+                                    {{ castanha.codigo }} - Ø{{ castanha.diametro or '?' }}mm x {{ castanha.comprimento or '?' }}mm
+                                </option>
+                                {% endfor %}
+                            </select>
+                        </div>
+                        
+                        <!-- Info da castanha selecionada -->
+                        <div id="info-castanha" style="display: none;">
+                            <div class="border rounded p-3 bg-light">
+                                <div class="row align-items-center">
+                                    <div class="col-auto">
+                                        <div id="castanha-imagem">
+                                            <i class="fas fa-circle-notch fa-3x text-muted"></i>
+                                        </div>
+                                    </div>
+                                    <div class="col">
+                                        <h6 class="mb-1">Dados da Castanha:</h6>
+                                        <p class="mb-0">
+                                            <strong>Diâmetro:</strong> <span id="castanha-diametro">-</span>mm<br>
+                                            <strong>Comprimento:</strong> <span id="castanha-comprimento">-</span>mm
+                                        </p>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Ferramental -->
+                <div class="card mb-4">
+                    <div class="card-header bg-success text-white d-flex justify-content-between align-items-center">
+                        <h5 class="mb-0"><i class="fas fa-tools me-2"></i>Ferramental Utilizado</h5>
+                        <button type="button" class="btn btn-sm btn-light" onclick="adicionarFerramenta()">
+                            <i class="fas fa-plus"></i> Adicionar
+                        </button>
+                    </div>
+                    <div class="card-body">
+                        <div id="lista-ferramentas">
+                            {% for ferramenta in ferramentas %}
+                            <div class="border rounded p-3 mb-2 ferramenta-item" data-id="{{ ferramenta.id }}">
+                                <div class="row align-items-center">
+                                    <div class="col-1">
+                                        {% if ferramenta.imagem %}
+                                        <img src="{{ get_file_url(ferramenta.imagem) }}" alt="Ferramenta" class="img-thumbnail" style="max-height: 40px; max-width: 40px;">
+                                        {% else %}
+                                        <div class="text-center text-muted" style="width: 40px; height: 40px; line-height: 40px; border: 1px dashed #ccc; border-radius: 4px;">
+                                            <i class="fas fa-tools fa-sm"></i>
+                                        </div>
+                                        {% endif %}
+                                    </div>
+                                    <div class="col-2">
+                                        <strong>{{ ferramenta.posicao }}</strong>
+                                    </div>
+                                    <div class="col-4">
+                                        {{ ferramenta.descricao }}
+                                    </div>
+                                    <div class="col-3">
+                                        {{ ferramenta.configuracao }}
+                                    </div>
+                                    <div class="col-2 text-end">
+                                        <button type="button" class="btn btn-sm btn-outline-primary me-1" onclick="editarFerramenta('{{ ferramenta.id }}', '{{ ferramenta.posicao }}', '{{ ferramenta.descricao }}', '{{ ferramenta.configuracao }}')">
+                                            <i class="fas fa-edit"></i>
+                                        </button>
+                                        <button type="button" class="btn btn-sm btn-outline-danger" onclick="removerFerramenta('{{ ferramenta.id }}')">
+                                            <i class="fas fa-trash"></i>
+                                        </button>
+                                    </div>
+                                </div>
+                            </div>
+                            {% endfor %}
+                        </div>
+                        
+                        <!-- Mini formulário para adicionar ferramenta -->
+                        <div id="form-nova-ferramenta" style="display: none;" class="border rounded p-3 mb-2 bg-light">
+                            <h6 class="mb-3"><i class="fas fa-plus me-2"></i>Nova Ferramenta</h6>
+                            <div class="row mb-2">
+                                <div class="col-md-3">
+                                    <input type="text" class="form-control form-control-sm" id="nova-posicao" placeholder="Ex: T01">
+                                    <small class="text-muted">Posição</small>
+                                </div>
+                                <div class="col-md-5">
+                                    <input type="text" class="form-control form-control-sm" id="nova-descricao" placeholder="Ex: TNMEG R01 9">
+                                    <small class="text-muted">Descrição</small>
+                                </div>
+                                <div class="col-md-4">
+                                    <input type="text" class="form-control form-control-sm" id="nova-configuracao" placeholder="Configuração">
+                                    <small class="text-muted">Configuração</small>
+                                </div>
+                            </div>
+                            <div class="row mb-3">
+                                <div class="col-md-6">
+                                    <input type="file" class="form-control form-control-sm" id="nova-imagem" accept="image/*" onchange="previewImagemFerramenta(this)">
+                                    <small class="text-muted">Foto da ferramenta (opcional)</small>
+                                </div>
+                                <div class="col-md-2">
+                                    <div id="preview-imagem-ferramenta" style="display: none;">
+                                        <img id="img-preview-ferramenta" class="img-thumbnail" style="max-height: 40px; max-width: 40px;">
+                                    </div>
+                                </div>
+                                <div class="col-md-4 text-end">
+                                    <button type="button" class="btn btn-success btn-sm me-1" onclick="salvarNovaFerramenta()">
+                                        <i class="fas fa-check"></i> Salvar
+                                    </button>
+                                    <button type="button" class="btn btn-secondary btn-sm" onclick="cancelarNovaFerramenta()">
+                                        <i class="fas fa-times"></i> Cancelar
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        {% if not ferramentas %}
+                        <div id="sem-ferramentas" class="text-center text-muted py-3">
+                            <i class="fas fa-tools fa-2x mb-2"></i>
+                            <p>Nenhuma ferramenta cadastrada. Clique em "Adicionar" para começar.</p>
+                        </div>
+                        {% endif %}
+                    </div>
+                </div>
+
+                <!-- Programa CNC -->
+                <div class="card mb-4">
+                    <div class="card-header bg-info text-white">
+                        <h5 class="mb-0"><i class="fas fa-file-code me-2"></i>Programa CNC</h5>
+                    </div>
+                    <div class="card-body">
+                        <div class="mb-3">
+                            <label for="nome_programa" class="form-label">
+                                <i class="fas fa-tag me-1"></i>Nome do Programa
+                            </label>
+                            <input type="text" class="form-control" id="nome_programa" name="nome_programa" 
+                                   value="{{ folha_torno.nome_programa or '' }}" 
+                                   placeholder="Ex: EIXO_001.nc">
+                        </div>
+
+                        <div class="mb-3">
+                            <label for="programa_cnc" class="form-label">
+                                <i class="fas fa-code me-1"></i>Conteúdo do Programa
+                            </label>
+                            <div class="mb-2">
+                                <label for="arquivo_programa" class="form-label">
+                                    <i class="fas fa-upload me-1"></i>Ou faça upload do arquivo .nc/.txt
+                                </label>
+                                <input type="file" class="form-control" id="arquivo_programa" name="arquivo_programa" 
+                                       accept=".nc,.txt,.cnc" onchange="carregarPrograma(this)">
+                            </div>
+                            <textarea class="form-control font-monospace" id="programa_cnc" name="programa_cnc" rows="8"
+                                      placeholder="Cole aqui o código do programa CNC ou faça upload de um arquivo...">{{ folha_torno.programa_cnc or '' }}</textarea>
+                            <div class="form-text">
+                                <i class="fas fa-info-circle me-1"></i>
+                                Você pode copiar e colar diretamente ou fazer upload de arquivos .nc, .txt, .cnc
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Coluna Direita -->
+            <div class="col-lg-6">
+                <!-- Gabarito de Rosca -->
+                <div class="card mb-4">
+                    <div class="card-header bg-secondary text-white">
+                        <h5 class="mb-0"><i class="fas fa-cog me-2"></i>Gabarito de Rosca (Opcional)</h5>
+                    </div>
+                    <div class="card-body">
+                        <div class="mb-3">
+                            <label for="gabarito_rosca_id" class="form-label">
+                                <i class="fas fa-search me-1"></i>Selecionar Gabarito
+                            </label>
+                            <select class="form-select" id="gabarito_rosca_id" name="gabarito_rosca_id" onchange="mostrarInfoGabarito()">
+                                <option value="">Não utilizar gabarito de rosca</option>
+                                {% for gabarito in gabaritos_rosca %}
+                                <option value="{{ gabarito.id }}" 
+                                        data-tipo="{{ gabarito.tipo_rosca or '' }}"
+                                        data-imagem="{{ gabarito.imagem_path if gabarito.imagem_path else '' }}"
+                                        {% if folha_torno.gabarito_rosca_id == gabarito.id %}selected{% endif %}>
+                                    {{ gabarito.codigo }} - {{ gabarito.tipo_rosca }}
+                                </option>
+                                {% endfor %}
+                            </select>
+                        </div>
+                        
+                        <!-- Info do gabarito -->
+                        <div id="info-gabarito" style="display: none;">
+                            <div class="border rounded p-3 bg-light">
+                                <div class="row align-items-center">
+                                    <div class="col-auto">
+                                        <div id="gabarito-imagem">
+                                            <i class="fas fa-cog fa-3x text-muted"></i>
+                                        </div>
+                                    </div>
+                                    <div class="col">
+                                        <h6 class="mb-1">Dados do Gabarito:</h6>
+                                        <p class="mb-0">
+                                            <strong>Tipo de Rosca:</strong> <span id="gabarito-tipo">-</span>
+                                        </p>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Imagens -->
+                <div class="card mb-4">
+                    <div class="card-header bg-warning text-dark">
+                        <h5 class="mb-0"><i class="fas fa-camera me-2"></i>Imagens</h5>
+                    </div>
+                    <div class="card-body">
+                        <!-- Imagem Torre Montada -->
+                        <div class="mb-3">
+                            <label for="imagem_torre_montada" class="form-label">
+                                <i class="fas fa-upload me-1"></i>Torre Montada
+                            </label>
+                            {% if folha_torno.imagem_torre_montada %}
+                            <div class="mb-2">
+                                <img src="{{ get_file_url(folha_torno.imagem_torre_montada) }}" 
+                                     alt="Torre Montada" class="img-thumbnail" style="max-height: 100px;">
+                            </div>
+                            {% endif %}
+                            <input type="file" class="form-control" id="imagem_torre_montada" name="imagem_torre_montada" accept="image/*">
+                        </div>
+
+                        <!-- Imagem Peça Fixa -->
+                        <div class="mb-3">
+                            <label for="imagem_peca_fixa" class="form-label">
+                                <i class="fas fa-upload me-1"></i>Peça Fixa na Castanha
+                            </label>
+                            {% if folha_torno.imagem_peca_fixa %}
+                            <div class="mb-2">
+                                <img src="{{ get_file_url(folha_torno.imagem_peca_fixa) }}" 
+                                     alt="Peça Fixa" class="img-thumbnail" style="max-height: 100px;">
+                            </div>
+                            {% endif %}
+                            <input type="file" class="form-control" id="imagem_peca_fixa" name="imagem_peca_fixa" accept="image/*">
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Bucha Guia e Encosto -->
+                <div class="card mb-4">
+                    <div class="card-header bg-danger text-white">
+                        <h5 class="mb-0"><i class="fas fa-arrows-alt me-2"></i>Bucha Guia e Encosto</h5>
+                    </div>
+                    <div class="card-body">
+                        <!-- Bucha Guia -->
+                        <div class="row mb-3">
+                            <div class="col-md-6">
+                                <label for="jogo_bucha_guia" class="form-label">
+                                    <i class="fas fa-circle me-1"></i>Jogo de Bucha Guia
+                                </label>
+                                <input type="text" class="form-control" id="jogo_bucha_guia" name="jogo_bucha_guia" 
+                                       value="{{ folha_torno.jogo_bucha_guia or '' }}">
+                            </div>
+                            <div class="col-md-6">
+                                <label for="local_armazenagem_bucha" class="form-label">
+                                    <i class="fas fa-map-marker-alt me-1"></i>Local de Armazenagem
+                                </label>
+                                <input type="text" class="form-control" id="local_armazenagem_bucha" name="local_armazenagem_bucha" 
+                                       value="{{ folha_torno.local_armazenagem_bucha or '' }}">
+                            </div>
+                        </div>
+
+                        <!-- Imagem Bucha -->
+                        <div class="mb-3">
+                            <label for="imagem_bucha_guia" class="form-label">
+                                <i class="fas fa-upload me-1"></i>Imagem da Bucha Guia
+                            </label>
+                            {% if folha_torno.imagem_bucha_guia %}
+                            <div class="mb-2">
+                                <img src="{{ get_file_url(folha_torno.imagem_bucha_guia) }}" 
+                                     alt="Bucha Guia" class="img-thumbnail" style="max-height: 80px;">
+                            </div>
+                            {% endif %}
+                            <input type="file" class="form-control" id="imagem_bucha_guia" name="imagem_bucha_guia" accept="image/*">
+                        </div>
+
+                        <hr>
+
+                        <!-- Encosto -->
+                        <div class="row mb-3">
+                            <div class="col-md-6">
+                                <label for="encosto" class="form-label">
+                                    <i class="fas fa-square me-1"></i>Encosto
+                                </label>
+                                <input type="text" class="form-control" id="encosto" name="encosto" 
+                                       value="{{ folha_torno.encosto or '' }}">
+                            </div>
+                            <div class="col-md-6">
+                                <label for="local_armazenagem_encosto" class="form-label">
+                                    <i class="fas fa-map-marker-alt me-1"></i>Local de Armazenagem
+                                </label>
+                                <input type="text" class="form-control" id="local_armazenagem_encosto" name="local_armazenagem_encosto" 
+                                       value="{{ folha_torno.local_armazenagem_encosto or '' }}">
+                            </div>
+                        </div>
+
+                        <!-- Imagem Encosto -->
+                        <div class="mb-0">
+                            <label for="imagem_encosto" class="form-label">
+                                <i class="fas fa-upload me-1"></i>Imagem do Encosto
+                            </label>
+                            {% if folha_torno.imagem_encosto %}
+                            <div class="mb-2">
+                                <img src="{{ get_file_url(folha_torno.imagem_encosto) }}" 
+                                     alt="Encosto" class="img-thumbnail" style="max-height: 80px;">
+                            </div>
+                            {% endif %}
+                            <input type="file" class="form-control" id="imagem_encosto" name="imagem_encosto" accept="image/*">
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Seções Expansíveis -->
+        <div class="row">
+            <div class="col-12">
+                <!-- Medidas Críticas -->
+                <div class="card mb-4">
+                    <div class="card-header bg-primary text-white d-flex justify-content-between align-items-center">
+                        <h5 class="mb-0"><i class="fas fa-ruler me-2"></i>Medidas Críticas</h5>
+                        <button type="button" class="btn btn-sm btn-light" onclick="adicionarMedida()">
+                            <i class="fas fa-plus"></i> Adicionar Medida
+                        </button>
+                    </div>
+                    <div class="card-body">
+                        <div id="lista-medidas">
+                            {% for medida in medidas %}
+                            <div class="border rounded p-3 mb-2 medida-item" data-id="{{ medida.id }}">
+                                <div class="row align-items-center">
+                                    <div class="col-4">
+                                        <strong>{{ medida.descricao }}</strong>
+                                    </div>
+                                    <div class="col-3">
+                                        {{ medida.valor }}
+                                    </div>
+                                    <div class="col-3">
+                                        {{ medida.tolerancia }}
+                                    </div>
+                                    <div class="col-2 text-end">
+                                        <button type="button" class="btn btn-sm btn-outline-primary me-1" onclick="editarMedida('{{ medida.id }}', '{{ medida.descricao }}', '{{ medida.valor }}', '{{ medida.tolerancia }}')">
+                                            <i class="fas fa-edit"></i>
+                                        </button>
+                                        <button type="button" class="btn btn-sm btn-outline-danger" onclick="removerMedida('{{ medida.id }}')">
+                                            <i class="fas fa-trash"></i>
+                                        </button>
+                                    </div>
+                                </div>
+                            </div>
+                            {% endfor %}
+                        </div>
+                        
+                        <!-- Mini formulário para adicionar medida -->
+                        <div id="form-nova-medida" style="display: none;" class="border rounded p-3 mb-2 bg-light">
+                            <h6 class="mb-3"><i class="fas fa-plus me-2"></i>Nova Medida Crítica</h6>
+                            <div class="row mb-2">
+                                <div class="col-md-5">
+                                    <input type="text" class="form-control form-control-sm" id="nova-desc-medida" placeholder="Ex: Diâmetro externo">
+                                    <small class="text-muted">Descrição da medida</small>
+                                </div>
+                                <div class="col-md-3">
+                                    <input type="text" class="form-control form-control-sm" id="nova-valor-medida" placeholder="Ex: 50mm">
+                                    <small class="text-muted">Valor</small>
+                                </div>
+                                <div class="col-md-4">
+                                    <input type="text" class="form-control form-control-sm" id="nova-tolerancia-medida" placeholder="Ex: +0.1/-0.05">
+                                    <small class="text-muted">Tolerância</small>
+                                </div>
+                            </div>
+                            <div class="row mb-3">
+                                <div class="col-md-8">
+                                    <div class="text-muted small">
+                                        <i class="fas fa-info-circle me-1"></i>
+                                        Medidas críticas para controle dimensional da peça
+                                    </div>
+                                </div>
+                                <div class="col-md-4 text-end">
+                                    <button type="button" class="btn btn-success btn-sm me-1" onclick="salvarNovaMedida()">
+                                        <i class="fas fa-check"></i> Salvar
+                                    </button>
+                                    <button type="button" class="btn btn-secondary btn-sm" onclick="cancelarNovaMedida()">
+                                        <i class="fas fa-times"></i> Cancelar
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        {% if not medidas %}
+                        <div id="sem-medidas" class="text-center text-muted py-3">
+                            <i class="fas fa-ruler fa-2x mb-2"></i>
+                            <p>Nenhuma medida crítica cadastrada. Clique em "Adicionar Medida" para começar.</p>
+                        </div>
+                        {% endif %}
+                    </div>
+                </div>
+
+                <!-- Observações -->
+                <div class="card mb-4">
+                    <div class="card-header bg-dark text-white">
+                        <h5 class="mb-0"><i class="fas fa-sticky-note me-2"></i>Observações</h5>
+                    </div>
+                    <div class="card-body">
+                        <textarea class="form-control" id="observacoes" name="observacoes" rows="4"
+                                  placeholder="Observações importantes sobre o processo, cuidados especiais, etc...">{{ folha_torno.observacoes or '' }}</textarea>
+                    </div>
+                </div>
+
+                <!-- Botões -->
+                <div class="card">
+                    <div class="card-body">
+                        <div class="d-flex justify-content-between">
+                            <div>
+                                <a href="{{ url_for('novas_folhas_processo.listar_folhas') }}" class="btn btn-secondary me-2">
+                                    <i class="fas fa-list me-1"></i>Voltar à Lista
+                                </a>
+                                <a href="{{ url_for('novas_folhas_processo.visualizar_folha', folha_id=folha.id) }}" class="btn btn-outline-primary">
+                                    <i class="fas fa-eye me-1"></i>Visualizar
+                                </a>
+                            </div>
+                            <div>
+                                <button type="submit" class="btn btn-success btn-lg">
+                                    <i class="fas fa-save me-1"></i>Salvar Alterações
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </form>
+</div>
+{% endblock %}
+
+<!-- Modal para adicionar ferramenta -->
+<div class="modal fade" id="modalAdicionarFerramenta" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Adicionar Ferramenta</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <form id="formFerramenta">
+                    <div class="mb-3">
+                        <label for="posicao_ferramenta" class="form-label">Posição (Ex: T01, T02)</label>
+                        <input type="text" class="form-control" id="posicao_ferramenta" required>
+                    </div>
+                    <div class="mb-3">
+                        <label for="descricao_ferramenta" class="form-label">Descrição</label>
+                        <input type="text" class="form-control" id="descricao_ferramenta" placeholder="Ex: TNMEG R01 9" required>
+                    </div>
+                    <div class="mb-3">
+                        <label for="configuracao_ferramenta" class="form-label">Configuração</label>
+                        <input type="text" class="form-control" id="configuracao_ferramenta" placeholder="Configurações na máquina">
+                    </div>
+                    <div class="mb-3">
+                        <label for="imagem_ferramenta" class="form-label">Imagem (Opcional)</label>
+                        <input type="file" class="form-control" id="imagem_ferramenta" accept="image/*">
+                    </div>
+                </form>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
+                <button type="button" class="btn btn-primary" onclick="salvarFerramenta()">Salvar</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Modal para adicionar medida crítica -->
+<div class="modal fade" id="modalAdicionarMedida" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Adicionar Medida Crítica</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <form id="formMedida">
+                    <div class="mb-3">
+                        <label for="descricao_medida" class="form-label">Descrição</label>
+                        <input type="text" class="form-control" id="descricao_medida" placeholder="Ex: Diâmetro externo" required>
+                    </div>
+                    <div class="mb-3">
+                        <label for="valor_medida" class="form-label">Valor</label>
+                        <input type="text" class="form-control" id="valor_medida" placeholder="Ex: 50mm" required>
+                    </div>
+                    <div class="mb-3">
+                        <label for="tolerancia_medida" class="form-label">Tolerância</label>
+                        <input type="text" class="form-control" id="tolerancia_medida" placeholder="Ex: +0.1/-0.05">
+                    </div>
+                </form>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
+                <button type="button" class="btn btn-primary" onclick="salvarMedida()">Salvar</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+{% block scripts %}
+<script>
+// Funções para mostrar informações dos selects
+function mostrarInfoCastanha() {
+    const select = document.getElementById('castanha_id');
+    const info = document.getElementById('info-castanha');
+    const opcao = select.options[select.selectedIndex];
+    
+    if (select.value) {
+        document.getElementById('castanha-diametro').textContent = opcao.dataset.diametro || '?';
+        document.getElementById('castanha-comprimento').textContent = opcao.dataset.comprimento || '?';
+        
+        const imagemDiv = document.getElementById('castanha-imagem');
+        if (opcao.dataset.imagem) {
+            imagemDiv.innerHTML = `<img src="${opcao.dataset.imagem}" class="rounded" style="max-height: 50px; max-width: 50px;">`;
+        } else {
+            imagemDiv.innerHTML = '<i class="fas fa-circle-notch fa-3x text-muted"></i>';
+        }
+        
+        info.style.display = 'block';
+    } else {
+        info.style.display = 'none';
+    }
+}
+
+function mostrarInfoGabarito() {
+    const select = document.getElementById('gabarito_rosca_id');
+    const info = document.getElementById('info-gabarito');
+    const opcao = select.options[select.selectedIndex];
+    
+    if (select.value) {
+        document.getElementById('gabarito-tipo').textContent = opcao.dataset.tipo || '-';
+        
+        const imagemDiv = document.getElementById('gabarito-imagem');
+        if (opcao.dataset.imagem) {
+            imagemDiv.innerHTML = `<img src="${opcao.dataset.imagem}" class="rounded" style="max-height: 50px; max-width: 50px;">`;
+        } else {
+            imagemDiv.innerHTML = '<i class="fas fa-cog fa-3x text-muted"></i>';
+        }
+        
+        info.style.display = 'block';
+    } else {
+        info.style.display = 'none';
+    }
+}
+
+// Inicializar informações se já houver seleções
+document.addEventListener('DOMContentLoaded', function() {
+    console.log('DOM carregado - JavaScript funcionando!');
+    mostrarInfoCastanha();
+    mostrarInfoGabarito();
+    
+    // Testar se os botões existem
+    const btnFerramenta = document.querySelector('button[onclick="adicionarFerramenta()"]');
+    const btnMedida = document.querySelector('button[onclick="adicionarMedida()"]');
+    
+    console.log('Botão ferramenta encontrado:', btnFerramenta);
+    console.log('Botão medida encontrado:', btnMedida);
+    
+    if (!btnFerramenta) {
+        console.error('ERRO: Botão de adicionar ferramenta não encontrado!');
+    }
+    if (!btnMedida) {
+        console.error('ERRO: Botão de adicionar medida não encontrado!');
+    }
+    
+    // Adicionar listener para ESC cancelar formulários
+    document.addEventListener('keydown', function(e) {
+        if (e.key === 'Escape') {
+            const formFerramenta = document.getElementById('form-nova-ferramenta');
+            const formMedida = document.getElementById('form-nova-medida');
+            
+            if (formFerramenta.style.display !== 'none') {
+                cancelarNovaFerramenta();
+            }
+            if (formMedida.style.display !== 'none') {
+                cancelarNovaMedida();
+            }
+        }
+    });
+});
+
+// Função para carregar programa CNC do arquivo
+function carregarPrograma(input) {
+    if (input.files && input.files[0]) {
+        const file = input.files[0];
+        const reader = new FileReader();
+        
+        reader.onload = function(e) {
+            document.getElementById('programa_cnc').value = e.target.result;
+            
+            // Definir nome do programa automaticamente se não estiver preenchido
+            const nomePrograma = document.getElementById('nome_programa');
+            if (!nomePrograma.value) {
+                nomePrograma.value = file.name;
+            }
+            
+            // Mostrar notificação
+            const toast = document.createElement('div');
+            toast.className = 'toast align-items-center text-white bg-success border-0 position-fixed top-0 end-0 m-3';
+            toast.style.zIndex = '9999';
+            toast.innerHTML = `
+                <div class="d-flex">
+                    <div class="toast-body">
+                        <i class="fas fa-check me-2"></i>Programa CNC carregado com sucesso!
+                    </div>
+                    <button type="button" class="btn-close btn-close-white me-2 m-auto" data-bs-dismiss="toast"></button>
+                </div>
+            `;
+            document.body.appendChild(toast);
+            const bsToast = new bootstrap.Toast(toast);
+            bsToast.show();
+            
+            // Remover toast após esconder
+            toast.addEventListener('hidden.bs.toast', function() {
+                document.body.removeChild(toast);
+            });
+        };
+        
+        reader.readAsText(file);
+    }
+}
+
+// Funções para gerenciar ferramentas
+function adicionarFerramenta() {
+    console.log('Abrindo mini formulário de ferramenta');
+    
+    // Mostrar mini formulário
+    document.getElementById('form-nova-ferramenta').style.display = 'block';
+    
+    // Limpar campos
+    document.getElementById('nova-posicao').value = '';
+    document.getElementById('nova-descricao').value = '';
+    document.getElementById('nova-configuracao').value = '';
+    document.getElementById('nova-imagem').value = '';
+    
+    // Esconder preview da imagem
+    document.getElementById('preview-imagem-ferramenta').style.display = 'none';
+    
+    // Focar no primeiro campo
+    document.getElementById('nova-posicao').focus();
+    
+    // Esconder botão de adicionar temporariamente
+    const btnAdicionar = document.querySelector('button[onclick="adicionarFerramenta()"]');
+    if (btnAdicionar) btnAdicionar.style.display = 'none';
+}
+
+function salvarNovaFerramenta() {
+    const posicao = document.getElementById('nova-posicao').value.trim();
+    const descricao = document.getElementById('nova-descricao').value.trim();
+    const configuracao = document.getElementById('nova-configuracao').value.trim();
+    const arquivoImagem = document.getElementById('nova-imagem').files[0];
+    
+    // Validar campos obrigatórios
+    if (!posicao || !descricao) {
+        alert('Posição e descrição são obrigatórios!');
+        return;
+    }
+    
+    // Se há imagem, criar preview e adicionar
+    if (arquivoImagem) {
+        const reader = new FileReader();
+        reader.onload = function(e) {
+            // Adicionar ferramenta com preview da imagem
+            adicionarFerramentaNaLista(posicao, descricao, configuracao, e.target.result);
+        };
+        reader.readAsDataURL(arquivoImagem);
+    } else {
+        // Adicionar ferramenta sem imagem
+        adicionarFerramentaNaLista(posicao, descricao, configuracao);
+    }
+    
+    // Esconder formulário e mostrar botão adicionar novamente
+    cancelarNovaFerramenta();
+}
+
+function previewImagemFerramenta(input) {
+    const previewDiv = document.getElementById('preview-imagem-ferramenta');
+    const previewImg = document.getElementById('img-preview-ferramenta');
+    
+    if (input.files && input.files[0]) {
+        const reader = new FileReader();
+        reader.onload = function(e) {
+            previewImg.src = e.target.result;
+            previewDiv.style.display = 'block';
+        };
+        reader.readAsDataURL(input.files[0]);
+    } else {
+        previewDiv.style.display = 'none';
+    }
+}
+
+function cancelarNovaFerramenta() {
+    // Esconder mini formulário
+    document.getElementById('form-nova-ferramenta').style.display = 'none';
+    
+    // Esconder preview da imagem
+    document.getElementById('preview-imagem-ferramenta').style.display = 'none';
+    
+    // Resetar botão salvar para modo adicionar
+    const btnSalvar = document.querySelector('#form-nova-ferramenta button[onclick*="ferramenta"]');
+    if (btnSalvar) {
+        btnSalvar.innerHTML = '<i class="fas fa-check"></i> Salvar';
+        btnSalvar.setAttribute('onclick', 'salvarNovaFerramenta()');
+    }
+    
+    // Mostrar botão de adicionar novamente
+    const btnAdicionar = document.querySelector('button[onclick="adicionarFerramenta()"]');
+    if (btnAdicionar) btnAdicionar.style.display = 'inline-block';
+}
+
+function adicionarFerramentaNaLista(posicao, descricao, configuracao, imagemPreview = null) {
+    const listContainer = document.getElementById('lista-ferramentas');
+    const semFerramentas = document.getElementById('sem-ferramentas');
+    
+    if (semFerramentas) {
+        semFerramentas.style.display = 'none';
+    }
+    
+    // Criar HTML para a imagem
+    let imagemHtml = '';
+    if (imagemPreview) {
+        imagemHtml = `<img src="${imagemPreview}" alt="Ferramenta" class="img-thumbnail" style="max-height: 40px; max-width: 40px;">`;
+    } else {
+        imagemHtml = `
+            <div class="text-center text-muted" style="width: 40px; height: 40px; line-height: 40px; border: 1px dashed #ccc; border-radius: 4px;">
+                <i class="fas fa-tools fa-sm"></i>
+            </div>
+        `;
+    }
+    
+    const novaFerramenta = document.createElement('div');
+    novaFerramenta.className = 'border rounded p-3 mb-2 ferramenta-item';
+    novaFerramenta.innerHTML = `
+        <div class="row align-items-center">
+            <div class="col-1">
+                ${imagemHtml}
+            </div>
+            <div class="col-2">
+                <strong>${posicao}</strong>
+            </div>
+            <div class="col-4">
+                ${descricao}
+            </div>
+            <div class="col-3">
+                ${configuracao}
+            </div>
+            <div class="col-2 text-end">
+                <button type="button" class="btn btn-sm btn-outline-danger" onclick="removerFerramentaTemp(this)">
+                    <i class="fas fa-trash"></i>
+                </button>
+            </div>
+        </div>
+        <input type="hidden" name="ferramentas[]" value='{"posicao":"${posicao}","descricao":"${descricao}","configuracao":"${configuracao}","tem_imagem":${imagemPreview ? 'true' : 'false'}}'>
+    `;
+    
+    listContainer.appendChild(novaFerramenta);
+    console.log('Ferramenta adicionada:', posicao, descricao, imagemPreview ? 'com imagem' : 'sem imagem');
+}
+
+function salvarFerramenta() {
+    const posicao = document.getElementById('posicao_ferramenta').value;
+    const descricao = document.getElementById('descricao_ferramenta').value;
+    const configuracao = document.getElementById('configuracao_ferramenta').value;
+    
+    if (!posicao || !descricao) {
+        alert('Posição e descrição são obrigatórios!');
+        return;
+    }
+    
+    // Criar elemento visual
+    const listContainer = document.getElementById('lista-ferramentas');
+    const semFerramentas = document.getElementById('sem-ferramentas');
+    
+    if (semFerramentas) {
+        semFerramentas.style.display = 'none';
+    }
+    
+    const novaFerramenta = document.createElement('div');
+    novaFerramenta.className = 'border rounded p-3 mb-2 ferramenta-item';
+    novaFerramenta.innerHTML = `
+        <div class="row align-items-center">
+            <div class="col-2">
+                <strong>${posicao}</strong>
+            </div>
+            <div class="col-4">
+                ${descricao}
+            </div>
+            <div class="col-4">
+                ${configuracao}
+            </div>
+            <div class="col-2 text-end">
+                <button type="button" class="btn btn-sm btn-outline-danger" onclick="removerFerramentaTemp(this)">
+                    <i class="fas fa-trash"></i>
+                </button>
+            </div>
+        </div>
+        <input type="hidden" name="ferramentas[]" value='{"posicao":"${posicao}","descricao":"${descricao}","configuracao":"${configuracao}"}'>
+    `;
+    
+    listContainer.appendChild(novaFerramenta);
+    
+    // Fechar modal
+    try {
+        bootstrap.Modal.getInstance(document.getElementById('modalAdicionarFerramenta')).hide();
+    } catch (e) {
+        $('#modalAdicionarFerramenta').modal('hide');
+    }
+}
+
+function removerFerramentaTemp(btn) {
+    if (confirm('Tem certeza que deseja remover esta ferramenta?')) {
+        btn.closest('.ferramenta-item').remove();
+        
+        // Verificar se há ferramentas restantes
+        const ferramentas = document.querySelectorAll('.ferramenta-item');
+        if (ferramentas.length === 0) {
+            document.getElementById('sem-ferramentas').style.display = 'block';
+        }
+    }
+}
+
+function editarFerramenta(id, posicao, descricao, configuracao) {
+    // Preencher o formulário com os dados existentes
+    document.getElementById('nova-posicao').value = posicao;
+    document.getElementById('nova-descricao').value = descricao;
+    document.getElementById('nova-configuracao').value = configuracao;
+    
+    // Mostrar formulário
+    document.getElementById('form-nova-ferramenta').style.display = 'block';
+    document.getElementById('nova-posicao').focus();
+    
+    // Esconder botão adicionar
+    const btnAdicionar = document.querySelector('button[onclick="adicionarFerramenta()"]');
+    if (btnAdicionar) btnAdicionar.style.display = 'none';
+    
+    // Alterar botão salvar para indicar edição
+    const btnSalvar = document.querySelector('#form-nova-ferramenta button[onclick="salvarNovaFerramenta()"]');
+    if (btnSalvar) {
+        btnSalvar.innerHTML = '<i class="fas fa-save"></i> Atualizar';
+        btnSalvar.setAttribute('onclick', `atualizarFerramenta('${id}')`);
+    }
+}
+
+function atualizarFerramenta(id) {
+    const posicao = document.getElementById('nova-posicao').value.trim();
+    const descricao = document.getElementById('nova-descricao').value.trim();
+    const configuracao = document.getElementById('nova-configuracao').value.trim();
+    
+    if (!posicao || !descricao) {
+        alert('Posição e descrição são obrigatórios!');
+        return;
+    }
+    
+    // Fazer requisição AJAX para atualizar no backend
+    fetch(`/folhas-processo-novas/ferramenta/${id}`, {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+            posicao: posicao,
+            descricao: descricao,
+            configuracao: configuracao
+        })
+    })
+    .then(response => {
+        if (!response.ok) {
+            throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+        }
+        return response.json();
+    })
+    .then(data => {
+        if (data.success) {
+            // Atualizar na interface
+            const item = document.querySelector(`.ferramenta-item[data-id="${id}"]`);
+            if (item) {
+                item.querySelector('.col-2 strong').textContent = posicao;
+                item.querySelector('.col-4:nth-child(3)').textContent = descricao;
+                item.querySelector('.col-3:nth-child(4)').textContent = configuracao;
+            }
+            
+            // Mostrar sucesso
+            alert('Ferramenta atualizada com sucesso!');
+            cancelarNovaFerramenta();
+        } else {
+            alert('Erro ao atualizar ferramenta: ' + (data.message || 'Erro desconhecido'));
+        }
+    })
+    .catch(error => {
+        console.error('Erro completo:', error);
+        alert('Erro ao conectar com o servidor: ' + error.message);
+    });
+}
+
+function removerFerramenta(id) {
+    if (confirm('Tem certeza que deseja remover esta ferramenta?')) {
+        // Fazer requisição AJAX para remover do backend
+        fetch(`/folhas-processo-novas/ferramenta/${id}`, {
+            method: 'DELETE'
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                document.querySelector(`.ferramenta-item[data-id="${id}"]`).remove();
+                
+                // Verificar se há ferramentas restantes
+                const ferramentas = document.querySelectorAll('.ferramenta-item');
+                if (ferramentas.length === 0) {
+                    document.getElementById('sem-ferramentas').style.display = 'block';
+                }
+            } else {
+                alert('Erro ao remover ferramenta: ' + data.message);
+            }
+        })
+        .catch(error => {
+            console.error('Erro:', error);
+            alert('Erro ao remover ferramenta');
+        });
+    }
+}
+
+// Funções para gerenciar medidas
+function adicionarMedida() {
+    console.log('Abrindo mini formulário de medida');
+    
+    // Mostrar mini formulário
+    document.getElementById('form-nova-medida').style.display = 'block';
+    
+    // Limpar campos
+    document.getElementById('nova-desc-medida').value = '';
+    document.getElementById('nova-valor-medida').value = '';
+    document.getElementById('nova-tolerancia-medida').value = '';
+    
+    // Focar no primeiro campo
+    document.getElementById('nova-desc-medida').focus();
+    
+    // Esconder botão de adicionar temporariamente
+    const btnAdicionar = document.querySelector('button[onclick="adicionarMedida()"]');
+    if (btnAdicionar) btnAdicionar.style.display = 'none';
+}
+
+function salvarNovaMedida() {
+    const descricao = document.getElementById('nova-desc-medida').value.trim();
+    const valor = document.getElementById('nova-valor-medida').value.trim();
+    const tolerancia = document.getElementById('nova-tolerancia-medida').value.trim();
+    
+    // Validar campos obrigatórios
+    if (!descricao || !valor) {
+        alert('Descrição e valor são obrigatórios!');
+        return;
+    }
+    
+    // Adicionar medida à lista
+    adicionarMedidaNaLista(descricao, valor, tolerancia);
+    
+    // Esconder formulário e mostrar botão adicionar novamente
+    cancelarNovaMedida();
+}
+
+function cancelarNovaMedida() {
+    // Esconder mini formulário
+    document.getElementById('form-nova-medida').style.display = 'none';
+    
+    // Resetar botão salvar para modo adicionar
+    const btnSalvar = document.querySelector('#form-nova-medida button[onclick*="medida"]');
+    if (btnSalvar) {
+        btnSalvar.innerHTML = '<i class="fas fa-check"></i> Salvar';
+        btnSalvar.setAttribute('onclick', 'salvarNovaMedida()');
+    }
+    
+    // Mostrar botão de adicionar novamente
+    const btnAdicionar = document.querySelector('button[onclick="adicionarMedida()"]');
+    if (btnAdicionar) btnAdicionar.style.display = 'inline-block';
+}
+
+function adicionarMedidaNaLista(descricao, valor, tolerancia) {
+    const listContainer = document.getElementById('lista-medidas');
+    const semMedidas = document.getElementById('sem-medidas');
+    
+    if (semMedidas) {
+        semMedidas.style.display = 'none';
+    }
+    
+    const novaMedida = document.createElement('div');
+    novaMedida.className = 'border rounded p-3 mb-2 medida-item';
+    novaMedida.innerHTML = `
+        <div class="row align-items-center">
+            <div class="col-4">
+                <strong>${descricao}</strong>
+            </div>
+            <div class="col-3">
+                ${valor}
+            </div>
+            <div class="col-3">
+                ${tolerancia}
+            </div>
+            <div class="col-2 text-end">
+                <button type="button" class="btn btn-sm btn-outline-danger" onclick="removerMedidaTemp(this)">
+                    <i class="fas fa-trash"></i>
+                </button>
+            </div>
+        </div>
+        <input type="hidden" name="medidas[]" value='{"descricao":"${descricao}","valor":"${valor}","tolerancia":"${tolerancia}"}'>
+    `;
+    
+    listContainer.appendChild(novaMedida);
+    console.log('Medida adicionada:', descricao, valor);
+}
+
+function salvarMedida() {
+    const descricao = document.getElementById('descricao_medida').value;
+    const valor = document.getElementById('valor_medida').value;
+    const tolerancia = document.getElementById('tolerancia_medida').value;
+    
+    if (!descricao || !valor) {
+        alert('Descrição e valor são obrigatórios!');
+        return;
+    }
+    
+    // Criar elemento visual
+    const listContainer = document.getElementById('lista-medidas');
+    const semMedidas = document.getElementById('sem-medidas');
+    
+    if (semMedidas) {
+        semMedidas.style.display = 'none';
+    }
+    
+    const novaMedida = document.createElement('div');
+    novaMedida.className = 'border rounded p-3 mb-2 medida-item';
+    novaMedida.innerHTML = `
+        <div class="row align-items-center">
+            <div class="col-4">
+                <strong>${descricao}</strong>
+            </div>
+            <div class="col-3">
+                ${valor}
+            </div>
+            <div class="col-3">
+                ${tolerancia}
+            </div>
+            <div class="col-2 text-end">
+                <button type="button" class="btn btn-sm btn-outline-danger" onclick="removerMedidaTemp(this)">
+                    <i class="fas fa-trash"></i>
+                </button>
+            </div>
+        </div>
+        <input type="hidden" name="medidas[]" value='{"descricao":"${descricao}","valor":"${valor}","tolerancia":"${tolerancia}"}'>
+    `;
+    
+    listContainer.appendChild(novaMedida);
+    
+    // Fechar modal
+    try {
+        bootstrap.Modal.getInstance(document.getElementById('modalAdicionarMedida')).hide();
+    } catch (e) {
+        $('#modalAdicionarMedida').modal('hide');
+    }
+}
+
+function removerMedidaTemp(btn) {
+    if (confirm('Tem certeza que deseja remover esta medida?')) {
+        btn.closest('.medida-item').remove();
+        
+        // Verificar se há medidas restantes
+        const medidas = document.querySelectorAll('.medida-item');
+        if (medidas.length === 0) {
+            document.getElementById('sem-medidas').style.display = 'block';
+        }
+    }
+}
+
+function editarMedida(id, descricao, valor, tolerancia) {
+    // Preencher o formulário com os dados existentes
+    document.getElementById('nova-desc-medida').value = descricao;
+    document.getElementById('nova-valor-medida').value = valor;
+    document.getElementById('nova-tolerancia-medida').value = tolerancia;
+    
+    // Mostrar formulário
+    document.getElementById('form-nova-medida').style.display = 'block';
+    document.getElementById('nova-desc-medida').focus();
+    
+    // Esconder botão adicionar
+    const btnAdicionar = document.querySelector('button[onclick="adicionarMedida()"]');
+    if (btnAdicionar) btnAdicionar.style.display = 'none';
+    
+    // Alterar botão salvar para indicar edição
+    const btnSalvar = document.querySelector('#form-nova-medida button[onclick="salvarNovaMedida()"]');
+    if (btnSalvar) {
+        btnSalvar.innerHTML = '<i class="fas fa-save"></i> Atualizar';
+        btnSalvar.setAttribute('onclick', `atualizarMedida('${id}')`);
+    }
+}
+
+function atualizarMedida(id) {
+    const descricao = document.getElementById('nova-desc-medida').value.trim();
+    const valor = document.getElementById('nova-valor-medida').value.trim();
+    const tolerancia = document.getElementById('nova-tolerancia-medida').value.trim();
+    
+    if (!descricao || !valor) {
+        alert('Descrição e valor são obrigatórios!');
+        return;
+    }
+    
+    // Fazer requisição AJAX para atualizar no backend
+    fetch(`/folhas-processo-novas/medida/${id}`, {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+            descricao: descricao,
+            valor: valor,
+            tolerancia: tolerancia
+        })
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            // Atualizar na interface
+            const item = document.querySelector(`.medida-item[data-id="${id}"]`);
+            if (item) {
+                item.querySelector('.col-4 strong').textContent = descricao;
+                item.querySelector('.col-3:nth-child(2)').textContent = valor;
+                item.querySelector('.col-3:nth-child(3)').textContent = tolerancia;
+            }
+            cancelarNovaMedida();
+        } else {
+            alert('Erro ao atualizar medida: ' + data.message);
+        }
+    })
+    .catch(error => {
+        console.error('Erro:', error);
+        alert('Erro ao atualizar medida');
+    });
+}
+
+function removerMedida(id) {
+    if (confirm('Tem certeza que deseja remover esta medida?')) {
+        // Fazer requisição AJAX para remover do backend
+        fetch(`/folhas-processo-novas/medida/${id}`, {
+            method: 'DELETE'
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                document.querySelector(`.medida-item[data-id="${id}"]`).remove();
+                
+                // Verificar se há medidas restantes
+                const medidas = document.querySelectorAll('.medida-item');
+                if (medidas.length === 0) {
+                    document.getElementById('sem-medidas').style.display = 'block';
+                }
+            } else {
+                alert('Erro ao remover medida: ' + data.message);
+            }
+        })
+        .catch(error => {
+            console.error('Erro:', error);
+            alert('Erro ao remover medida');
+        });
+    }
+}
+</script>
+{% endblock %}

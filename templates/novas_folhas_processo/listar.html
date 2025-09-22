@@ -1,0 +1,200 @@
+{% extends 'base.html' %}
+
+{% block title %}Folhas de Processo - Nova Versão{% endblock %}
+
+{% block content %}
+<div class="container-fluid mt-4">
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <div>
+            <h1><i class="fas fa-file-alt me-2"></i>Folhas de Processo - Nova Versão</h1>
+            {% if item %}
+            <div class="alert alert-success mt-2">
+                <div class="d-flex align-items-center">
+                    {% if item.imagem_path %}
+                    <img src="{{ get_file_url(item.imagem_path) }}" alt="Item" class="rounded me-3" style="max-height: 50px; max-width: 50px;">
+                    {% else %}
+                    <i class="fas fa-cube fa-3x text-success me-3"></i>
+                    {% endif %}
+                    <div>
+                        <strong><i class="fas fa-filter me-1"></i>Mostrando folhas do item:</strong>
+                        <br><strong class="text-success">#{{ item.id }} - {{ item.nome }}</strong>
+                    </div>
+                </div>
+            </div>
+            {% endif %}
+        </div>
+        <div>
+            {% if item %}
+            <a href="{{ url_for('novas_folhas_processo.nova_folha', item_id=item.id) }}" class="btn btn-success me-2">
+                <i class="fas fa-plus"></i> Nova Folha para este Item
+            </a>
+            <a href="{{ url_for('novas_folhas_processo.listar_folhas') }}" class="btn btn-outline-secondary">
+                <i class="fas fa-list"></i> Ver Todas
+            </a>
+            {% else %}
+            <a href="{{ url_for('novas_folhas_processo.selecionar_item') }}" class="btn btn-primary">
+                <i class="fas fa-plus"></i> Nova Folha de Processo
+            </a>
+            {% endif %}
+        </div>
+    </div>
+
+    {% if folhas %}
+    <div class="card shadow">
+        <div class="card-body">
+            <div class="table-responsive">
+                <table class="table table-striped table-hover" id="tabela-folhas">
+                    <thead class="table-dark">
+                        <tr>
+                            <th style="width: 80px;">Imagem</th>
+                            <th>Item Vinculado</th>
+                            <th>Máquina</th>
+                            <th>Categoria</th>
+                            <th>Tipo de Serviço</th>
+                            <th style="width: 120px;">Criado em</th>
+                            <th style="width: 120px;">Atualizado</th>
+                            <th style="width: 150px;">Ações</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for folha in folhas %}
+                        <tr>
+                            <td>
+                                {% if folha.maquina.imagem_path %}
+                                <img src="{{ folha.maquina.imagem_path }}" alt="Máquina" class="img-thumbnail" style="max-height: 50px; max-width: 50px;">
+                                {% else %}
+                                <i class="fas fa-cogs fa-2x text-muted"></i>
+                                {% endif %}
+                            </td>
+                            <td>
+                                {% if folha.item %}
+                                <div class="d-flex align-items-center">
+                                    {% if folha.item.imagem_path %}
+                                    <img src="{{ get_file_url(folha.item.imagem_path) }}" alt="Item" class="rounded me-2" style="max-height: 30px; max-width: 30px;">
+                                    {% else %}
+                                    <i class="fas fa-cube text-success me-2"></i>
+                                    {% endif %}
+                                    <div>
+                                        <strong class="text-success">#{{ folha.item.id }}</strong>
+                                        <br><small class="text-muted">{{ folha.item.nome }}</small>
+                                    </div>
+                                </div>
+                                {% else %}
+                                <span class="text-muted small">
+                                    <i class="fas fa-minus-circle me-1"></i>Folha genérica
+                                </span>
+                                {% endif %}
+                            </td>
+                            <td>
+                                <strong>{{ folha.maquina.nome }}</strong>
+                                <br><small class="text-muted">{{ folha.maquina.codigo }}</small>
+                            </td>
+                            <td>
+                                <span class="badge bg-info">{{ folha.categoria_maquina.replace('_', ' ').title() }}</span>
+                            </td>
+                            <td>{{ folha.titulo_servico }}</td>
+                            <td>
+                                <small>{{ folha.data_criacao.strftime('%d/%m/%Y %H:%M') }}</small>
+                            </td>
+                            <td>
+                                <small>{{ folha.data_atualizacao.strftime('%d/%m/%Y %H:%M') }}</small>
+                            </td>
+                            <td>
+                                <div class="btn-group" role="group">
+                                    <a href="{{ url_for('novas_folhas_processo.visualizar_folha', folha_id=folha.id) }}" 
+                                       class="btn btn-sm btn-outline-primary" title="Visualizar">
+                                        <i class="fas fa-eye"></i>
+                                    </a>
+                                    {% if folha.categoria_maquina == 'serra' %}
+                                    <a href="{{ url_for('novas_folhas_processo.editar_serra', folha_id=folha.id) }}" 
+                                       class="btn btn-sm btn-outline-secondary" title="Editar">
+                                        <i class="fas fa-edit"></i>
+                                    </a>
+                                    {% elif folha.categoria_maquina == 'torno cnc' %}
+                                    <a href="{{ url_for('novas_folhas_processo.editar_torno_cnc', folha_id=folha.id) }}" 
+                                       class="btn btn-sm btn-outline-secondary" title="Editar">
+                                        <i class="fas fa-edit"></i>
+                                    </a>
+                                    {% elif folha.categoria_maquina == 'centro de usinagem' %}
+                                    <a href="{{ url_for('novas_folhas_processo.editar_centro_usinagem', folha_id=folha.id) }}" 
+                                       class="btn btn-sm btn-outline-secondary" title="Editar">
+                                        <i class="fas fa-edit"></i>
+                                    </a>
+                                    {% else %}
+                                    <a href="{{ url_for('novas_folhas_processo.editar_manual_acabamento', folha_id=folha.id) }}" 
+                                       class="btn btn-sm btn-outline-secondary" title="Editar">
+                                        <i class="fas fa-edit"></i>
+                                    </a>
+                                    {% endif %}
+                                    <button class="btn btn-sm btn-outline-danger" onclick="excluirFolha({{ folha.id }})" title="Excluir">
+                                        <i class="fas fa-trash"></i>
+                                    </button>
+                                </div>
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+    {% else %}
+    <div class="card">
+        <div class="card-body text-center py-5">
+            <i class="fas fa-file-alt fa-3x text-muted mb-3"></i>
+            <h4>Nenhuma folha de processo cadastrada</h4>
+            <p class="text-muted">Comece criando sua primeira folha de processo!</p>
+            <a href="{{ url_for('novas_folhas_processo.selecionar_item') }}" class="btn btn-primary">
+                <i class="fas fa-plus"></i> Criar Primeira Folha
+            </a>
+        </div>
+    </div>
+    {% endif %}
+</div>
+
+<!-- Modal de confirmação para exclusão -->
+<div class="modal fade" id="modalExcluir" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Confirmar Exclusão</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <p>Tem certeza que deseja excluir esta folha de processo?</p>
+                <p class="text-warning"><i class="fas fa-exclamation-triangle"></i> Esta ação não pode ser desfeita.</p>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
+                <form id="formExcluir" method="POST" style="display: inline;">
+                    <button type="submit" class="btn btn-danger">
+                        <i class="fas fa-trash"></i> Excluir
+                    </button>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+$(document).ready(function() {
+    $('#tabela-folhas').DataTable({
+        "language": {
+            "url": "//cdn.datatables.net/plug-ins/1.10.25/i18n/Portuguese-Brasil.json"
+        },
+        "order": [[4, "desc"]], // Ordenar por data de criação (mais recente primeiro)
+        "columnDefs": [
+            { "orderable": false, "targets": [0, 6] } // Desabilitar ordenação para imagem e ações
+        ]
+    });
+});
+
+function excluirFolha(folhaId) {
+    const form = document.getElementById('formExcluir');
+    form.action = `/folhas-processo-novas/${folhaId}/excluir`;
+    new bootstrap.Modal(document.getElementById('modalExcluir')).show();
+}
+</script>
+{% endblock %}
