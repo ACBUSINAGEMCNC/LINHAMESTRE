@@ -32,6 +32,14 @@
         .logo {
             max-height: 80px;
         }
+        .company-name {
+            font-weight: 700;
+            font-size: 14px;
+        }
+        .company-sub {
+            font-size: 11px;
+            line-height: 1.25;
+        }
         .pedido-info {
             border: 1px solid #ddd;
             padding: 15px;
@@ -56,15 +64,21 @@
             <a href="/pedidos-material" class="btn btn-secondary">Voltar</a>
         </div>
         
-        <div class="header d-flex justify-content-between align-items-center">
-            <div>
-                <h1>Pedido de Material</h1>
-                <h2>{{ pedido.numero }}</h2>
-            </div>
-            <div class="text-end">
-                <img src="/static/logo.svg" alt="ACB Usinagem CNC" class="logo">
-                <div>ACB Usinagem CNC</div>
-                <div>CNPJ: XX.XXX.XXX/0001-XX</div>
+        <div class="header">
+            <div class="row g-2 align-items-center">
+                <div class="col-7">
+                    <div class="company-name">A C B USINAGEM CNC LTDA</div>
+                    <div class="company-sub">Nome Fantasia: ARTCOMPANY</div>
+                    <div class="company-sub">Av. Piquiri, 3146 Brasmadeira - Cascavel/PR - CEP 85.814-040</div>
+                    <div class="company-sub">CNPJ: 17.328.208/0001-37 | I.E.: 90.627.001-38 | Tel: (45) 3096-5902</div>
+                </div>
+                <div class="col-5 text-end">
+                    <img src="/static/logo_acb.png" alt="ACB" class="logo" onerror="this.onerror=null;this.src='/static/logo.svg';">
+                    <div class="mt-1">
+                        <div><strong>Pedido de Material</strong></div>
+                        <div><strong>{{ pedido.numero }}</strong></div>
+                    </div>
+                </div>
             </div>
         </div>
         

@@ -18,6 +18,28 @@
                                 <a href="/ordens-servico/imprimir-desenho/{{ ordem.id }}" class="btn btn-sm btn-outline-secondary me-2 mb-1" target="_blank">
                                     <i class="fas fa-drafting-compass"></i> Imprimir Desenhos
                                 </a>
+                                <a href="/ordens-servico/imprimir/{{ ordem.id }}?auto=1" class="btn btn-sm btn-outline-secondary me-2 mb-1" target="_blank">
+                                    <i class="fas fa-print"></i> Imprimir OS
+                                </a>
+                                <div class="btn-group me-2 mb-1">
+                                    <button type="button" class="btn btn-sm btn-outline-primary dropdown-toggle" data-bs-toggle="dropdown">
+                                        <i class="fas fa-edit"></i> Editar Item
+                                    </button>
+                                    <ul class="dropdown-menu">
+                                        {% for pedido_os in ordem.pedidos %}
+                                            {% if pedido_os.pedido.item_id %}
+                                                <li>
+                                                    <a class="dropdown-item" href="{{ url_for('itens.editar_item', item_id=pedido_os.pedido.item_id) }}" target="_blank">
+                                                        <i class="fas fa-box"></i> {{ pedido_os.pedido.item.codigo_acb }}
+                                                    </a>
+                                                </li>
+                                            {% endif %}
+                                        {% endfor %}
+                                        {% if not ordem.pedidos or not ordem.pedidos[0].pedido.item_id %}
+                                            <li><span class="dropdown-item-text text-muted">Nenhum item disponível</span></li>
+                                        {% endif %}
+                                    </ul>
+                                </div>
                                 <div class="btn-group me-2 mb-1">
                                     <button type="button" class="btn btn-sm btn-outline-info dropdown-toggle" data-bs-toggle="dropdown">
                                         <i class="fas fa-clipboard-list"></i> Folhas de Processo

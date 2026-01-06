@@ -200,6 +200,7 @@ class Item(db.Model):
     desenho_tecnico = db.Column(db.String(255))
     imagem = db.Column(db.String(255))
     instrucoes_trabalho = db.Column(db.String(255))
+    tamanho_peca = db.Column(db.String(100))
     tempera = db.Column(db.Boolean, default=False)
     tipo_tempera = db.Column(db.String(50))
     retifica = db.Column(db.Boolean, default=False)
@@ -209,6 +210,7 @@ class Item(db.Model):
     oleo_protetivo = db.Column(db.Boolean, default=False)
     zincagem = db.Column(db.Boolean, default=False)
     tipo_zincagem = db.Column(db.String(50))
+    tipo_bruto = db.Column(db.String(50))
     tipo_embalagem = db.Column(db.String(50))
     peso = db.Column(db.Float)
     # Novo campo para identificar se é item composto

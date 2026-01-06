@@ -23,7 +23,8 @@ logger = logging.getLogger(__name__)
 
 def verificar_inicializar_banco():
     """Verifica se o banco de dados existe e o inicializa se necessário."""
-    database_url = os.getenv('DATABASE_URL', '')
+    force_sqlite = os.getenv('FORCE_SQLITE', '').strip().lower() in ('1', 'true', 'yes')
+    database_url = '' if force_sqlite else os.getenv('DATABASE_URL', '')
     
     # Se for PostgreSQL (Supabase), usar script de migração rápido
     if database_url.startswith('postgresql://'):
@@ -61,6 +62,26 @@ def verificar_inicializar_banco():
                 logger.warning("Falha ao verificar/adicionar coluna categoria_trabalho.")
         except Exception as col_err:
             logger.warning(f"Erro ao migrar coluna categoria_trabalho: {str(col_err)}")
+            
+        # Executar migração para adicionar coluna tipo_bruto em Item
+        try:
+            from migrations.add_tipo_bruto_item import migrate_postgres as migrate_tipo_bruto_postgres
+            if migrate_tipo_bruto_postgres():
+                logger.info("Coluna tipo_bruto verificada/adicionada com sucesso.")
+            else:
+                logger.warning("Falha ao verificar/adicionar coluna tipo_bruto.")
+        except Exception as col_err:
+            logger.warning(f"Erro ao migrar coluna tipo_bruto: {str(col_err)}")
+            
+        # Executar migração para adicionar coluna tamanho_peca em Item
+        try:
+            from migrations.add_tamanho_peca_item import migrate_postgres as migrate_tamanho_peca_postgres
+            if migrate_tamanho_peca_postgres():
+                logger.info("Coluna tamanho_peca verificada/adicionada com sucesso.")
+            else:
+                logger.warning("Falha ao verificar/adicionar coluna tamanho_peca.")
+        except Exception as col_err:
+            logger.warning(f"Erro ao migrar coluna tamanho_peca: {str(col_err)}")
             
         # Executar migração para adicionar colunas imagem e data_cadastro
         try:
@@ -118,6 +139,27 @@ def verificar_inicializar_banco():
                         logger.info("Colunas imagem e data_cadastro adicionadas com sucesso à tabela maquina.")
                     else:
                         logger.warning("Falha ao adicionar colunas imagem e data_cadastro à tabela maquina.")
+                        
+                # Verificar se tabela item tem a coluna tipo_bruto
+                try:
+                    cursor.execute("PRAGMA table_info(item)")
+                    item_columns = [column[1] for column in cursor.fetchall()]
+                    if 'tipo_bruto' not in item_columns:
+                        logger.info("Coluna tipo_bruto não encontrada na tabela item. Executando migração...")
+                        from migrations.add_tipo_bruto_item import migrate_sqlite as migrate_tipo_bruto_sqlite
+                        if migrate_tipo_bruto_sqlite():
+                            logger.info("Coluna tipo_bruto adicionada com sucesso à tabela item.")
+                        else:
+                            logger.warning("Falha ao adicionar coluna tipo_bruto à tabela item.")
+                    if 'tamanho_peca' not in item_columns:
+                        logger.info("Coluna tamanho_peca não encontrada na tabela item. Executando migração...")
+                        from migrations.add_tamanho_peca_item import migrate_sqlite as migrate_tamanho_peca_sqlite
+                        if migrate_tamanho_peca_sqlite():
+                            logger.info("Coluna tamanho_peca adicionada com sucesso à tabela item.")
+                        else:
+                            logger.warning("Falha ao adicionar coluna tamanho_peca à tabela item.")
+                except Exception as col_err:
+                    logger.warning(f"Erro ao verificar/adicionar coluna tipo_bruto na tabela item: {str(col_err)}")
             except Exception as col_err:
                 logger.warning(f"Erro ao verificar/adicionar colunas na tabela maquina: {str(col_err)}")
                 
@@ -145,9 +187,11 @@ def create_app():
     app = Flask(__name__)
     app.config['SECRET_KEY'] = os.getenv('SECRET_KEY', 'acbusinagem2023')
     # Configurar DATABASE_URL: PostgreSQL (produção) ou SQLite (desenvolvimento/temporário)
-    database_url = os.getenv('DATABASE_URL')
+    # FORCE_SQLITE: força SQLite mesmo que DATABASE_URL esteja configurada (útil para testes locais)
+    force_sqlite = os.getenv('FORCE_SQLITE', '').strip().lower() in ('1', 'true', 'yes')
+    database_url = None if force_sqlite else os.getenv('DATABASE_URL')
     if not database_url:
-        # Usar SQLite local como fallback
+        # Usar SQLite local como fallback ou quando FORCE_SQLITE está ativo
         db_path = os.path.join(WRITABLE_DIR, 'database.db')
         database_url = f'sqlite:///{db_path}'
     

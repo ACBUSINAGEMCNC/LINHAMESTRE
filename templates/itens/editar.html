@@ -49,6 +49,21 @@
                         </div>
                     </div>
 
+                    <div class="row mb-3">
+                        <div class="col-md-12">
+                            <label for="tipo_bruto" class="form-label">Tipo de Bruto</label>
+                            <select class="form-select" id="tipo_bruto" name="tipo_bruto">
+                                <option value="" {{ '' == (item.tipo_bruto or '') and 'selected' or '' }}>Selecione</option>
+                                <option value="CORTE POR BARRA DE 1 METRO" {{ 'CORTE POR BARRA DE 1 METRO' == (item.tipo_bruto or '') and 'selected' or '' }}>CORTE POR BARRA DE 1 METRO</option>
+                                <option value="CORTE BARRA DE 500MM" {{ 'CORTE BARRA DE 500MM' == (item.tipo_bruto or '') and 'selected' or '' }}>CORTE BARRA DE 500MM</option>
+                                <option value="MATERIAL VEM CORTADO" {{ 'MATERIAL VEM CORTADO' == (item.tipo_bruto or '') and 'selected' or '' }}>MATERIAL VEM CORTADO</option>
+                                <option value="CORTAR POR PEÇA" {{ 'CORTAR POR PEÇA' == (item.tipo_bruto or '') and 'selected' or '' }}>CORTAR POR PEÇA</option>
+                                <option value="MATERIAL FUNDIDO PINTADO" {{ 'MATERIAL FUNDIDO PINTADO' == (item.tipo_bruto or '') and 'selected' or '' }}>MATERIAL FUNDIDO PINTADO</option>
+                                <option value="MATERIAL FUNDIDO" {{ 'MATERIAL FUNDIDO' == (item.tipo_bruto or '') and 'selected' or '' }}>MATERIAL FUNDIDO</option>
+                            </select>
+                        </div>
+                    </div>
+
                     <h4 class="mt-4 mb-3">Materiais Utilizados</h4>
                     <div class="card mb-4">
                         <div class="card-body">
@@ -162,6 +177,7 @@
                                     <input type="file" class="form-control" id="desenho_tecnico" name="desenho_tecnico" accept=".pdf">
                                     {% if item.desenho_tecnico %}
                                     <div class="mt-2">
+                                        <div class="small text-muted mb-1">Atual: {{ item.desenho_tecnico }}</div>
                                         <a href="{{ item.desenho_tecnico_path }}" target="_blank" class="btn btn-sm btn-info">
                                             <i class="fas fa-file-pdf"></i> Ver desenho atual
                                         </a>
@@ -173,6 +189,10 @@
                                     <input type="file" class="form-control" id="imagem" name="imagem" accept="image/*">
                                     {% if item.imagem %}
                                     <div class="mt-2">
+                                        <div class="small text-muted mb-2">Atual: {{ item.imagem }}</div>
+                                        <div class="mb-2">
+                                            <img src="{{ item.imagem_path }}" alt="Imagem atual" class="img-thumbnail" style="max-height: 140px;">
+                                        </div>
                                         <a href="{{ item.imagem_path }}" target="_blank" class="btn btn-sm btn-info">
                                             <i class="fas fa-image"></i> Ver imagem atual
                                         </a>
@@ -184,6 +204,7 @@
                                     <input type="file" class="form-control" id="instrucoes_trabalho" name="instrucoes_trabalho" accept=".pdf">
                                     {% if item.instrucoes_trabalho %}
                                     <div class="mt-2">
+                                        <div class="small text-muted mb-1">Atual: {{ item.instrucoes_trabalho }}</div>
                                         <a href="{{ item.instrucoes_trabalho_path }}" target="_blank" class="btn btn-sm btn-info">
                                             <i class="fas fa-file-pdf"></i> Ver instruções atuais
                                         </a>
@@ -551,6 +572,8 @@
 
     <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    <script type="application/json" id="item_materiais_data">{{ item_materiais|tojson }}</script>
+    <script type="application/json" id="item_trabalhos_data">{{ item_trabalhos|tojson }}</script>
     <script>
         $(document).ready(function() {
             // Arrays para armazenar materiais e trabalhos
@@ -559,14 +582,16 @@
             
             // Carregar materiais e trabalhos existentes
             try {
-                const materiaisJson = '{{ item_materiais|safe }}';
-                if (materiaisJson) {
-                    materiais = JSON.parse(materiaisJson);
+                const materiaisText = document.getElementById('item_materiais_data')?.textContent || '[]';
+                const materiaisJson = JSON.parse(materiaisText);
+                if (Array.isArray(materiaisJson)) {
+                    materiais = materiaisJson;
                 }
                 
-                const trabalhosJson = '{{ item_trabalhos|safe }}';
-                if (trabalhosJson) {
-                    trabalhos = JSON.parse(trabalhosJson);
+                const trabalhosText = document.getElementById('item_trabalhos_data')?.textContent || '[]';
+                const trabalhosJson = JSON.parse(trabalhosText);
+                if (Array.isArray(trabalhosJson)) {
+                    trabalhos = trabalhosJson;
                 }
                 
                 // Atualizar tabelas

@@ -16,7 +16,7 @@
         }
         .componente-header {
             display: flex;
-            justify-content-between;
+            justify-content: space-between;
             align-items: center;
             margin-bottom: 0.5rem;
         }
@@ -74,6 +74,25 @@
                                         <input type="text" class="form-control" id="codigo_acb" value="Gerado automaticamente" disabled>
                                     </div>
                                 </div>
+                            </div>
+
+                            <div class="row">
+                                <div class="col-md-12">
+                                    <div class="mb-3">
+                                        <label for="tipo_bruto" class="form-label">Tipo de Bruto</label>
+                                        <select class="form-select" id="tipo_bruto" name="tipo_bruto">
+                                            <option value="">Selecione</option>
+                                            <option value="CORTE POR BARRA DE 1 METRO">CORTE POR BARRA DE 1 METRO</option>
+                                            <option value="CORTE BARRA DE 500MM">CORTE BARRA DE 500MM</option>
+                                            <option value="MATERIAL VEM CORTADO">MATERIAL VEM CORTADO</option>
+                                            <option value="CORTAR POR PEÇA">CORTAR POR PEÇA</option>
+                                            <option value="MATERIAL FUNDIDO PINTADO">MATERIAL FUNDIDO PINTADO</option>
+                                            <option value="MATERIAL FUNDIDO">MATERIAL FUNDIDO</option>
+                                        </select>
+                                    </div>
+                                </div>
+                            </div>
+
                             </div>
 
                             <!-- Arquivos -->

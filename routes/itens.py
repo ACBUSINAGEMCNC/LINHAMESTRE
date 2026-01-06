@@ -45,6 +45,8 @@ def novo_item():
         item = Item(
             nome=nome,
             codigo_acb=novo_codigo,
+            tipo_bruto=request.form.get('tipo_bruto', ''),
+            tamanho_peca=request.form.get('tamanho_peca', ''),
             tempera='tempera' in request.form,
             tipo_tempera=request.form.get('tipo_tempera', ''),
             retifica='retifica' in request.form,
@@ -158,6 +160,8 @@ def editar_item(item_id):
         
         # Atualizar dados do item
         item.nome = nome
+        item.tipo_bruto = request.form.get('tipo_bruto', '')
+        item.tamanho_peca = request.form.get('tamanho_peca', '')
         item.tempera = 'tempera' in request.form
         item.tipo_tempera = request.form.get('tipo_tempera', '')
         item.retifica = 'retifica' in request.form
@@ -272,8 +276,8 @@ def editar_item(item_id):
                           item=item, 
                           materiais=materiais, 
                           trabalhos=trabalhos,
-                          item_materiais=json.dumps(item_materiais),
-                          item_trabalhos=json.dumps(item_trabalhos))
+                          item_materiais=item_materiais,
+                          item_trabalhos=item_trabalhos)
 
 @itens.route('/itens/atualizar_ordem', methods=['POST'])
 def atualizar_ordem():
@@ -448,6 +452,8 @@ def novo_item_composto():
             nome=nome,
             codigo_acb=novo_codigo,
             eh_composto=True,  # Marcar como item composto
+            tipo_bruto=request.form.get('tipo_bruto', ''),
+            tamanho_peca=request.form.get('tamanho_peca', ''),
             tipo_embalagem=request.form.get('tipo_embalagem', ''),
             tempera='tempera' in request.form,
             tipo_tempera=request.form.get('tipo_tempera', ''),
@@ -529,6 +535,8 @@ def editar_item_composto(item_id):
         
         # Atualizar dados do item
         item.nome = nome
+        item.tipo_bruto = request.form.get('tipo_bruto', '')
+        item.tamanho_peca = request.form.get('tamanho_peca', '')
         item.tipo_embalagem = request.form.get('tipo_embalagem', '')
         item.tempera = 'tempera' in request.form
         item.tipo_tempera = request.form.get('tipo_tempera', '')

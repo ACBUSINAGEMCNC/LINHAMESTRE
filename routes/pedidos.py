@@ -130,29 +130,33 @@ def gerar_os_item_composto(pedidos_grupo, item_composto):
                 os_componente.posicao = 0
             db.session.add(os_componente)
             db.session.flush()
-            
-            # Criar pedido virtual para o componente
-            pedido_virtual = Pedido(
-                cliente_id=pedidos_grupo[0].cliente_id,
-                unidade_entrega_id=pedidos_grupo[0].unidade_entrega_id,
-                item_id=item_componente.id,
-                nome_item=f"{item_componente.nome} (Componente de {item_composto.nome})",
-                descricao=f"Componente gerado automaticamente do item composto {item_composto.codigo_acb}",
-                quantidade=quantidade_componente,
-                data_entrada=datetime.now().date(),
-                numero_pedido=f"AUTO-{numero_os}",
-                previsao_entrega=pedidos_grupo[0].previsao_entrega,
-                numero_oc=numero_os
-            )
-            db.session.add(pedido_virtual)
-            db.session.flush()
-            
-            # Associar pedido virtual à OS
-            assoc = PedidoOrdemServico(
-                pedido_id=pedido_virtual.id, 
-                ordem_servico_id=os_componente.id
-            )
-            db.session.add(assoc)
+
+            # Criar pedidos virtuais por pedido original (preserva cliente/unidade)
+            for pedido_original in pedidos_grupo:
+                quantidade_virtual = componente_rel.quantidade * (pedido_original.quantidade or 0)
+                if quantidade_virtual <= 0:
+                    continue
+
+                pedido_virtual = Pedido(
+                    cliente_id=pedido_original.cliente_id,
+                    unidade_entrega_id=pedido_original.unidade_entrega_id,
+                    item_id=item_componente.id,
+                    nome_item=f"{item_componente.nome} (Componente de {item_composto.nome})",
+                    descricao=f"Componente gerado automaticamente do item composto {item_composto.codigo_acb}",
+                    quantidade=quantidade_virtual,
+                    data_entrada=datetime.now().date(),
+                    numero_pedido=f"AUTO-{numero_os}-{pedido_original.id}",
+                    previsao_entrega=pedido_original.previsao_entrega,
+                    numero_oc=numero_os
+                )
+                db.session.add(pedido_virtual)
+                db.session.flush()
+
+                assoc = PedidoOrdemServico(
+                    pedido_id=pedido_virtual.id,
+                    ordem_servico_id=os_componente.id
+                )
+                db.session.add(assoc)
             
             os_geradas.append({
                 'numero': numero_os,

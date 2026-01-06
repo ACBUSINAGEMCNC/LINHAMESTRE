@@ -76,6 +76,23 @@
                                 </div>
                             </div>
 
+                            <div class="row">
+                                <div class="col-md-12">
+                                    <div class="mb-3">
+                                        <label for="tipo_bruto" class="form-label">Tipo de Bruto</label>
+                                        <select class="form-select" id="tipo_bruto" name="tipo_bruto">
+                                            <option value="" {{ '' == (item.tipo_bruto or '') and 'selected' or '' }}>Selecione</option>
+                                            <option value="CORTE POR BARRA DE 1 METRO" {{ 'CORTE POR BARRA DE 1 METRO' == (item.tipo_bruto or '') and 'selected' or '' }}>CORTE POR BARRA DE 1 METRO</option>
+                                            <option value="CORTE BARRA DE 500MM" {{ 'CORTE BARRA DE 500MM' == (item.tipo_bruto or '') and 'selected' or '' }}>CORTE BARRA DE 500MM</option>
+                                            <option value="MATERIAL VEM CORTADO" {{ 'MATERIAL VEM CORTADO' == (item.tipo_bruto or '') and 'selected' or '' }}>MATERIAL VEM CORTADO</option>
+                                            <option value="CORTAR POR PEÇA" {{ 'CORTAR POR PEÇA' == (item.tipo_bruto or '') and 'selected' or '' }}>CORTAR POR PEÇA</option>
+                                            <option value="MATERIAL FUNDIDO PINTADO" {{ 'MATERIAL FUNDIDO PINTADO' == (item.tipo_bruto or '') and 'selected' or '' }}>MATERIAL FUNDIDO PINTADO</option>
+                                            <option value="MATERIAL FUNDIDO" {{ 'MATERIAL FUNDIDO' == (item.tipo_bruto or '') and 'selected' or '' }}>MATERIAL FUNDIDO</option>
+                                        </select>
+                                    </div>
+                                </div>
+                            </div>
+
                             <!-- Arquivos -->
                             <div class="row">
                                 <div class="col-md-4">
