@@ -12,10 +12,14 @@ import glob
 import logging
 import time
 from sqlalchemy import create_engine, text
-import psycopg2
 from urllib.parse import urlparse
 import requests
 import json
+
+try:
+    import psycopg2  # type: ignore
+except Exception:
+    psycopg2 = None
 
 backup = Blueprint('backup', __name__)
 logger = logging.getLogger(__name__)

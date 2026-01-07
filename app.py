@@ -194,6 +194,20 @@ def create_app():
         # Usar SQLite local como fallback ou quando FORCE_SQLITE está ativo
         db_path = os.path.join(WRITABLE_DIR, 'database.db')
         database_url = f'sqlite:///{db_path}'
+
+    # Preferir psycopg3 (psycopg) no Python 3.13+ quando URL for PostgreSQL genérica
+    # Isso evita dependência de psycopg2 que pode não ter wheel no Windows/Py3.13
+    if database_url:
+        db_url_lower = database_url.lower()
+        if db_url_lower.startswith('postgres://'):
+            database_url = 'postgresql://' + database_url[len('postgres://'):]
+            db_url_lower = database_url.lower()
+        if db_url_lower.startswith('postgresql://') and '+psycopg' not in db_url_lower and '+psycopg2' not in db_url_lower:
+            try:
+                import psycopg  # noqa: F401
+                database_url = 'postgresql+psycopg://' + database_url[len('postgresql://'):]
+            except Exception:
+                pass
     
     app.config['SQLALCHEMY_DATABASE_URI'] = database_url
     app.logger.info("Usando banco: %s", 'PostgreSQL (Supabase)' if database_url.startswith('postgresql://') else 'SQLite')
@@ -228,6 +242,13 @@ def create_app():
             db.create_all()
             db_type = 'PostgreSQL (Supabase)' if app.config['SQLALCHEMY_DATABASE_URI'].startswith('postgresql://') else 'SQLite'
             app.logger.info("Tabelas %s criadas/verificadas com sucesso.", db_type)
+            
+            # Executar migração para adicionar numero_pedido_cliente
+            try:
+                from migrations.add_numero_pedido_cliente import upgrade
+                upgrade(db.engine)
+            except Exception as e:
+                app.logger.warning(f"Migração numero_pedido_cliente: {str(e)}")
             
             # Garantir que o usuário admin existe (especialmente importante no Vercel)
             from models import Usuario

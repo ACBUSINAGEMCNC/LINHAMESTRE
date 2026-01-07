@@ -129,8 +129,9 @@
                             <input type="date" class="form-control" id="data_entrada" name="data_entrada" value="{{ now().strftime('%Y-%m-%d') }}" required>
                         </div>
                         <div class="col-md-4">
-                            <label for="numero_pedido" class="form-label">Nº Pedido</label>
-                            <input type="text" class="form-control" id="numero_pedido" name="numero_pedido">
+                            <label for="numero_pedido" class="form-label">Nº Pedido do Cliente</label>
+                            <input type="text" class="form-control" id="numero_pedido" name="numero_pedido" placeholder="Ex: OC-2025-123">
+                            <div class="form-text text-muted">Número do pedido/OC fornecido pelo cliente</div>
                         </div>
                         <div class="col-md-4">
                             <label for="previsao_entrega" class="form-label">Previsão de Entrega</label>

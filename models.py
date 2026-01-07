@@ -322,7 +322,8 @@ class Pedido(db.Model):
     descricao = db.Column(db.Text)
     quantidade = db.Column(db.Integer, nullable=False)
     data_entrada = db.Column(db.Date, nullable=False, default=datetime.now().date())
-    numero_pedido = db.Column(db.String(50))
+    numero_pedido = db.Column(db.String(50))  # Número interno do sistema (PED-00077 ou AUTO-*)
+    numero_pedido_cliente = db.Column(db.String(100))  # Número do pedido do cliente
     previsao_entrega = db.Column(db.Date)
     numero_oc = db.Column(db.String(20), nullable=True)
     numero_pedido_material = db.Column(db.String(50))

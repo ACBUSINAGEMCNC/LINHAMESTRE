@@ -472,12 +472,30 @@
             {% set item_key = pedido_os.pedido.item_id if pedido_os.pedido.item_id else pedido_os.pedido.nome_item %}
             {% set item_name = pedido_os.pedido.item.codigo_acb ~ ' - ' ~ pedido_os.pedido.item.nome if pedido_os.pedido.item_id else pedido_os.pedido.nome_item ~ ' (Sem cadastro)' %}
             
+            {# Obter número do pedido do cliente (novo campo separado) #}
+            {% set numero_pedido_cliente = '' %}
+            {% if pedido_os.pedido.numero_pedido_cliente %}
+                {# Usar o campo numero_pedido_cliente diretamente #}
+                {% set numero_pedido_cliente = pedido_os.pedido.numero_pedido_cliente %}
+            {% elif pedido_os.pedido.numero_pedido and pedido_os.pedido.numero_pedido.startswith('AUTO-') %}
+                {# Para pedidos AUTO, buscar o numero_pedido_cliente do pedido original #}
+                {% set parts = pedido_os.pedido.numero_pedido.split('-') %}
+                {% if parts|length > 0 %}
+                    {% set pedido_original_id = parts[-1]|int %}
+                    {% set pedido_original = Pedido.query.get(pedido_original_id) %}
+                    {% if pedido_original and pedido_original.numero_pedido_cliente %}
+                        {% set numero_pedido_cliente = pedido_original.numero_pedido_cliente %}
+                    {% endif %}
+                {% endif %}
+            {% endif %}
+            
             {% if item_key in grouped_items %}
                 {% set orders_novos = grouped_items[item_key].orders + [{
                     'pedido_id': pedido_os.pedido.id,
                     'cliente': pedido_os.pedido.cliente.nome,
                     'unidade': pedido_os.pedido.unidade_entrega.nome,
                     'quantidade': pedido_os.pedido.quantidade,
+                    'numero_pedido_cliente': numero_pedido_cliente,
                     'numero_pedido': pedido_os.pedido.numero_pedido
                 }] %}
                 {% set _ = grouped_items[item_key].update({
@@ -495,6 +513,7 @@
                             'cliente': pedido_os.pedido.cliente.nome,
                             'unidade': pedido_os.pedido.unidade_entrega.nome,
                             'quantidade': pedido_os.pedido.quantidade,
+                            'numero_pedido_cliente': numero_pedido_cliente,
                             'numero_pedido': pedido_os.pedido.numero_pedido
                         }]
                     }
@@ -528,7 +547,8 @@
                             <th>Cliente</th>
                             <th>Unidade</th>
                             <th>Quantidade</th>
-                            <th>Nº Pedido</th>
+                            <th>Nº Pedido Cliente</th>
+                            <th>Nº Sistema</th>
                         </tr>
                     </thead>
                     <tbody>
@@ -537,7 +557,8 @@
                             <td>{{ order.cliente }}</td>
                             <td>{{ order.unidade }}</td>
                             <td>{{ order.quantidade }}</td>
-                            <td>{{ order.numero_pedido }}</td>
+                            <td>{{ order.numero_pedido_cliente or '-' }}</td>
+                            <td><small>{{ order.numero_pedido }}</small></td>
                         </tr>
                         {% endfor %}
                     </tbody>
@@ -547,22 +568,32 @@
             {% if item_data.item_id %}
                 {% set item = Item.query.get(item_data.item_id) %}
                 {% if item %}
+                {% set item_base = item %}
+                {% if (not item_base.tipo_bruto) and item_base.usado_em_composicao and (item_base.usado_em_composicao.count() > 0) %}
+                    {% set rels_pai = item_base.usado_em_composicao.all() %}
+                    {% if rels_pai and rels_pai|length > 0 %}
+                        {% set pai_obj = Item.query.get(rels_pai[0].item_pai_id) %}
+                        {% if pai_obj %}
+                            {% set item_base = pai_obj %}
+                        {% endif %}
+                    {% endif %}
+                {% endif %}
                 <div class="trabalho-info mt-3">
                     <h5>Material / Bruto</h5>
                     <table class="table table-sm table-bordered">
                         <tbody>
                             <tr>
                                 <th class="table-light" style="width: 25%;">Tipo de Bruto</th>
-                                <td>{{ item.tipo_bruto or 'Não informado' }}</td>
+                                <td>{{ item_base.tipo_bruto or 'Não informado' }}</td>
                             </tr>
                         </tbody>
                     </table>
-                    {% if item.materiais and item.materiais|length > 0 %}
+                    {% if item_base.materiais and item_base.materiais|length > 0 %}
                     {% set barra_len = none %}
                     {% set barra_perda = 25 %}
-                    {% if item.tipo_bruto == 'CORTE POR BARRA DE 1 METRO' %}
+                    {% if item_base.tipo_bruto == 'CORTE POR BARRA DE 1 METRO' %}
                         {% set barra_len = 1000 %}
-                    {% elif item.tipo_bruto == 'CORTE BARRA DE 500MM' %}
+                    {% elif item_base.tipo_bruto == 'CORTE BARRA DE 500MM' %}
                         {% set barra_len = 500 %}
                     {% endif %}
                     <table class="table table-sm table-bordered">
@@ -575,7 +606,7 @@
                             </tr>
                         </thead>
                         <tbody>
-                            {% for im in item.materiais %}
+                            {% for im in item_base.materiais %}
                                 {% set comp_unit = (im.comprimento or 0) %}
                                 {% set qtd_unit = (im.quantidade or 1) %}
                                 {% set cortes_total = item_data.total_qty * qtd_unit %}
@@ -608,7 +639,7 @@
                     {% endif %}
                 </div>
 
-                {% if item and item.trabalhos %}
+                {% if item_base and item_base.trabalhos %}
                 <div class="trabalho-info mt-3">
                     <h5>Trabalhos</h5>
                     <table class="table table-sm table-bordered">
@@ -621,7 +652,7 @@
                             </tr>
                         </thead>
                         <tbody>
-                            {% for item_trabalho in item.trabalhos %}
+                            {% for item_trabalho in item_base.trabalhos %}
                             <tr>
                                 <td>{{ item_trabalho.trabalho.nome }}</td>
                                 <td>{{ item_trabalho.tempo_setup // 60 }} minutos</td>

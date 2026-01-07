@@ -189,7 +189,7 @@
                                             <input class="form-check-input" type="checkbox" id="selectAll" style="width: 1.5rem; height: 1.5rem;">
                                         </div>
                                     </th>
-                                    <th>Nº Pedido</th>
+                                    <th>Nº Pedido Cliente</th>
                                     <th>Cliente</th>
                                     <th>Unidade de Entrega</th>
                                     <th>Nº Sistema</th>
@@ -211,11 +211,13 @@
                                             <input class="form-check-input pedido-checkbox" type="checkbox" value="{{ pedido.id }}" onclick="event.stopPropagation();" style="width: 1.5rem; height: 1.5rem;">
                                         </div>
                                     </td>
-                                    <td>{{ pedido.numero_pedido }}</td>
+                                    <td>{{ pedido.numero_pedido_cliente if pedido.numero_pedido_cliente else '-' }}</td>
                                     <td>{{ pedido.cliente.nome }}</td>
                                     <td>{{ pedido.unidade_entrega.nome }}</td>
+                                    <td><small><span class="badge bg-secondary">{{ pedido.numero_pedido if pedido.numero_pedido and not pedido.numero_pedido.startswith('AUTO-') else '-' }}</span></small></td>
                                     <td>
                                         {% if pedido.item_id %}
+                                            <small>
                                             {% if pedido.item.imagem_path %}
                                                 <a tabindex="0" class="item-popover" data-bs-toggle="popover" data-bs-trigger="hover focus" data-bs-html="true"
                                                    data-bs-content="<img src='{{ pedido.item.imagem_path }}' width='100' class='img-fluid'>">
@@ -224,13 +226,8 @@
                                             {% else %}
                                                 <span class="text-primary">{{ pedido.item.codigo_acb }}</span>
                                             {% endif %}
-                                        {% else %}
-                                            <span class="badge bg-warning">Sem cadastro</span>
-                                        {% endif %}
-                                    </td>
-                                    <td>
-                                        {% if pedido.item_id %}
-                                            {{ pedido.item.nome }}
+                                            </small>
+                                            <br>{{ pedido.item.nome }}
                                         {% else %}
                                             {{ pedido.nome_item }}
                                             <a href="/pedidos/cadastrar-item/{{ pedido.id }}" class="btn btn-sm btn-success" title="Cadastrar item completo" data-bs-toggle="tooltip">
@@ -308,29 +305,33 @@
         const btnFechar = document.getElementById('fecharCancelamento');
         const btnFecharX = document.getElementById('fecharCancelamentoX');
         
+        // Função para adicionar listener aos botões de cancelamento
+        function addCancelButtonListeners() {
+            document.querySelectorAll('.btn-cancelar-pedido').forEach(btn => {
+                btn.addEventListener('click', function(e) {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    
+                    // Configurar a ação do formulário
+                    const pedidoId = this.getAttribute('data-pedido-id');
+                    form.action = '/pedidos/cancelar/' + pedidoId;
+                    
+                    // Limpar textarea
+                    textarea.value = '';
+                    
+                    // Mostrar modal
+                    modal.style.display = 'block';
+                    document.body.style.overflow = 'hidden'; // Prevenir scroll
+                });
+            });
+        }
+        
         // Adicionar listeners aos botões de cancelamento existentes
-        document.querySelectorAll('.btn-cancelar-pedido').forEach(btn => {
-            btn.addEventListener('click', function(e) {
-                e.preventDefault();
-                e.stopPropagation();
-                
-                // Configurar a ação do formulário
-                const pedidoId = this.getAttribute('data-pedido-id');
-                form.action = '/pedidos/cancelar/' + pedidoId;
-                
-                // Limpar textarea
-                textarea.value = '';
-                
-                // Mostrar modal
-                modal.style.display = 'block';
-                document.body.style.overflow = 'hidden'; // Prevenir scroll
-            });
-            // Inicializar popovers após DataTable pronto
-            initItemPopovers();
-            // Re-inicializar ao paginar/ordenar/filtrar
-            $('#pedidosTable').on('draw.dt', function () {
-                initItemPopovers();
-            });
+        addCancelButtonListeners();
+        
+        // Re-adicionar listeners após DataTable redraw
+        $('#pedidosTable').on('draw.dt', function () {
+            addCancelButtonListeners();
         });
         
         // Função para fechar o modal
@@ -434,7 +435,7 @@
             // Configuração específica para o filtro de status
             $('#filter_status').select2({
                 theme: 'bootstrap-5',
-                placeholder: "Selecione um cliente", // Corrigido para 'Selecione um cliente'
+                placeholder: "Selecione status",
                 allowClear: true,
                 width: '100%',
                 closeOnSelect: false
@@ -511,14 +512,15 @@
 
                     // Get data from the current row (adjust column indices as needed)
                     // Ensure data array indices match the actual table columns
-                    var clienteCol = data[2].toLowerCase(); // Corrigido para coluna do cliente (anteriormente data[1])
-                    var itemCol = data[5].toLowerCase(); // Corrigido para coluna do nome do item (anteriormente data[4])
-                    var numSistemaCol = data[1].toLowerCase(); // Corrigido para coluna do número do pedido (anteriormente data[3])
-                    var dataEntradaCol = parseDate(data[7]); // Corrigido para coluna da data de entrada (anteriormente data[6])
-                    var previsaoEntregaCol = parseDate(data[10]); // Corrigido para coluna da previsão de entrega (anteriormente data[9])
+                    var numeroPedidoClienteCol = data[1].toLowerCase(); // Nº Pedido Cliente
+                    var clienteCol = data[2].toLowerCase(); // Cliente
+                    var numSistemaCol = data[4].toLowerCase(); // Nº Sistema
+                    var itemCol = data[5].toLowerCase(); // Item
+                    var dataEntradaCol = parseDate(data[7]); // Data de Entrada
+                    var previsaoEntregaCol = parseDate(data[10]); // Previsão de Entrega
                     // Status needs to be extracted differently as it's rendered with HTML
                     var statusCol = '';
-                    var statusBadge = table.cell(dataIndex, 11).nodes().to$().find('.status-badge'); // Corrigido para coluna do status (anteriormente dataIndex 10)
+                    var statusBadge = table.cell(dataIndex, 11).nodes().to$().find('.status-badge');
                     if (statusBadge.length > 0) {
                         statusCol = statusBadge.text().trim().toLowerCase();
                     }
@@ -530,8 +532,8 @@
                     if (itemFilter && itemCol.indexOf(itemFilter) === -1) {
                         return false;
                     }
-                    // Assuming Nº Sistema is the correct column for numero_pedido filter
-                    if (numeroPedidoFilter && numSistemaCol.indexOf(numeroPedidoFilter) === -1) {
+                    // Buscar tanto no Nº Pedido Cliente quanto no Nº Sistema
+                    if (numeroPedidoFilter && numeroPedidoClienteCol.indexOf(numeroPedidoFilter) === -1 && numSistemaCol.indexOf(numeroPedidoFilter) === -1) {
                         return false;
                     }
                     if (statusFilter.length > 0) {
@@ -566,14 +568,30 @@
 
             // Event listeners for filter inputs
             $('#btnAplicarFiltros').on('click', function() {
-                console.log("Aplicando filtros...");
-                table.draw(); // Redraw the table to apply the custom filter
-                var totalResultados = table.rows({ search: 'applied' }).count();
-                // Assuming showToast function exists
-                if (typeof showToast === 'function') {
-                   showToast('Filtros aplicados: ' + totalResultados + ' resultados encontrados', 'success');
+                // Verificar se usuário selecionou status "entregue" ou "cancelado"
+                var statusFilter = $('#filter_status').val() || [];
+                var precisaRecarregar = false;
+                
+                for (var i = 0; i < statusFilter.length; i++) {
+                    if (statusFilter[i] === 'entregue' || statusFilter[i] === 'cancelado') {
+                        precisaRecarregar = true;
+                        break;
+                    }
+                }
+                
+                if (precisaRecarregar) {
+                    // Recarregar página com parâmetro mostrar_todos=1
+                    window.location.href = '/pedidos?mostrar_todos=1';
                 } else {
-                   console.log('Filtros aplicados: ' + totalResultados + ' resultados encontrados');
+                    console.log("Aplicando filtros...");
+                    table.draw(); // Redraw the table to apply the custom filter
+                    var totalResultados = table.rows({ search: 'applied' }).count();
+                    // Assuming showToast function exists
+                    if (typeof showToast === 'function') {
+                       showToast('Filtros aplicados: ' + totalResultados + ' resultados encontrados', 'success');
+                    } else {
+                       console.log('Filtros aplicados: ' + totalResultados + ' resultados encontrados');
+                    }
                 }
             });
 

@@ -6,8 +6,17 @@ Versão otimizada para não travar
 
 import os
 import sys
-import psycopg2
 from urllib.parse import urlparse
+
+try:
+    import psycopg2  # type: ignore
+except Exception:
+    psycopg2 = None
+
+try:
+    import psycopg  # type: ignore
+except Exception:
+    psycopg = None
 
 print("🚀 Migração RÁPIDA do módulo de apontamento para Supabase/PostgreSQL...")
 
@@ -23,14 +32,27 @@ parsed = urlparse(database_url)
 try:
     # Conectar ao PostgreSQL com timeout muito baixo
     print("⚡ Conectando rapidamente ao PostgreSQL...")
-    conn = psycopg2.connect(
-        host=parsed.hostname,
-        port=parsed.port,
-        database=parsed.path[1:],
-        user=parsed.username,
-        password=parsed.password,
-        connect_timeout=3  # Timeout muito baixo
-    )
+    if psycopg2 is not None:
+        conn = psycopg2.connect(
+            host=parsed.hostname,
+            port=parsed.port,
+            database=parsed.path[1:],
+            user=parsed.username,
+            password=parsed.password,
+            connect_timeout=3  # Timeout muito baixo
+        )
+    elif psycopg is not None:
+        conn = psycopg.connect(
+            host=parsed.hostname,
+            port=parsed.port,
+            dbname=parsed.path[1:],
+            user=parsed.username,
+            password=parsed.password,
+            connect_timeout=3
+        )
+    else:
+        print("❌ Nenhum driver PostgreSQL disponível (psycopg2/psycopg)")
+        sys.exit(0)
     conn.autocommit = True
     cursor = conn.cursor()
     
@@ -97,10 +119,6 @@ try:
             print(f"⚠️ Comando {i} falhou: {str(e)[:50]}... (continuando)")
     
     print("🎉 Migração rápida concluída!")
-    
-except psycopg2.OperationalError as e:
-    print(f"⚠️ Erro de conexão: {str(e)[:100]}")
-    print("🔄 Sistema continuará sem migração (tabelas podem já existir)")
     
 except Exception as e:
     print(f"⚠️ Erro na migração: {str(e)[:100]}")

@@ -3,6 +3,7 @@ from models import db, Pedido, Cliente, UnidadeEntrega, Item, PedidoOrdemServico
 from utils import validate_form_data, parse_json_field, generate_next_code, generate_next_os_code
 from datetime import datetime
 import logging
+from sqlalchemy import and_
 
 pedidos = Blueprint('pedidos', __name__)
 logger = logging.getLogger(__name__)
@@ -14,7 +15,7 @@ def gerar_ordem_servico_multipla():
     if not pedidos_ids:
         flash('Selecione pelo menos um pedido para gerar ordens de serviço', 'danger')
         return redirect(url_for('pedidos.listar_pedidos'))
-    
+
     # Verificar se há pedidos cancelados
     pedidos_cancelados = []
     pedidos_validos = []
@@ -49,9 +50,29 @@ def gerar_ordem_servico_multipla():
         flash('Selecione apenas pedidos do mesmo item para gerar uma Ordem de Serviço', 'warning')
         return redirect(url_for('pedidos.listar_pedidos'))
     pedidos_grupo = list(grupos.values())[0]
+
+    item_principal = Item.query.get(pedidos_grupo[0].item_id)
+    if not item_principal:
+        flash('Item não encontrado para os pedidos selecionados', 'danger')
+        return redirect(url_for('pedidos.listar_pedidos'))
     # Impedir gerar nova OS se já existe
     if any(p.ordens_servico for p in pedidos_grupo):
-        # Recuperar número de OS existente
+        # Se for item composto, tenta reconciliar OS existentes (recriar pedidos virtuais por cliente)
+        if item_principal.eh_composto:
+            ok = reconciliar_os_composto_existente(pedidos_grupo, item_principal)
+            if ok:
+                try:
+                    db.session.commit()
+                except Exception:
+                    db.session.rollback()
+                    ok = False
+            if ok:
+                flash('OS de item composto já existia: pedidos virtuais foram atualizados por cliente/unidade nas OS dos componentes.', 'success')
+            else:
+                flash('OS de item composto já existia, mas não foi possível atualizar os pedidos virtuais nas OS dos componentes. Tente novamente ou gere uma OS nova.', 'warning')
+            return redirect(url_for('pedidos.listar_pedidos'))
+
+        # ITEM SIMPLES: Recuperar número de OS existente
         existing_num = pedidos_grupo[0].ordens_servico[0].ordem_servico.numero
         # Atualizar numero_oc para todos pedidos do grupo
         for p in pedidos_grupo:
@@ -60,7 +81,6 @@ def gerar_ordem_servico_multipla():
         flash(f'Ordem de Serviço {existing_num} já existe para este item', 'warning')
         return redirect(url_for('pedidos.listar_pedidos'))
     # Verificar se o item é composto
-    item_principal = Item.query.get(pedidos_grupo[0].item_id)
     print(f"🔍 VERIFICANDO TIPO DE ITEM: {item_principal.codigo_acb}")
     print(f"   É composto: {item_principal.eh_composto}")
     
@@ -192,6 +212,91 @@ def gerar_os_item_composto(pedidos_grupo, item_composto):
         db.session.rollback()
         flash(f'Erro ao desmembrar item composto: {str(e)}', 'danger')
         return redirect(url_for('pedidos.listar_pedidos'))
+
+
+def reconciliar_os_composto_existente(pedidos_grupo, item_composto):
+    """Atualiza OS já existentes de item composto, recriando pedidos virtuais por pedido original."""
+    try:
+        componentes = item_composto.componentes
+        if not componentes:
+            return False
+
+        atualizou_algum = False
+
+        for componente_rel in componentes:
+            item_componente = componente_rel.item_componente
+            if not item_componente:
+                continue
+
+            # localizar OS existente deste componente via associação de pedidos AUTO
+            assoc = (
+                db.session.query(PedidoOrdemServico)
+                .join(Pedido, PedidoOrdemServico.pedido_id == Pedido.id)
+                .filter(
+                    Pedido.item_id == item_componente.id,
+                    Pedido.numero_pedido.isnot(None),
+                    Pedido.numero_pedido.like('AUTO-%'),
+                    and_(Pedido.descricao.isnot(None), Pedido.descricao.like('Componente gerado automaticamente%')),
+                    Pedido.descricao.like(f"%{item_composto.codigo_acb}%"),
+                )
+                .order_by(PedidoOrdemServico.id.desc())
+                .first()
+            )
+            if not assoc:
+                continue
+
+            os_existente = OrdemServico.query.get(assoc.ordem_servico_id)
+            if not os_existente:
+                continue
+
+            recriar_pedidos_virtuais_os_componente(os_existente, pedidos_grupo, item_composto, componente_rel)
+            atualizou_algum = True
+
+        return atualizou_algum
+    except Exception:
+        db.session.rollback()
+        logger.exception('Erro ao reconciliar OS existente de item composto')
+        return False
+
+
+def recriar_pedidos_virtuais_os_componente(os_componente, pedidos_grupo, item_composto, componente_rel):
+    """Remove pedidos virtuais AUTO existentes na OS do componente e recria 1 por pedido original."""
+    # Remover associações/pedidos virtuais antigos desta OS
+    assocs = list(os_componente.pedidos)
+    for pedido_os in assocs:
+        pedido = pedido_os.pedido
+        if not pedido:
+            continue
+        if pedido.numero_pedido and pedido.numero_pedido.startswith('AUTO-') and pedido.descricao and pedido.descricao.startswith('Componente gerado automaticamente'):
+            db.session.delete(pedido_os)
+            db.session.delete(pedido)
+
+    # Recriar pedidos virtuais por pedido original
+    for pedido_original in pedidos_grupo:
+        quantidade_virtual = componente_rel.quantidade * (pedido_original.quantidade or 0)
+        if quantidade_virtual <= 0:
+            continue
+
+        pedido_virtual = Pedido(
+            cliente_id=pedido_original.cliente_id,
+            unidade_entrega_id=pedido_original.unidade_entrega_id,
+            item_id=componente_rel.item_componente_id,
+            nome_item=f"{componente_rel.item_componente.nome} (Componente de {item_composto.nome})",
+            descricao=f"Componente gerado automaticamente do item composto {item_composto.codigo_acb}",
+            quantidade=quantidade_virtual,
+            data_entrada=datetime.now().date(),
+            numero_pedido=f"AUTO-{os_componente.numero}-{pedido_original.id}",
+            previsao_entrega=pedido_original.previsao_entrega,
+            numero_oc=os_componente.numero
+        )
+        db.session.add(pedido_virtual)
+        db.session.flush()
+
+        assoc = PedidoOrdemServico(
+            pedido_id=pedido_virtual.id,
+            ordem_servico_id=os_componente.id
+        )
+        db.session.add(assoc)
 
 @pedidos.route('/pedidos/gerar-pedido-material-multiplo', methods=['POST'])
 def gerar_pedido_material_multiplo():
@@ -387,11 +492,19 @@ def novo_pedido():
             flash('Formato de data inválido!', 'danger')
             return redirect(url_for('pedidos.novo_pedido'))
         
-        # Gerar número do pedido
-        ultimo_pedido = Pedido.query.order_by(Pedido.numero_pedido.desc()).first()
-        if ultimo_pedido:
-            ultimo_numero = int(ultimo_pedido.numero_pedido.split('-')[-1])
-            novo_numero = f"PED-{str(ultimo_numero + 1).zfill(5)}"
+        # Obter número do pedido do cliente (digitado no formulário)
+        numero_pedido_cliente = request.form.get('numero_pedido', '').strip()
+        
+        # Gerar número interno do sistema
+        ultimo_pedido = Pedido.query.filter(
+            (Pedido.numero_pedido != None) & (~Pedido.numero_pedido.like('AUTO-%'))
+        ).order_by(Pedido.numero_pedido.desc()).first()
+        if ultimo_pedido and ultimo_pedido.numero_pedido:
+            try:
+                ultimo_numero = int(ultimo_pedido.numero_pedido.split('-')[-1])
+                novo_numero = f"PED-{str(ultimo_numero + 1).zfill(5)}"
+            except (ValueError, IndexError):
+                novo_numero = "PED-00001"
         else:
             novo_numero = "PED-00001"
         
@@ -399,6 +512,7 @@ def novo_pedido():
         for item in itens:
             novo_pedido = Pedido(
                 numero_pedido=novo_numero,
+                numero_pedido_cliente=numero_pedido_cliente if numero_pedido_cliente else None,
                 cliente_id=cliente_id,
                 unidade_entrega_id=unidade_entrega_id,
                 item_id=item['item_id'],
@@ -411,7 +525,8 @@ def novo_pedido():
             db.session.add(novo_pedido)
         
         db.session.commit()
-        flash(f'Pedido {novo_numero} criado com sucesso com {len(itens)} item(ns)!', 'success')
+        msg_pedido = f'Pedido {numero_pedido_cliente}' if numero_pedido_cliente else 'Pedido'
+        flash(f'{msg_pedido} criado com sucesso com {len(itens)} item(ns)!', 'success')
         return redirect(url_for('pedidos.listar_pedidos'))
     
     clientes = Cliente.query.all()
@@ -421,7 +536,22 @@ def novo_pedido():
 @pedidos.route('/pedidos')
 def listar_pedidos():
     """Rota para listar todos os pedidos"""
-    pedidos = Pedido.query.all()
+    # Por padrão, ocultar pedidos entregues e cancelados (melhor visualização)
+    # O usuário pode usar filtros para vê-los
+    mostrar_todos = request.args.get('mostrar_todos', '0') == '1'
+    
+    query = Pedido.query.filter(
+        (Pedido.numero_pedido == None) | (~Pedido.numero_pedido.like('AUTO-%'))
+    )
+    
+    if not mostrar_todos:
+        # Ocultar entregues e cancelados por padrão
+        query = query.filter(
+            (Pedido.cancelado == False) | (Pedido.cancelado == None),
+            (Pedido.data_entrega == None)
+        )
+    
+    pedidos = query.all()
     for pedido in pedidos:
         logger.debug("Pedido ID %s: numero_pedido_material = %s", pedido.id, pedido.numero_pedido_material if pedido.numero_pedido_material else 'N/A')
     clientes = Cliente.query.all()
@@ -480,7 +610,7 @@ def editar_pedido(pedido_id):
             unidades = UnidadeEntrega.query.filter_by(cliente_id=pedido.cliente_id).all()
             return render_template('pedidos/editar.html', pedido=pedido, clientes=clientes, itens=itens, unidades=unidades)
         
-        numero_pedido = request.form.get('numero_pedido', '')
+        numero_pedido_cliente = request.form.get('numero_pedido_cliente', '').strip()
         
         # Validar previsão de entrega
         previsao_entrega = None
@@ -504,7 +634,7 @@ def editar_pedido(pedido_id):
         pedido.unidade_entrega_id = unidade_entrega_id
         pedido.quantidade = quantidade
         pedido.data_entrada = data_entrada
-        pedido.numero_pedido = numero_pedido
+        pedido.numero_pedido_cliente = numero_pedido_cliente if numero_pedido_cliente else None
         pedido.previsao_entrega = previsao_entrega
         pedido.descricao = descricao
         pedido.material_comprado = material_comprado
