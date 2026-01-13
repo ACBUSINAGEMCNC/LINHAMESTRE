@@ -84,9 +84,12 @@
                                     {% set _ = grouped_items[item_key].update({'total_qty': grouped_items[item_key].total_qty + pedido_os.pedido.quantidade}) %}
                                     {% set _ = grouped_items[item_key].orders.append({
                                         'pedido_id': pedido_os.pedido.id,
+                                        'pedido_os_id': pedido_os.id,
                                         'cliente': pedido_os.pedido.cliente.nome,
                                         'unidade': pedido_os.pedido.unidade_entrega.nome,
-                                        'quantidade': pedido_os.pedido.quantidade
+                                        'quantidade': pedido_os.pedido.quantidade,
+                                        'quantidade_snapshot': pedido_os.quantidade_snapshot,
+                                        'quantidade_alterada': pedido_os.quantidade_alterada
                                     }) %}
                                 {% else %}
                                     {% set _ = grouped_items.update({
@@ -96,9 +99,12 @@
                                             'item_id': pedido_os.pedido.item_id,
                                             'orders': [{
                                                 'pedido_id': pedido_os.pedido.id,
+                                                'pedido_os_id': pedido_os.id,
                                                 'cliente': pedido_os.pedido.cliente.nome,
                                                 'unidade': pedido_os.pedido.unidade_entrega.nome,
-                                                'quantidade': pedido_os.pedido.quantidade
+                                                'quantidade': pedido_os.pedido.quantidade,
+                                                'quantidade_snapshot': pedido_os.quantidade_snapshot,
+                                                'quantidade_alterada': pedido_os.quantidade_alterada
                                             }]
                                         }
                                     }) %}
@@ -128,14 +134,29 @@
                                                                     <th>Cliente</th>
                                                                     <th>Unidade</th>
                                                                     <th>Quantidade</th>
+                                                                    <th width="120">Ações</th>
                                                                 </tr>
                                                             </thead>
                                                             <tbody>
                                                                 {% for order in item_data.orders %}
-                                                                <tr>
+                                                                <tr {% if order.quantidade_alterada %}class="table-warning"{% endif %}>
                                                                     <td>{{ order.cliente }}</td>
                                                                     <td>{{ order.unidade }}</td>
-                                                                    <td>{{ order.quantidade }}</td>
+                                                                    <td>
+                                                                        {{ order.quantidade }}
+                                                                        {% if order.quantidade_alterada %}
+                                                                            <span class="badge bg-warning text-dark ms-2" title="Quantidade alterada! Original: {{ order.quantidade_snapshot }}">
+                                                                                <i class="fas fa-exclamation-triangle"></i> Alterado
+                                                                            </span>
+                                                                        {% endif %}
+                                                                    </td>
+                                                                    <td>
+                                                                        <button type="button" class="btn btn-sm btn-outline-primary" 
+                                                                                onclick="sincronizarQuantidadePedido({{ order.pedido_id }}, {{ ordem.id }})"
+                                                                                title="Atualizar quantidade da OS com a quantidade atual do Pedido">
+                                                                            <i class="fas fa-sync-alt"></i> Sync
+                                                                        </button>
+                                                                    </td>
                                                                 </tr>
                                                                 {% endfor %}
                                                             </tbody>
@@ -384,4 +405,37 @@ document.addEventListener('DOMContentLoaded', function() {
         carregarLogsManualmente('{{ ordem.id }}');
     }
 });
+
+// Função para sincronizar quantidade do Pedido para a OS
+function sincronizarQuantidadePedido(pedidoId, ordemId) {
+    if (!confirm('Deseja atualizar a quantidade desta OS com a quantidade atual do Pedido?')) {
+        return;
+    }
+    
+    fetch('/kanban/sincronizar-quantidade-pedido', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+            pedido_id: pedidoId,
+            ordem_id: ordemId
+        })
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            showToast(data.message, 'success');
+            setTimeout(() => {
+                location.reload();
+            }, 1000);
+        } else {
+            showToast(data.message || 'Erro ao sincronizar quantidade', 'error');
+        }
+    })
+    .catch(error => {
+        console.error('Erro:', error);
+        showToast('Erro ao sincronizar quantidade', 'error');
+    });
+}
 </script>

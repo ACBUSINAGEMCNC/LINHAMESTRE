@@ -1,4 +1,4 @@
-from flask import Blueprint, render_template, request, redirect, url_for, flash, jsonify, session
+from flask import Blueprint, render_template, request, redirect, url_for, flash, jsonify, session, current_app, make_response
 from models import db, Usuario, OrdemServico, Pedido, PedidoOrdemServico, Item, Trabalho, ItemTrabalho, RegistroMensal, KanbanLista, CartaoFantasma
 from utils import validate_form_data, get_kanban_lists, get_kanban_categories, format_seconds_to_time
 from datetime import datetime
@@ -80,14 +80,22 @@ def index():
         
         tempos_listas[lista] = tempo_total
         quantidades_listas[lista] = quantidade_total
-    
-    return render_template('kanban/index.html', 
+
+    template_obj = current_app.jinja_env.get_template('kanban/index.html')
+    template_filename = getattr(template_obj, 'filename', None)
+    current_app.logger.warning('KANBAN_TEMPLATE_FILE=%s', template_filename)
+
+    html = render_template('kanban/index.html', 
                           listas=listas, 
                           ordens=ordens, 
                           cartoes_fantasma=cartoes_fantasma,
                           tempos_listas=tempos_listas, 
                           quantidades_listas=quantidades_listas,
                           Item=Item)
+    response = make_response(html)
+    if template_filename:
+        response.headers['X-Kanban-Template-File'] = template_filename
+    return response
 
 @kanban.route('/kanban/mover', methods=['POST'])
 def mover_kanban():
@@ -256,6 +264,30 @@ def atualizar_tempo_real():
     db.session.commit()
     
     return jsonify({'success': True})
+
+@kanban.route('/kanban/sincronizar-quantidade-pedido', methods=['POST'])
+def sincronizar_quantidade_pedido():
+    """Atualiza a visualização com a quantidade atual do Pedido (não altera dados, apenas recarrega)"""
+    try:
+        pedido_id = request.json.get('pedido_id')
+        ordem_id = request.json.get('ordem_id')
+        
+        if not pedido_id or not ordem_id:
+            return jsonify({'success': False, 'message': 'Pedido ID e Ordem ID são obrigatórios'}), 400
+        
+        pedido = Pedido.query.get_or_404(pedido_id)
+        ordem = OrdemServico.query.get_or_404(ordem_id)
+        
+        quantidade_total = sum(po.pedido.quantidade for po in ordem.pedidos)
+        
+        return jsonify({
+            'success': True, 
+            'message': f'Quantidade atualizada: {pedido.quantidade} peças neste pedido. Total na OS: {quantidade_total} peças',
+            'quantidade_pedido': pedido.quantidade,
+            'quantidade_total_os': quantidade_total
+        })
+    except Exception as e:
+        return jsonify({'success': False, 'message': f'Erro ao sincronizar: {str(e)}'}), 500
 
 @kanban.route('/kanban/detalhes/<int:ordem_id>')
 def detalhes_kanban(ordem_id):

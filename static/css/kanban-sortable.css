@@ -8,22 +8,43 @@ body.sorting {
 
 /* Estilos para o item sendo arrastado */
 .sortable-ghost {
-    opacity: 0.4 !important;
-    background-color: #c8ebfb !important;
-    box-shadow: 0 0 10px rgba(0,0,0,0.2) !important;
+    opacity: 0.5 !important;
+    background: linear-gradient(135deg, #e3f2fd 0%, #bbdefb 100%) !important;
+    box-shadow: 0 4px 20px rgba(33, 150, 243, 0.4) !important;
+    border: 2px dashed #2196F3 !important;
+    transform: rotate(2deg) !important;
 }
 
 /* Estilos para o espaço onde o item pode ser solto */
 .sortable-chosen {
-    box-shadow: 0 5px 15px rgba(0,0,0,0.2) !important;
-    transform: scale(1.02) !important;
-    z-index: 100 !important;
+    box-shadow: 0 8px 24px rgba(0,0,0,0.25) !important;
+    transform: scale(1.05) rotate(-1deg) !important;
+    z-index: 1000 !important;
+    cursor: grabbing !important;
+    transition: all 0.2s cubic-bezier(0.25, 0.8, 0.25, 1) !important;
 }
 
 /* Estilos para o elemento sendo arrastado */
 .sortable-drag {
-    opacity: 0.8 !important;
-    transform: translateY(-5px) !important;
+    opacity: 0.9 !important;
+    transform: rotate(3deg) scale(1.05) !important;
+    cursor: grabbing !important;
+    box-shadow: 0 10px 30px rgba(0,0,0,0.3) !important;
+}
+
+/* Animação suave nas colunas durante arrasto */
+.kanban-column-body {
+    transition: background-color 0.2s ease;
+}
+
+.kanban-column-body.sortable-over {
+    background-color: rgba(33, 150, 243, 0.05);
+}
+
+/* Classe adicional para feedback durante arrasto */
+.is-dragging {
+    transition: all 0.2s ease !important;
+    filter: brightness(1.1) !important;
 }
 
 /* Estilos para a alça de arrasto */
@@ -44,11 +65,18 @@ body.sorting {
 }
 
 /* Prevenir seleção de texto nos cartões */
-.kanban-card, .kanban-card * {
+.kanban-card {
     user-select: none;
     -webkit-user-select: none;
     -moz-user-select: none;
     -ms-user-select: none;
+    transition: transform 0.15s ease, box-shadow 0.15s ease;
+}
+
+/* Permitir seleção em textos dentro dos cartões quando não estiver arrastando */
+.kanban-card:not(.sortable-chosen):not(.sortable-drag) * {
+    user-select: text;
+    -webkit-user-select: text;
 }
 
 /* Novos estilos para os cartões e documentos */

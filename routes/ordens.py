@@ -51,7 +51,8 @@ def _recriar_pedidos_virtuais_os_componente(os_componente, pedidos_originais, it
 
         assoc = PedidoOrdemServico(
             pedido_id=pedido_virtual.id,
-            ordem_servico_id=os_componente.id
+            ordem_servico_id=os_componente.id,
+            quantidade_snapshot=pedido_virtual.quantidade
         )
         db.session.add(assoc)
 
@@ -214,9 +215,11 @@ def nova_ordem_servico():
                 
                 # Adicionar pedidos à OS
                 for pedido_id in pedidos_ids:
+                    pedido = Pedido.query.get(pedido_id)
                     pedido_os = PedidoOrdemServico(
                         pedido_id=pedido_id,
-                        ordem_servico_id=ordem.id
+                        ordem_servico_id=ordem.id,
+                        quantidade_snapshot=pedido.quantidade if pedido else None
                     )
                     db.session.add(pedido_os)
                     

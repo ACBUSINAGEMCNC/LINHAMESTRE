@@ -103,7 +103,11 @@ def gerar_os_item_simples(pedidos_grupo):
     db.session.flush()
     # Associar pedidos à OS e atualizar campo numero_oc
     for pedido in pedidos_grupo:
-        assoc = PedidoOrdemServico(pedido_id=pedido.id, ordem_servico_id=os_nova.id)
+        assoc = PedidoOrdemServico(
+            pedido_id=pedido.id, 
+            ordem_servico_id=os_nova.id,
+            quantidade_snapshot=pedido.quantidade
+        )
         pedido.numero_oc = numero_os
         db.session.add(assoc)
     db.session.commit()
@@ -174,7 +178,8 @@ def gerar_os_item_composto(pedidos_grupo, item_composto):
 
                 assoc = PedidoOrdemServico(
                     pedido_id=pedido_virtual.id,
-                    ordem_servico_id=os_componente.id
+                    ordem_servico_id=os_componente.id,
+                    quantidade_snapshot=pedido_virtual.quantidade
                 )
                 db.session.add(assoc)
             
@@ -294,7 +299,8 @@ def recriar_pedidos_virtuais_os_componente(os_componente, pedidos_grupo, item_co
 
         assoc = PedidoOrdemServico(
             pedido_id=pedido_virtual.id,
-            ordem_servico_id=os_componente.id
+            ordem_servico_id=os_componente.id,
+            quantidade_snapshot=pedido_virtual.quantidade
         )
         db.session.add(assoc)
 

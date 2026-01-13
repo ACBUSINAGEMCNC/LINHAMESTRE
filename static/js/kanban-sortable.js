@@ -5,34 +5,38 @@ document.addEventListener('DOMContentLoaded', function() {
     // Inicializa o Sortable.js para cada coluna do kanban
     document.querySelectorAll('.kanban-column-body').forEach(function(columnBody) {
         new Sortable(columnBody, {
-            group: 'kanban-columns', // Permite arrastar entre colunas
-            animation: 150, // Duração da animação
-            easing: 'cubic-bezier(0.2, 1, 0.1, 1)', // Easing suave
-            delay: 0, // Sem delay para resposta imediata
-            delayOnTouchOnly: false, // Sem delay em toque
-            touchStartThreshold: 1, // Alta sensibilidade
+            group: 'kanban-columns',
+            animation: 200, // Animação mais suave
+            easing: 'cubic-bezier(0.25, 0.8, 0.25, 1)', // Easing mais natural
+            delay: 0,
+            delayOnTouchOnly: false,
+            touchStartThreshold: 5, // Menos sensível para evitar arrastar acidental
             dragClass: 'sortable-drag',
             ghostClass: 'sortable-ghost',
             chosenClass: 'sortable-chosen',
-            // Removido o handle: agora o cartão inteiro é arrastável (estilo Trello)
-            forceFallback: true, // Modo fallback para melhor controle
+            forceFallback: false, // Usar comportamento nativo quando possível
             fallbackClass: 'sortable-fallback',
-            fallbackOnBody: true, 
-            swapThreshold: 0.65,
+            fallbackOnBody: true,
+            swapThreshold: 0.5, // Threshold mais responsivo
+            invertSwap: true, // Melhor experiência ao trocar posições
             preventOnFilter: true,
-            // Impede arrastar quando clicando em elementos interativos dentro do cartão
-            filter: '.no-drag, .document-icons, .document-container, .pdf-container, .cnc-container, .apontamento-buttons, .btn, button, .dropdown, .dropdown-menu, input, select, textarea, a, [data-bs-toggle]',
+            // Simplificar filtros - apenas elementos realmente necessários
+            filter: '.btn, button, .dropdown, input, select, textarea, a[href]',
             draggable: '.kanban-card, .kanban-card.fantasma',
             onStart: function(evt) {
                 console.log('Início do arrasto', evt.item.dataset.ordemId);
                 document.body.style.cursor = 'grabbing';
-                // Adiciona classe para prevenir seleção de texto
                 document.body.classList.add('sorting');
+                // Adicionar classe visual ao cartão
+                evt.item.classList.add('is-dragging');
+                // Esconder dropdowns abertos
+                document.querySelectorAll('.dropdown-menu.show').forEach(m => m.classList.remove('show'));
             },
             onEnd: function(evt) {
                 console.log('Fim do arrasto', evt.item.dataset.ordemId || evt.item.dataset.cartaoId);
                 document.body.style.cursor = 'default';
                 document.body.classList.remove('sorting');
+                evt.item.classList.remove('is-dragging');
                 
                 // Disparar evento personalizado para reinicializar os eventos do cartão
                 document.dispatchEvent(new CustomEvent('sortable-drop-complete', {
@@ -85,11 +89,15 @@ document.addEventListener('DOMContentLoaded', function() {
                         console.log('📡 DRAG Dados parseados:', data);
                         if (data.success) {
                             console.log('✅ DRAG Cartão fantasma movido com sucesso');
-                            setTimeout(() => window.location.reload(), 300);
+                            // Mostrar feedback visual
+                            evt.item.style.opacity = '0.5';
+                            setTimeout(() => window.location.reload(), 200);
                         } else {
                             console.error('❌ DRAG Erro ao mover cartão fantasma:', data.message);
-                            // Reverter posição em caso de erro
+                            // Reverter posição com animação
+                            evt.item.style.transition = 'all 0.3s ease';
                             evt.from.appendChild(evt.item);
+                            setTimeout(() => evt.item.style.transition = '', 300);
                         }
                     })
                     .catch(error => {
@@ -118,8 +126,17 @@ document.addEventListener('DOMContentLoaded', function() {
                         .then(data => {
                             if (data.success) {
                                 console.log('Movimento salvo com sucesso');
-                                setTimeout(() => window.location.reload(), 300);
+                                // Feedback visual antes de recarregar
+                                evt.item.style.opacity = '0.5';
+                                setTimeout(() => window.location.reload(), 200);
+                            } else {
+                                // Reverter em caso de erro
+                                evt.from.appendChild(evt.item);
                             }
+                        })
+                        .catch(error => {
+                            console.error('Erro ao mover:', error);
+                            evt.from.appendChild(evt.item);
                         });
                     } else {
                         // Reordenou dentro da mesma lista - salvar nova posição

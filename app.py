@@ -60,6 +60,12 @@ def verificar_inicializar_banco():
                 logger.info("Coluna categoria_trabalho verificada/adicionada com sucesso.")
             else:
                 logger.warning("Falha ao verificar/adicionar coluna categoria_trabalho.")
+            
+            from migrations.add_quantidade_snapshot import migrate_postgres as migrate_snapshot_pg
+            if migrate_snapshot_pg():
+                logger.info("Coluna quantidade_snapshot verificada/adicionada com sucesso.")
+            else:
+                logger.warning("Falha ao verificar/adicionar coluna quantidade_snapshot.")
         except Exception as col_err:
             logger.warning(f"Erro ao migrar coluna categoria_trabalho: {str(col_err)}")
             
@@ -139,6 +145,17 @@ def verificar_inicializar_banco():
                         logger.info("Colunas imagem e data_cadastro adicionadas com sucesso à tabela maquina.")
                     else:
                         logger.warning("Falha ao adicionar colunas imagem e data_cadastro à tabela maquina.")
+                
+                # Verificar se tabela pedido_ordem_servico tem a coluna quantidade_snapshot
+                cursor.execute("PRAGMA table_info(pedido_ordem_servico)")
+                pos_columns = [column[1] for column in cursor.fetchall()]
+                if 'quantidade_snapshot' not in pos_columns:
+                    logger.info("Coluna quantidade_snapshot não encontrada na tabela pedido_ordem_servico. Executando migração...")
+                    from migrations.add_quantidade_snapshot import migrate_sqlite as migrate_snapshot_sqlite
+                    if migrate_snapshot_sqlite():
+                        logger.info("Coluna quantidade_snapshot adicionada com sucesso à tabela pedido_ordem_servico.")
+                    else:
+                        logger.warning("Falha ao adicionar coluna quantidade_snapshot à tabela pedido_ordem_servico.")
                         
                 # Verificar se tabela item tem a coluna tipo_bruto
                 try:

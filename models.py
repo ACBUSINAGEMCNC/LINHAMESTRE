@@ -384,9 +384,17 @@ class PedidoOrdemServico(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     pedido_id = db.Column(db.Integer, db.ForeignKey('pedido.id'), nullable=False)
     ordem_servico_id = db.Column(db.Integer, db.ForeignKey('ordem_servico.id'), nullable=False)
+    quantidade_snapshot = db.Column(db.Integer, nullable=True)
     
     def __repr__(self):
         return f'<PedidoOrdemServico {self.id}>'
+    
+    @property
+    def quantidade_alterada(self):
+        """Verifica se a quantidade do pedido foi alterada desde a vinculação"""
+        if self.quantidade_snapshot is None:
+            return False
+        return self.pedido.quantidade != self.quantidade_snapshot
     
 class PedidoMaterial(db.Model):
     id = db.Column(db.Integer, primary_key=True)

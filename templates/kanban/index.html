@@ -1,4 +1,4 @@
-<!DOCTYPE html>
+﻿<!DOCTYPE html>
 <html lang="pt-BR">
 <head>
     <meta charset="UTF-8">
@@ -148,7 +148,59 @@
         
         .status-pausado .apontamento-timer {
             background-color: #ffc107;
-            color: #212529;
+        }
+        
+        /* Estilos para toast de feedback */
+        .kanban-toast {
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            background: white;
+            padding: 12px 20px;
+            border-radius: 8px;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+            display: flex;
+            align-items: center;
+            font-weight: 500;
+            z-index: 9999;
+            transform: translateX(400px);
+            transition: transform 0.3s cubic-bezier(0.25, 0.8, 0.25, 1);
+        }
+        .kanban-toast.show {
+            transform: translateX(0);
+        }
+        .kanban-toast-success {
+            border-left: 4px solid #28a745;
+            color: #155724;
+        }
+        .kanban-toast-error {
+            border-left: 4px solid #dc3545;
+            color: #721c24;
+        }
+        
+        /* Melhorias no dropdown de mover */
+        .kanban-dropdown-mover {
+            min-width: 220px;
+        }
+        .kanban-dropdown-mover .dropdown-header {
+            font-weight: 600;
+            font-size: 0.85rem;
+            color: #495057;
+            padding: 8px 16px;
+        }
+        .kanban-dropdown-mover .btn-mover-visual {
+            padding: 8px 16px;
+            transition: all 0.2s ease;
+        }
+        .kanban-dropdown-mover .btn-mover-visual:hover {
+            background-color: #e3f2fd;
+            padding-left: 20px;
+        }
+        .kanban-dropdown-mover .btn-mover-visual i {
+            transition: transform 0.2s ease;
+        }
+        .kanban-dropdown-mover .btn-mover-visual:hover i {
+            transform: translateX(3px);
         }
         
         /* Estilo para o campo de status */
@@ -445,6 +497,12 @@
                     <li class="nav-item">
                         <a class="nav-link" href="/registros-mensais"><i class="fas fa-archive"></i> Registros Mensais</a>
                     </li>
+                    <li class="nav-item">
+                        <a class="nav-link" href="/pedidos"><i class="fas fa-clipboard-list"></i> Pedidos</a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link" href="/itens"><i class="fas fa-boxes"></i> Itens</a>
+                    </li>
                 </ul>
             </div>
         </div>
@@ -513,7 +571,7 @@
                                                 aria-expanded="false" onclick="event.stopPropagation()">
                                             <i class="fas fa-ellipsis-v"></i>
                                         </button>
-                                        <ul class="dropdown-menu dropdown-menu-end" aria-labelledby="dropdownMenuButton{{ ordem.id }}">
+                                        <ul class="dropdown-menu dropdown-menu-end kanban-dropdown-mover" aria-labelledby="dropdownMenuButton{{ ordem.id }}">
                                             {% if ordem.pedidos and ordem.pedidos[0].pedido.item_id %}
                                             <li><a class="dropdown-item" href="/folhas-processo-novas?item_id={{ ordem.pedidos[0].pedido.item_id }}" target="_blank">
                                                 <i class="fas fa-file-alt me-2"></i>Ver Folhas do Item
@@ -523,13 +581,18 @@
                                             </a></li>
                                             <li><hr class="dropdown-divider"></li>
                                             {% endif %}
+                                            <li class="dropdown-header"><i class="fas fa-arrows-alt me-2"></i>Mover para:</li>
                                             {% for lista_destino in listas %}
                                                 {% if lista_destino != lista and lista_destino not in ['Entrada','Expedição'] %}
-                                                    <li><a class="dropdown-item btn-mover" href="#" data-ordem-id="{{ ordem.id }}" data-lista-destino="{{ lista_destino }}">Mover para {{ lista_destino }}</a></li>
+                                                    <li><a class="dropdown-item btn-mover-visual" href="#" data-ordem-id="{{ ordem.id }}" data-lista-destino="{{ lista_destino }}">
+                                                        <i class="fas fa-arrow-right me-2 text-primary"></i>{{ lista_destino }}
+                                                    </a></li>
                                                 {% endif %}
                                             {% endfor %}
                                             <li><hr class="dropdown-divider"></li>
-                                            <li><a class="dropdown-item text-purple btn-criar-fantasma-menu" href="#" data-ordem-id="{{ ordem.id }}" data-lista-origem="{{ lista }}"><i class="fas fa-ghost"></i> Criar cartão fantasma</a></li>
+                                            <li><a class="dropdown-item text-purple btn-criar-fantasma-menu" href="#" data-ordem-id="{{ ordem.id }}" data-lista-origem="{{ lista }}">
+                                                <i class="fas fa-ghost me-2"></i>Criar cartão fantasma
+                                            </a></li>
                                         </ul>
                                     </div>
                                 {% endif %}
@@ -1000,6 +1063,14 @@
     <script src="/static/js/kanban-sortable.js"></script>
     <script>
         function moverOrdem(ordemId, listaDestino) {
+            // Encontrar o cartão
+            const card = document.querySelector(`.kanban-card[data-ordem-id="${ordemId}"]`);
+            if (card) {
+                // Feedback visual imediato
+                card.style.opacity = '0.5';
+                card.style.transform = 'scale(0.95)';
+            }
+            
             fetch('/kanban/mover', {
                 method: 'POST',
                 headers: {
@@ -1010,12 +1081,43 @@
             .then(response => response.json())
             .then(data => {
                 if (data.success) {
-                    // Mostrar mensagem de sucesso
-                    alert(data.message);
-                    // Recarregar a página para atualizar
-                    window.location.reload();
+                    // Mostrar toast de sucesso
+                    mostrarToast('Cartão movido com sucesso!', 'success');
+                    // Recarregar com pequeno delay para feedback
+                    setTimeout(() => window.location.reload(), 300);
+                } else {
+                    // Reverter visual em caso de erro
+                    if (card) {
+                        card.style.opacity = '1';
+                        card.style.transform = 'scale(1)';
+                    }
+                    mostrarToast('Erro ao mover cartão', 'error');
                 }
+            })
+            .catch(error => {
+                if (card) {
+                    card.style.opacity = '1';
+                    card.style.transform = 'scale(1)';
+                }
+                mostrarToast('Erro ao mover cartão', 'error');
             });
+        }
+        
+        // Função para mostrar toast
+        function mostrarToast(mensagem, tipo) {
+            const toast = document.createElement('div');
+            toast.className = `kanban-toast kanban-toast-${tipo}`;
+            toast.innerHTML = `
+                <i class="fas fa-${tipo === 'success' ? 'check-circle' : 'exclamation-circle'} me-2"></i>
+                ${mensagem}
+            `;
+            document.body.appendChild(toast);
+            
+            setTimeout(() => toast.classList.add('show'), 100);
+            setTimeout(() => {
+                toast.classList.remove('show');
+                setTimeout(() => toast.remove(), 300);
+            }, 2500);
         }
         
         function openCardDetails(ordemId) {
@@ -1245,6 +1347,17 @@
         document.addEventListener('DOMContentLoaded', function() {
             console.log('DOM carregado - chamando initializeKanbanEvents');
             initializeKanbanEvents();
+            
+            // Event listeners para botões de mover visuais
+            document.querySelectorAll('.btn-mover-visual').forEach(function(btn) {
+                btn.addEventListener('click', function(e) {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    const ordemId = this.dataset.ordemId;
+                    const listaDestino = this.dataset.listaDestino;
+                    moverOrdem(ordemId, listaDestino);
+                });
+            });
             
             // Também inicializar novamente quando o Sortable terminar uma operação de arrasto
             document.addEventListener('sortable-drop-complete', function() {
