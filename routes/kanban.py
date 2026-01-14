@@ -267,7 +267,7 @@ def atualizar_tempo_real():
 
 @kanban.route('/kanban/sincronizar-quantidade-pedido', methods=['POST'])
 def sincronizar_quantidade_pedido():
-    """Atualiza a visualização com a quantidade atual do Pedido (não altera dados, apenas recarrega)"""
+    """Atualiza pedidos virtuais de componentes quando o pedido original do item composto foi alterado"""
     try:
         pedido_id = request.json.get('pedido_id')
         ordem_id = request.json.get('ordem_id')
@@ -278,15 +278,59 @@ def sincronizar_quantidade_pedido():
         pedido = Pedido.query.get_or_404(pedido_id)
         ordem = OrdemServico.query.get_or_404(ordem_id)
         
+        # Verificar se é um pedido virtual de componente (AUTO-*)
+        if pedido.numero_pedido and pedido.numero_pedido.startswith('AUTO-'):
+            import re
+            match = re.search(r'-(\d+)$', pedido.numero_pedido)
+            if match:
+                pedido_original_id = int(match.group(1))
+                pedido_original = Pedido.query.get(pedido_original_id)
+                
+                if pedido_original and pedido_original.item_id:
+                    item_composto = pedido_original.item
+                    
+                    if item_composto and item_composto.eh_composto:
+                        # Encontrar a relação de componente
+                        for comp_rel in item_composto.componentes:
+                            if comp_rel.item_componente_id == pedido.item_id:
+                                # Calcular nova quantidade
+                                nova_quantidade = comp_rel.quantidade * pedido_original.quantidade
+                                quantidade_antiga = pedido.quantidade
+                                
+                                # Atualizar quantidade do pedido virtual
+                                pedido.quantidade = nova_quantidade
+                                
+                                # Atualizar snapshot
+                                pedido_os = PedidoOrdemServico.query.filter_by(
+                                    pedido_id=pedido.id,
+                                    ordem_servico_id=ordem.id
+                                ).first()
+                                
+                                if pedido_os:
+                                    pedido_os.quantidade_snapshot = nova_quantidade
+                                
+                                db.session.commit()
+                                
+                                quantidade_total = sum(po.pedido.quantidade for po in ordem.pedidos)
+                                
+                                return jsonify({
+                                    'success': True,
+                                    'message': f'Quantidade atualizada de {quantidade_antiga} para {nova_quantidade} peças (baseado no pedido original: {pedido_original.quantidade} peças). Total na OS: {quantidade_total} peças',
+                                    'quantidade_pedido': nova_quantidade,
+                                    'quantidade_total_os': quantidade_total
+                                })
+        
+        # Para pedidos normais (não AUTO), apenas retornar informação
         quantidade_total = sum(po.pedido.quantidade for po in ordem.pedidos)
         
         return jsonify({
             'success': True, 
-            'message': f'Quantidade atualizada: {pedido.quantidade} peças neste pedido. Total na OS: {quantidade_total} peças',
+            'message': f'Quantidade atual: {pedido.quantidade} peças. Total na OS: {quantidade_total} peças',
             'quantidade_pedido': pedido.quantidade,
             'quantidade_total_os': quantidade_total
         })
     except Exception as e:
+        db.session.rollback()
         return jsonify({'success': False, 'message': f'Erro ao sincronizar: {str(e)}'}), 500
 
 @kanban.route('/kanban/detalhes/<int:ordem_id>')

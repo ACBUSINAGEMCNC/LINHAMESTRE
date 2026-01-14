@@ -8,6 +8,7 @@
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
     <script src="https://cdn.jsdelivr.net/npm/sortablejs@1.15.1/Sortable.min.js"></script>
     <link rel="stylesheet" href="/static/css/kanban-sortable.css">
+    <script src="/static/js/kanban-card-click.js"></script>
     <style>
         body {
             background-color: #f0f2f5;
@@ -17,6 +18,8 @@
             overflow-x: auto;
             padding: 1rem 0;
             min-height: calc(100vh - 150px);
+            -webkit-overflow-scrolling: touch;
+            scroll-behavior: smooth;
         }
         .kanban-column {
             min-width: 280px;
@@ -71,11 +74,34 @@
             align-items: center;
             gap: 8px;
         }
-        .card-header-main { display: flex; align-items: center; gap: 8px; min-width: 0; }
-        .card-header-actions { display: flex; align-items: center; gap: 6px; margin-left: auto; }
-        .item-thumb { width: 48px; height: 48px; object-fit: cover; }
-        /* Título da OS maior */
-        .kanban-card-header .card-title { font-size: 1.2rem; line-height: 1.2; font-weight: 600; }
+        .card-header-top { display: flex; align-items: flex-start; gap: 8px; width: 100%; margin-bottom: 8px; position: relative; padding-left: 32px; }
+        .card-header-main { display: flex; align-items: center; gap: 8px; width: 100%; }
+        .card-header-actions { display: flex; flex-direction: column; align-items: flex-start; gap: 4px; flex: 1; }
+        .item-thumb { width: 60px; height: 60px; object-fit: cover; border-radius: 6px; flex-shrink: 0; }
+        /* Botão do número da OS - compacto, centralizado, clicável */
+        .os-number-btn {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border: none;
+            border-radius: 6px;
+            padding: 8px 12px;
+            font-size: 0.95rem;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+            width: 100%;
+            text-align: center;
+            margin-top: 4px;
+        }
+        .os-number-btn:hover {
+            transform: translateY(-1px);
+            box-shadow: 0 4px 8px rgba(0,0,0,0.15);
+            background: linear-gradient(135deg, #764ba2 0%, #667eea 100%);
+        }
+        .os-number-btn:active {
+            transform: translateY(0);
+        }
         /* Número nos cartões fantasma maior */
         .kanban-card.fantasma .fantasma-info strong { font-size: 1.4rem; }
         /* Nome do item (Itens da OS) maior */
@@ -84,7 +110,19 @@
         .kanban-card .os-item-qty { font-size: 1.05rem; padding: 0.2rem 0.55rem; }
         /* Responsivo: reduzir um pouco em telas pequenas */
         @media (max-width: 576px) {
-            .kanban-card-header .card-title { font-size: 1.1rem; }
+            .kanban-container {
+                padding: 0.5rem;
+                gap: 0.5rem;
+            }
+            .kanban-column {
+                min-width: 260px;
+                max-width: 260px;
+            }
+            .card-header-top { padding-left: 28px; }
+            .os-number-btn { font-size: 0.85rem; padding: 6px 10px; }
+            .item-thumb { width: 50px; height: 50px; }
+            .card-header-actions { gap: 3px; }
+            .card-header-actions .btn-sm { padding: 0.25rem 0.5rem; font-size: 0.75rem; }
             .kanban-card.fantasma .fantasma-info strong { font-size: 1.2rem; }
             .kanban-card .os-item-name { font-size: 1.05rem; }
             .kanban-card .os-item-qty { font-size: 0.95rem; }
@@ -535,16 +573,13 @@
                     <!-- Cartões normais -->
                     {% for ordem in ordens[lista] %}
                     <div class="kanban-card" data-ordem-id="{{ ordem.id }}">
-                        <div class="kanban-card-header">
-                            <div class="card-header-main">
-                                <div class="drag-handle" onclick="event.stopPropagation()">
-                                    <i class="fas fa-grip-lines"></i>
-                                </div>
-                                {% if ordem.pedidos and ordem.pedidos[0].pedido.item and ordem.pedidos[0].pedido.item.imagem_path %}
-                                    <img src="{{ ordem.pedidos[0].pedido.item.imagem_path }}" width="48" height="48" class="item-thumb rounded me-2" alt="Imagem do item">
-                                {% endif %}
-                                <span class="card-title" data-ordem-id="{{ ordem.id }}">{{ ordem.numero }}</span>
-                            </div>
+                        <div class="drag-handle" style="position: absolute; top: 8px; left: 8px; cursor: grab; z-index: 10;" onclick="event.stopPropagation()">
+                            <i class="fas fa-grip-lines"></i>
+                        </div>
+                        <div class="card-header-top">
+                            {% if ordem.pedidos and ordem.pedidos[0].pedido.item and ordem.pedidos[0].pedido.item.imagem_path %}
+                                <img src="{{ ordem.pedidos[0].pedido.item.imagem_path }}" class="item-thumb" alt="Imagem do item">
+                            {% endif %}
                             <div class="card-header-actions">
                                 {% if lista != 'Expedição' %}
                                     <!-- Botão folha de processo direto -->
@@ -553,7 +588,7 @@
                                             type="button" 
                                             onclick="event.stopPropagation(); window.open('/folhas-processo-novas?item_id={{ ordem.pedidos[0].pedido.item_id }}', '_blank')" 
                                             title="Ver folhas de processo do item">
-                                        <i class="fas fa-clipboard-list"></i>
+                                        <i class="fas fa-clipboard-list"></i> Folha
                                     </button>
                                     {% endif %}
                                     <!-- Botão fantasma direto -->
@@ -563,13 +598,13 @@
                                             data-lista-origem="{{ lista }}"
                                             onclick="event.stopPropagation()" 
                                             title="Criar cartão fantasma desta OS">
-                                        <i class="fas fa-ghost"></i>
+                                        <i class="fas fa-ghost"></i> Fantasma
                                     </button>
                                     <div class="dropdown">
                                         <button class="btn btn-sm btn-outline-secondary dropdown-toggle" type="button" 
                                                 id="dropdownMenuButton{{ ordem.id }}" data-bs-toggle="dropdown" 
                                                 aria-expanded="false" onclick="event.stopPropagation()">
-                                            <i class="fas fa-ellipsis-v"></i>
+                                            <i class="fas fa-ellipsis-v"></i> Mover
                                         </button>
                                         <ul class="dropdown-menu dropdown-menu-end kanban-dropdown-mover" aria-labelledby="dropdownMenuButton{{ ordem.id }}">
                                             {% if ordem.pedidos and ordem.pedidos[0].pedido.item_id %}
@@ -597,6 +632,11 @@
                                     </div>
                                 {% endif %}
                             </div>
+                        </div>
+                        <div class="card-header-main">
+                            <button class="os-number-btn" data-ordem-id="{{ ordem.id }}" onclick="event.stopPropagation();">
+                                {{ ordem.numero }}
+                            </button>
                         </div>
                         <div class="kanban-card-body">
                             {% if ordem.pedidos %}

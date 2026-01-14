@@ -394,6 +394,29 @@ class PedidoOrdemServico(db.Model):
         """Verifica se a quantidade do pedido foi alterada desde a vinculação"""
         if self.quantidade_snapshot is None:
             return False
+        
+        # Para pedidos virtuais de componentes (AUTO-*), verificar se o pedido original mudou
+        if self.pedido and self.pedido.numero_pedido and self.pedido.numero_pedido.startswith('AUTO-'):
+            # Extrair ID do pedido original do formato AUTO-OS-XXX-{pedido_original_id}
+            import re
+            match = re.search(r'-(\d+)$', self.pedido.numero_pedido)
+            if match:
+                pedido_original_id = int(match.group(1))
+                pedido_original = Pedido.query.get(pedido_original_id)
+                if pedido_original and pedido_original.item_id:
+                    # Buscar o item composto
+                    item_composto = pedido_original.item
+                    if item_composto and item_composto.eh_composto:
+                        # Verificar se a quantidade do pedido original mudou
+                        # A quantidade esperada do componente seria: quantidade_original * fator_componente
+                        # Se a quantidade atual do pedido virtual não bate, houve mudança
+                        for comp_rel in item_composto.componentes:
+                            if comp_rel.item_componente_id == self.pedido.item_id:
+                                quantidade_esperada = comp_rel.quantidade * pedido_original.quantidade
+                                if self.pedido.quantidade != quantidade_esperada:
+                                    return True
+        
+        # Verificação padrão para pedidos normais
         return self.pedido.quantidade != self.quantidade_snapshot
     
 class PedidoMaterial(db.Model):
