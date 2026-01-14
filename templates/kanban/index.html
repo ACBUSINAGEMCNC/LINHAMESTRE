@@ -74,10 +74,13 @@
             align-items: center;
             gap: 8px;
         }
-        .card-header-top { display: flex; align-items: flex-start; gap: 8px; width: 100%; margin-bottom: 8px; position: relative; padding-left: 32px; }
-        .card-header-main { display: flex; align-items: center; gap: 8px; width: 100%; }
-        .card-header-actions { display: flex; flex-direction: column; align-items: flex-start; gap: 4px; flex: 1; }
-        .item-thumb { width: 60px; height: 60px; object-fit: cover; border-radius: 6px; flex-shrink: 0; }
+        .card-header-top { display: flex; align-items: stretch; gap: 6px; width: 100%; max-width: 100%; margin-bottom: 8px; position: relative; padding-left: 32px; min-height: 95px; overflow: hidden; box-sizing: border-box; }
+        .card-header-main { display: flex; align-items: center; gap: 8px; width: 100%; max-width: 100%; min-width: 0; }
+        .card-header-actions { display: flex; flex-direction: column; align-items: stretch; gap: 4px; flex: 1; justify-content: space-between; min-width: 0; max-width: 100%; overflow: hidden; }
+        .card-header-actions .btn { width: 100%; max-width: 100%; text-align: left; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; box-sizing: border-box; }
+        .card-header-actions .dropdown { width: 100%; max-width: 100%; }
+        .card-header-actions .dropdown .dropdown-toggle { width: 100%; max-width: 100%; overflow: hidden; text-overflow: ellipsis; }
+        .item-thumb { width: 110px; height: 100%; object-fit: cover; border-radius: 6px; flex: 0 0 auto; min-height: 95px; background-color: #f8f9fa; padding: 2px; box-sizing: border-box; }
         /* Botão do número da OS - compacto, centralizado, clicável */
         .os-number-btn {
             background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
@@ -118,11 +121,11 @@
                 min-width: 260px;
                 max-width: 260px;
             }
-            .card-header-top { padding-left: 28px; }
+            .card-header-top { padding-left: 28px; min-height: 75px; }
             .os-number-btn { font-size: 0.85rem; padding: 6px 10px; }
-            .item-thumb { width: 50px; height: 50px; }
+            .item-thumb { width: 75px; min-height: 75px; }
             .card-header-actions { gap: 3px; }
-            .card-header-actions .btn-sm { padding: 0.25rem 0.5rem; font-size: 0.75rem; }
+            .card-header-actions .btn-sm { padding: 0.3rem 0.5rem; font-size: 0.75rem; }
             .kanban-card.fantasma .fantasma-info strong { font-size: 1.2rem; }
             .kanban-card .os-item-name { font-size: 1.05rem; }
             .kanban-card .os-item-qty { font-size: 0.95rem; }
@@ -816,8 +819,8 @@
                                 <div class="row g-1 mt-1">
                                     <div class="col-12">
                                         <button class="btn btn-outline-info btn-sm w-100" 
-                                                onclick="abrirDetalhesOS('{{ ordem.id }}')"
-                                                title="Ver apontamentos da OS">
+                                                onclick="abrirResumoApontamentos('{{ ordem.id }}')"
+                                                title="Ver resumo de apontamentos da OS">
                                             <i class="fas fa-info-circle"></i> Apontamentos
                                         </button>
                                     </div>
@@ -978,8 +981,8 @@
                                 </button>
                                 <button class="btn btn-outline-info btn-fantasma btn-detalhes-fantasma" 
                                         data-ordem-id="{{ cartao_fantasma.ordem_servico.id }}"
-                                        onclick="abrirDetalhesOS('{{ cartao_fantasma.ordem_servico.id }}')"
-                                        title="Ver apontamentos da OS original">
+                                        onclick="abrirResumoApontamentos('{{ cartao_fantasma.ordem_servico.id }}')">
+                                        title="Ver resumo de apontamentos da OS original">
                                     <i class="fas fa-info-circle"></i> Apontamentos
                                 </button>
                             </div>
@@ -2664,8 +2667,8 @@
         });
     }
     
-    // Função para abrir detalhes da OS (igual ao dashboard)
-    function abrirDetalhesOS(ordemId) {
+    // Função para abrir resumo de apontamentos da OS (igual ao dashboard)
+    function abrirResumoApontamentos(ordemId) {
         // Criar modal dinamicamente se não existir
         let modal = document.getElementById('detalhesOSModal');
         if (!modal) {
