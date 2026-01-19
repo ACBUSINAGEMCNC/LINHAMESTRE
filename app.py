@@ -66,6 +66,12 @@ def verificar_inicializar_banco():
                 logger.info("Coluna quantidade_snapshot verificada/adicionada com sucesso.")
             else:
                 logger.warning("Falha ao verificar/adicionar coluna quantidade_snapshot.")
+
+            from migrations.enable_rls_public_tables import migrate_postgres as migrate_rls_public
+            if migrate_rls_public():
+                logger.info("RLS verificado/habilitado nas tabelas public (Supabase).")
+            else:
+                logger.warning("Falha ao verificar/habilitar RLS nas tabelas public.")
         except Exception as col_err:
             logger.warning(f"Erro ao migrar coluna categoria_trabalho: {str(col_err)}")
             
