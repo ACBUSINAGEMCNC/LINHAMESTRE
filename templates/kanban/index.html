@@ -2340,7 +2340,16 @@
             // Pré-selecionar a OS (usar o ID correto do select)
             const selectOS = document.getElementById('ordemSelect');
             if (selectOS) {
-                selectOS.value = ordemId;
+                const ordemIdStr = String(ordemId);
+                // Garantir que a option exista (caso a lista não tenha sido populada corretamente)
+                let opt = Array.from(selectOS.options).find(o => o.value === ordemIdStr);
+                if (!opt) {
+                    opt = document.createElement('option');
+                    opt.value = ordemIdStr;
+                    opt.textContent = `OS #${ordemIdStr}`;
+                    selectOS.appendChild(opt);
+                }
+                selectOS.value = ordemIdStr;
                 // Disparar evento change se necessário para carregar trabalhos
                 selectOS.dispatchEvent(new Event('change'));
             }
@@ -2407,6 +2416,12 @@
                     const option = document.createElement('option');
                     option.value = ordemId;
                     option.textContent = titulo.textContent.trim();
+                    selectOS.appendChild(option);
+                    ordensAdicionadas.add(ordemId);
+                } else if (ordemId && !ordensAdicionadas.has(ordemId)) {
+                    const option = document.createElement('option');
+                    option.value = ordemId;
+                    option.textContent = `OS #${ordemId}`;
                     selectOS.appendChild(option);
                     ordensAdicionadas.add(ordemId);
                 }

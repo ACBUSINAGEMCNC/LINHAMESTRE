@@ -522,13 +522,45 @@ def criar_cartao_fantasma():
     try:
         errors = validate_form_data(request.form, ['ordem_id', 'lista_destino'])
         if errors:
-            return jsonify({'success': False, 'errors': errors})
+            return jsonify({
+                'success': False,
+                'errors': errors,
+                'message': 'Dados inválidos: ' + ', '.join(errors)
+            })
         
-        ordem_id = request.form['ordem_id']
+        try:
+            ordem_id = int(request.form['ordem_id'])
+        except Exception:
+            return jsonify({
+                'success': False,
+                'message': 'Ordem de serviço inválida',
+                'errors': ['ordem_id inválido']
+            })
         lista_destino = request.form['lista_destino']
         trabalho_id = request.form.get('trabalho_id')
         posicao_fila = request.form.get('posicao_fila', 1)
         observacoes = request.form.get('observacoes', '')
+
+        try:
+            posicao_fila = int(posicao_fila)
+        except Exception:
+            return jsonify({
+                'success': False,
+                'message': 'Posição na fila inválida',
+                'errors': ['posicao_fila inválida']
+            })
+
+        if trabalho_id:
+            try:
+                trabalho_id = int(trabalho_id)
+            except Exception:
+                return jsonify({
+                    'success': False,
+                    'message': 'Trabalho inválido',
+                    'errors': ['trabalho_id inválido']
+                })
+        else:
+            trabalho_id = None
         
         # Validar se a ordem existe
         ordem = OrdemServico.query.get_or_404(ordem_id)
@@ -550,8 +582,8 @@ def criar_cartao_fantasma():
         cartao_fantasma = CartaoFantasma(
             ordem_servico_id=ordem_id,
             lista_kanban=lista_destino,
-            trabalho_id=trabalho_id if trabalho_id else None,
-            posicao_fila=int(posicao_fila),
+            trabalho_id=trabalho_id,
+            posicao_fila=posicao_fila,
             observacoes=observacoes,
             criado_por_id=session.get('usuario_id')
         )
@@ -594,16 +626,60 @@ def mover_cartao_fantasma():
         if errors:
             return jsonify({'success': False, 'errors': errors})
         
-        cartao_id = request.form['cartao_id']
-        nova_posicao = int(request.form['nova_posicao'])
+        try:
+            cartao_id = int(request.form['cartao_id'])
+            nova_posicao = int(request.form['nova_posicao'])
+        except Exception:
+            return jsonify({'success': False, 'message': 'Parâmetros inválidos'}), 400
         
         cartao = CartaoFantasma.query.get_or_404(cartao_id)
-        cartao.posicao_fila = nova_posicao
+        lista_origem = cartao.lista_kanban
+        lista_destino = request.form.get('nova_lista') or lista_origem
+
+        current_app.logger.info(
+            "Mover cartao fantasma id=%s lista_origem=%s lista_destino=%s nova_posicao=%s",
+            cartao_id,
+            lista_origem,
+            lista_destino,
+            nova_posicao,
+        )
+
+        # Se mudou de lista, aplicar a mudança antes de reordenar
+        cartao.lista_kanban = lista_destino
+
+        # Reordenar todos os cartões fantasma ativos da lista de destino para evitar posições duplicadas
+        cartoes_destino = CartaoFantasma.query.filter_by(
+            lista_kanban=lista_destino,
+            ativo=True
+        ).order_by(CartaoFantasma.posicao_fila.asc(), CartaoFantasma.id.asc()).all()
+
+        ids = [c.id for c in cartoes_destino if c.id != cartao.id]
+        nova_posicao = max(1, min(nova_posicao, len(ids) + 1))
+        ids.insert(nova_posicao - 1, cartao.id)
+
+        card_by_id = {c.id: c for c in cartoes_destino}
+        card_by_id[cartao.id] = cartao
+
+        for idx, cid in enumerate(ids, start=1):
+            card_by_id[cid].posicao_fila = idx
+
+        # Se mudou de lista, também reindexar a lista de origem para manter sequência
+        if lista_origem != lista_destino:
+            cartoes_origem = CartaoFantasma.query.filter_by(
+                lista_kanban=lista_origem,
+                ativo=True
+            ).order_by(CartaoFantasma.posicao_fila.asc(), CartaoFantasma.id.asc()).all()
+            for idx, c in enumerate(cartoes_origem, start=1):
+                c.posicao_fila = idx
+
         db.session.commit()
         
         return jsonify({
             'success': True,
-            'message': f'Cartão fantasma movido para posição {nova_posicao}'
+            'message': f'Cartão fantasma movido para posição {nova_posicao}',
+            'nova_posicao': nova_posicao,
+            'lista_origem': lista_origem,
+            'lista_destino': lista_destino
         })
     
     except Exception as e:
