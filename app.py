@@ -72,6 +72,12 @@ def verificar_inicializar_banco():
                 logger.info("RLS verificado/habilitado nas tabelas public (Supabase).")
             else:
                 logger.warning("Falha ao verificar/habilitar RLS nas tabelas public.")
+
+            from migrations.add_indexes_and_pk_postgres import migrate_postgres as migrate_indexes_pk
+            if migrate_indexes_pk():
+                logger.info("Índices de FKs e PKs de tabelas backup verificados/criados (Supabase).")
+            else:
+                logger.warning("Falha ao verificar/criar índices de FKs e PKs de tabelas backup (Supabase).")
         except Exception as col_err:
             logger.warning(f"Erro ao migrar coluna categoria_trabalho: {str(col_err)}")
             
