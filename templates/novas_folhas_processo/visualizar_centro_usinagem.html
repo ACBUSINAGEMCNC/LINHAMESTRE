@@ -1,0 +1,344 @@
+{% extends 'base.html' %}
+
+{% block title %}{{ folha.titulo_completo }} - Visualizar{% endblock %}
+
+{% block content %}
+<div class="container-fluid mt-4">
+    <div class="row mb-4">
+        <div class="col-12">
+            <div class="card bg-primary text-white">
+                <div class="card-body">
+                    <div class="d-flex align-items-center justify-content-between">
+                        <div class="d-flex align-items-center">
+                            {% if folha.maquina.imagem_path %}
+                            <img src="{{ folha.maquina.imagem_path }}" alt="Máquina" class="rounded me-3" style="max-height: 80px; max-width: 80px;">
+                            {% else %}
+                            <i class="fas fa-industry fa-4x me-3"></i>
+                            {% endif %}
+                            <div>
+                                <h3 class="mb-1">{{ folha.titulo_completo }}</h3>
+                                <p class="mb-0">
+                                    <i class="fas fa-tag me-1"></i>Categoria: {{ folha.categoria_maquina.title() }} |
+                                    <i class="fas fa-calendar me-1"></i>Criado: {{ folha.data_criacao.strftime('%d/%m/%Y') }}
+                                </p>
+                            </div>
+                        </div>
+                        <div>
+                            <div class="btn-group me-2" role="group">
+                                <button type="button" class="btn btn-light" onclick="abrirModalImpressao()">
+                                    <i class="fas fa-print"></i> Imprimir
+                                </button>
+                                <button type="button" class="btn btn-outline-light dropdown-toggle dropdown-toggle-split" data-bs-toggle="dropdown">
+                                    <span class="visually-hidden">Toggle Dropdown</span>
+                                </button>
+                                <ul class="dropdown-menu">
+                                    <li><a class="dropdown-item" href="#" onclick="imprimirFolha()"><i class="fas fa-file-alt me-2"></i>Apenas Folha</a></li>
+                                    <li><a class="dropdown-item" href="#" onclick="abrirModalImpressao()"><i class="fas fa-cog me-2"></i>Opções Avançadas</a></li>
+                                    {% if folha.item and folha.item.desenho_path %}
+                                    <li><hr class="dropdown-divider"></li>
+                                    <li><a class="dropdown-item" href="{{ get_file_url(folha.item.desenho_path) }}" target="_blank"><i class="fas fa-drafting-compass me-2"></i>Ver Desenho Técnico</a></li>
+                                    {% endif %}
+                                </ul>
+                            </div>
+                            <a href="{{ url_for('novas_folhas_processo.editar_centro_usinagem', folha_id=folha.id) }}" class="btn btn-outline-light me-2">
+                                <i class="fas fa-edit"></i> Editar
+                            </a>
+                            <a href="{{ url_for('novas_folhas_processo.listar_folhas') }}" class="btn btn-outline-light">
+                                <i class="fas fa-list"></i> Voltar
+                            </a>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="row">
+        <div class="col-lg-8 mb-4">
+            <div class="card">
+                <div class="card-header bg-success text-white">
+                    <h5 class="mb-0"><i class="fas fa-cog me-2"></i>Dados do Processo</h5>
+                </div>
+                <div class="card-body">
+                    {% if folha_centro %}
+                        <div class="row mb-3">
+                            <div class="col-12">
+                                <strong><i class="fas fa-puzzle-piece me-1"></i>Gabarito:</strong><br>
+                                {% if folha_centro.gabarito_centro %}
+                                    {{ folha_centro.gabarito_centro.codigo }} - {{ folha_centro.gabarito_centro.nome or '' }}
+                                {% else %}
+                                    <span class="text-muted">Não informado</span>
+                                {% endif %}
+                            </div>
+                        </div>
+
+                        {% if folha_centro.como_zeramento %}
+                        <div class="row mb-3">
+                            <div class="col-12">
+                                <strong><i class="fas fa-crosshairs me-1"></i>Como fazer o zeramento:</strong>
+                                <div class="bg-light p-3 rounded border mt-2">{{ folha_centro.como_zeramento|nl2br }}</div>
+                            </div>
+                        </div>
+                        {% endif %}
+
+                        {% if folha_centro.observacoes %}
+                        <div class="row">
+                            <div class="col-12">
+                                <strong><i class="fas fa-sticky-note me-1"></i>Observações:</strong>
+                                <div class="bg-warning bg-opacity-10 p-3 rounded border mt-2">{{ folha_centro.observacoes|nl2br }}</div>
+                            </div>
+                        </div>
+                        {% endif %}
+                    {% else %}
+                        <p class="text-muted">Nenhuma informação cadastrada.</p>
+                    {% endif %}
+                </div>
+            </div>
+
+            <!-- Ferramental -->
+            {% if ferramentas %}
+            <div class="card mt-4">
+                <div class="card-header bg-success text-white">
+                    <h5 class="mb-0"><i class="fas fa-tools me-2"></i>Ferramental ({{ ferramentas|length }})</h5>
+                </div>
+                <div class="card-body">
+                    {% for ferramenta in ferramentas %}
+                    <div class="border rounded p-3 mb-2">
+                        <div class="row align-items-center">
+                            <div class="col-2">
+                                <strong class="badge bg-dark">{{ ferramenta.posicao }}</strong>
+                            </div>
+                            <div class="col-5">
+                                <strong>{{ ferramenta.descricao }}</strong>
+                            </div>
+                            <div class="col-5">
+                                <small class="text-muted">{{ ferramenta.configuracao }}</small>
+                            </div>
+                        </div>
+                        {% if ferramenta.imagem %}
+                        <div class="row mt-2">
+                            <div class="col-12">
+                                <img src="{{ get_file_url(ferramenta.imagem) }}" alt="Ferramenta" class="img-thumbnail" style="max-height: 60px;">
+                            </div>
+                        </div>
+                        {% endif %}
+                    </div>
+                    {% endfor %}
+                </div>
+            </div>
+            {% endif %}
+        </div>
+
+        <div class="col-lg-4 mb-4">
+            <div class="card mb-4">
+                <div class="card-header bg-info text-white">
+                    <h5 class="mb-0"><i class="fas fa-image me-2"></i>Gabarito Montado</h5>
+                </div>
+                <div class="card-body text-center">
+                    {% if folha_centro and folha_centro.imagem_gabarito_montado %}
+                        <img src="{{ get_file_url(folha_centro.imagem_gabarito_montado) }}" alt="Gabarito" class="img-fluid rounded border">
+                    {% else %}
+                        <div class="text-muted">
+                            <i class="fas fa-image fa-3x mb-2"></i>
+                            <div>Sem imagem</div>
+                        </div>
+                    {% endif %}
+                </div>
+            </div>
+
+            <div class="card">
+                <div class="card-header bg-info text-white">
+                    <h5 class="mb-0"><i class="fas fa-image me-2"></i>Zeramento</h5>
+                </div>
+                <div class="card-body text-center">
+                    {% if folha_centro and folha_centro.imagem_zeramento %}
+                        <img src="{{ get_file_url(folha_centro.imagem_zeramento) }}" alt="Zeramento" class="img-fluid rounded border">
+                    {% else %}
+                        <div class="text-muted">
+                            <i class="fas fa-image fa-3x mb-2"></i>
+                            <div>Sem imagem</div>
+                        </div>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Medidas Críticas -->
+    {% if medidas %}
+    <div class="row">
+        <div class="col-12">
+            <div class="card mb-4">
+                <div class="card-header bg-primary text-white">
+                    <h5 class="mb-0"><i class="fas fa-ruler me-2"></i>Medidas Críticas ({{ medidas|length }})</h5>
+                </div>
+                <div class="card-body">
+                    <div class="table-responsive">
+                        <table class="table table-sm">
+                            <thead>
+                                <tr>
+                                    <th>Descrição</th>
+                                    <th>Valor</th>
+                                    <th>Tolerância</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for medida in medidas %}
+                                <tr>
+                                    <td><strong>{{ medida.descricao }}</strong></td>
+                                    <td>{{ medida.valor }}</td>
+                                    <td><span class="badge bg-warning text-dark">{{ medida.tolerancia }}</span></td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    {% endif %}
+
+    <!-- Imagens de Peças -->
+    {% if imagens_peca %}
+    <div class="row">
+        <div class="col-12">
+            <div class="card mb-4">
+                <div class="card-header bg-success text-white">
+                    <h5 class="mb-0"><i class="fas fa-images me-2"></i>Imagens de Peças ({{ imagens_peca|length }})</h5>
+                </div>
+                <div class="card-body">
+                    <div class="row">
+                        {% for imagem in imagens_peca %}
+                        <div class="col-md-4 mb-3">
+                            <div class="card">
+                                <img src="{{ get_file_url(imagem.imagem) }}" alt="Peça" class="card-img-top">
+                                {% if imagem.observacao %}
+                                <div class="card-body p-2">
+                                    <small class="text-muted">{{ imagem.observacao }}</small>
+                                </div>
+                                {% endif %}
+                            </div>
+                        </div>
+                        {% endfor %}
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    {% endif %}
+</div>
+
+<!-- Modal de Impressão Avançada -->
+<div class="modal fade" id="modalImpressao" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title"><i class="fas fa-print me-2"></i>Opções de Impressão</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <div class="mb-3">
+                    <h6><i class="fas fa-file-alt me-2"></i>Conteúdo da Impressão</h6>
+                    <div class="form-check">
+                        <input class="form-check-input" type="checkbox" id="incluirFolha" checked>
+                        <label class="form-check-label" for="incluirFolha">
+                            <strong>Folha de Processo</strong> - Documento principal
+                        </label>
+                    </div>
+                    {% if folha.item and folha.item.desenho_path %}
+                    <div class="form-check">
+                        <input class="form-check-input" type="checkbox" id="incluirDesenho">
+                        <label class="form-check-label" for="incluirDesenho">
+                            <strong>Desenho Técnico</strong> - Abrir desenho do item
+                        </label>
+                    </div>
+                    {% endif %}
+                </div>
+
+                <div class="mb-3">
+                    <h6><i class="fas fa-cog me-2"></i>Configurações</h6>
+                    <div class="form-check">
+                        <input class="form-check-input" type="checkbox" id="abrirNovaAba" checked>
+                        <label class="form-check-label" for="abrirNovaAba">
+                            Abrir em nova aba para impressão
+                        </label>
+                    </div>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
+                <button type="button" class="btn btn-success" onclick="executarImpressaoAvancada()">
+                    <i class="fas fa-print me-1"></i>Imprimir
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script id="template-config" type="application/json">
+{
+    "desenhoPath": "{{ get_file_url(folha.item.desenho_path) if folha.item and folha.item.desenho_path else '' }}"
+}
+</script>
+
+<script>
+function imprimirFolha() {
+    window.print();
+}
+
+function abrirModalImpressao() {
+    new bootstrap.Modal(document.getElementById('modalImpressao')).show();
+}
+
+function getTemplateConfig() {
+    const configScript = document.getElementById('template-config');
+    return JSON.parse(configScript.textContent);
+}
+
+function executarImpressaoAvancada() {
+    const config = getTemplateConfig();
+    const incluirFolha = document.getElementById('incluirFolha').checked;
+    const incluirDesenho = document.getElementById('incluirDesenho')?.checked || false;
+    const abrirNovaAba = document.getElementById('abrirNovaAba').checked;
+
+    bootstrap.Modal.getInstance(document.getElementById('modalImpressao')).hide();
+
+    if (incluirFolha) {
+        if (abrirNovaAba) {
+            const url = window.location.href;
+            window.open(url, '_blank');
+        } else {
+            window.print();
+        }
+    }
+
+    if (incluirDesenho && !incluirFolha && config.desenhoPath) {
+        window.open(config.desenhoPath, '_blank');
+    }
+}
+
+$(document).ready(function() {
+    $('.position-fixed .btn-lg.rounded-circle').parent().remove();
+
+    $('body').append(`
+        <div class="position-fixed bottom-0 end-0 p-3" style="z-index: 999;">
+            <div class="btn-group dropup">
+                <button type="button" class="btn btn-light btn-lg rounded-circle shadow" onclick="imprimirFolha()" title="Impressão rápida">
+                    <i class="fas fa-print"></i>
+                </button>
+                <button type="button" class="btn btn-light btn-lg dropdown-toggle dropdown-toggle-split rounded-circle shadow ms-1" data-bs-toggle="dropdown" title="Opções de impressão">
+                    <span class="visually-hidden">Toggle Dropdown</span>
+                </button>
+                <ul class="dropdown-menu">
+                    <li><a class="dropdown-item" href="#" onclick="imprimirFolha()"><i class="fas fa-print me-2"></i>Impressão Rápida</a></li>
+                    <li><a class="dropdown-item" href="#" onclick="abrirModalImpressao()"><i class="fas fa-cog me-2"></i>Opções Avançadas</a></li>
+                </ul>
+            </div>
+        </div>
+    `);
+});
+</script>
+{% endblock %}

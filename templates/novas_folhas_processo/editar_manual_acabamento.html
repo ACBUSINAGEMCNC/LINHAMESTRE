@@ -1,0 +1,188 @@
+{% extends 'base.html' %}
+
+{% block title %}{{ folha.titulo_completo }} - Editar Manual/Acabamento{% endblock %}
+
+{% block content %}
+<div class="container-fluid mt-4">
+    <div class="row mb-4">
+        <div class="col-12">
+            <div class="card bg-secondary text-white">
+                <div class="card-body">
+                    <div class="d-flex align-items-center">
+                        {% if folha.maquina.imagem_path %}
+                        <img src="{{ folha.maquina.imagem_path }}" alt="Máquina" class="rounded me-3" style="max-height: 80px; max-width: 80px;">
+                        {% else %}
+                        <i class="fas fa-tools fa-4x me-3"></i>
+                        {% endif %}
+                        <div>
+                            <h3 class="mb-1">{{ folha.titulo_completo }}</h3>
+                            <p class="mb-0">
+                                <i class="fas fa-tag me-1"></i>Categoria: {{ folha.categoria_maquina.title() }} |
+                                <i class="fas fa-calendar me-1"></i>Criado: {{ folha.data_criacao.strftime('%d/%m/%Y') }}
+                            </p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <form method="POST" enctype="multipart/form-data">
+        <div class="row">
+            <div class="col-lg-6 mb-4">
+                <div class="card h-100">
+                    <div class="card-header bg-primary text-white">
+                        <h5 class="mb-0"><i class="fas fa-fire me-2"></i>Têmpera</h5>
+                    </div>
+                    <div class="card-body">
+                        <div class="form-check mb-3">
+                            <input class="form-check-input" type="checkbox" id="possui_tempera" name="possui_tempera" {% if folha_manual.possui_tempera %}checked{% endif %} onchange="toggleTempera()">
+                            <label class="form-check-label" for="possui_tempera">
+                                Possui têmpera
+                            </label>
+                        </div>
+
+                        <div class="mb-3" id="tipo-tempera-container">
+                            <label for="tipo_tempera" class="form-label">Tipo de têmpera</label>
+                            <select class="form-select" id="tipo_tempera" name="tipo_tempera" onchange="toggleTempera()">
+                                <option value="" {% if not folha_manual.tipo_tempera %}selected{% endif %}>Selecionar...</option>
+                                <option value="inducao" {% if folha_manual.tipo_tempera == 'inducao' %}selected{% endif %}>Indução</option>
+                                <option value="forno" {% if folha_manual.tipo_tempera == 'forno' %}selected{% endif %}>Forno</option>
+                            </select>
+                        </div>
+
+                        <div id="tempera-inducao" style="display: none;">
+                            <div class="mb-3">
+                                <label for="programa_inducao" class="form-label">Programa (Indução)</label>
+                                <input type="text" class="form-control" id="programa_inducao" name="programa_inducao" value="{{ folha_manual.programa_inducao or '' }}">
+                            </div>
+                            <div class="mb-3">
+                                <label for="indutor_utilizado" class="form-label">Indutor utilizado</label>
+                                <input type="text" class="form-control" id="indutor_utilizado" name="indutor_utilizado" value="{{ folha_manual.indutor_utilizado or '' }}">
+                            </div>
+                            <div class="mb-3">
+                                <label for="local_armazenagem_gabarito_inducao" class="form-label">Local armazenagem (gabarito indução)</label>
+                                <input type="text" class="form-control" id="local_armazenagem_gabarito_inducao" name="local_armazenagem_gabarito_inducao" value="{{ folha_manual.local_armazenagem_gabarito_inducao or '' }}">
+                            </div>
+                            <div class="mb-3">
+                                <label for="dureza_inducao" class="form-label">Dureza (Indução)</label>
+                                <input type="text" class="form-control" id="dureza_inducao" name="dureza_inducao" value="{{ folha_manual.dureza_inducao or '' }}">
+                            </div>
+                        </div>
+
+                        <div id="tempera-forno" style="display: none;">
+                            <div class="mb-3">
+                                <label for="dureza_forno" class="form-label">Dureza (Forno)</label>
+                                <input type="text" class="form-control" id="dureza_forno" name="dureza_forno" value="{{ folha_manual.dureza_forno or '' }}">
+                            </div>
+                        </div>
+
+                        <div class="mb-0">
+                            <label for="observacoes" class="form-label"><i class="fas fa-sticky-note me-1"></i>Observações</label>
+                            <textarea class="form-control" id="observacoes" name="observacoes" rows="4">{{ folha_manual.observacoes or '' }}</textarea>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="col-lg-6 mb-4">
+                <div class="card h-100">
+                    <div class="card-header bg-success text-white">
+                        <h5 class="mb-0"><i class="fas fa-images me-2"></i>Imagens</h5>
+                    </div>
+                    <div class="card-body">
+                        <div class="mb-4">
+                            <label class="form-label fw-bold">Imagens (Indução)</label>
+                            <div class="mb-2">
+                                <label class="form-label">Gabarito Indução</label>
+                                {% if folha_manual.imagem_gabarito_inducao %}
+                                <div class="mb-2 text-center"><img src="{{ get_file_url(folha_manual.imagem_gabarito_inducao) }}" class="img-fluid rounded border" style="max-height: 150px;"></div>
+                                {% endif %}
+                                <input type="file" class="form-control" name="imagem_gabarito_inducao" accept="image/*">
+                            </div>
+                            <div class="mb-2">
+                                <label class="form-label">Indutor</label>
+                                {% if folha_manual.imagem_indutor %}
+                                <div class="mb-2 text-center"><img src="{{ get_file_url(folha_manual.imagem_indutor) }}" class="img-fluid rounded border" style="max-height: 150px;"></div>
+                                {% endif %}
+                                <input type="file" class="form-control" name="imagem_indutor" accept="image/*">
+                            </div>
+                            <div class="mb-2">
+                                <label class="form-label">Montagem Indução</label>
+                                {% if folha_manual.imagem_montagem_inducao %}
+                                <div class="mb-2 text-center"><img src="{{ get_file_url(folha_manual.imagem_montagem_inducao) }}" class="img-fluid rounded border" style="max-height: 150px;"></div>
+                                {% endif %}
+                                <input type="file" class="form-control" name="imagem_montagem_inducao" accept="image/*">
+                            </div>
+                            <div class="mb-0">
+                                <label class="form-label">Dureza (Indução)</label>
+                                {% if folha_manual.imagem_dureza_inducao %}
+                                <div class="mb-2 text-center"><img src="{{ get_file_url(folha_manual.imagem_dureza_inducao) }}" class="img-fluid rounded border" style="max-height: 150px;"></div>
+                                {% endif %}
+                                <input type="file" class="form-control" name="imagem_dureza_inducao" accept="image/*">
+                            </div>
+                        </div>
+
+                        <div class="mb-0">
+                            <label class="form-label fw-bold">Imagens (Forno)</label>
+                            <div class="mb-2">
+                                <label class="form-label">Peça Temperada (Forno)</label>
+                                {% if folha_manual.imagem_peca_temperada_forno %}
+                                <div class="mb-2 text-center"><img src="{{ get_file_url(folha_manual.imagem_peca_temperada_forno) }}" class="img-fluid rounded border" style="max-height: 150px;"></div>
+                                {% endif %}
+                                <input type="file" class="form-control" name="imagem_peca_temperada_forno" accept="image/*">
+                            </div>
+                            <div class="mb-0">
+                                <label class="form-label">Dureza (Forno)</label>
+                                {% if folha_manual.imagem_dureza_forno %}
+                                <div class="mb-2 text-center"><img src="{{ get_file_url(folha_manual.imagem_dureza_forno) }}" class="img-fluid rounded border" style="max-height: 150px;"></div>
+                                {% endif %}
+                                <input type="file" class="form-control" name="imagem_dureza_forno" accept="image/*">
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="row">
+            <div class="col-12">
+                <div class="card">
+                    <div class="card-body">
+                        <div class="d-flex justify-content-between">
+                            <div>
+                                <a href="{{ url_for('novas_folhas_processo.listar_folhas') }}" class="btn btn-secondary me-2">
+                                    <i class="fas fa-list me-1"></i>Voltar à Lista
+                                </a>
+                                <a href="{{ url_for('novas_folhas_processo.visualizar_folha', folha_id=folha.id) }}" class="btn btn-outline-primary">
+                                    <i class="fas fa-eye me-1"></i>Visualizar
+                                </a>
+                            </div>
+                            <div>
+                                <button type="submit" class="btn btn-success">
+                                    <i class="fas fa-save me-1"></i>Salvar Alterações
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </form>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+function toggleTempera() {
+    const possui = document.getElementById('possui_tempera').checked;
+    const tipo = document.getElementById('tipo_tempera').value;
+
+    document.getElementById('tipo-tempera-container').style.display = possui ? 'block' : 'none';
+    document.getElementById('tempera-inducao').style.display = (possui && tipo === 'inducao') ? 'block' : 'none';
+    document.getElementById('tempera-forno').style.display = (possui && tipo === 'forno') ? 'block' : 'none';
+}
+
+document.addEventListener('DOMContentLoaded', toggleTempera);
+</script>
+{% endblock %}

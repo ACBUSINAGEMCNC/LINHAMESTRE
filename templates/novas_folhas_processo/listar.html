@@ -105,17 +105,18 @@
                                        class="btn btn-sm btn-outline-primary" title="Visualizar">
                                         <i class="fas fa-eye"></i>
                                     </a>
-                                    {% if folha.categoria_maquina == 'serra' %}
+                                    {% set cat = (folha.categoria_maquina or '')|lower|replace('_', ' ') %}
+                                    {% if cat == 'serra' %}
                                     <a href="{{ url_for('novas_folhas_processo.editar_serra', folha_id=folha.id) }}" 
                                        class="btn btn-sm btn-outline-secondary" title="Editar">
                                         <i class="fas fa-edit"></i>
                                     </a>
-                                    {% elif folha.categoria_maquina == 'torno cnc' %}
+                                    {% elif cat == 'torno cnc' %}
                                     <a href="{{ url_for('novas_folhas_processo.editar_torno_cnc', folha_id=folha.id) }}" 
                                        class="btn btn-sm btn-outline-secondary" title="Editar">
                                         <i class="fas fa-edit"></i>
                                     </a>
-                                    {% elif folha.categoria_maquina == 'centro de usinagem' %}
+                                    {% elif cat == 'centro de usinagem' %}
                                     <a href="{{ url_for('novas_folhas_processo.editar_centro_usinagem', folha_id=folha.id) }}" 
                                        class="btn btn-sm btn-outline-secondary" title="Editar">
                                         <i class="fas fa-edit"></i>

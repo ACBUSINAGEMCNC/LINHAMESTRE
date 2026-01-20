@@ -1,5 +1,5 @@
 from flask import Blueprint, render_template, request, redirect, url_for, flash
-from models import db, GabaritoCentroUsinagem
+from models import db, GabaritoCentroUsinagem, Trabalho
 from utils import validate_form_data, save_uploaded_file, generate_next_code
 
 gabaritos_centro = Blueprint('gabaritos_centro', __name__)
@@ -13,15 +13,17 @@ def listar_gabaritos_centro():
 @gabaritos_centro.route('/trabalhos/gabaritos-centro/novo', methods=['GET', 'POST'])
 def novo_gabarito_centro():
     """Rota para cadastrar um novo gabarito de centro de usinagem"""
+    categorias = [c[0] for c in db.session.query(Trabalho.categoria).distinct().all() if c and c[0]]
     if request.method == 'POST':
         # Validação de dados
-        errors = validate_form_data(request.form, ['nome', 'local_armazenamento'])
+        errors = validate_form_data(request.form, ['nome', 'local_armazenamento', 'categoria_trabalho'])
         if errors:
             for error in errors:
                 flash(error, 'danger')
-            return render_template('trabalhos/gabaritos-centro/novo.html')
+            return render_template('trabalhos/gabaritos-centro/novo.html', categorias=categorias)
         
         nome = request.form['nome']
+        categoria_trabalho = request.form.get('categoria_trabalho')
         funcao = request.form.get('funcao', '')
         local_armazenamento = request.form['local_armazenamento']
         
@@ -29,7 +31,7 @@ def novo_gabarito_centro():
         gabarito_existente = GabaritoCentroUsinagem.query.filter_by(nome=nome).first()
         if gabarito_existente:
             flash('Já existe um gabarito com este nome!', 'danger')
-            return render_template('trabalhos/gabaritos-centro/novo.html')
+            return render_template('trabalhos/gabaritos-centro/novo.html', categorias=categorias)
         
         # Gerar código automático
         codigo = generate_next_code(GabaritoCentroUsinagem, 'GCU', 'codigo')
@@ -42,6 +44,7 @@ def novo_gabarito_centro():
         gabarito = GabaritoCentroUsinagem(
             codigo=codigo,
             nome=nome,
+            categoria_trabalho=categoria_trabalho,
             funcao=funcao,
             local_armazenamento=local_armazenamento,
             imagem=imagem
@@ -52,22 +55,24 @@ def novo_gabarito_centro():
         flash('Gabarito cadastrado com sucesso!', 'success')
         return redirect(url_for('gabaritos_centro.listar_gabaritos_centro'))
     
-    return render_template('trabalhos/gabaritos-centro/novo.html')
+    return render_template('trabalhos/gabaritos-centro/novo.html', categorias=categorias)
 
 @gabaritos_centro.route('/trabalhos/gabaritos-centro/editar/<int:gabarito_id>', methods=['GET', 'POST'])
 def editar_gabarito_centro(gabarito_id):
     """Rota para editar um gabarito de centro de usinagem existente"""
     gabarito = GabaritoCentroUsinagem.query.get_or_404(gabarito_id)
+    categorias = [c[0] for c in db.session.query(Trabalho.categoria).distinct().all() if c and c[0]]
     
     if request.method == 'POST':
         # Validação de dados
-        errors = validate_form_data(request.form, ['nome', 'local_armazenamento'])
+        errors = validate_form_data(request.form, ['nome', 'local_armazenamento', 'categoria_trabalho'])
         if errors:
             for error in errors:
                 flash(error, 'danger')
-            return render_template('trabalhos/gabaritos-centro/editar.html', gabarito=gabarito)
+            return render_template('trabalhos/gabaritos-centro/editar.html', gabarito=gabarito, categorias=categorias)
         
         nome = request.form['nome']
+        categoria_trabalho = request.form.get('categoria_trabalho')
         funcao = request.form.get('funcao', '')
         local_armazenamento = request.form['local_armazenamento']
         
@@ -75,13 +80,14 @@ def editar_gabarito_centro(gabarito_id):
         gabarito_existente = GabaritoCentroUsinagem.query.filter(GabaritoCentroUsinagem.nome == nome, GabaritoCentroUsinagem.id != gabarito_id).first()
         if gabarito_existente:
             flash('Já existe um gabarito com este nome!', 'danger')
-            return render_template('trabalhos/gabaritos-centro/editar.html', gabarito=gabarito)
+            return render_template('trabalhos/gabaritos-centro/editar.html', gabarito=gabarito, categorias=categorias)
         
         # Processar imagem se enviada
         if 'imagem' in request.files and request.files['imagem'].filename:
             gabarito.imagem = save_uploaded_file(request.files['imagem'], 'gabaritos')
         
         gabarito.nome = nome
+        gabarito.categoria_trabalho = categoria_trabalho
         gabarito.funcao = funcao
         gabarito.local_armazenamento = local_armazenamento
         
@@ -89,4 +95,4 @@ def editar_gabarito_centro(gabarito_id):
         flash('Gabarito atualizado com sucesso!', 'success')
         return redirect(url_for('gabaritos_centro.listar_gabaritos_centro'))
     
-    return render_template('trabalhos/gabaritos-centro/editar.html', gabarito=gabarito)
+    return render_template('trabalhos/gabaritos-centro/editar.html', gabarito=gabarito, categorias=categorias)

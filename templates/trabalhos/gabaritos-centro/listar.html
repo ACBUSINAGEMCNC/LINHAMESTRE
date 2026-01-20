@@ -18,8 +18,8 @@
                     <thead>
                         <tr>
                             <th>Código</th>
-                            <th>Descrição</th>
-                            <th>Máquina</th>
+                            <th>Nome</th>
+                            <th>Tipo de Serviço</th>
                             <th>Local de Armazenamento</th>
                             <th>Imagem</th>
                             <th>Data de Cadastro</th>
@@ -30,8 +30,8 @@
                         {% for gabarito in gabaritos %}
                         <tr>
                             <td>{{ gabarito.codigo }}</td>
-                            <td>{{ gabarito.descricao }}</td>
-                            <td>{% if gabarito.maquina %}{{ gabarito.maquina.nome }}{% else %}-{% endif %}</td>
+                            <td>{{ gabarito.nome }}</td>
+                            <td>{{ gabarito.categoria_trabalho or '-' }}</td>
                             <td>{{ gabarito.local_armazenamento }}</td>
                             <td>
                                 {% if gabarito.imagem_path %}

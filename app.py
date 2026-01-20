@@ -283,6 +283,20 @@ def create_app():
                 upgrade(db.engine)
             except Exception as e:
                 app.logger.warning(f"Migração numero_pedido_cliente: {str(e)}")
+
+            # Executar migração para adicionar categoria_trabalho em gabarito_centro_usinagem
+            try:
+                from migrations.add_categoria_trabalho_gabarito_centro import upgrade
+                upgrade(db.engine)
+            except Exception as e:
+                app.logger.warning(f"Migração categoria_trabalho (gabarito_centro_usinagem): {str(e)}")
+
+            # Executar migração para adicionar bt/ar em folha_processo_torno_cnc
+            try:
+                from migrations.add_bt_ar_folha_torno_cnc import upgrade
+                upgrade(db.engine)
+            except Exception as e:
+                app.logger.warning(f"Migração bt/ar (folha_processo_torno_cnc): {str(e)}")
             
             # Garantir que o usuário admin existe (especialmente importante no Vercel)
             from models import Usuario

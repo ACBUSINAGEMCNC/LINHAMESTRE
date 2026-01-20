@@ -21,25 +21,31 @@ def verificar_permissao():
 def listar_folhas(item_id):
     """Redireciona para o novo sistema de folhas de processo"""
     flash('Sistema de folhas de processo atualizado! Use o novo sistema.', 'info')
-    return redirect(url_for('novas_folhas_processo.listar_folhas'))
+    return redirect(url_for('novas_folhas_processo.listar_folhas', item_id=item_id))
 
 @folhas_processo.route('/folhas-processo/historico/<int:item_id>')
 def historico_folhas(item_id):
     """Redireciona para o novo sistema de folhas de processo"""
     flash('Sistema de folhas de processo atualizado! Use o novo sistema.', 'info')
-    return redirect(url_for('novas_folhas_processo.listar_folhas'))
+    return redirect(url_for('novas_folhas_processo.listar_folhas', item_id=item_id))
 
 @folhas_processo.route('/folhas-processo/criar/<int:item_id>')
 def criar_folha_form(item_id):
     """Redireciona para o novo sistema de folhas de processo"""
     flash('Sistema de folhas de processo atualizado! Use o novo sistema.', 'info')
-    return redirect(url_for('novas_folhas_processo.nova_folha'))
+    return redirect(url_for('novas_folhas_processo.nova_folha', item_id=item_id))
 
 @folhas_processo.route('/folhas-processo/criar', methods=['POST'])
 def criar_folha():
     """Redireciona para o novo sistema de folhas de processo"""
     flash('Sistema de folhas de processo atualizado! Use o novo sistema.', 'info')
-    return redirect(url_for('novas_folhas_processo.nova_folha'))
+    item_id = request.form.get('item_id') or request.args.get('item_id')
+    if item_id:
+        try:
+            return redirect(url_for('novas_folhas_processo.nova_folha', item_id=int(item_id)))
+        except Exception:
+            pass
+    return redirect(url_for('novas_folhas_processo.selecionar_item'))
 
 @folhas_processo.route('/folhas-processo/editar/<int:folha_id>')
 def editar_folha(folha_id):
@@ -63,7 +69,13 @@ def visualizar_folha(folha_id):
 def criar_nova_versao(folha_id):
     """Redireciona para o novo sistema de folhas de processo"""
     flash('Sistema de folhas de processo atualizado! Use o novo sistema.', 'info')
-    return redirect(url_for('novas_folhas_processo.nova_folha'))
+    item_id = request.form.get('item_id') or request.args.get('item_id')
+    if item_id:
+        try:
+            return redirect(url_for('novas_folhas_processo.nova_folha', item_id=int(item_id)))
+        except Exception:
+            pass
+    return redirect(url_for('novas_folhas_processo.selecionar_item'))
 
 # Qualquer outra rota de folhas de processo redireciona para o novo sistema
 @folhas_processo.route('/folhas-processo')

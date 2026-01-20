@@ -103,6 +103,7 @@ class GabaritoCentroUsinagem(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     codigo = db.Column(db.String(20), unique=True)  # Código automático
     nome = db.Column(db.String(100), nullable=False)
+    categoria_trabalho = db.Column(db.String(50))  # Categoria/Tipo de serviço (ex: Centro de Usinagem)
     funcao = db.Column(db.Text)  # Função do gabarito
     imagem = db.Column(db.String(255))  # Caminho para a imagem do gabarito
     local_armazenamento = db.Column(db.String(100))  # Estante/linha/posição
@@ -925,6 +926,10 @@ class FolhaProcessoTornoCNC(db.Model):
     local_armazenagem_bucha = db.Column(db.String(200))
     encosto = db.Column(db.String(200))
     local_armazenagem_encosto = db.Column(db.String(200))
+
+    # BT e AR
+    bt = db.Column(db.String(50))
+    ar = db.Column(db.String(50))
     
     # Observações
     observacoes = db.Column(db.Text)

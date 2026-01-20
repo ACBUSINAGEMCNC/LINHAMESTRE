@@ -1,0 +1,161 @@
+{% extends 'base.html' %}
+
+{% block title %}{{ folha.titulo_completo }} - Visualizar{% endblock %}
+
+{% block content %}
+<div class="container-fluid mt-4">
+    <div class="row mb-4">
+        <div class="col-12">
+            <div class="card bg-secondary text-white">
+                <div class="card-body">
+                    <div class="d-flex align-items-center justify-content-between">
+                        <div class="d-flex align-items-center">
+                            {% if folha.maquina.imagem_path %}
+                            <img src="{{ folha.maquina.imagem_path }}" alt="Máquina" class="rounded me-3" style="max-height: 80px; max-width: 80px;">
+                            {% else %}
+                            <i class="fas fa-tools fa-4x me-3"></i>
+                            {% endif %}
+                            <div>
+                                <h3 class="mb-1">{{ folha.titulo_completo }}</h3>
+                                <p class="mb-0">
+                                    <i class="fas fa-tag me-1"></i>Categoria: {{ folha.categoria_maquina.title() }} |
+                                    <i class="fas fa-calendar me-1"></i>Criado: {{ folha.data_criacao.strftime('%d/%m/%Y') }}
+                                </p>
+                            </div>
+                        </div>
+                        <div>
+                            <a href="{{ url_for('novas_folhas_processo.editar_manual_acabamento', folha_id=folha.id) }}" class="btn btn-outline-light me-2">
+                                <i class="fas fa-edit"></i> Editar
+                            </a>
+                            <a href="{{ url_for('novas_folhas_processo.listar_folhas') }}" class="btn btn-outline-light">
+                                <i class="fas fa-list"></i> Voltar
+                            </a>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="row">
+        <div class="col-lg-8 mb-4">
+            <div class="card">
+                <div class="card-header bg-primary text-white">
+                    <h5 class="mb-0"><i class="fas fa-fire me-2"></i>Têmpera</h5>
+                </div>
+                <div class="card-body">
+                    {% if folha_manual %}
+                        <div class="row mb-3">
+                            <div class="col-12">
+                                <strong>Possui têmpera:</strong>
+                                {% if folha_manual.possui_tempera %}
+                                    <span class="badge bg-success">Sim</span>
+                                {% else %}
+                                    <span class="badge bg-secondary">Não</span>
+                                {% endif %}
+                            </div>
+                        </div>
+
+                        {% if folha_manual.possui_tempera %}
+                        <div class="row mb-3">
+                            <div class="col-12">
+                                <strong>Tipo:</strong>
+                                <span class="badge bg-info">{{ (folha_manual.tipo_tempera or 'Não informado')|title }}</span>
+                            </div>
+                        </div>
+                        {% endif %}
+
+                        {% if folha_manual.tipo_tempera == 'inducao' %}
+                        <div class="row mb-3">
+                            <div class="col-md-6"><strong>Programa:</strong><br>{{ folha_manual.programa_inducao or 'Não informado' }}</div>
+                            <div class="col-md-6"><strong>Indutor:</strong><br>{{ folha_manual.indutor_utilizado or 'Não informado' }}</div>
+                        </div>
+                        <div class="row mb-3">
+                            <div class="col-md-6"><strong>Armazenagem:</strong><br>{{ folha_manual.local_armazenagem_gabarito_inducao or 'Não informado' }}</div>
+                            <div class="col-md-6"><strong>Dureza:</strong><br>{{ folha_manual.dureza_inducao or 'Não informado' }}</div>
+                        </div>
+                        {% endif %}
+
+                        {% if folha_manual.tipo_tempera == 'forno' %}
+                        <div class="row mb-3">
+                            <div class="col-12"><strong>Dureza:</strong><br>{{ folha_manual.dureza_forno or 'Não informado' }}</div>
+                        </div>
+                        {% endif %}
+
+                        {% if folha_manual.observacoes %}
+                        <div class="row">
+                            <div class="col-12">
+                                <strong><i class="fas fa-sticky-note me-1"></i>Observações:</strong>
+                                <div class="bg-warning bg-opacity-10 p-3 rounded border mt-2">{{ folha_manual.observacoes|nl2br }}</div>
+                            </div>
+                        </div>
+                        {% endif %}
+                    {% else %}
+                        <p class="text-muted">Nenhuma informação cadastrada.</p>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+
+        <div class="col-lg-4 mb-4">
+            <div class="card mb-4">
+                <div class="card-header bg-success text-white">
+                    <h5 class="mb-0"><i class="fas fa-images me-2"></i>Imagens</h5>
+                </div>
+                <div class="card-body">
+                    {% if folha_manual %}
+                        {% if folha_manual.imagem_gabarito_inducao %}
+                            <div class="mb-3 text-center">
+                                <div class="fw-bold mb-1">Gabarito Indução</div>
+                                <img src="{{ get_file_url(folha_manual.imagem_gabarito_inducao) }}" class="img-fluid rounded border">
+                            </div>
+                        {% endif %}
+                        {% if folha_manual.imagem_indutor %}
+                            <div class="mb-3 text-center">
+                                <div class="fw-bold mb-1">Indutor</div>
+                                <img src="{{ get_file_url(folha_manual.imagem_indutor) }}" class="img-fluid rounded border">
+                            </div>
+                        {% endif %}
+                        {% if folha_manual.imagem_montagem_inducao %}
+                            <div class="mb-3 text-center">
+                                <div class="fw-bold mb-1">Montagem Indução</div>
+                                <img src="{{ get_file_url(folha_manual.imagem_montagem_inducao) }}" class="img-fluid rounded border">
+                            </div>
+                        {% endif %}
+                        {% if folha_manual.imagem_dureza_inducao %}
+                            <div class="mb-3 text-center">
+                                <div class="fw-bold mb-1">Dureza (Indução)</div>
+                                <img src="{{ get_file_url(folha_manual.imagem_dureza_inducao) }}" class="img-fluid rounded border">
+                            </div>
+                        {% endif %}
+                        {% if folha_manual.imagem_peca_temperada_forno %}
+                            <div class="mb-3 text-center">
+                                <div class="fw-bold mb-1">Peça Temperada (Forno)</div>
+                                <img src="{{ get_file_url(folha_manual.imagem_peca_temperada_forno) }}" class="img-fluid rounded border">
+                            </div>
+                        {% endif %}
+                        {% if folha_manual.imagem_dureza_forno %}
+                            <div class="mb-0 text-center">
+                                <div class="fw-bold mb-1">Dureza (Forno)</div>
+                                <img src="{{ get_file_url(folha_manual.imagem_dureza_forno) }}" class="img-fluid rounded border">
+                            </div>
+                        {% endif %}
+
+                        {% if not folha_manual.imagem_gabarito_inducao and not folha_manual.imagem_indutor and not folha_manual.imagem_montagem_inducao and not folha_manual.imagem_dureza_inducao and not folha_manual.imagem_peca_temperada_forno and not folha_manual.imagem_dureza_forno %}
+                            <div class="text-muted text-center">
+                                <i class="fas fa-image fa-3x mb-2"></i>
+                                <div>Sem imagens</div>
+                            </div>
+                        {% endif %}
+                    {% else %}
+                        <div class="text-muted text-center">
+                            <i class="fas fa-image fa-3x mb-2"></i>
+                            <div>Sem imagens</div>
+                        </div>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

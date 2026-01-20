@@ -16,18 +16,16 @@
                 </div>
                 
                 <div class="mb-3">
-                    <label for="descricao" class="form-label">Descrição <span class="text-danger">*</span></label>
-                    <input type="text" class="form-control" id="descricao" name="descricao" value="{{ gabarito.descricao }}" required>
+                    <label for="nome" class="form-label">Nome <span class="text-danger">*</span></label>
+                    <input type="text" class="form-control" id="nome" name="nome" value="{{ gabarito.nome }}" required>
                 </div>
                 
                 <div class="mb-3">
-                    <label for="maquina_id" class="form-label">Máquina</label>
-                    <select class="form-select" id="maquina_id" name="maquina_id">
-                        <option value="">Selecione uma máquina</option>
-                        {% for maquina in maquinas %}
-                        <option value="{{ maquina.id }}" {% if gabarito.maquina_id == maquina.id %}selected{% endif %}>
-                            {{ maquina.nome }} ({{ maquina.codigo }})
-                        </option>
+                    <label for="categoria_trabalho" class="form-label">Tipo de Serviço <span class="text-danger">*</span></label>
+                    <select class="form-select" id="categoria_trabalho" name="categoria_trabalho" required>
+                        <option value="">Selecione...</option>
+                        {% for categoria in categorias %}
+                        <option value="{{ categoria }}" {% if gabarito.categoria_trabalho == categoria %}selected{% endif %}>{{ categoria }}</option>
                         {% endfor %}
                     </select>
                 </div>
@@ -46,8 +44,8 @@
                 <input type="hidden" id="local_armazenamento" name="local_armazenamento" value="{{ gabarito.local_armazenamento or '' }}">
                 
                 <div class="mb-3">
-                    <label for="observacoes" class="form-label">Observações</label>
-                    <textarea class="form-control" id="observacoes" name="observacoes" rows="3">{{ gabarito.observacoes }}</textarea>
+                    <label for="funcao" class="form-label">Função</label>
+                    <textarea class="form-control" id="funcao" name="funcao" rows="3">{{ gabarito.funcao }}</textarea>
                 </div>
                 
                 <div class="mb-3">

@@ -62,9 +62,9 @@ def nova_folha(item_id):
         elif 'torno' in categoria and 'cnc' in categoria:
             return redirect(url_for('novas_folhas_processo.editar_torno_cnc', folha_id=nova_folha.id))
         elif 'centro' in categoria and 'usinagem' in categoria:
-            return redirect(url_for('novas_folhas_processo.editar_centro', folha_id=nova_folha.id))
+            return redirect(url_for('novas_folhas_processo.editar_centro_usinagem', folha_id=nova_folha.id))
         else:
-            return redirect(url_for('novas_folhas_processo.editar_manual', folha_id=nova_folha.id))
+            return redirect(url_for('novas_folhas_processo.editar_manual_acabamento', folha_id=nova_folha.id))
     
     # GET - Mostrar formulário
     maquinas = Maquina.query.all()
@@ -82,7 +82,7 @@ def selecionar_item():
 def visualizar_folha(folha_id):
     """Visualiza uma folha de processo baseada em sua categoria"""
     folha = NovaFolhaProcesso.query.get_or_404(folha_id)
-    categoria = folha.categoria_maquina.lower()
+    categoria = (folha.categoria_maquina or '').strip().lower().replace('_', ' ')
     
     if categoria == 'serra':
         folha_especifica = FolhaProcessoSerra.query.filter_by(nova_folha_id=folha_id).first()
@@ -159,6 +159,8 @@ def editar_torno_cnc(folha_id):
         # Atualizar dados do torno
         folha_torno.castanha_id = int(request.form.get('castanha_id') or 0) or None
         folha_torno.gabarito_rosca_id = int(request.form.get('gabarito_rosca_id') or 0) or None
+        folha_torno.bt = request.form.get('bt', '')
+        folha_torno.ar = request.form.get('ar', '')
         # Processar upload de programa CNC se houver arquivo
         if 'arquivo_programa' in request.files and request.files['arquivo_programa'].filename:
             arquivo_programa = request.files['arquivo_programa']
@@ -271,7 +273,18 @@ def editar_centro_usinagem(folha_id):
         return redirect(url_for('novas_folhas_processo.visualizar_folha', folha_id=folha_id))
     
     # Buscar dados para os selects
-    gabaritos_centro = GabaritoCentroUsinagem.query.all()
+    categoria_folha = None
+    try:
+        categoria_folha = (folha.maquina.categoria_trabalho or '').strip()
+    except Exception:
+        categoria_folha = None
+
+    if categoria_folha:
+        gabaritos_centro = GabaritoCentroUsinagem.query.filter_by(categoria_trabalho=categoria_folha).all()
+        if not gabaritos_centro:
+            gabaritos_centro = GabaritoCentroUsinagem.query.all()
+    else:
+        gabaritos_centro = GabaritoCentroUsinagem.query.all()
     ferramentas = FerramentaCentro.query.filter_by(folha_centro_id=folha_centro.id).all()
     medidas = MedidaCritica.query.filter_by(folha_tipo='centro', folha_id=folha_centro.id).all()
     imagens_peca = ImagemPecaProcesso.query.filter_by(folha_tipo='centro', folha_id=folha_centro.id).all()
@@ -279,6 +292,7 @@ def editar_centro_usinagem(folha_id):
     return render_template('novas_folhas_processo/editar_centro_usinagem.html', 
                           folha=folha, folha_centro=folha_centro,
                           gabaritos_centro=gabaritos_centro,
+                          categoria_folha=categoria_folha,
                           ferramentas=ferramentas, medidas=medidas, imagens_peca=imagens_peca)
 
 @novas_folhas_processo.route('/folhas-processo-novas/manual-acabamento/<int:folha_id>/editar', methods=['GET', 'POST'])
@@ -325,7 +339,8 @@ def editar_manual_acabamento(folha_id):
         return redirect(url_for('novas_folhas_processo.visualizar_folha', folha_id=folha_id))
     
     return render_template('novas_folhas_processo/editar_manual_acabamento.html', 
-                          folha=folha, folha_manual=folha_manual)
+                          folha=folha, folha_manual=folha_manual,
+                          get_file_url=get_file_url)
 
 # ======================= ROTAS AJAX PARA CRUD DE FERRAMENTAS E MEDIDAS =======================
 
@@ -335,6 +350,8 @@ def atualizar_ferramenta(ferramenta_id):
     try:
         # Verificar se a ferramenta existe
         ferramenta = FerramentaTorno.query.get(ferramenta_id)
+        if not ferramenta:
+            ferramenta = FerramentaCentro.query.get(ferramenta_id)
         if not ferramenta:
             return jsonify({'success': False, 'message': f'Ferramenta com ID {ferramenta_id} não encontrada'})
         
@@ -366,7 +383,9 @@ def atualizar_ferramenta(ferramenta_id):
 def excluir_ferramenta(ferramenta_id):
     """Excluir ferramenta via AJAX"""
     try:
-        ferramenta = FerramentaTorno.query.get_or_404(ferramenta_id)
+        ferramenta = FerramentaTorno.query.get(ferramenta_id)
+        if not ferramenta:
+            ferramenta = FerramentaCentro.query.get_or_404(ferramenta_id)
         db.session.delete(ferramenta)
         db.session.commit()
         return jsonify({'success': True})

@@ -294,6 +294,22 @@
                         <h5 class="mb-0"><i class="fas fa-arrows-alt me-2"></i>Bucha Guia e Encosto</h5>
                     </div>
                     <div class="card-body">
+                        <!-- BT e AR -->
+                        <div class="row mb-3">
+                            <div class="col-md-6">
+                                <label for="bt" class="form-label">
+                                    <i class="fas fa-tag me-1"></i>BT
+                                </label>
+                                <input type="text" class="form-control" id="bt" name="bt" value="{{ folha_torno.bt or '' }}">
+                            </div>
+                            <div class="col-md-6">
+                                <label for="ar" class="form-label">
+                                    <i class="fas fa-tag me-1"></i>AR (Qtd para fora do BT)
+                                </label>
+                                <input type="text" class="form-control" id="ar" name="ar" value="{{ folha_torno.ar or '' }}">
+                            </div>
+                        </div>
+
                         <!-- Bucha Guia -->
                         <div class="row mb-3">
                             <div class="col-md-6">
