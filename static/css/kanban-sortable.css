@@ -79,6 +79,10 @@ body.sorting {
     -webkit-user-select: text;
 }
 
+ .dropdown-menu.show {
+     z-index: 2000;
+ }
+
 /* Novos estilos para os cartões e documentos */
 .document-icon {
     display: inline-flex;

@@ -109,8 +109,14 @@
                                     <div class="col-3">
                                         {{ ferramenta.configuracao }}
                                     </div>
+                                    <div class="col-2">
+                                        <small class="text-muted">{{ ferramenta.suporte_bt }}</small>
+                                    </div>
+                                    <div class="col-1">
+                                        <small class="text-muted">{{ ferramenta.comprimento_fora }}</small>
+                                    </div>
                                     <div class="col-2 text-end">
-                                        <button type="button" class="btn btn-sm btn-outline-primary me-1" onclick="editarFerramenta('{{ ferramenta.id }}', '{{ ferramenta.posicao }}', '{{ ferramenta.descricao }}', '{{ ferramenta.configuracao }}')">
+                                        <button type="button" class="btn btn-sm btn-outline-primary me-1" onclick="editarFerramenta('{{ ferramenta.id }}', '{{ ferramenta.posicao }}', '{{ ferramenta.descricao }}', '{{ ferramenta.configuracao }}', '{{ ferramenta.suporte_bt }}', '{{ ferramenta.comprimento_fora }}')">
                                             <i class="fas fa-edit"></i>
                                         </button>
                                         <button type="button" class="btn btn-sm btn-outline-danger" onclick="removerFerramenta('{{ ferramenta.id }}')">
@@ -137,6 +143,16 @@
                                 <div class="col-md-4">
                                     <input type="text" class="form-control form-control-sm" id="nova-configuracao" placeholder="Configuração">
                                     <small class="text-muted">Configuração</small>
+                                </div>
+                            </div>
+                            <div class="row mb-2">
+                                <div class="col-md-6">
+                                    <input type="text" class="form-control form-control-sm" id="nova-suporte-bt" placeholder="Ex: BT40 / Suporte...">
+                                    <small class="text-muted">Suporte/BT</small>
+                                </div>
+                                <div class="col-md-6">
+                                    <input type="text" class="form-control form-control-sm" id="nova-comprimento-fora" placeholder="Ex: 45mm">
+                                    <small class="text-muted">Comprimento para fora</small>
                                 </div>
                             </div>
                             <div class="row mb-3">
@@ -701,6 +717,8 @@ function adicionarFerramenta() {
     document.getElementById('nova-posicao').value = '';
     document.getElementById('nova-descricao').value = '';
     document.getElementById('nova-configuracao').value = '';
+    document.getElementById('nova-suporte-bt').value = '';
+    document.getElementById('nova-comprimento-fora').value = '';
     document.getElementById('nova-imagem').value = '';
     
     // Esconder preview da imagem
@@ -718,6 +736,8 @@ function salvarNovaFerramenta() {
     const posicao = document.getElementById('nova-posicao').value.trim();
     const descricao = document.getElementById('nova-descricao').value.trim();
     const configuracao = document.getElementById('nova-configuracao').value.trim();
+    const suporte_bt = document.getElementById('nova-suporte-bt').value.trim();
+    const comprimento_fora = document.getElementById('nova-comprimento-fora').value.trim();
     const arquivoImagem = document.getElementById('nova-imagem').files[0];
     
     // Validar campos obrigatórios
@@ -731,12 +751,12 @@ function salvarNovaFerramenta() {
         const reader = new FileReader();
         reader.onload = function(e) {
             // Adicionar ferramenta com preview da imagem
-            adicionarFerramentaNaLista(posicao, descricao, configuracao, e.target.result);
+            adicionarFerramentaNaLista(posicao, descricao, configuracao, suporte_bt, comprimento_fora, e.target.result);
         };
         reader.readAsDataURL(arquivoImagem);
     } else {
         // Adicionar ferramenta sem imagem
-        adicionarFerramentaNaLista(posicao, descricao, configuracao);
+        adicionarFerramentaNaLista(posicao, descricao, configuracao, suporte_bt, comprimento_fora);
     }
     
     // Esconder formulário e mostrar botão adicionar novamente
@@ -778,7 +798,7 @@ function cancelarNovaFerramenta() {
     if (btnAdicionar) btnAdicionar.style.display = 'inline-block';
 }
 
-function adicionarFerramentaNaLista(posicao, descricao, configuracao, imagemPreview = null) {
+function adicionarFerramentaNaLista(posicao, descricao, configuracao, suporte_bt, comprimento_fora, imagemPreview = null) {
     const listContainer = document.getElementById('lista-ferramentas');
     const semFerramentas = document.getElementById('sem-ferramentas');
     
@@ -814,13 +834,19 @@ function adicionarFerramentaNaLista(posicao, descricao, configuracao, imagemPrev
             <div class="col-3">
                 ${configuracao}
             </div>
+            <div class="col-2">
+                <small class="text-muted">${suporte_bt || ''}</small>
+            </div>
+            <div class="col-1">
+                <small class="text-muted">${comprimento_fora || ''}</small>
+            </div>
             <div class="col-2 text-end">
                 <button type="button" class="btn btn-sm btn-outline-danger" onclick="removerFerramentaTemp(this)">
                     <i class="fas fa-trash"></i>
                 </button>
             </div>
         </div>
-        <input type="hidden" name="ferramentas[]" value='{"posicao":"${posicao}","descricao":"${descricao}","configuracao":"${configuracao}","tem_imagem":${imagemPreview ? 'true' : 'false'}}'>
+        <input type="hidden" name="ferramentas[]" value='{"posicao":"${posicao}","descricao":"${descricao}","configuracao":"${configuracao}","suporte_bt":"${(suporte_bt || '').replace(/"/g, "\\\"")}","comprimento_fora":"${(comprimento_fora || '').replace(/"/g, "\\\"")}","tem_imagem":${imagemPreview ? 'true' : 'false'}}'>
     `;
     
     listContainer.appendChild(novaFerramenta);
@@ -889,11 +915,13 @@ function removerFerramentaTemp(btn) {
     }
 }
 
-function editarFerramenta(id, posicao, descricao, configuracao) {
+function editarFerramenta(id, posicao, descricao, configuracao, suporte_bt = '', comprimento_fora = '') {
     // Preencher o formulário com os dados existentes
     document.getElementById('nova-posicao').value = posicao;
     document.getElementById('nova-descricao').value = descricao;
     document.getElementById('nova-configuracao').value = configuracao;
+    document.getElementById('nova-suporte-bt').value = suporte_bt;
+    document.getElementById('nova-comprimento-fora').value = comprimento_fora;
     
     // Mostrar formulário
     document.getElementById('form-nova-ferramenta').style.display = 'block';
@@ -915,6 +943,8 @@ function atualizarFerramenta(id) {
     const posicao = document.getElementById('nova-posicao').value.trim();
     const descricao = document.getElementById('nova-descricao').value.trim();
     const configuracao = document.getElementById('nova-configuracao').value.trim();
+    const suporte_bt = document.getElementById('nova-suporte-bt').value.trim();
+    const comprimento_fora = document.getElementById('nova-comprimento-fora').value.trim();
     
     if (!posicao || !descricao) {
         alert('Posição e descrição são obrigatórios!');
@@ -930,7 +960,9 @@ function atualizarFerramenta(id) {
         body: JSON.stringify({
             posicao: posicao,
             descricao: descricao,
-            configuracao: configuracao
+            configuracao: configuracao,
+            suporte_bt: suporte_bt,
+            comprimento_fora: comprimento_fora
         })
     })
     .then(response => {
@@ -947,6 +979,8 @@ function atualizarFerramenta(id) {
                 item.querySelector('.col-2 strong').textContent = posicao;
                 item.querySelector('.col-4:nth-child(3)').textContent = descricao;
                 item.querySelector('.col-3:nth-child(4)').textContent = configuracao;
+                item.querySelector('.col-2:nth-child(5) small').textContent = suporte_bt;
+                item.querySelector('.col-1:nth-child(6) small').textContent = comprimento_fora;
             }
             
             // Mostrar sucesso

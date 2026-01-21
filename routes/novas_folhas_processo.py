@@ -17,9 +17,13 @@ def listar_folhas():
     item_id = request.args.get('item_id')
     
     if item_id:
+        try:
+            item_id_int = int(item_id)
+        except Exception:
+            abort(400)
         # Filtrar por item específico
-        folhas = NovaFolhaProcesso.query.filter_by(ativo=True, item_id=item_id).order_by(NovaFolhaProcesso.data_criacao.desc()).all()
-        item = Item.query.get(item_id)
+        folhas = NovaFolhaProcesso.query.filter_by(ativo=True, item_id=item_id_int).order_by(NovaFolhaProcesso.data_criacao.desc()).all()
+        item = Item.query.get(item_id_int)
         return render_template('novas_folhas_processo/listar.html', folhas=folhas, item=item)
     else:
         # Listar todas as folhas
@@ -205,7 +209,9 @@ def editar_torno_cnc(folha_id):
                         folha_torno_id=folha_torno.id,
                         posicao=dados_ferramenta.get('posicao'),
                         descricao=dados_ferramenta.get('descricao'),
-                        configuracao=dados_ferramenta.get('configuracao')
+                        configuracao=dados_ferramenta.get('configuracao'),
+                        suporte_bt=dados_ferramenta.get('suporte_bt'),
+                        comprimento_fora=dados_ferramenta.get('comprimento_fora')
                     )
                     db.session.add(nova_ferramenta)
                 except:
@@ -371,6 +377,8 @@ def atualizar_ferramenta(ferramenta_id):
         ferramenta.posicao = posicao
         ferramenta.descricao = descricao
         ferramenta.configuracao = data.get('configuracao', '').strip()
+        ferramenta.suporte_bt = data.get('suporte_bt', '').strip()
+        ferramenta.comprimento_fora = data.get('comprimento_fora', '').strip()
         
         db.session.commit()
         return jsonify({'success': True, 'message': 'Ferramenta atualizada com sucesso'})
@@ -428,20 +436,26 @@ def adicionar_ferramenta(tipo, folha_id):
         posicao = request.json.get('posicao')
         descricao = request.json.get('descricao')
         configuracao = request.json.get('configuracao')
+        suporte_bt = request.json.get('suporte_bt')
+        comprimento_fora = request.json.get('comprimento_fora')
         
         if tipo == 'torno':
             ferramenta = FerramentaTorno(
                 folha_torno_id=folha_id,
                 posicao=posicao,
                 descricao=descricao,
-                configuracao=configuracao
+                configuracao=configuracao,
+                suporte_bt=suporte_bt,
+                comprimento_fora=comprimento_fora
             )
         else:  # centro
             ferramenta = FerramentaCentro(
                 folha_centro_id=folha_id,
                 posicao=posicao,
                 descricao=descricao,
-                configuracao=configuracao
+                configuracao=configuracao,
+                suporte_bt=suporte_bt,
+                comprimento_fora=comprimento_fora
             )
         
         db.session.add(ferramenta)
@@ -478,24 +492,39 @@ def adicionar_medida(tipo, folha_id):
 def adicionar_imagem_peca(tipo, folha_id):
     """Adiciona imagem de peça com observação (AJAX)"""
     try:
-        observacao = request.form.get('observacao')
-        
-        if 'imagem' in request.files and request.files['imagem'].filename:
-            imagem_path = save_uploaded_file(request.files['imagem'], 'folhas_processo')
-            
+        imagens = request.files.getlist('imagens')
+        observacoes = request.form.getlist('observacoes')
+
+        # Compatibilidade com envio antigo (1 imagem)
+        if not imagens and 'imagem' in request.files:
+            imagens = [request.files['imagem']]
+            observacoes = [request.form.get('observacao', '')]
+
+        # Normalizar observações (pode vir vazio)
+        if not observacoes:
+            observacoes = ['' for _ in range(len(imagens))]
+
+        ids = []
+        for idx, file in enumerate(imagens):
+            if not file or not file.filename:
+                continue
+            obs = observacoes[idx] if idx < len(observacoes) else ''
+            imagem_path = save_uploaded_file(file, 'folhas_processo')
             imagem_peca = ImagemPecaProcesso(
                 folha_tipo=tipo,
                 folha_id=folha_id,
                 imagem=imagem_path,
-                observacao=observacao
+                observacao=obs
             )
-            
             db.session.add(imagem_peca)
-            db.session.commit()
-            
-            return jsonify({'success': True, 'id': imagem_peca.id})
-        
-        return jsonify({'success': False, 'error': 'Nenhuma imagem enviada'})
+            db.session.flush()
+            ids.append(imagem_peca.id)
+
+        if not ids:
+            return jsonify({'success': False, 'error': 'Nenhuma imagem enviada'})
+
+        db.session.commit()
+        return jsonify({'success': True, 'ids': ids, 'count': len(ids)})
     except Exception as e:
         return jsonify({'success': False, 'error': str(e)})
 

@@ -15,6 +15,8 @@ async function salvarFerramentaCentro() {
     const posicao = (document.getElementById('fc-posicao').value || '').trim();
     const descricao = (document.getElementById('fc-descricao').value || '').trim();
     const configuracao = (document.getElementById('fc-configuracao').value || '').trim();
+    const suporte_bt = (document.getElementById('fc-suporte-bt').value || '').trim();
+    const comprimento_fora = (document.getElementById('fc-comprimento-fora').value || '').trim();
     if (!posicao || !descricao) {
         alert('Posição e descrição são obrigatórios');
         return;
@@ -23,7 +25,7 @@ async function salvarFerramentaCentro() {
     const resp = await fetch(url, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ posicao, descricao, configuracao })
+        body: JSON.stringify({ posicao, descricao, configuracao, suporte_bt, comprimento_fora })
     });
     const data = await resp.json();
     if (!data.success) {
@@ -92,24 +94,54 @@ async function removerMedidaCentro(id) {
     window.location.reload();
 }
 
-async function salvarImagemPecaCentro() {
-    const fileInput = document.getElementById('ic-imagem');
-    if (!fileInput.files || !fileInput.files[0]) {
-        alert('Selecione uma imagem');
-        return;
-    }
-    const observacao = (document.getElementById('ic-observacao').value || '').trim();
-    const formData = new FormData();
-    formData.append('imagem', fileInput.files[0]);
-    formData.append('observacao', observacao);
+function adicionarLinhaImagemCentro() {
+    const container = document.getElementById('ic-linhas');
+    const idx = container.children.length;
+    const div = document.createElement('div');
+    div.className = 'row g-2 align-items-end mb-2 ic-linha';
+    div.innerHTML = `
+        <div class="col-md-4">
+            <label class="form-label">Imagem</label>
+            <input type="file" class="form-control ic-imagem" accept="image/*">
+        </div>
+        <div class="col-md-7">
+            <label class="form-label">Observação</label>
+            <input type="text" class="form-control ic-observacao" placeholder="Ex: cuidado com rebarba">
+        </div>
+        <div class="col-md-1 text-end">
+            <button type="button" class="btn btn-outline-danger" onclick="this.closest('.ic-linha').remove()">
+                <i class="fas fa-trash"></i>
+            </button>
+        </div>
+    `;
+    container.appendChild(div);
+}
+
+async function salvarImagensPecaCentro() {
+    const linhas = Array.from(document.querySelectorAll('#ic-linhas .ic-linha'));
     const url = "{{ url_for('novas_folhas_processo.adicionar_imagem_peca', tipo='centro', folha_id=folha_centro.id) }}";
-    const resp = await fetch(url, {
-        method: 'POST',
-        body: formData
-    });
-    const data = await resp.json();
-    if (!data.success) {
-        alert(data.error || 'Erro ao enviar imagem');
+
+    let enviou = 0;
+    for (const linha of linhas) {
+        const fileInput = linha.querySelector('.ic-imagem');
+        const obsInput = linha.querySelector('.ic-observacao');
+        if (!fileInput?.files || !fileInput.files[0]) continue;
+
+        const formData = new FormData();
+        formData.append('imagem', fileInput.files[0]);
+        formData.append('observacao', (obsInput?.value || '').trim());
+
+        const resp = await fetch(url, { method: 'POST', body: formData });
+        const data = await resp.json();
+        if (!data.success) {
+            alert(data.error || 'Erro ao enviar imagem');
+            return;
+        }
+        enviou += (data.count || 1);
+    }
+
+    if (!enviou) {
+        alert('Selecione pelo menos uma imagem');
         return;
     }
     window.location.reload();
@@ -139,7 +171,7 @@ async function salvarImagemPecaCentro() {
                             </div>
                         </div>
                         <div>
-                            <a href="{{ url_for('novas_folhas_processo.visualizar_folha', folha_id=folha.id) }}" class="btn btn-light me-2" target="_blank" onclick="setTimeout(() => window.open(this.href, '_blank')?.print?.(), 500); return true;">
+                            <a href="{{ url_for('novas_folhas_processo.visualizar_folha', folha_id=folha.id) }}" class="btn btn-light me-2" target="_blank">
                                 <i class="fas fa-print"></i> Imprimir
                             </a>
                             <a href="{{ url_for('novas_folhas_processo.visualizar_folha', folha_id=folha.id) }}" class="btn btn-outline-light me-2">
@@ -182,6 +214,16 @@ async function salvarImagemPecaCentro() {
                                     <input type="text" class="form-control" id="fc-configuracao" placeholder="Configuração">
                                 </div>
                             </div>
+                            <div class="row g-2 align-items-end mt-2">
+                                <div class="col-md-6">
+                                    <label class="form-label">Suporte/BT</label>
+                                    <input type="text" class="form-control" id="fc-suporte-bt" placeholder="Ex: BT40 / Suporte...">
+                                </div>
+                                <div class="col-md-6">
+                                    <label class="form-label">Comprimento para fora</label>
+                                    <input type="text" class="form-control" id="fc-comprimento-fora" placeholder="Ex: 45mm">
+                                </div>
+                            </div>
                             <div class="mt-3 d-flex justify-content-end">
                                 <button type="button" class="btn btn-secondary me-2" onclick="esconderFormFerramentaCentro()">Cancelar</button>
                                 <button type="button" class="btn btn-success" onclick="salvarFerramentaCentro()">Salvar</button>
@@ -194,7 +236,15 @@ async function salvarImagemPecaCentro() {
                                 <div class="row align-items-center">
                                     <div class="col-2"><strong class="badge bg-dark">{{ ferramenta.posicao }}</strong></div>
                                     <div class="col-5"><strong>{{ ferramenta.descricao }}</strong></div>
-                                    <div class="col-4"><small class="text-muted">{{ ferramenta.configuracao }}</small></div>
+                                    <div class="col-4">
+                                        <small class="text-muted">{{ ferramenta.configuracao }}</small>
+                                        {% if ferramenta.suporte_bt or ferramenta.comprimento_fora %}
+                                        <div class="text-muted">
+                                            {% if ferramenta.suporte_bt %}<small><strong>Suporte/BT:</strong> {{ ferramenta.suporte_bt }}</small>{% endif %}
+                                            {% if ferramenta.comprimento_fora %}<small class="ms-2"><strong>Fora:</strong> {{ ferramenta.comprimento_fora }}</small>{% endif %}
+                                        </div>
+                                        {% endif %}
+                                    </div>
                                     <div class="col-1 text-end">
                                         <button type="button" class="btn btn-sm btn-outline-danger" onclick="removerFerramentaCentro({{ ferramenta.id }})">
                                             <i class="fas fa-trash"></i>
@@ -275,20 +325,14 @@ async function salvarImagemPecaCentro() {
                     </div>
                     <div class="card-body">
                         <div class="border rounded p-3 mb-3 bg-light">
-                            <div class="row g-2 align-items-end">
-                                <div class="col-md-4">
-                                    <label class="form-label">Imagem</label>
-                                    <input type="file" class="form-control" id="ic-imagem" accept="image/*">
-                                </div>
-                                <div class="col-md-6">
-                                    <label class="form-label">Observação</label>
-                                    <input type="text" class="form-control" id="ic-observacao" placeholder="Ex: cuidado com rebarba">
-                                </div>
-                                <div class="col-md-2 text-end">
-                                    <button type="button" class="btn btn-warning" onclick="salvarImagemPecaCentro()">
-                                        <i class="fas fa-upload"></i> Enviar
-                                    </button>
-                                </div>
+                            <div id="ic-linhas"></div>
+                            <div class="d-flex justify-content-between mt-2">
+                                <button type="button" class="btn btn-outline-secondary" onclick="adicionarLinhaImagemCentro()">
+                                    <i class="fas fa-plus"></i> Adicionar imagem
+                                </button>
+                                <button type="button" class="btn btn-warning" onclick="salvarImagensPecaCentro()">
+                                    <i class="fas fa-upload"></i> Enviar
+                                </button>
                             </div>
                         </div>
 

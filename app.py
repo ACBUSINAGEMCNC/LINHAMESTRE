@@ -297,6 +297,13 @@ def create_app():
                 upgrade(db.engine)
             except Exception as e:
                 app.logger.warning(f"Migração bt/ar (folha_processo_torno_cnc): {str(e)}")
+
+            # Executar migração para adicionar campos suporte_bt/comprimento_fora em ferramentas
+            try:
+                from migrations.add_campos_ferramenta_suporte_comprimento import upgrade
+                upgrade(db.engine)
+            except Exception as e:
+                app.logger.warning(f"Migração suporte_bt/comprimento_fora (ferramentas): {str(e)}")
             
             # Garantir que o usuário admin existe (especialmente importante no Vercel)
             from models import Usuario

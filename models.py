@@ -1014,6 +1014,8 @@ class FerramentaTorno(db.Model):
     posicao = db.Column(db.String(10))  # Ex: T01, T02, etc
     descricao = db.Column(db.String(200))  # Ex: TNMEG R01 9
     configuracao = db.Column(db.String(200))
+    suporte_bt = db.Column(db.String(100))
+    comprimento_fora = db.Column(db.String(50))
     imagem = db.Column(db.String(255))
     
     # Relacionamento
@@ -1028,6 +1030,8 @@ class FerramentaCentro(db.Model):
     posicao = db.Column(db.String(10))  # Ex: T01, T02, etc
     descricao = db.Column(db.String(200))
     configuracao = db.Column(db.String(200))
+    suporte_bt = db.Column(db.String(100))
+    comprimento_fora = db.Column(db.String(50))
     imagem = db.Column(db.String(255))
     
     # Relacionamento

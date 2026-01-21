@@ -587,7 +587,7 @@
                     <!-- Cartões normais -->
                     {% for ordem in ordens[lista] %}
                     <div class="kanban-card" data-ordem-id="{{ ordem.id }}">
-                        <div class="drag-handle" style="position: absolute; top: 8px; left: 8px; cursor: grab; z-index: 10;" onclick="event.stopPropagation()">
+                        <div class="drag-handle" style="position: absolute; top: 8px; left: 8px; cursor: grab; z-index: 10;">
                             <i class="fas fa-grip-lines"></i>
                         </div>
                         <div class="card-header-top">
@@ -1401,6 +1401,68 @@
         document.addEventListener('DOMContentLoaded', function() {
             console.log('DOM carregado - chamando initializeKanbanEvents');
             initializeKanbanEvents();
+
+            function setupMoverDropdownPortal() {
+                const portals = new Map();
+
+                function placeMenu(toggle, menu) {
+                    const rect = toggle.getBoundingClientRect();
+                    menu.style.position = 'fixed';
+                    menu.style.zIndex = '2000';
+                    menu.style.left = `${Math.min(rect.left, window.innerWidth - menu.offsetWidth - 8)}px`;
+                    const top = rect.bottom;
+                    const maxTop = window.innerHeight - menu.offsetHeight - 8;
+                    menu.style.top = `${Math.min(top, maxTop)}px`;
+                }
+
+                document.querySelectorAll('.dropdown').forEach(function(dropdownEl) {
+                    const toggle = dropdownEl.querySelector('[data-bs-toggle="dropdown"]');
+                    const menu = dropdownEl.querySelector('.dropdown-menu');
+                    if (!toggle || !menu) return;
+                    if (menu.dataset.portalBound === '1') return;
+                    menu.dataset.portalBound = '1';
+
+                    dropdownEl.addEventListener('shown.bs.dropdown', function() {
+                        if (!menu.classList.contains('show')) return;
+                        if (!portals.has(menu)) {
+                            portals.set(menu, {
+                                parent: menu.parentNode,
+                                nextSibling: menu.nextSibling
+                            });
+                            document.body.appendChild(menu);
+                        }
+                        placeMenu(toggle, menu);
+                    });
+
+                    dropdownEl.addEventListener('hidden.bs.dropdown', function() {
+                        const meta = portals.get(menu);
+                        if (!meta) return;
+                        if (meta.nextSibling) {
+                            meta.parent.insertBefore(menu, meta.nextSibling);
+                        } else {
+                            meta.parent.appendChild(menu);
+                        }
+                        portals.delete(menu);
+                        menu.style.position = '';
+                        menu.style.zIndex = '';
+                        menu.style.left = '';
+                        menu.style.top = '';
+                    });
+
+                    const reposition = function() {
+                        if (menu.classList.contains('show') && document.body.contains(menu)) {
+                            placeMenu(toggle, menu);
+                        }
+                    };
+
+                    window.addEventListener('resize', reposition);
+                    document.querySelectorAll('.kanban-column-body, .kanban-container').forEach(function(scroller) {
+                        scroller.addEventListener('scroll', reposition, { passive: true });
+                    });
+                });
+            }
+
+            setupMoverDropdownPortal();
             
             // Event listeners para botões de mover visuais
             document.querySelectorAll('.btn-mover-visual').forEach(function(btn) {
@@ -1417,6 +1479,7 @@
             document.addEventListener('sortable-drop-complete', function() {
                 console.log('Sortable drop complete - reinicializando eventos');
                 setTimeout(initializeKanbanEvents, 100);
+                setTimeout(setupMoverDropdownPortal, 120);
             });
         });
     </script>
