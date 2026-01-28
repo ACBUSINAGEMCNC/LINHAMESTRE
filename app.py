@@ -4,7 +4,7 @@ import datetime
 import subprocess
 import sqlite3
 import logging
-from flask import Flask, render_template, redirect, url_for, flash, request, session, send_file
+from flask import Flask, render_template, redirect, url_for, flash, request, session, send_file, g
 from flask_sqlalchemy import SQLAlchemy
 from werkzeug.security import generate_password_hash, check_password_hash
 from werkzeug.utils import secure_filename
@@ -373,6 +373,79 @@ def create_app():
     app.register_blueprint(gabaritos_centro)
     app.register_blueprint(gabaritos_rosca)
     app.register_blueprint(novas_folhas_processo)
+
+    # Guard global de autenticação/autorização
+    @app.before_request
+    def _global_auth_guard():
+        # Permitir preflight CORS/OPTIONS sem login
+        if request.method == 'OPTIONS':
+            return
+
+        endpoint = request.endpoint or ''
+        blueprint = request.blueprint
+
+        # Endpoints públicos
+        if endpoint.startswith('static'):
+            return
+        if endpoint in ('auth.login', 'auth.logout'):
+            return
+        if endpoint.startswith('arquivos.uploaded_'):
+            return
+        if endpoint == 'supabase_redirect':
+            return
+
+        # Qualquer outra rota exige usuário logado
+        if 'usuario_id' not in session:
+            flash('Por favor, faça login para acessar esta página', 'warning')
+            return redirect(url_for('auth.login', next=request.url))
+
+        # Carregar usuário e validar sessão
+        from models import Usuario
+        usuario = Usuario.query.get(session.get('usuario_id'))
+        if not usuario:
+            session.clear()
+            flash('Sessão inválida. Faça login novamente.', 'warning')
+            return redirect(url_for('auth.login'))
+
+        g.usuario = usuario
+
+        # Admin possui acesso total
+        if usuario.nivel_acesso == 'admin':
+            return
+
+        # Blueprints que já têm verificação interna (evitar duplicar regras finas)
+        if blueprint in ('kanban', 'estoque', 'folhas_processo', 'backup', 'auth'):
+            return
+
+        # Permissões por módulo
+        if blueprint in ('pedidos', 'ordens', 'pedidos_material', 'clientes'):
+            if not usuario.acesso_pedidos:
+                flash('Você não tem permissão para acessar esta área', 'danger')
+                return redirect(url_for('main.index'))
+
+        if blueprint in ('apontamento',):
+            if not usuario.acesso_kanban:
+                flash('Você não tem permissão para acessar esta área', 'danger')
+                return redirect(url_for('main.index'))
+
+        if blueprint in (
+            'itens',
+            'materiais',
+            'trabalhos',
+            'maquinas',
+            'castanhas',
+            'gabaritos_centro',
+            'gabaritos_rosca',
+            'novas_folhas_processo',
+        ):
+            if not usuario.acesso_cadastros:
+                flash('Você não tem permissão para acessar esta área', 'danger')
+                return redirect(url_for('main.index'))
+
+        if blueprint in ('estoque_pecas',):
+            if not usuario.acesso_estoque:
+                flash('Você não tem permissão para acessar esta área', 'danger')
+                return redirect(url_for('main.index'))
     
     # Rota para redirecionar URLs Supabase
     @app.route('/uploads/supabase:/<path:file_path>')

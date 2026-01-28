@@ -114,7 +114,10 @@ def novo_item():
         if 'cnc_files' in request.files:
             cnc_files = request.files.getlist('cnc_files')
             maquina = request.form.get('maquina_cnc', '')
-            criador_id = current_app.config['CURRENT_USER_ID']  # Substituir por autenticação real
+            criador_id = session.get('usuario_id')
+            if not criador_id:
+                flash('Por favor, faça login para adicionar arquivos CNC.', 'warning')
+                return redirect(url_for('auth.login', next=request.url))
             for file in cnc_files:
                 if file and file.filename.endswith(('.txt', '.nc')):
                     filename = save_file(file, 'cnc_files')
@@ -233,7 +236,10 @@ def editar_item(item_id):
         if 'cnc_files' in request.files:
             cnc_files = request.files.getlist('cnc_files')
             maquina = request.form.get('maquina_cnc', '')
-            criador_id = current_app.config['CURRENT_USER_ID']  # Substituir por autenticação real
+            criador_id = session.get('usuario_id')
+            if not criador_id:
+                flash('Por favor, faça login para adicionar arquivos CNC.', 'warning')
+                return redirect(url_for('auth.login', next=request.url))
             for file in cnc_files:
                 if file and file.filename.endswith(('.txt', '.nc')):
                     filename = save_file(file, 'cnc_files')
@@ -322,12 +328,16 @@ def adicionar_arquivo_cnc(item_id):
                 file.save(file_path)
                 
                 # Criar registro no banco
+                criador_id = session.get('usuario_id')
+                if not criador_id:
+                    flash('Por favor, faça login para adicionar arquivos CNC.', 'warning')
+                    return redirect(url_for('auth.login', next=request.url))
                 arquivo_cnc = ArquivoCNC(
                     item_id=item.id,
                     nome_arquivo=nome_arquivo,
                     caminho_arquivo=file_path,  # Adicionar o caminho do arquivo
                     maquina=maquina,
-                    criador_id=request.form.get('usuario_id', session.get('usuario_id', 1))  # Usar ID do usuário da sessão
+                    criador_id=criador_id
                 )
                 db.session.add(arquivo_cnc)
                 arquivos_adicionados += 1
