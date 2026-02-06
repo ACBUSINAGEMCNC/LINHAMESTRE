@@ -562,6 +562,31 @@ class Backup(db.Model):
     def __repr__(self):
         return f'<Backup {self.nome_arquivo}>'
 
+
+class AuditLog(db.Model):
+    __tablename__ = 'audit_log'
+
+    id = db.Column(db.Integer, primary_key=True)
+    data_criacao = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
+
+    usuario_id = db.Column(db.Integer, db.ForeignKey('usuario.id'), nullable=True)
+    usuario_nome = db.Column(db.String(100), nullable=True)
+
+    acao = db.Column(db.String(20), nullable=False)
+    entidade_tipo = db.Column(db.String(100), nullable=False)
+    entidade_id = db.Column(db.String(64), nullable=True)
+    mudancas_json = db.Column(db.Text, nullable=True)
+
+    endpoint = db.Column(db.String(200), nullable=True)
+    metodo = db.Column(db.String(10), nullable=True)
+    ip = db.Column(db.String(64), nullable=True)
+    user_agent = db.Column(db.String(255), nullable=True)
+
+    usuario = relationship('Usuario', backref='audit_logs', lazy=True)
+
+    def __repr__(self):
+        return f'<AuditLog {self.id} {self.acao} {self.entidade_tipo}:{self.entidade_id}>'
+
 # ====================
 # FOLHAS DE PROCESSO
 # ====================

@@ -36,6 +36,9 @@
                             <a href="{{ url_for('novas_folhas_processo.editar_torno_cnc', folha_id=folha.id) }}" class="btn btn-outline-dark me-2">
                                 <i class="fas fa-edit"></i> Editar
                             </a>
+                            <a href="{{ url_for('auditoria.auditoria_entidade', entidade_tipo='NovaFolhaProcesso', entidade_id=folha.id) }}" class="btn btn-outline-dark me-2">
+                                <i class="fas fa-clipboard-check"></i> Auditoria
+                            </a>
                             <a href="{{ url_for('novas_folhas_processo.listar_folhas') }}" class="btn btn-outline-dark">
                                 <i class="fas fa-list"></i> Voltar
                             </a>

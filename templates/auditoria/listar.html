@@ -1,0 +1,134 @@
+{% extends 'base.html' %}
+
+{% block title %}Auditoria do Sistema{% endblock %}
+
+{% block content %}
+<div class="container-fluid mt-4">
+    <div class="d-flex justify-content-between align-items-center mb-3">
+        <h1><i class="fas fa-clipboard-check me-2"></i>Auditoria do Sistema</h1>
+    </div>
+
+    <div class="card mb-3">
+        <div class="card-body">
+            <form method="GET" class="row g-2">
+                <div class="col-md-3">
+                    <label class="form-label">Buscar</label>
+                    <input type="text" name="q" class="form-control" value="{{ filtros.q }}" placeholder="Texto livre">
+                </div>
+                <div class="col-md-2">
+                    <label class="form-label">Usuário</label>
+                    <input type="text" name="usuario" class="form-control" value="{{ filtros.usuario }}" placeholder="Nome ou ID">
+                </div>
+                <div class="col-md-2">
+                    <label class="form-label">Ação</label>
+                    <select name="acao" class="form-select">
+                        <option value="" {% if not filtros.acao %}selected{% endif %}>Todas</option>
+                        <option value="create" {% if filtros.acao == 'create' %}selected{% endif %}>create</option>
+                        <option value="update" {% if filtros.acao == 'update' %}selected{% endif %}>update</option>
+                        <option value="delete" {% if filtros.acao == 'delete' %}selected{% endif %}>delete</option>
+                    </select>
+                </div>
+                <div class="col-md-2">
+                    <label class="form-label">Entidade</label>
+                    <input type="text" name="entidade_tipo" class="form-control" value="{{ filtros.entidade_tipo }}" placeholder="Ex: Item">
+                </div>
+                <div class="col-md-1">
+                    <label class="form-label">ID</label>
+                    <input type="text" name="entidade_id" class="form-control" value="{{ filtros.entidade_id }}">
+                </div>
+                <div class="col-md-1">
+                    <label class="form-label">De</label>
+                    <input type="date" name="data_de" class="form-control" value="{{ filtros.data_de }}">
+                </div>
+                <div class="col-md-1">
+                    <label class="form-label">Até</label>
+                    <input type="date" name="data_ate" class="form-control" value="{{ filtros.data_ate }}">
+                </div>
+
+                <div class="col-md-2">
+                    <label class="form-label">Por página</label>
+                    <select name="per_page" class="form-select">
+                        <option value="50" {% if per_page == 50 %}selected{% endif %}>50</option>
+                        <option value="100" {% if per_page == 100 %}selected{% endif %}>100</option>
+                        <option value="200" {% if per_page == 200 %}selected{% endif %}>200</option>
+                    </select>
+                </div>
+
+                <div class="col-md-10 d-flex align-items-end">
+                    <button class="btn btn-primary me-2" type="submit">
+                        <i class="fas fa-search"></i> Filtrar
+                    </button>
+                    <a class="btn btn-outline-secondary" href="{{ url_for('auditoria.listar_auditoria') }}">
+                        <i class="fas fa-eraser"></i> Limpar
+                    </a>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <div class="card">
+        <div class="card-body">
+            <div class="d-flex justify-content-between align-items-center mb-2">
+                <div class="text-muted small">Total: {{ total }}</div>
+                <div>
+                    <nav aria-label="Paginação">
+                        <ul class="pagination pagination-sm mb-0">
+                            <li class="page-item {% if page <= 1 %}disabled{% endif %}">
+                                <a class="page-link" href="{{ url_for('auditoria.listar_auditoria', q=filtros.q, usuario=filtros.usuario, entidade_tipo=filtros.entidade_tipo, entidade_id=filtros.entidade_id, acao=filtros.acao, data_de=filtros.data_de, data_ate=filtros.data_ate, per_page=per_page, page=page-1) }}">Anterior</a>
+                            </li>
+                            <li class="page-item disabled"><span class="page-link">{{ page }} / {{ total_pages }}</span></li>
+                            <li class="page-item {% if page >= total_pages %}disabled{% endif %}">
+                                <a class="page-link" href="{{ url_for('auditoria.listar_auditoria', q=filtros.q, usuario=filtros.usuario, entidade_tipo=filtros.entidade_tipo, entidade_id=filtros.entidade_id, acao=filtros.acao, data_de=filtros.data_de, data_ate=filtros.data_ate, per_page=per_page, page=page+1) }}">Próximo</a>
+                            </li>
+                        </ul>
+                    </nav>
+                </div>
+            </div>
+
+            <div class="table-responsive">
+                <table class="table table-striped table-hover">
+                    <thead class="table-dark">
+                        <tr>
+                            <th style="width: 160px;">Data/Hora</th>
+                            <th style="width: 140px;">Usuário</th>
+                            <th style="width: 80px;">Ação</th>
+                            <th style="width: 160px;">Entidade</th>
+                            <th>Alterações</th>
+                            <th style="width: 120px;">Origem</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for log in logs %}
+                        <tr>
+                            <td><small>{{ log.data_criacao.strftime('%d/%m/%Y %H:%M:%S') if log.data_criacao else '' }}</small></td>
+                            <td>
+                                <small>
+                                    {{ log.usuario_nome or ('ID ' ~ log.usuario_id) or 'N/A' }}
+                                </small>
+                            </td>
+                            <td><span class="badge {% if log.acao == 'create' %}bg-success{% elif log.acao == 'update' %}bg-primary{% else %}bg-danger{% endif %}">{{ log.acao }}</span></td>
+                            <td>
+                                <a href="{{ url_for('auditoria.auditoria_entidade', entidade_tipo=log.entidade_tipo, entidade_id=log.entidade_id or '') }}">
+                                    <small>{{ log.entidade_tipo }} #{{ log.entidade_id }}</small>
+                                </a>
+                            </td>
+                            <td>
+                                <small class="text-muted" style="white-space: pre-wrap;">{{ log.mudancas_json or '' }}</small>
+                            </td>
+                            <td>
+                                <small class="text-muted">{{ log.metodo or '' }}<br>{{ log.endpoint or '' }}</small>
+                            </td>
+                        </tr>
+                        {% endfor %}
+                        {% if not logs %}
+                        <tr>
+                            <td colspan="6" class="text-center text-muted py-4">Nenhum registro encontrado.</td>
+                        </tr>
+                        {% endif %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

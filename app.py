@@ -4,8 +4,10 @@ import datetime
 import subprocess
 import sqlite3
 import logging
-from flask import Flask, render_template, redirect, url_for, flash, request, session, send_file, g
+import json
+from flask import Flask, render_template, redirect, url_for, flash, request, session, send_file, g, has_request_context
 from flask_sqlalchemy import SQLAlchemy
+from sqlalchemy import event, inspect
 from werkzeug.security import generate_password_hash, check_password_hash
 from werkzeug.utils import secure_filename
 from dotenv import load_dotenv
@@ -270,6 +272,151 @@ def create_app():
     # Inicializar SQLAlchemy
     from models import db
     db.init_app(app)
+
+    def _register_audit_logging(_app):
+        if _app.extensions.get('audit_log_registered'):
+            return
+
+        from models import AuditLog
+
+        def _get_actor():
+            usuario = getattr(g, 'usuario', None)
+            if usuario is not None:
+                return usuario.id, getattr(usuario, 'nome', None)
+            if 'usuario_id' in session:
+                return session.get('usuario_id'), session.get('usuario_nome')
+            return None, None
+
+        def _get_request_meta():
+            if not has_request_context():
+                return None, None, None, None
+            try:
+                endpoint = request.endpoint
+            except Exception:
+                endpoint = None
+            try:
+                metodo = request.method
+            except Exception:
+                metodo = None
+            try:
+                ip = request.headers.get('X-Forwarded-For', request.remote_addr)
+            except Exception:
+                ip = None
+            try:
+                ua = request.headers.get('User-Agent')
+            except Exception:
+                ua = None
+            return endpoint, metodo, ip, ua
+
+        def _row_identity(obj):
+            try:
+                mapper = inspect(obj).mapper
+                pks = [col.key for col in mapper.primary_key]
+                if not pks:
+                    return None
+                if len(pks) == 1:
+                    return str(getattr(obj, pks[0], None))
+                return json.dumps({k: getattr(obj, k, None) for k in pks}, ensure_ascii=False, default=str)
+            except Exception:
+                return None
+
+        def _collect_changes(obj, action):
+            try:
+                state = inspect(obj)
+                mapper = state.mapper
+                changes = {}
+
+                for attr in mapper.column_attrs:
+                    key = attr.key
+                    if key == 'id':
+                        continue
+                    hist = state.attrs[key].history
+
+                    if action == 'create':
+                        val = getattr(obj, key, None)
+                        if val is not None:
+                            changes[key] = {'old': None, 'new': val}
+                        continue
+
+                    if action == 'delete':
+                        val = getattr(obj, key, None)
+                        if val is not None:
+                            changes[key] = {'old': val, 'new': None}
+                        continue
+
+                    if action == 'update':
+                        if not hist.has_changes():
+                            continue
+                        old = hist.deleted[0] if hist.deleted else None
+                        new = hist.added[0] if hist.added else getattr(obj, key, None)
+                        changes[key] = {'old': old, 'new': new}
+
+                if not changes:
+                    return None
+                return changes
+            except Exception:
+                return None
+
+        @event.listens_for(db.session.__class__, 'before_flush')
+        def _audit_before_flush(session_, flush_context, instances):
+            if session_.info.get('_audit_logging_disabled'):
+                return
+
+            usuario_id, usuario_nome = _get_actor()
+            endpoint, metodo, ip, ua = _get_request_meta()
+
+            def _add_log(acao, obj, changes):
+                if isinstance(obj, AuditLog):
+                    return
+
+                entidade_tipo = obj.__class__.__name__
+                entidade_id = _row_identity(obj)
+                mudancas_json = None
+                if changes is not None:
+                    try:
+                        mudancas_json = json.dumps(changes, ensure_ascii=False, default=str)
+                    except Exception:
+                        mudancas_json = None
+
+                session_.add(
+                    AuditLog(
+                        usuario_id=usuario_id,
+                        usuario_nome=usuario_nome,
+                        acao=acao,
+                        entidade_tipo=entidade_tipo,
+                        entidade_id=entidade_id,
+                        mudancas_json=mudancas_json,
+                        endpoint=endpoint,
+                        metodo=metodo,
+                        ip=ip,
+                        user_agent=ua,
+                    )
+                )
+
+            for obj in list(session_.new):
+                if isinstance(obj, AuditLog):
+                    continue
+                changes = _collect_changes(obj, 'create')
+                _add_log('create', obj, changes)
+
+            for obj in list(session_.dirty):
+                if isinstance(obj, AuditLog):
+                    continue
+                if not session_.is_modified(obj, include_collections=False):
+                    continue
+                changes = _collect_changes(obj, 'update')
+                if changes:
+                    _add_log('update', obj, changes)
+
+            for obj in list(session_.deleted):
+                if isinstance(obj, AuditLog):
+                    continue
+                changes = _collect_changes(obj, 'delete')
+                _add_log('delete', obj, changes)
+
+        _app.extensions['audit_log_registered'] = True
+
+    _register_audit_logging(app)
     
     if not skip_db_checks:
         with app.app_context():
@@ -352,6 +499,7 @@ def create_app():
     from routes.gabaritos_centro import gabaritos_centro
     from routes.gabaritos_rosca import gabaritos_rosca
     from routes.novas_folhas_processo import novas_folhas_processo
+    from routes.auditoria import auditoria
     
     app.register_blueprint(clientes)
     app.register_blueprint(materiais)
@@ -373,6 +521,7 @@ def create_app():
     app.register_blueprint(gabaritos_centro)
     app.register_blueprint(gabaritos_rosca)
     app.register_blueprint(novas_folhas_processo)
+    app.register_blueprint(auditoria)
 
     # Guard global de autenticação/autorização
     @app.before_request

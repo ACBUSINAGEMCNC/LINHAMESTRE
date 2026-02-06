@@ -188,6 +188,13 @@ def listar_ordens_servico():
     ordens = OrdemServico.query.all()
     return render_template('ordens/listar.html', ordens=ordens)
 
+
+@ordens.route('/ordens-servico/visualizar/<int:ordem_id>')
+def visualizar_ordem_servico(ordem_id):
+    """Rota para visualizar detalhes de uma ordem de serviço"""
+    ordem = OrdemServico.query.get_or_404(ordem_id)
+    return render_template('ordens/visualizar.html', ordem=ordem)
+
 @ordens.route('/ordens-servico/nova', methods=['GET', 'POST'])
 def nova_ordem_servico():
     """Rota para criar uma nova ordem de serviço"""
