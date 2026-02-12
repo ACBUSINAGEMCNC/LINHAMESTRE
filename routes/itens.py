@@ -606,7 +606,7 @@ def editar_item_composto(item_id):
         item_componentes.append({
             'id': ic.item_componente_id,
             'nome': componente.nome,
-            'codigo_acb': componente.codigo_acb,
+            'codigo': componente.codigo_acb,
             'quantidade': ic.quantidade,
             'observacoes': ic.observacoes or ''
         })
@@ -614,7 +614,7 @@ def editar_item_composto(item_id):
     return render_template('itens/composto_editar.html', 
                           item=item, 
                           itens_disponiveis=itens_disponiveis,
-                          item_componentes=json.dumps(item_componentes))
+                          item_componentes=item_componentes)
 
 @itens.route('/itens/composto/visualizar/<int:item_id>')
 def visualizar_item_composto(item_id):

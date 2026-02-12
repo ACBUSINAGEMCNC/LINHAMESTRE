@@ -1,10 +1,11 @@
-<!DOCTYPE html>
-<html lang="pt-BR">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Pedidos - ACB Usinagem CNC</title>
-    <!-- CSS específico para esta página -->
+{% extends 'base.html' %}
+
+{% block title %}Pedidos - ACB Usinagem CNC{% endblock %}
+
+{% block extra_css %}
+    <link rel="stylesheet" href="https://cdn.datatables.net/1.11.5/css/dataTables.bootstrap5.min.css">
+    <link href="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/css/select2.min.css" rel="stylesheet" />
+    <link href="https://cdn.jsdelivr.net/npm/select2-bootstrap-5-theme@1.3.0/dist/select2-bootstrap-5-theme.min.css" rel="stylesheet" />
     <style>
 
         .status-badge {
@@ -88,21 +89,11 @@
             color: white;
         }
     </style>
-</head>
-<body>
-    <div class="container-fluid">
-    {% include 'base.html' %}
+{% endblock %}
+
+{% block content %}
     {% include 'components/modal_confirmacao.html' %}
     
-    {% block title %}Pedidos - ACB Usinagem CNC{% endblock %}
-    
-    {% block extra_css %}
-    <link rel="stylesheet" href="https://cdn.datatables.net/1.11.5/css/dataTables.bootstrap5.min.css">
-    <link href="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/css/select2.min.css" rel="stylesheet" />
-    <link href="https://cdn.jsdelivr.net/npm/select2-bootstrap-5-theme@1.3.0/dist/select2-bootstrap-5-theme.min.css" rel="stylesheet" />
-    {% endblock %}
-    
-    {% block content %}
     <!-- Header and Actions -->
     <div class='row mb-4'>
         <div class='col d-flex justify-content-between align-items-center'>
@@ -387,42 +378,23 @@
             </div>
         </div>
     </div>
-    {% endblock %}
+{% endblock %}
 
-    {% block extra_js %}
+{% block extra_js %}
     <script src="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/js/select2.min.js"></script>
     <script src="https://cdn.datatables.net/1.11.5/js/jquery.dataTables.min.js"></script>
     <script src="https://cdn.datatables.net/1.11.5/js/dataTables.bootstrap5.min.js"></script>
-    {% endblock %}
+{% endblock %}
 
-    {% block page_scripts %}
+{% block scripts %}
     <script>
         $(document).ready(function() {
             // Inicializar tooltips
             var tooltipTriggerList = [].slice.call(document.querySelectorAll('[data-bs-toggle="tooltip"]'));
-            var tooltipList = tooltipTriggerList.map(function (tooltipTriggerEl) {
+            tooltipTriggerList.map(function (tooltipTriggerEl) {
                 return new bootstrap.Tooltip(tooltipTriggerEl);
             });
 
-            // Função para inicializar popovers (necessária após DataTables redraw)
-            function initItemPopovers() {
-                // Destruir popovers antigos antes de recriar (evitar duplicados)
-                document.querySelectorAll('.item-popover').forEach(function (el) {
-                    var existing = bootstrap.Popover.getInstance(el);
-                    if (existing) { existing.dispose(); }
-                });
-                // Criar popovers
-                var popoverTriggerList = [].slice.call(document.querySelectorAll('.item-popover'));
-                popoverTriggerList.map(function (popoverTriggerEl) {
-                    return new bootstrap.Popover(popoverTriggerEl, {
-                        container: 'body',
-                        html: true,
-                        sanitize: false, // permitir imagem no conteúdo
-                        trigger: 'hover focus'
-                    });
-                });
-            }
-            
             // Inicializar Select2
             $('.select2').select2({
                 theme: 'bootstrap-5',
@@ -431,7 +403,7 @@
                 width: '100%',
                 closeOnSelect: false
             });
-            
+
             // Configuração específica para o filtro de status
             $('#filter_status').select2({
                 theme: 'bootstrap-5',
@@ -440,7 +412,7 @@
                 width: '100%',
                 closeOnSelect: false
             });
-            
+
             // Inicializar DataTable
             var table = $('#pedidosTable').DataTable({
                 language: {
@@ -472,35 +444,30 @@
                     { orderable: false, targets: [0, 9] }
                 ]
             });
-            
+
             // Toggle de filtros
             $('#filterToggle').click(function() {
                 $('#filterCard').toggleClass('collapsed');
                 $('#filterIcon').toggleClass('fa-chevron-down fa-chevron-up');
             });
-            
+
             // --- DataTables Custom Filtering Logic ---
-            // Helper function to parse dates from DD/MM/YYYY or return null
             function parseDate(dateString) {
                 if (!dateString) return null;
                 var parts = dateString.split('/');
                 if (parts.length === 3) {
-                    // Note: months are 0-based in JS Date
                     return new Date(parts[2], parts[1] - 1, parts[0]);
                 }
                 return null;
             }
 
-            // Helper function to parse dates from YYYY-MM-DD input or return null
             function parseInputDate(dateString) {
                 if (!dateString) return null;
-                return new Date(dateString + 'T00:00:00'); // Ensure it's parsed as local time start of day
+                return new Date(dateString + 'T00:00:00');
             }
 
-            // Register the custom filtering function
             $.fn.dataTable.ext.search.push(
                 function(settings, data, dataIndex) {
-                    // Get filter values
                     var clienteFilter = $('#filter_cliente').val() ? $('#filter_cliente').val().toLowerCase() : '';
                     var itemFilter = $('#filter_item').val() ? $('#filter_item').val().toLowerCase() : '';
                     var numeroPedidoFilter = $('#filter_numero_pedido').val() ? $('#filter_numero_pedido').val().toLowerCase() : '';
@@ -510,32 +477,23 @@
                     var previsaoInicioFilter = parseInputDate($('#filter_previsao_inicio').val());
                     var previsaoFimFilter = parseInputDate($('#filter_previsao_fim').val());
 
-                    // Get data from the current row (adjust column indices as needed)
-                    // Ensure data array indices match the actual table columns
-                    var numeroPedidoClienteCol = data[1].toLowerCase(); // Nº Pedido Cliente
-                    var clienteCol = data[2].toLowerCase(); // Cliente
-                    var numSistemaCol = data[4].toLowerCase(); // Nº Sistema
-                    var itemCol = data[5].toLowerCase(); // Item
-                    var dataEntradaCol = parseDate(data[7]); // Data de Entrada
-                    var previsaoEntregaCol = parseDate(data[10]); // Previsão de Entrega
-                    // Status needs to be extracted differently as it's rendered with HTML
+                    var numeroPedidoClienteCol = (data[1] || '').toLowerCase();
+                    var clienteCol = (data[2] || '').toLowerCase();
+                    var numSistemaCol = (data[4] || '').toLowerCase();
+                    var itemCol = (data[5] || '').toLowerCase();
+                    var dataEntradaCol = parseDate(data[7]);
+                    var previsaoEntregaCol = parseDate(data[10]);
+
                     var statusCol = '';
                     var statusBadge = table.cell(dataIndex, 11).nodes().to$().find('.status-badge');
                     if (statusBadge.length > 0) {
                         statusCol = statusBadge.text().trim().toLowerCase();
                     }
 
-                    // Apply filters
-                    if (clienteFilter && clienteCol.indexOf(clienteFilter) === -1) {
-                        return false;
-                    }
-                    if (itemFilter && itemCol.indexOf(itemFilter) === -1) {
-                        return false;
-                    }
-                    // Buscar tanto no Nº Pedido Cliente quanto no Nº Sistema
-                    if (numeroPedidoFilter && numeroPedidoClienteCol.indexOf(numeroPedidoFilter) === -1 && numSistemaCol.indexOf(numeroPedidoFilter) === -1) {
-                        return false;
-                    }
+                    if (clienteFilter && clienteCol.indexOf(clienteFilter) === -1) return false;
+                    if (itemFilter && itemCol.indexOf(itemFilter) === -1) return false;
+                    if (numeroPedidoFilter && numeroPedidoClienteCol.indexOf(numeroPedidoFilter) === -1 && numSistemaCol.indexOf(numeroPedidoFilter) === -1) return false;
+
                     if (statusFilter.length > 0) {
                         var statusMatch = false;
                         for (var i = 0; i < statusFilter.length; i++) {
@@ -544,244 +502,186 @@
                                 break;
                             }
                         }
-                        if (!statusMatch) {
-                            return false;
-                        }
-                    }
-                    if (dataInicioFilter && (!dataEntradaCol || dataEntradaCol < dataInicioFilter)) {
-                        return false;
-                    }
-                    if (dataFimFilter && (!dataEntradaCol || dataEntradaCol > dataFimFilter)) {
-                        return false;
-                    }
-                    if (previsaoInicioFilter && (!previsaoEntregaCol || previsaoEntregaCol < previsaoInicioFilter)) {
-                        return false;
-                    }
-                    if (previsaoFimFilter && (!previsaoEntregaCol || previsaoEntregaCol > previsaoFimFilter)) {
-                        return false;
+                        if (!statusMatch) return false;
                     }
 
-                    // If all filters pass, return true
+                    if (dataInicioFilter && (!dataEntradaCol || dataEntradaCol < dataInicioFilter)) return false;
+                    if (dataFimFilter && (!dataEntradaCol || dataEntradaCol > dataFimFilter)) return false;
+                    if (previsaoInicioFilter && (!previsaoEntregaCol || previsaoEntregaCol < previsaoInicioFilter)) return false;
+                    if (previsaoFimFilter && (!previsaoEntregaCol || previsaoEntregaCol > previsaoFimFilter)) return false;
+
                     return true;
                 }
             );
 
-            // Event listeners for filter inputs
             $('#btnAplicarFiltros').on('click', function() {
-                // Verificar se usuário selecionou status "entregue" ou "cancelado"
                 var statusFilter = $('#filter_status').val() || [];
                 var precisaRecarregar = false;
-                
+
                 for (var i = 0; i < statusFilter.length; i++) {
                     if (statusFilter[i] === 'entregue' || statusFilter[i] === 'cancelado') {
                         precisaRecarregar = true;
                         break;
                     }
                 }
-                
+
                 if (precisaRecarregar) {
-                    // Recarregar página com parâmetro mostrar_todos=1
                     window.location.href = '/pedidos?mostrar_todos=1';
                 } else {
-                    console.log("Aplicando filtros...");
-                    table.draw(); // Redraw the table to apply the custom filter
+                    table.draw();
                     var totalResultados = table.rows({ search: 'applied' }).count();
-                    // Assuming showToast function exists
                     if (typeof showToast === 'function') {
-                       showToast('Filtros aplicados: ' + totalResultados + ' resultados encontrados', 'success');
-                    } else {
-                       console.log('Filtros aplicados: ' + totalResultados + ' resultados encontrados');
+                        showToast('Filtros aplicados: ' + totalResultados + ' resultados encontrados', 'success');
                     }
                 }
             });
 
             $('#btnLimparFiltros').on('click', function() {
                 $('#filterForm')[0].reset();
-                // Reset Select2 fields specifically
                 $('#filter_cliente').val(null).trigger('change');
                 $('#filter_status').val(null).trigger('change');
-                console.log("Limpando filtros...");
-                table.draw(); // Redraw table to remove filters
-                 if (typeof showToast === 'function') {
+                table.draw();
+                if (typeof showToast === 'function') {
                     showToast('Filtros limpos', 'info');
-                 } else {
-                    console.log('Filtros limpos');
-                 }
+                }
             });
-            // --- End DataTables Custom Filtering Logic ---
-            
-            // Select all checkbox
+
             $('#selectAll').change(function() {
                 $('.pedido-checkbox').prop('checked', $(this).prop('checked'));
             });
-            
-            // Row click to edit
+
             $('#pedidosTable tbody').on('click', 'tr', function(e) {
-                // Ignore if clicked on checkbox, button or link
-                if ($(e.target).is('input, button, a, .btn, .form-check, .form-check-input') || 
+                if ($(e.target).is('input, button, a, .btn, .form-check, .form-check-input') ||
                     $(e.target).closest('button, a, .btn, .form-check').length) {
                     return;
                 }
-                
                 var id = $(this).data('id');
                 window.location.href = '/pedidos/editar/' + id;
             });
-        });
-    </script>
-    {% endblock %}
 
-    <script>
-// --- Event Handlers Adicionais (Integrados Corretamente) ---
-// Ativar a seleção ao clicar na linha (exceto em elementos interativos)
-$("#pedidosTable tbody").on("click", "tr", function(e) {
-    if (!$(e.target).is("input.pedido-checkbox, button, a, .btn, i") && !$(e.target).closest("button, a, .btn, .dropdown-toggle, .form-check").length) {
-        var checkbox = $(this).find(".pedido-checkbox");
-        checkbox.prop("checked", !checkbox.prop("checked"));
-    }
-});
-// Selecionar/deselecionar todos (checkbox no thead)
-$("#selectAll").on("change", function() {
-    var isChecked = $(this).prop("checked");
-    $(".pedido-checkbox").prop("checked", isChecked);
-});
-// Garantir que clicar no checkbox da linha não propague para a linha (evita desmarcar)
-$("#pedidosTable tbody").on("click", ".pedido-checkbox", function(e) {
-    e.stopPropagation();
-});
-// Prevenir seleção de linha ao clicar em botões/dropdowns dentro da linha
-$("#pedidosTable tbody").on("click", ".table-actions .btn, .dropdown-toggle", function(e) {
-    e.stopPropagation();
-});
-// Função auxiliar para obter IDs dos pedidos selecionados (filtrando cancelados)
-function getPedidosSelecionados() {
-    var selecionados = [];
-    var pedidosCanceladosNomes = [];
-    $(".pedido-checkbox:checked").each(function() {
-        var tr = $(this).closest("tr");
-        var status = (tr.data("status") || tr.find(".status-badge").text().trim()).toLowerCase();
-        var pedidoId = $(this).val();
-        if (status === "cancelado") {
-            var nomeCliente = tr.find("td:nth-child(2)").text().trim();
-            pedidosCanceladosNomes.push(nomeCliente || `ID ${pedidoId}`);
-        } else {
-            selecionados.push(pedidoId);
-        }
-    });
-    if (pedidosCanceladosNomes.length > 0) {
-        var alertMsg = "Atenção! Os seguintes pedidos cancelados foram ignorados: " + pedidosCanceladosNomes.join(", ");
-        if (typeof showToast === "function") {
-            showToast(alertMsg, "warning");
-        } else {
-            alert(alertMsg);
-        }
-    }
-    return selecionados;
-}
-// Gerar OS para pedidos selecionados
-$("#btn-gerar-os").on("click", function() {
-    var pedidosSelecionados = getPedidosSelecionados();
-    if (pedidosSelecionados.length === 0) {
-        if (typeof showToast === "function") {
-            showToast("Selecione pelo menos um pedido válido (não cancelado) marcando os checkboxes.", "warning");
-        } else {
-            alert("Selecione pelo menos um pedido válido (não cancelado) marcando os checkboxes.");
-        }
-        return;
-    }
-    var mensagem = "Tem certeza que deseja gerar Ordem de Serviço para " + pedidosSelecionados.length + " pedido(s) selecionado(s)?";
-    if (typeof mostrarModalConfirmacao === "function") {
-        mostrarModalConfirmacao(mensagem, function() {
-            $("body").append("<div id=\"overlay\" style=\"position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.5); z-index: 9999; display: flex; justify-content: center; align-items: center;\"><div class=\"spinner-border text-light\" role=\"status\"><span class=\"sr-only\">Processando...</span></div></div>");
-            var form = $("<form></form>");
-            form.attr("method", "post");
-            form.attr("action", "/pedidos/gerar-os-multipla");
-            var csrfToken = $("meta[name=\"csrf-token\"]").attr("content") || $("#csrf_token").val();
-            if (csrfToken) {
-                form.append("<input type=\"hidden\" name=\"csrf_token\" value=\"" + csrfToken + "\"> ");
-            }
-            pedidosSelecionados.forEach(function(pedidoId) {
-                form.append("<input type=\"hidden\" name=\"pedidos[]\" value=\"" + pedidoId + "\"> ");
-            });
-            $("body").append(form);
-            form.submit();
-        });
-    } else {
-        console.error("Função mostrarModalConfirmacao não definida.");
-        alert("Erro: Função de confirmação não encontrada.");
-    }
-});
-// Gerar Pedido de Material para pedidos selecionados
-$("#btn-gerar-pedido-material").on("click", function() {
-    var pedidosSelecionados = getPedidosSelecionados();
-    if (pedidosSelecionados.length === 0) {
-        if (typeof showToast === "function") {
-            showToast("Selecione pelo menos um pedido válido (não cancelado) marcando os checkboxes.", "warning");
-        } else {
-            alert("Selecione pelo menos um pedido válido (não cancelado) marcando os checkboxes.");
-        }
-        return;
-    }
-    var mensagem = "Tem certeza que deseja gerar Pedido de Material para " + pedidosSelecionados.length + " pedido(s) selecionado(s)?";
-    if (typeof mostrarModalConfirmacao === "function") {
-        mostrarModalConfirmacao(mensagem, function() {
-            $("body").append("<div id=\"overlay\" style=\"position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.5); z-index: 9999; display: flex; justify-content: center; align-items: center;\"><div class=\"spinner-border text-light\" role=\"status\"><span class=\"sr-only\">Processando...</span></div></div>");
-            var form = $("<form></form>");
-            form.attr("method", "post");
-            form.attr("action", "/pedidos/gerar-pedido-material-multiplo");
-            var csrfToken = $("meta[name=\"csrf-token\"]").attr("content") || $("#csrf_token").val();
-            if (csrfToken) {
-                form.append("<input type=\"hidden\" name=\"csrf_token\" value=\"" + csrfToken + "\"> ");
-            }
-            pedidosSelecionados.forEach(function(pedidoId) {
-                form.append("<input type=\"hidden\" name=\"pedidos[]\" value=\"" + pedidoId + "\"> ");
-            });
-            $("body").append(form);
-            form.submit();
-        });
-    } else {
-        console.error("Função mostrarModalConfirmacao não definida.");
-        alert("Erro: Função de confirmação não encontrada.");
-    }
-});
-            // --- Fim dos Event Handlers Adicionais ---
+            function getPedidosSelecionados() {
+                var selecionados = [];
+                var pedidosCanceladosNomes = [];
+                $('.pedido-checkbox:checked').each(function() {
+                    var tr = $(this).closest('tr');
+                    var status = (tr.data('status') || tr.find('.status-badge').text().trim()).toLowerCase();
+                    var pedidoId = $(this).val();
 
-    // Adicionar função de modal de confirmação diretamente nesta página para garantir disponibilidade
-    function mostrarModalConfirmacao(mensagem, acaoConfirmada) {
-        // Criar o modal se ele não existir
-        if ($('#modalConfirmacao').length === 0) {
-            $('body').append(`
-                <div class="modal fade" id="modalConfirmacao" tabindex="-1" aria-labelledby="modalConfirmacaoTitulo" aria-hidden="true">
-                    <div class="modal-dialog">
-                        <div class="modal-content">
-                            <div class="modal-header">
-                                <h5 class="modal-title" id="modalConfirmacaoTitulo">Confirmação</h5>
-                                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Fechar"></button>
-                            </div>
-                            <div class="modal-body" id="modalConfirmacaoCorpo">
-                                <!-- Conteúdo dinâmico será inserido aqui -->
-                            </div>
-                            <div class="modal-footer">
-                                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
-                                <button type="button" class="btn btn-primary" id="btnConfirmarAcao">Confirmar</button>
+                    if (status === 'cancelado') {
+                        var nomeCliente = tr.find('td:nth-child(2)').text().trim();
+                        pedidosCanceladosNomes.push(nomeCliente || ('ID ' + pedidoId));
+                    } else {
+                        selecionados.push(pedidoId);
+                    }
+                });
+                if (pedidosCanceladosNomes.length > 0) {
+                    var alertMsg = 'Atenção! Os seguintes pedidos cancelados foram ignorados: ' + pedidosCanceladosNomes.join(', ');
+                    if (typeof showToast === 'function') {
+                        showToast(alertMsg, 'warning');
+                    } else {
+                        alert(alertMsg);
+                    }
+                }
+                return selecionados;
+            }
+
+            function mostrarModalConfirmacao(mensagem, acaoConfirmada) {
+                if ($('#modalConfirmacao').length === 0) {
+                    $('body').append(`
+                        <div class="modal fade" id="modalConfirmacao" tabindex="-1" aria-labelledby="modalConfirmacaoTitulo" aria-hidden="true">
+                            <div class="modal-dialog">
+                                <div class="modal-content">
+                                    <div class="modal-header">
+                                        <h5 class="modal-title" id="modalConfirmacaoTitulo">Confirmação</h5>
+                                        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Fechar"></button>
+                                    </div>
+                                    <div class="modal-body" id="modalConfirmacaoCorpo"></div>
+                                    <div class="modal-footer">
+                                        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
+                                        <button type="button" class="btn btn-primary" id="btnConfirmarAcao">Confirmar</button>
+                                    </div>
+                                </div>
                             </div>
                         </div>
-                    </div>
-                </div>
-            `);
-        }
-        
-        // Definir a mensagem
-        $('#modalConfirmacaoCorpo').text(mensagem);
-        
-        // Remover eventos antigos e adicionar novo
-        $('#btnConfirmarAcao').off('click').on('click', function() {
-            $('#modalConfirmacao').modal('hide');
-            acaoConfirmada();
+                    `);
+                }
+
+                $('#modalConfirmacaoCorpo').text(mensagem);
+                $('#btnConfirmarAcao').off('click').on('click', function() {
+                    var modalEl = document.getElementById('modalConfirmacao');
+                    var modal = bootstrap.Modal.getOrCreateInstance(modalEl);
+                    modal.hide();
+                    acaoConfirmada();
+                });
+
+                var modalEl = document.getElementById('modalConfirmacao');
+                var modal = bootstrap.Modal.getOrCreateInstance(modalEl);
+                modal.show();
+            }
+
+            $('#btn-gerar-os').on('click', function() {
+                var pedidosSelecionados = getPedidosSelecionados();
+                if (pedidosSelecionados.length === 0) {
+                    if (typeof showToast === 'function') {
+                        showToast('Selecione pelo menos um pedido válido (não cancelado) marcando os checkboxes.', 'warning');
+                    } else {
+                        alert('Selecione pelo menos um pedido válido (não cancelado) marcando os checkboxes.');
+                    }
+                    return;
+                }
+
+                var mensagem = 'Tem certeza que deseja gerar Ordem de Serviço para ' + pedidosSelecionados.length + ' pedido(s) selecionado(s)?';
+                mostrarModalConfirmacao(mensagem, function() {
+                    $('body').append('<div id="overlay" style="position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.5); z-index: 9999; display: flex; justify-content: center; align-items: center;"><div class="spinner-border text-light" role="status"><span class="sr-only">Processando...</span></div></div>');
+                    var form = $('<form></form>');
+                    form.attr('method', 'post');
+                    form.attr('action', '/pedidos/gerar-os-multipla');
+
+                    var csrfToken = $('meta[name="csrf-token"]').attr('content') || $('#csrf_token').val();
+                    if (csrfToken) {
+                        form.append('<input type="hidden" name="csrf_token" value="' + csrfToken + '">');
+                    }
+
+                    pedidosSelecionados.forEach(function(pedidoId) {
+                        form.append('<input type="hidden" name="pedidos[]" value="' + pedidoId + '">');
+                    });
+
+                    $('body').append(form);
+                    form.submit();
+                });
+            });
+
+            $('#btn-gerar-pedido-material').on('click', function() {
+                var pedidosSelecionados = getPedidosSelecionados();
+                if (pedidosSelecionados.length === 0) {
+                    if (typeof showToast === 'function') {
+                        showToast('Selecione pelo menos um pedido válido (não cancelado) marcando os checkboxes.', 'warning');
+                    } else {
+                        alert('Selecione pelo menos um pedido válido (não cancelado) marcando os checkboxes.');
+                    }
+                    return;
+                }
+
+                var mensagem = 'Tem certeza que deseja gerar Pedido de Material para ' + pedidosSelecionados.length + ' pedido(s) selecionado(s)?';
+                mostrarModalConfirmacao(mensagem, function() {
+                    $('body').append('<div id="overlay" style="position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.5); z-index: 9999; display: flex; justify-content: center; align-items: center;"><div class="spinner-border text-light" role="status"><span class="sr-only">Processando...</span></div></div>');
+                    var form = $('<form></form>');
+                    form.attr('method', 'post');
+                    form.attr('action', '/pedidos/gerar-pedido-material-multiplo');
+
+                    var csrfToken = $('meta[name="csrf-token"]').attr('content') || $('#csrf_token').val();
+                    if (csrfToken) {
+                        form.append('<input type="hidden" name="csrf_token" value="' + csrfToken + '">');
+                    }
+
+                    pedidosSelecionados.forEach(function(pedidoId) {
+                        form.append('<input type="hidden" name="pedidos[]" value="' + pedidoId + '">');
+                    });
+
+                    $('body').append(form);
+                    form.submit();
+                });
+            });
         });
-        
-        // Mostrar o modal
-        var modalEl = document.getElementById('modalConfirmacao');
-        var modal = bootstrap.Modal.getOrCreateInstance(modalEl);
-        modal.show();
-    }
-</script>
+    </script>
+{% endblock %}

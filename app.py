@@ -595,6 +595,79 @@ def create_app():
             if not usuario.acesso_estoque:
                 flash('Você não tem permissão para acessar esta área', 'danger')
                 return redirect(url_for('main.index'))
+
+    @app.context_processor
+    def _inject_audit_footer():
+        try:
+            usuario = getattr(g, 'usuario', None)
+            if not usuario or getattr(usuario, 'nivel_acesso', None) != 'admin':
+                return {}
+
+            if not has_request_context():
+                return {}
+
+            from models import AuditLog
+
+            blueprint = request.blueprint
+            view_args = request.view_args or {}
+
+            blueprint_to_entity = {
+                'itens': 'Item',
+                'pedidos': 'Pedido',
+                'ordens': 'OrdemServico',
+                'novas_folhas_processo': 'NovaFolhaProcesso',
+                'clientes': 'Cliente',
+                'materiais': 'Material',
+                'trabalhos': 'Trabalho',
+                'pedidos_material': 'PedidoMaterial',
+                'estoque': 'Estoque',
+                'estoque_pecas': 'EstoquePeca',
+                'kanban': 'OrdemServico',
+                'apontamento': 'OrdemServico',
+            }
+
+            entity_type = blueprint_to_entity.get(blueprint)
+            entity_id = None
+
+            viewarg_to_entity = {
+                'item_id': 'Item',
+                'pedido_id': 'Pedido',
+                'ordem_id': 'OrdemServico',
+                'ordem_servico_id': 'OrdemServico',
+                'os_id': 'OrdemServico',
+                'folha_id': 'NovaFolhaProcesso',
+                'cliente_id': 'Cliente',
+                'material_id': 'Material',
+                'trabalho_id': 'Trabalho',
+                'pedido_material_id': 'PedidoMaterial',
+                'id': None,
+            }
+
+            for arg_name, et in viewarg_to_entity.items():
+                if arg_name in view_args and view_args.get(arg_name) is not None:
+                    val = view_args.get(arg_name)
+                    if et:
+                        entity_type = et
+                    entity_id = str(val)
+                    break
+
+            q = AuditLog.query
+            if entity_type and entity_id:
+                q = q.filter(AuditLog.entidade_tipo == entity_type, AuditLog.entidade_id == entity_id)
+                titulo = f"Últimas mudanças: {entity_type} #{entity_id}"
+            elif entity_type:
+                q = q.filter(AuditLog.entidade_tipo == entity_type)
+                titulo = f"Últimas mudanças: {entity_type}"
+            else:
+                titulo = "Últimas mudanças (Sistema)"
+
+            logs = q.order_by(AuditLog.data_criacao.desc()).limit(8).all()
+            return {
+                'audit_footer_logs': logs,
+                'audit_footer_title': titulo,
+            }
+        except Exception:
+            return {}
     
     # Rota para redirecionar URLs Supabase
     @app.route('/uploads/supabase:/<path:file_path>')
