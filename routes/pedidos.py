@@ -390,6 +390,7 @@ def gerar_pedido_material_multiplo():
     
     # Agregar materiais de todos os pedidos válidos (incluindo desmembramento de itens compostos)
     materiais_agrupados = {}
+    materiais_agrupados_qtd = {}
     for pedido in pedidos_para_processar:
         item = Item.query.get(pedido.item_id)
         
@@ -402,24 +403,38 @@ def gerar_pedido_material_multiplo():
                 # Buscar materiais do componente
                 item_materiais = ItemMaterial.query.filter_by(item_id=item_componente.id).all()
                 for item_material in item_materiais:
-                    comprimento_necessario = (item_material.comprimento or 0) * quantidade_componente
-                    
-                    if item_material.material_id in materiais_agrupados:
-                        materiais_agrupados[item_material.material_id] += comprimento_necessario
+                    material = Material.query.get(item_material.material_id)
+                    if material and material.especifico:
+                        qtd_necessaria = (item_material.quantidade or 1) * quantidade_componente
+                        if item_material.material_id in materiais_agrupados_qtd:
+                            materiais_agrupados_qtd[item_material.material_id] += qtd_necessaria
+                        else:
+                            materiais_agrupados_qtd[item_material.material_id] = qtd_necessaria
                     else:
-                        materiais_agrupados[item_material.material_id] = comprimento_necessario
+                        comprimento_necessario = (item_material.comprimento or 0) * quantidade_componente
+                        if item_material.material_id in materiais_agrupados:
+                            materiais_agrupados[item_material.material_id] += comprimento_necessario
+                        else:
+                            materiais_agrupados[item_material.material_id] = comprimento_necessario
         else:
             # ITEM SIMPLES: Processar normalmente
             item_materiais = ItemMaterial.query.filter_by(item_id=pedido.item_id).all()
             for item_material in item_materiais:
-                comprimento_necessario = (item_material.comprimento or 0) * pedido.quantidade
-                
-                if item_material.material_id in materiais_agrupados:
-                    materiais_agrupados[item_material.material_id] += comprimento_necessario
+                material = Material.query.get(item_material.material_id)
+                if material and material.especifico:
+                    qtd_necessaria = (item_material.quantidade or 1) * pedido.quantidade
+                    if item_material.material_id in materiais_agrupados_qtd:
+                        materiais_agrupados_qtd[item_material.material_id] += qtd_necessaria
+                    else:
+                        materiais_agrupados_qtd[item_material.material_id] = qtd_necessaria
                 else:
-                    materiais_agrupados[item_material.material_id] = comprimento_necessario
+                    comprimento_necessario = (item_material.comprimento or 0) * pedido.quantidade
+                    if item_material.material_id in materiais_agrupados:
+                        materiais_agrupados[item_material.material_id] += comprimento_necessario
+                    else:
+                        materiais_agrupados[item_material.material_id] = comprimento_necessario
     
-    if not materiais_agrupados:
+    if not materiais_agrupados and not materiais_agrupados_qtd:
         flash('Nenhum material associado aos itens dos pedidos selecionados', 'warning')
         return redirect(url_for('pedidos.listar_pedidos'))
     
@@ -442,6 +457,14 @@ def gerar_pedido_material_multiplo():
             pedido_material_id=pm.id,
             material_id=material_id,
             comprimento=comprimento_total
+        )
+        db.session.add(assoc)
+
+    for material_id, qtd_total in materiais_agrupados_qtd.items():
+        assoc = ItemPedidoMaterial(
+            pedido_material_id=pm.id,
+            material_id=material_id,
+            quantidade=qtd_total
         )
         db.session.add(assoc)
     

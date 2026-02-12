@@ -62,33 +62,75 @@
             </div>
         </div>
 
-        <div class="card">
-            <div class="card-header">
-                <h5 class="mb-0">Itens do Pedido</h5>
-            </div>
-            <div class="card-body">
-                <div class="table-responsive">
-                    <table class="table table-striped table-hover">
-                        <thead>
-                            <tr>
-                                <th>Material</th>
-                                <th>Tipo</th>
-                                <th>Comprimento (m)</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            {% for item in pedido.itens %}
-                            <tr>
-                                <td>{{ item.material.nome }}</td>
-                                <td>{{ item.material.tipo }}</td>
-                                <td>{{ item.comprimento_em_metros }} m</td>
-                            </tr>
-                            {% endfor %}
-                        </tbody>
-                    </table>
+        <form method="POST" action="/pedidos-material/atualizar/{{ pedido.id }}">
+            <div class="card">
+                <div class="card-header d-flex justify-content-between align-items-center">
+                    <h5 class="mb-0">Itens do Pedido</h5>
+                    <button type="submit" class="btn btn-sm btn-primary">
+                        <i class="fas fa-save"></i> Salvar Ajustes
+                    </button>
+                </div>
+                <div class="card-body">
+                    <h6 class="mb-3">Materiais Específicos (peças)</h6>
+                    <div class="table-responsive mb-4">
+                        <table class="table table-striped table-hover align-middle">
+                            <thead>
+                                <tr>
+                                    <th style="width: 160px;">Quantidade</th>
+                                    <th>Material</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% if itens_especificos and itens_especificos|length > 0 %}
+                                    {% for item in itens_especificos %}
+                                    <tr>
+                                        <td>
+                                            <input type="number" class="form-control" min="0" step="1" name="qtd_{{ item.id }}" value="{{ item.quantidade or 0 }}">
+                                        </td>
+                                        <td>{{ item.material.nome }}</td>
+                                    </tr>
+                                    {% endfor %}
+                                {% else %}
+                                    <tr>
+                                        <td colspan="2" class="text-muted">Nenhum material específico.</td>
+                                    </tr>
+                                {% endif %}
+                            </tbody>
+                        </table>
+                    </div>
+
+                    <h6 class="mb-3">Materiais em Barra (metros)</h6>
+                    <div class="table-responsive">
+                        <table class="table table-striped table-hover align-middle">
+                            <thead>
+                                <tr>
+                                    <th style="width: 160px;">Metros</th>
+                                    <th>Material</th>
+                                    <th style="width: 140px;">Tipo</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% if itens_barra and itens_barra|length > 0 %}
+                                    {% for item in itens_barra %}
+                                    <tr>
+                                        <td>
+                                            <input type="number" class="form-control" min="0" step="0.01" name="m_{{ item.id }}" value="{{ ((item.comprimento or 0) / 1000.0) | round(2) }}">
+                                        </td>
+                                        <td>{{ item.material.nome }}</td>
+                                        <td>{{ item.material.tipo }}</td>
+                                    </tr>
+                                    {% endfor %}
+                                {% else %}
+                                    <tr>
+                                        <td colspan="3" class="text-muted">Nenhum material em barra.</td>
+                                    </tr>
+                                {% endif %}
+                            </tbody>
+                        </table>
+                    </div>
                 </div>
             </div>
-        </div>
+        </form>
     </div>
 
     <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
