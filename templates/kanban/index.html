@@ -363,6 +363,9 @@
             color: #0d6efd;
         }
         .drag-handle { display: none; }
+        @media (hover: none) and (pointer: coarse) {
+            .drag-handle { display: block; }
+        }
         /* Estilos para o Sortable.js */
         .sortable-ghost {
             opacity: 0.4;
@@ -1481,13 +1484,22 @@
             
             // Event listeners para botões de mover visuais
             document.querySelectorAll('.btn-mover-visual').forEach(function(btn) {
-                btn.addEventListener('click', function(e) {
+                if (btn.classList.contains('events-initialized')) {
+                    return;
+                }
+
+                const handler = function(e) {
                     e.preventDefault();
                     e.stopPropagation();
                     const ordemId = this.dataset.ordemId;
                     const listaDestino = this.dataset.listaDestino;
                     moverOrdem(ordemId, listaDestino);
-                });
+                };
+
+                btn.addEventListener('click', handler);
+                btn.addEventListener('touchend', handler);
+                btn.addEventListener('pointerup', handler);
+                btn.classList.add('events-initialized');
             });
             
             // Também inicializar novamente quando o Sortable terminar uma operação de arrasto
@@ -2568,13 +2580,17 @@
         // Botões de mover fantasma
         document.querySelectorAll('.btn-mover-fantasma').forEach(function(btn) {
             if (!btn.classList.contains('events-initialized')) {
-                btn.addEventListener('click', function(e) {
+                const handler = function(e) {
                     e.preventDefault();
                     e.stopPropagation();
                     const cartaoId = this.dataset.cartaoId;
                     console.log('Movendo cartão fantasma:', cartaoId);
                     abrirModalMoverFantasma(cartaoId);
-                });
+                };
+
+                btn.addEventListener('click', handler);
+                btn.addEventListener('touchend', handler);
+                btn.addEventListener('pointerup', handler);
                 btn.classList.add('events-initialized');
                 console.log('✅ Botão mover configurado para cartão:', btn.dataset.cartaoId);
             }
@@ -2661,9 +2677,17 @@
         // Configurar botão de confirmar se ainda não foi configurado
         const btnConfirmar = document.getElementById('btnConfirmarMoverFantasma');
         if (btnConfirmar && !btnConfirmar.classList.contains('events-initialized')) {
-            btnConfirmar.addEventListener('click', function() {
+            const handler = function(e) {
+                if (e) {
+                    e.preventDefault();
+                    e.stopPropagation();
+                }
                 moverCartaoFantasma();
-            });
+            };
+
+            btnConfirmar.addEventListener('click', handler);
+            btnConfirmar.addEventListener('touchend', handler);
+            btnConfirmar.addEventListener('pointerup', handler);
             btnConfirmar.classList.add('events-initialized');
         }
     }

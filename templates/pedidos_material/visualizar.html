@@ -34,6 +34,9 @@
         <div class="d-flex justify-content-between align-items-center mb-4">
             <h1>Pedido de Material: {{ pedido.numero }}</h1>
             <div>
+                <a href="/pedidos-material/comparativo/{{ pedido.id }}" class="btn btn-info">
+                    <i class="fas fa-balance-scale"></i> Comparativo
+                </a>
                 <a href="/pedidos-material/imprimir/{{ pedido.id }}" class="btn btn-secondary" target="_blank">
                     <i class="fas fa-print"></i> Imprimir
                 </a>

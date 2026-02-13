@@ -54,6 +54,8 @@ body.sorting {
     padding: 3px 5px;
     border-radius: 3px;
     transition: background-color 0.2s ease;
+    touch-action: none;
+    -webkit-touch-callout: none;
 }
 
 .drag-handle:hover {

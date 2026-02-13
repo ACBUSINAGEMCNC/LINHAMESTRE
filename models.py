@@ -193,6 +193,59 @@ class ItemMaterial(db.Model):
         if self.comprimento:
             return math.ceil(self.comprimento / 1000)
         return 0
+
+
+class Fornecedor(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    nome = db.Column(db.String(120), nullable=False, unique=True)
+
+    def __repr__(self):
+        return f'<Fornecedor {self.nome}>'
+
+
+class CotacaoPedidoMaterial(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    pedido_material_id = db.Column(db.Integer, db.ForeignKey('pedido_material.id'), nullable=False)
+    fornecedor_id = db.Column(db.Integer, db.ForeignKey('fornecedor.id'), nullable=False)
+    data_criacao = db.Column(db.DateTime, default=datetime.utcnow)
+    observacoes = db.Column(db.Text)
+
+    pedido_material = relationship('PedidoMaterial', backref='cotacoes_fornecedores', lazy=True)
+    fornecedor = relationship('Fornecedor', backref='cotacoes', lazy=True)
+    itens = db.relationship('CotacaoItemPedidoMaterial', backref='cotacao', lazy=True, cascade="all, delete-orphan")
+
+    __table_args__ = (
+        db.UniqueConstraint('pedido_material_id', 'fornecedor_id', name='uq_cotacao_pedido_fornecedor'),
+    )
+
+    def __repr__(self):
+        return f'<CotacaoPedidoMaterial {self.id}>'
+
+
+class CotacaoItemPedidoMaterial(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    cotacao_id = db.Column(db.Integer, db.ForeignKey('cotacao_pedido_material.id'), nullable=False)
+    item_pedido_material_id = db.Column(db.Integer, db.ForeignKey('item_pedido_material.id'), nullable=False)
+
+    preco_total = db.Column(db.Float)
+    preco_por_kg = db.Column(db.Float)
+    preco_unitario = db.Column(db.Float)
+    ipi_percent = db.Column(db.Float)
+    prazo_entrega_dias = db.Column(db.Integer)
+    prazo_pagamento_dias = db.Column(db.Integer)
+
+    # Rateio (opcional): quanto deste item será comprado deste fornecedor
+    quantidade_escolhida = db.Column(db.Integer)
+    metros_escolhidos = db.Column(db.Float)
+
+    item_pedido_material = relationship('ItemPedidoMaterial', backref='cotacoes_itens', lazy=True)
+
+    __table_args__ = (
+        db.UniqueConstraint('cotacao_id', 'item_pedido_material_id', name='uq_cotacao_item'),
+    )
+
+    def __repr__(self):
+        return f'<CotacaoItemPedidoMaterial {self.id}>'
     
 class Item(db.Model):
     id = db.Column(db.Integer, primary_key=True)

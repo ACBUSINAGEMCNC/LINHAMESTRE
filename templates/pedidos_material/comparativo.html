@@ -1,0 +1,193 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Comparativo de Fornecedores - Pedido {{ pedido.numero }}</title>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+</head>
+<body>
+    <nav class="navbar navbar-expand-lg navbar-dark bg-primary">
+        <div class="container">
+            <a class="navbar-brand d-flex align-items-center gap-2" href="/">
+                <img src="/static/logo_acb.png" alt="ACB" style="height: 28px; width: auto;" onerror="this.onerror=null;this.src='/static/logo.svg';">
+                <span>ARTCOMPANY</span>
+            </a>
+            <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav">
+                <span class="navbar-toggler-icon"></span>
+            </button>
+            <div class="collapse navbar-collapse" id="navbarNav">
+                <ul class="navbar-nav">
+                    <li class="nav-item">
+                        <a class="nav-link" href="/pedidos-material"><i class="fas fa-box"></i> Pedidos de Material</a>
+                    </li>
+                </ul>
+            </div>
+        </div>
+    </nav>
+
+    <div class="container py-4">
+        <div class="d-flex justify-content-between align-items-center mb-4">
+            <div>
+                <h1 class="mb-1">Comparativo de Fornecedores</h1>
+                <div class="text-muted">Pedido de Material: <strong>{{ pedido.numero }}</strong></div>
+            </div>
+            <div class="d-flex gap-2">
+                <a href="/pedidos-material/visualizar/{{ pedido.id }}" class="btn btn-secondary">
+                    <i class="fas fa-arrow-left"></i> Voltar
+                </a>
+            </div>
+        </div>
+
+        <div class="card mb-4">
+            <div class="card-header">
+                <h5 class="mb-0">Adicionar fornecedor</h5>
+            </div>
+            <div class="card-body">
+                <form method="POST" action="/pedidos-material/comparativo/{{ pedido.id }}/fornecedor" class="row g-2 align-items-end">
+                    <div class="col-md-6">
+                        <label class="form-label">Nome do fornecedor</label>
+                        <input type="text" class="form-control" name="nome_fornecedor" required>
+                    </div>
+                    <div class="col-md-6">
+                        <button type="submit" class="btn btn-primary">
+                            <i class="fas fa-plus"></i> Adicionar
+                        </button>
+                    </div>
+                </form>
+            </div>
+        </div>
+
+        <div class="card">
+            <div class="card-header d-flex justify-content-between align-items-center">
+                <h5 class="mb-0">Cotações por item</h5>
+                <div class="d-flex gap-2">
+                    <form method="POST" action="/pedidos-material/comparativo/{{ pedido.id }}/sugerir-rateio" class="m-0">
+                        <button type="submit" class="btn btn-sm btn-outline-primary">
+                            <i class="fas fa-wand-magic-sparkles"></i> Sugerir melhor opção (ratear)
+                        </button>
+                    </form>
+                    <form method="POST" action="/pedidos-material/comparativo/{{ pedido.id }}/sugerir-rateio-entrega" class="m-0">
+                        <button type="submit" class="btn btn-sm btn-outline-primary">
+                            <i class="fas fa-truck"></i> Ratear por melhor entrega
+                        </button>
+                    </form>
+                    <form method="POST" action="/pedidos-material/comparativo/{{ pedido.id }}/sugerir-rateio-pagamento" class="m-0">
+                        <button type="submit" class="btn btn-sm btn-outline-primary">
+                            <i class="fas fa-calendar-check"></i> Ratear por melhor pagamento
+                        </button>
+                    </form>
+                    <button type="submit" form="form-cotacoes" class="btn btn-sm btn-success">
+                        <i class="fas fa-save"></i> Salvar cotações
+                    </button>
+                </div>
+            </div>
+            <div class="card-body">
+                {% if cotacoes and cotacoes|length > 0 %}
+                    <form id="form-cotacoes" method="POST" action="/pedidos-material/comparativo/{{ pedido.id }}/salvar">
+                        <div class="table-responsive">
+                            <table class="table table-striped table-hover align-middle">
+                                <thead>
+                                    <tr>
+                                        <th style="min-width: 280px;">Item</th>
+                                        {% for c in cotacoes %}
+                                            <th style="min-width: 320px;">
+                                                <div class="d-flex justify-content-between align-items-center">
+                                                    <div>
+                                                        <div class="fw-bold">{{ c.fornecedor.nome }}</div>
+                                                        <div class="text-muted" style="font-size: 12px;">Cotação #{{ c.id }}</div>
+                                                    </div>
+                                                </div>
+                                            </th>
+                                        {% endfor %}
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {% for item in pedido.itens %}
+                                        <tr>
+                                            <td>
+                                                <div class="fw-bold">{{ item.material.nome }}</div>
+                                                <div class="text-muted" style="font-size: 12px;">
+                                                    {% if item.material.especifico %}
+                                                        Qtd: {{ item.quantidade or 0 }}
+                                                    {% else %}
+                                                        Metros: {{ ((item.comprimento or 0)/1000.0) | round(2) }}
+                                                    {% endif %}
+                                                </div>
+                                            </td>
+                                            {% for c in cotacoes %}
+                                                {% set key = (c.id|string) ~ '_' ~ (item.id|string) %}
+                                                {% set ci = cotacao_itens_map.get(key) %}
+                                                {% set melhor_preco = melhores.get(key, {}).get('melhor_preco', False) %}
+                                                {% set melhor_prazo = melhores.get(key, {}).get('melhor_prazo', False) %}
+                                                {% set melhor_pagamento = melhores.get(key, {}).get('melhor_pagamento', False) %}
+                                                <td>
+                                                    <div class="row g-2">
+                                                        <div class="col-6">
+                                                            <label class="form-label mb-0" style="font-size: 12px;">Preço total</label>
+                                                            <input type="number" step="0.01" min="0" class="form-control {% if melhor_preco %}border-success{% endif %}" name="preco_total_{{ c.id }}_{{ item.id }}" value="{{ ci.preco_total if ci and ci.preco_total is not none else (ci.preco_unitario if ci else '') }}">
+                                                        </div>
+                                                        <div class="col-6">
+                                                            <label class="form-label mb-0" style="font-size: 12px;">IPI %</label>
+                                                            <input type="number" step="0.01" min="0" class="form-control" name="ipi_{{ c.id }}_{{ item.id }}" value="{{ ci.ipi_percent if ci else '' }}">
+                                                        </div>
+                                                        <div class="col-6">
+                                                            <label class="form-label mb-0" style="font-size: 12px;">Preço por kg (opcional)</label>
+                                                            <input type="number" step="0.01" min="0" class="form-control" name="preco_kg_{{ c.id }}_{{ item.id }}" value="{{ ci.preco_por_kg if ci else '' }}">
+                                                        </div>
+                                                        <div class="col-6">
+                                                            <label class="form-label mb-0" style="font-size: 12px;">(legado) Preço unit.</label>
+                                                            <input type="number" step="0.01" min="0" class="form-control" name="preco_{{ c.id }}_{{ item.id }}" value="{{ ci.preco_unitario if ci else '' }}">
+                                                        </div>
+                                                        <div class="col-6">
+                                                            <label class="form-label mb-0" style="font-size: 12px;">Entrega (dias)</label>
+                                                            <input type="number" step="1" min="0" class="form-control {% if melhor_prazo %}border-primary{% endif %}" name="entrega_{{ c.id }}_{{ item.id }}" value="{{ ci.prazo_entrega_dias if ci else '' }}">
+                                                        </div>
+                                                        <div class="col-6">
+                                                            <label class="form-label mb-0" style="font-size: 12px;">Pagamento (dias)</label>
+                                                            <input type="number" step="1" min="0" class="form-control {% if melhor_pagamento %}border-warning{% endif %}" name="pagamento_{{ c.id }}_{{ item.id }}" value="{{ ci.prazo_pagamento_dias if ci else '' }}">
+                                                        </div>
+
+                                                        {% if item.material.especifico %}
+                                                            <div class="col-12">
+                                                                <label class="form-label mb-0" style="font-size: 12px;">Rateio (qtd escolhida)</label>
+                                                                <input type="number" step="1" min="0" class="form-control" name="qtd_escolhida_{{ c.id }}_{{ item.id }}" value="{{ ci.quantidade_escolhida if ci else '' }}">
+                                                            </div>
+                                                        {% else %}
+                                                            <div class="col-12">
+                                                                <label class="form-label mb-0" style="font-size: 12px;">Rateio (metros escolhidos)</label>
+                                                                <input type="number" step="0.01" min="0" class="form-control" name="m_escolhidos_{{ c.id }}_{{ item.id }}" value="{{ ci.metros_escolhidos if ci else '' }}">
+                                                            </div>
+                                                        {% endif %}
+
+                                                        <div class="col-12">
+                                                            {% if melhor_preco %}
+                                                                <span class="badge text-bg-success">Melhor preço</span>
+                                                            {% endif %}
+                                                            {% if melhor_prazo %}
+                                                                <span class="badge text-bg-primary">Melhor entrega</span>
+                                                            {% endif %}
+                                                            {% if melhor_pagamento %}
+                                                                <span class="badge text-bg-warning">Melhor pagamento</span>
+                                                            {% endif %}
+                                                        </div>
+                                                    </div>
+                                                </td>
+                                            {% endfor %}
+                                        </tr>
+                                    {% endfor %}
+                                </tbody>
+                            </table>
+                        </div>
+                    </form>
+                {% else %}
+                    <div class="text-muted">Adicione pelo menos 1 fornecedor para lançar as cotações.</div>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+</body>
+</html>

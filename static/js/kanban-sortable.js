@@ -6,6 +6,9 @@ document.addEventListener('DOMContentLoaded', function() {
         ('ontouchstart' in window) ||
         (navigator.maxTouchPoints && navigator.maxTouchPoints > 0)
     );
+
+    const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) ||
+        (navigator.platform === 'MacIntel' && navigator.maxTouchPoints && navigator.maxTouchPoints > 1);
     
     // Inicializa o Sortable.js para cada coluna do kanban
     document.querySelectorAll('.kanban-column-body').forEach(function(columnBody) {
@@ -20,12 +23,15 @@ document.addEventListener('DOMContentLoaded', function() {
             dragClass: 'sortable-drag',
             ghostClass: 'sortable-ghost',
             chosenClass: 'sortable-chosen',
-            forceFallback: false, // Usar comportamento nativo quando possível
+            // iOS costuma falhar/ser instável com drag nativo; forceFallback melhora muito
+            forceFallback: isIOS,
             fallbackClass: 'sortable-fallback',
             fallbackOnBody: true,
+            fallbackTolerance: isIOS ? 6 : 0,
             swapThreshold: 0.5, // Threshold mais responsivo
             invertSwap: true, // Melhor experiência ao trocar posições
-            preventOnFilter: true,
+            // No iOS o preventDefault em elementos filtrados pode quebrar cliques (ex.: dropdown Mover)
+            preventOnFilter: isIOS ? false : true,
             // Simplificar filtros - apenas elementos realmente necessários
             filter: '.btn, button, .dropdown, input, select, textarea, a[href]',
             draggable: '.kanban-card, .kanban-card.fantasma',
