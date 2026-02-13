@@ -760,6 +760,14 @@ def create_app():
             'get_file_url': get_file_url  # Adicionar função para templates
         }
         return user_data
+
+    @app.context_processor
+    def inject_app_version():
+        try:
+            from version import APP_VERSION
+            return {'app_version': APP_VERSION}
+        except Exception:
+            return {'app_version': ''}
     
     # Adicionar função now() para os templates
     @app.context_processor

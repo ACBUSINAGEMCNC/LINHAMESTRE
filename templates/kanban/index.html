@@ -636,7 +636,7 @@
                                             {% endif %}
                                             <li class="dropdown-header"><i class="fas fa-arrows-alt me-2"></i>Mover para:</li>
                                             {% for lista_destino in listas %}
-                                                {% if lista_destino != lista and lista_destino not in ['Entrada','Expedição'] %}
+                                                {% if lista_destino != lista and lista_destino not in ['Entrada'] %}
                                                     <li><a class="dropdown-item btn-mover-visual" href="#" data-ordem-id="{{ ordem.id }}" data-lista-destino="{{ lista_destino }}">
                                                         <i class="fas fa-arrow-right me-2 text-primary"></i>{{ lista_destino }}
                                                     </a></li>
@@ -1063,7 +1063,7 @@
                                 <select class="form-select" id="listaSelect" name="lista_destino" required>
                                     <option value="">Selecione a lista...</option>
                                     {% for lista in listas %}
-                                        {% if lista not in ['Entrada', 'Expedição'] %}
+                                        {% if lista not in ['Entrada'] %}
                                         <option value="{{ lista }}">{{ lista }}</option>
                                         {% endif %}
                                     {% endfor %}

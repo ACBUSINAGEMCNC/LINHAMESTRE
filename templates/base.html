@@ -115,6 +115,9 @@
     <footer class="bg-light py-3 mt-5">
         <div class="container text-center">
             <p class="mb-0">&copy; <span id="current-year"></span> ACB Usinagem CNC. Todos os direitos reservados.</p>
+            {% if app_version %}
+            <div class="text-muted small">{{ app_version }}</div>
+            {% endif %}
         </div>
 
         {% if usuario_nivel == 'admin' and audit_footer_logs is defined %}
