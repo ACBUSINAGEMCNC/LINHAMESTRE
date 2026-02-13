@@ -38,7 +38,7 @@
                             <div class="list-group-item d-flex justify-content-between align-items-center {% if lista.nome in ['Entrada', 'Expedição'] %}locked{% endif %}" data-id="{{ lista.id }}">
                                 <div class="d-flex align-items-center">
                                     {% if lista.nome not in ['Entrada', 'Expedição'] %}
-                                    <i class="fas fa-grip-vertical text-muted me-3" style="cursor: move;"></i>
+                                    <i class="fas fa-grip-vertical kanban-list-drag-handle text-muted me-3" style="cursor: move;"></i>
                                     {% else %}
                                     <i class="fas fa-lock text-muted me-3" title="Lista protegida"></i>
                                     {% endif %}
@@ -209,13 +209,32 @@
 </div>
 
 <script src="https://cdn.jsdelivr.net/npm/sortablejs@1.15.0/Sortable.min.js"></script>
+<style>
+    .kanban-list-drag-handle {
+        touch-action: none;
+        -webkit-touch-callout: none;
+        -webkit-user-select: none;
+        user-select: none;
+    }
+
+    #listas-sortable .list-group-item:not(.locked) {
+        cursor: grab;
+    }
+</style>
 <script>
 document.addEventListener('DOMContentLoaded', function() {
+    const ua = navigator.userAgent || '';
+    const isIOS = /iPad|iPhone|iPod/.test(ua) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+
     // Inicializar Sortable para reordenação
     const sortable = Sortable.create(document.getElementById('listas-sortable'), {
-        filter: '.locked',
-        handle: '.fa-grip-vertical',
+        filter: '.locked, .btn-group, button, a, input, select, textarea',
+        draggable: '.list-group-item:not(.locked)',
         animation: 150,
+        forceFallback: isIOS,
+        fallbackTolerance: isIOS ? 6 : 0,
+        touchStartThreshold: isIOS ? 5 : 0,
+        preventOnFilter: isIOS ? false : true,
         onEnd: function(evt) {
             const ordem = Array.from(evt.to.children).map(item => item.dataset.id);
             
