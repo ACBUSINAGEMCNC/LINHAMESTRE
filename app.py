@@ -865,19 +865,23 @@ def create_app():
                     'Kanban: filtro por busca e lista (com persistência).',
                     'Kanban: link por pedido para OS compostas (seleção quando há múltiplas OS).',
                     'Registros mensais: busca + imagem/nome do item + opção “Todos os meses”.',
-                    'Apontamentos: logs detalhados por OS (inclusive finalizadas) e correções de fuso/cronômetro.'
+                    'Apontamentos: logs detalhados por OS (inclusive finalizadas) e correções de fuso/cronômetro.',
+                    'Implementação completa de Itens de Montagem (cadastro e visualizações).',
+                    'Melhorias nas visualizações (itens e telas relacionadas).',
+                    'Pedidos de Materiais: melhorias e fluxo de novo pedido.',
+                    'Pedidos de Montagem: novo módulo/fluxo e telas de listagem/visualização/impressão.'
                 ]
             }
         except Exception:
             return {'release_2_0_show_banner': False}
-    
+
     # Adicionar função now() para os templates
     @app.context_processor
     def utility_processor():
         def now():
             return datetime.datetime.now()
         return dict(now=now)
-    
+
     # Adicionar filtros customizados
     @app.template_filter('nl2br')
     def nl2br_filter(s):
