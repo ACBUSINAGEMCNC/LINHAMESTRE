@@ -1,7 +1,21 @@
 from flask_sqlalchemy import SQLAlchemy
 from sqlalchemy.orm import relationship
-from datetime import datetime
+from datetime import datetime, timezone, timedelta
 import math
+
+# Timezone helpers (preferir America/Sao_Paulo)
+try:
+    from zoneinfo import ZoneInfo  # Python 3.9+
+    LOCAL_TZ = ZoneInfo("America/Sao_Paulo")
+except Exception:
+    # Fallback to fixed -03:00 (Brazil currently no DST)
+    LOCAL_TZ = timezone(timedelta(hours=-3))
+
+def local_now_naive():
+    """Retorna agora no fuso America/Sao_Paulo como datetime naive.
+    Isso evita diferença de horário quando o servidor está em UTC.
+    """
+    return datetime.now(LOCAL_TZ).replace(tzinfo=None)
 
 # Inicializar SQLAlchemy
 db = SQLAlchemy()
@@ -246,6 +260,51 @@ class CotacaoItemPedidoMaterial(db.Model):
 
     def __repr__(self):
         return f'<CotacaoItemPedidoMaterial {self.id}>'
+
+
+class CotacaoPedidoMontagem(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    pedido_montagem_id = db.Column(db.Integer, db.ForeignKey('pedido_montagem.id'), nullable=False)
+    fornecedor_id = db.Column(db.Integer, db.ForeignKey('fornecedor.id'), nullable=False)
+    data_criacao = db.Column(db.DateTime, default=datetime.utcnow)
+    observacoes = db.Column(db.Text)
+
+    pedido_montagem = relationship('PedidoMontagem', backref='cotacoes_fornecedores', lazy=True)
+    fornecedor = relationship('Fornecedor', backref='cotacoes_montagem', lazy=True)
+    itens = db.relationship('CotacaoItemPedidoMontagem', backref='cotacao', lazy=True, cascade="all, delete-orphan")
+
+    __table_args__ = (
+        db.UniqueConstraint('pedido_montagem_id', 'fornecedor_id', name='uq_cotacao_pedido_montagem_fornecedor'),
+    )
+
+    def __repr__(self):
+        return f'<CotacaoPedidoMontagem {self.id}>'
+
+
+class CotacaoItemPedidoMontagem(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    cotacao_id = db.Column(db.Integer, db.ForeignKey('cotacao_pedido_montagem.id'), nullable=False)
+    item_pedido_montagem_id = db.Column(db.Integer, db.ForeignKey('item_pedido_montagem.id'), nullable=False)
+
+    preco_total = db.Column(db.Float)
+    preco_por_kg = db.Column(db.Float)
+    preco_unitario = db.Column(db.Float)
+    ipi_percent = db.Column(db.Float)
+    prazo_entrega_dias = db.Column(db.Integer)
+    prazo_pagamento_dias = db.Column(db.Integer)
+
+    # Rateio (opcional): quanto deste item será comprado deste fornecedor
+    quantidade_escolhida = db.Column(db.Integer)
+    metros_escolhidos = db.Column(db.Float)
+
+    item_pedido_montagem = relationship('ItemPedidoMontagem', backref='cotacoes_itens', lazy=True)
+
+    __table_args__ = (
+        db.UniqueConstraint('cotacao_id', 'item_pedido_montagem_id', name='uq_cotacao_item_pedido_montagem'),
+    )
+
+    def __repr__(self):
+        return f'<CotacaoItemPedidoMontagem {self.id}>'
     
 class Item(db.Model):
     id = db.Column(db.Integer, primary_key=True)
@@ -254,6 +313,8 @@ class Item(db.Model):
     desenho_tecnico = db.Column(db.String(255))
     imagem = db.Column(db.String(255))
     instrucoes_trabalho = db.Column(db.String(255))
+    tipo_item = db.Column(db.String(20), default='producao')
+    categoria_montagem = db.Column(db.String(50))
     tamanho_peca = db.Column(db.String(100))
     tempera = db.Column(db.Boolean, default=False)
     tipo_tempera = db.Column(db.String(50))
@@ -381,6 +442,7 @@ class Pedido(db.Model):
     previsao_entrega = db.Column(db.Date)
     numero_oc = db.Column(db.String(20), nullable=True)
     numero_pedido_material = db.Column(db.String(50))
+    numero_pedido_montagem = db.Column(db.String(50))
     data_entrega = db.Column(db.Date)
     material_comprado = db.Column(db.Boolean, default=False)  # Novo campo para status de compra
     ordens_servico = relationship('PedidoOrdemServico', backref='pedido', lazy=True, cascade="all, delete-orphan")
@@ -500,6 +562,25 @@ class ItemPedidoMaterial(db.Model):
         if self.comprimento:
             return math.ceil(self.comprimento / 1000)
         return 0
+
+class PedidoMontagem(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    numero = db.Column(db.String(20), unique=True)
+    data_criacao = db.Column(db.Date, default=datetime.now().date())
+    itens = db.relationship('ItemPedidoMontagem', backref='pedido_montagem', lazy=True, cascade="all, delete-orphan")
+
+    def __repr__(self):
+        return f'<PedidoMontagem {self.numero}>'
+
+class ItemPedidoMontagem(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    pedido_montagem_id = db.Column(db.Integer, db.ForeignKey('pedido_montagem.id'), nullable=False)
+    item_id = db.Column(db.Integer, db.ForeignKey('item.id'), nullable=False)
+    quantidade = db.Column(db.Integer, nullable=False, default=1)
+    item = relationship('Item', backref='pedidos_montagem', lazy=True)
+
+    def __repr__(self):
+        return f'<ItemPedidoMontagem {self.id}>'
 
 # Estoque models
 class Estoque(db.Model):
@@ -651,7 +732,7 @@ class FolhaProcesso(db.Model):
     tipo_processo = db.Column(db.String(30), nullable=False)  # 'torno_cnc', 'centro_usinagem', 'corte_serra', 'servicos_gerais'
     versao = db.Column(db.Integer, default=1)
     data_criacao = db.Column(db.DateTime, default=datetime.utcnow)
-    data_atualizacao = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    data_atualizacao = db.Column(db.DateTime, default=local_now_naive, onupdate=local_now_naive)
     criado_por = db.Column(db.String(100))
     responsavel = db.Column(db.String(100))
     ativo = db.Column(db.Boolean, default=True)
@@ -797,7 +878,7 @@ class ApontamentoProducao(db.Model):
     item_id = db.Column(db.Integer, db.ForeignKey('item.id'), nullable=False)
     trabalho_id = db.Column(db.Integer, db.ForeignKey('trabalho.id'), nullable=False)
     tipo_acao = db.Column(db.String(20), nullable=False)  # 'inicio_setup', 'fim_setup', 'inicio_producao', 'pausa', 'fim_producao'
-    data_hora = db.Column(db.DateTime, default=datetime.utcnow)
+    data_hora = db.Column(db.DateTime, default=local_now_naive)
     data_fim = db.Column(db.DateTime, nullable=True)  # Data/hora de finalização (para cálculo de duração)
     quantidade = db.Column(db.Integer, nullable=True)  # Quantidade de peças no momento do apontamento
     motivo_parada = db.Column(db.String(100), nullable=True)  # Motivo da pausa
@@ -879,7 +960,7 @@ class StatusProducaoOS(db.Model):
     previsao_termino = db.Column(db.DateTime, nullable=True)  # Previsão de término baseada na produção
     eficiencia_percentual = db.Column(db.Float, nullable=True)  # Eficiência em relação ao tempo estimado
     motivo_pausa = db.Column(db.String(100), nullable=True)  # Último motivo de pausa
-    data_atualizacao = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    data_atualizacao = db.Column(db.DateTime, default=local_now_naive, onupdate=local_now_naive)
     
     # Relacionamentos
     ordem_servico = relationship('OrdemServico', backref='status_producao', uselist=False, lazy=True)
@@ -894,7 +975,7 @@ class StatusProducaoOS(db.Model):
     def tempo_acao_atual(self):
         """Calcula o tempo decorrido da ação atual em segundos"""
         if self.inicio_acao:
-            return int((datetime.utcnow() - self.inicio_acao).total_seconds())
+            return int((local_now_naive() - self.inicio_acao).total_seconds())
         return 0
     
     @property

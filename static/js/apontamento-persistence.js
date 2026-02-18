@@ -356,6 +356,41 @@ function keyTrabalho(ordemId, itemId, trabalhoId) {
     return `${ordemId}:${itemId}:${trabalhoId}`;
 }
 
+function parseStartTimestamp(startTimeStr) {
+    // Aceitar timestamp numérico (ms)
+    if (typeof startTimeStr === 'number' && Number.isFinite(startTimeStr)) {
+        return startTimeStr;
+    }
+    if (typeof startTimeStr === 'string') {
+        const raw = startTimeStr.trim();
+        if (raw && /^\d{13}$/.test(raw)) {
+            const n = Number(raw);
+            if (Number.isFinite(n)) return n;
+        }
+
+        // ISO sem timezone (ex: 2026-02-18T18:20:00) pode ser interpretado como UTC em alguns browsers.
+        // Se não houver offset/Z, assumir BRT (-03:00) para evitar pular horas.
+        let iso = raw;
+        const hasTz = /([zZ]|[+-]\d{2}:?\d{2})$/.test(iso);
+        if (!hasTz && /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}/.test(iso)) {
+            iso = `${iso}-03:00`;
+        }
+
+        const ts = new Date(iso).getTime();
+        if (Number.isFinite(ts)) return ts;
+    }
+    return Date.now();
+}
+
+function clampStartTimestamp(startTs) {
+    const now = Date.now();
+    // Se veio no futuro, corrige
+    if (startTs > now + (5 * 60 * 1000)) return now;
+    // Se veio absurdamente antigo (ex.: localStorage velho), evita começar com "horas" sem sentido
+    if (now - startTs > (24 * 60 * 60 * 1000)) return now;
+    return startTs;
+}
+
 function iniciarTimerTrabalho(ordemId, itemId, trabalhoId, startTimeStr) {
     const key = keyTrabalho(ordemId, itemId, trabalhoId);
     // Limpar anterior, se existir
@@ -365,7 +400,7 @@ function iniciarTimerTrabalho(ordemId, itemId, trabalhoId, startTimeStr) {
     }
     const el = document.getElementById(`timer-${ordemId}-${itemId}-${trabalhoId}`);
     if (!el) return;
-    const startTs = startTimeStr ? new Date(startTimeStr).getTime() : Date.now();
+    const startTs = clampStartTimestamp(parseStartTimestamp(startTimeStr));
     // Atualização imediata
     atualizarElementoTimer(el, startTs);
     // Intervalo de 1s
@@ -1540,8 +1575,8 @@ function iniciarTimerApontamento(ordemId, statusClass, startTimeStr = null) {
     pararTimerApontamento(ordemId);
     
     // Determinar o tempo de início
-    const startTime = startTimeStr ? new Date(startTimeStr) : new Date();
-    const startTimestamp = startTime.getTime();
+    const startTimestamp = clampStartTimestamp(parseStartTimestamp(startTimeStr));
+    const startTime = new Date(startTimestamp);
     
     // Salvar o tempo de início no localStorage para persistência local
     try {

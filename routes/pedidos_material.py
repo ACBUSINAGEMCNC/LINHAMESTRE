@@ -1,10 +1,65 @@
-from flask import Blueprint, render_template, request, redirect, url_for, flash, jsonify
-from models import db, PedidoMaterial, ItemPedidoMaterial, Material, Pedido, Fornecedor, CotacaoPedidoMaterial, CotacaoItemPedidoMaterial
+from flask import Blueprint, render_template, request, redirect, url_for, flash, session
+from models import db, PedidoMaterial, ItemPedidoMaterial, Material, Item, ItemMaterial, Pedido, Fornecedor, CotacaoPedidoMaterial, CotacaoItemPedidoMaterial
 from utils import validate_form_data, generate_next_code, parse_json_field
 from datetime import datetime
 from sqlalchemy.exc import IntegrityError
 
 pedidos_material = Blueprint('pedidos_material', __name__)
+
+
+def _build_material_item_map(pedido_material):
+    pedidos_origem = []
+    if pedido_material and pedido_material.numero:
+        pedidos_origem = Pedido.query.filter_by(numero_pedido_material=pedido_material.numero).all()
+
+    item_ids = []
+    for p in pedidos_origem:
+        if getattr(p, 'item_id', None):
+            item_ids.append(p.item_id)
+
+    if not item_ids:
+        return {}
+
+    itens = Item.query.filter(Item.id.in_(list(set(item_ids)))).all()
+    itens_expandidos = []
+    for it in itens:
+        if it and getattr(it, 'eh_composto', False):
+            for comp_rel in getattr(it, 'componentes', []) or []:
+                comp_item = getattr(comp_rel, 'item_componente', None)
+                if comp_item:
+                    itens_expandidos.append(comp_item)
+        else:
+            itens_expandidos.append(it)
+
+    vistos = set()
+    itens_expandidos_unicos = []
+    for it in itens_expandidos:
+        if it and it.id not in vistos:
+            vistos.add(it.id)
+            itens_expandidos_unicos.append(it)
+
+    itemmaterial = ItemMaterial.query.filter(ItemMaterial.item_id.in_([i.id for i in itens_expandidos_unicos])).all()
+    material_to_item_ids = {}
+    for im in itemmaterial:
+        material_to_item_ids.setdefault(im.material_id, set()).add(im.item_id)
+
+    item_by_id = {i.id: i for i in itens_expandidos_unicos}
+
+    out = {}
+    for material_id, ids in material_to_item_ids.items():
+        items_payload = []
+        for iid in sorted(list(ids)):
+            it = item_by_id.get(iid)
+            if not it:
+                continue
+            items_payload.append({
+                'id': it.id,
+                'codigo_acb': it.codigo_acb,
+                'nome': it.nome,
+                'imagem_url': it.imagem_path,
+            })
+        out[material_id] = items_payload
+    return out
 
 @pedidos_material.route('/pedidos-material')
 def listar_pedidos_material():
@@ -31,7 +86,16 @@ def visualizar_pedido_material(pedido_id):
         else:
             itens_barra.append(item)
 
-    return render_template('pedidos_material/visualizar.html', pedido=pedido, itens_especificos=itens_especificos, itens_barra=itens_barra)
+    material_item_map = _build_material_item_map(pedido)
+
+    return render_template('pedidos_material/visualizar.html', pedido=pedido, itens_especificos=itens_especificos, itens_barra=itens_barra, material_item_map=material_item_map)
+
+
+@pedidos_material.route('/pedidos-material/numero/<string:numero>')
+def visualizar_pedido_material_por_numero(numero):
+    """Atalho: localizar PedidoMaterial pelo número (PM-xxxxx) e redirecionar para a visualização."""
+    pedido = PedidoMaterial.query.filter_by(numero=numero).first_or_404()
+    return redirect(url_for('pedidos_material.visualizar_pedido_material', pedido_id=pedido.id))
 
 
 @pedidos_material.route('/pedidos-material/atualizar/<int:pedido_id>', methods=['POST'])
@@ -67,7 +131,8 @@ def atualizar_pedido_material(pedido_id):
 def imprimir_pedido_material(pedido_id):
     """Rota para imprimir um pedido de material"""
     pedido = PedidoMaterial.query.get_or_404(pedido_id)
-    return render_template('pedidos_material/imprimir.html', pedido=pedido, Material=Material)
+    material_item_map = _build_material_item_map(pedido)
+    return render_template('pedidos_material/imprimir.html', pedido=pedido, Material=Material, material_item_map=material_item_map)
 
 
 @pedidos_material.route('/pedidos-material/comparativo/<int:pedido_id>')
@@ -122,12 +187,15 @@ def comparar_fornecedores(pedido_id):
                 'melhor_pagamento': (melhores_pagamento_val is not None and ci and ci.prazo_pagamento_dias == melhores_pagamento_val),
             }
 
+    material_item_map = _build_material_item_map(pedido)
+
     return render_template(
         'pedidos_material/comparativo.html',
         pedido=pedido,
         cotacoes=cotacoes,
         cotacao_itens_map=cotacao_itens_map,
         melhores=melhores,
+        material_item_map=material_item_map,
     )
 
 

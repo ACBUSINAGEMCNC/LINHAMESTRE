@@ -1,0 +1,97 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Imprimir Composição - {{ item.nome }} - ACB Usinagem CNC</title>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+    <style>
+        @media print {
+            .no-print { display: none !important; }
+            body { background: #fff !important; }
+        }
+        .thumb {
+            width: 44px;
+            height: 44px;
+            object-fit: cover;
+        }
+        .table td, .table th {
+            vertical-align: middle;
+        }
+    </style>
+</head>
+<body>
+    <div class="container py-4">
+        <div class="d-flex justify-content-between align-items-start mb-3 no-print">
+            <div>
+                <h3 class="mb-0">Composição do Item</h3>
+                <div class="text-muted">Use imprimir / salvar como PDF no navegador</div>
+            </div>
+            <div class="btn-group">
+                <button type="button" class="btn btn-primary" onclick="window.print()">
+                    <i class="fas fa-print"></i> Imprimir
+                </button>
+                <a href="/itens/composto/visualizar/{{ item.id }}" class="btn btn-secondary">
+                    <i class="fas fa-arrow-left"></i> Voltar
+                </a>
+            </div>
+        </div>
+
+        <div class="mb-3">
+            <div class="d-flex justify-content-between align-items-start">
+                <div>
+                    <h4 class="mb-1">{{ item.nome }}</h4>
+                    <div class="text-muted">Código ACB: <strong>{{ item.codigo_acb }}</strong></div>
+                </div>
+                <div class="text-end">
+                    <div><small class="text-muted">Data:</small> {{ now.strftime('%d/%m/%Y %H:%M') }}</div>
+                </div>
+            </div>
+        </div>
+
+        <div class="card">
+            <div class="card-header">
+                <strong>Componentes ({{ item.componentes|length }})</strong>
+            </div>
+            <div class="card-body p-0">
+                <div class="table-responsive">
+                    <table class="table table-striped mb-0">
+                        <thead>
+                            <tr>
+                                <th style="width: 60px;">Imagem</th>
+                                <th style="width: 140px;">Código</th>
+                                <th>Nome</th>
+                                <th style="width: 90px;" class="text-end">Qtd</th>
+                                <th style="width: 260px;">Obs.</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for componente_rel in item.componentes %}
+                            <tr>
+                                <td>
+                                    {% if componente_rel.item_componente.imagem %}
+                                        <img src="{{ componente_rel.item_componente.imagem_path }}" alt="{{ componente_rel.item_componente.nome }}" class="img-thumbnail thumb">
+                                    {% else %}
+                                        <div class="img-thumbnail thumb d-flex align-items-center justify-content-center text-muted" style="background-color: #f8f9fa;">-</div>
+                                    {% endif %}
+                                </td>
+                                <td><strong>{{ componente_rel.item_componente.codigo_acb }}</strong></td>
+                                <td>{{ componente_rel.item_componente.nome }}</td>
+                                <td class="text-end"><strong>{{ componente_rel.quantidade }}</strong></td>
+                                <td>{{ componente_rel.observacoes or '' }}</td>
+                            </tr>
+                            {% endfor %}
+                            {% if not item.componentes %}
+                            <tr>
+                                <td colspan="5" class="text-center text-muted py-4">Nenhum componente cadastrado</td>
+                            </tr>
+                            {% endif %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+</body>
+</html>

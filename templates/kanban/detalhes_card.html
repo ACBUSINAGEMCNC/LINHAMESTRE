@@ -59,9 +59,9 @@
                                         {% endif %}
                                     </ul>
                                 </div>
-                                <button type="button" class="btn btn-sm btn-outline-info me-2 mb-1" onclick="abrirDetalhesOS('{{ ordem.id }}')" title="Ver apontamentos da OS">
+                                <a href="/apontamento/os/{{ ordem.id }}/logs/view" class="btn btn-sm btn-outline-info me-2 mb-1" target="_blank" title="Ver apontamentos da OS">
                                     <i class="fas fa-info-circle"></i> Apontamentos
-                                </button>
+                                </a>
                                 {% if ordem.status == 'Expedição' %}
                                 <button type="button" class="btn btn-sm btn-success mb-1" onclick="finalizarOS('{{ ordem.id }}')">
                                     <i class="fas fa-check-circle"></i> Finalizar OS
@@ -152,7 +152,9 @@
                                                                     </td>
                                                                     <td>
                                                                         <button type="button" class="btn btn-sm btn-outline-primary" 
-                                                                                onclick="sincronizarQuantidadePedido({{ order.pedido_id }}, {{ ordem.id }})"
+                                                                                data-pedido-id="{{ order.pedido_id }}"
+                                                                                data-ordem-id="{{ ordem.id }}"
+                                                                                onclick="sincronizarQuantidadePedido(this.dataset.pedidoId, this.dataset.ordemId)"
                                                                                 title="Atualizar quantidade da OS com a quantidade atual do Pedido">
                                                                             <i class="fas fa-sync-alt"></i> Sync
                                                                         </button>

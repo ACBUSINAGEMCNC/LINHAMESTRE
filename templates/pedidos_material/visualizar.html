@@ -46,6 +46,13 @@
             </div>
         </div>
 
+        {% if usuario_nivel == 'admin' or usuario_nome == 'ARTCOMPANY' %}
+        <div class="form-check form-switch mb-3">
+            <input class="form-check-input" type="checkbox" role="switch" id="toggleItemInfo">
+            <label class="form-check-label" for="toggleItemInfo">Mostrar item / imagem</label>
+        </div>
+        {% endif %}
+
         <div class="card mb-4">
             <div class="card-header">
                 <h5 class="mb-0">Informações do Pedido</h5>
@@ -81,6 +88,7 @@
                                 <tr>
                                     <th style="width: 160px;">Quantidade</th>
                                     <th>Material</th>
+                                    <th class="pm-item-col">Item</th>
                                 </tr>
                             </thead>
                             <tbody>
@@ -91,11 +99,29 @@
                                             <input type="number" class="form-control" min="0" step="1" name="qtd_{{ item.id }}" value="{{ item.quantidade or 0 }}">
                                         </td>
                                         <td>{{ item.material.nome }}</td>
+                                        <td class="pm-item-col">
+                                            {% set itens_rel = material_item_map.get(item.material_id) if material_item_map is defined else None %}
+                                            {% if itens_rel %}
+                                                {% for it in itens_rel %}
+                                                    <div class="d-flex align-items-center gap-2 mb-1">
+                                                        {% if it.imagem_url %}
+                                                            <img src="{{ it.imagem_url }}" alt="" style="height: 28px; width: 28px; object-fit: cover; border-radius: 4px;" onerror="this.style.display='none'">
+                                                        {% endif %}
+                                                        <div style="line-height: 1.1;">
+                                                            <div class="fw-semibold" style="font-size: 12px;">{{ it.codigo_acb }}</div>
+                                                            <div class="text-muted" style="font-size: 11px;">{{ it.nome }}</div>
+                                                        </div>
+                                                    </div>
+                                                {% endfor %}
+                                            {% else %}
+                                                <span class="text-muted" style="font-size: 12px;">-</span>
+                                            {% endif %}
+                                        </td>
                                     </tr>
                                     {% endfor %}
                                 {% else %}
                                     <tr>
-                                        <td colspan="2" class="text-muted">Nenhum material específico.</td>
+                                        <td colspan="3" class="text-muted">Nenhum material específico.</td>
                                     </tr>
                                 {% endif %}
                             </tbody>
@@ -110,6 +136,7 @@
                                     <th style="width: 160px;">Metros</th>
                                     <th>Material</th>
                                     <th style="width: 140px;">Tipo</th>
+                                    <th class="pm-item-col">Item</th>
                                 </tr>
                             </thead>
                             <tbody>
@@ -121,11 +148,29 @@
                                         </td>
                                         <td>{{ item.material.nome }}</td>
                                         <td>{{ item.material.tipo }}</td>
+                                        <td class="pm-item-col">
+                                            {% set itens_rel = material_item_map.get(item.material_id) if material_item_map is defined else None %}
+                                            {% if itens_rel %}
+                                                {% for it in itens_rel %}
+                                                    <div class="d-flex align-items-center gap-2 mb-1">
+                                                        {% if it.imagem_url %}
+                                                            <img src="{{ it.imagem_url }}" alt="" style="height: 28px; width: 28px; object-fit: cover; border-radius: 4px;" onerror="this.style.display='none'">
+                                                        {% endif %}
+                                                        <div style="line-height: 1.1;">
+                                                            <div class="fw-semibold" style="font-size: 12px;">{{ it.codigo_acb }}</div>
+                                                            <div class="text-muted" style="font-size: 11px;">{{ it.nome }}</div>
+                                                        </div>
+                                                    </div>
+                                                {% endfor %}
+                                            {% else %}
+                                                <span class="text-muted" style="font-size: 12px;">-</span>
+                                            {% endif %}
+                                        </td>
                                     </tr>
                                     {% endfor %}
                                 {% else %}
                                     <tr>
-                                        <td colspan="3" class="text-muted">Nenhum material em barra.</td>
+                                        <td colspan="4" class="text-muted">Nenhum material em barra.</td>
                                     </tr>
                                 {% endif %}
                             </tbody>
@@ -138,5 +183,32 @@
 
     <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    <script>
+        (function () {
+            const toggle = document.getElementById('toggleItemInfo');
+            const cols = document.querySelectorAll('.pm-item-col');
+
+            if (!toggle || !cols || cols.length === 0) return;
+
+            const key = 'pm_show_item_info';
+            const saved = localStorage.getItem(key);
+            const enabled = saved === '1';
+
+            function apply(v) {
+                cols.forEach(el => {
+                    el.style.display = v ? '' : 'none';
+                });
+                toggle.checked = v;
+            }
+
+            apply(enabled);
+
+            toggle.addEventListener('change', function () {
+                const v = !!toggle.checked;
+                localStorage.setItem(key, v ? '1' : '0');
+                apply(v);
+            });
+        })();
+    </script>
 </body>
 </html>

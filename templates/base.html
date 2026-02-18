@@ -56,6 +56,7 @@
                             <li><a class="dropdown-item" href="/estoque-pecas">Estoque de Peças</a></li>
                             <li><hr class="dropdown-divider"></li>
                             <li><a class="dropdown-item" href="/pedidos-material">Pedidos de Material</a></li>
+                            <li><a class="dropdown-item" href="/pedidos-montagem">Pedidos de Montagem</a></li>
                         </ul>
                     </li>
                     {% endif %}
@@ -108,6 +109,23 @@
 
     <main class="flex-grow-1">
         <div class="container py-4">
+            {% if release_2_0_show_banner %}
+            <div class="alert alert-info alert-dismissible fade show" role="alert">
+                <div class="d-flex justify-content-between align-items-start gap-2">
+                    <div>
+                        <div class="fw-semibold mb-1"><i class="fas fa-bullhorn me-2"></i>Nova atualização 2.0</div>
+                        {% if release_2_0_items %}
+                        <ul class="mb-0">
+                            {% for it in release_2_0_items %}
+                            <li>{{ it }}</li>
+                            {% endfor %}
+                        </ul>
+                        {% endif %}
+                    </div>
+                    <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Fechar"></button>
+                </div>
+            </div>
+            {% endif %}
             {% block content %}{% endblock %}
         </div>
     </main>

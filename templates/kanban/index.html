@@ -566,6 +566,31 @@
     <main class="flex-grow-1">
     <div class="container-fluid py-3">
         <h1 class="mb-4">Kanban ACB</h1>
+
+        <div class="card mb-3">
+            <div class="card-body py-2">
+                <div class="row g-2 align-items-end">
+                    <div class="col-12 col-md-6 col-lg-5">
+                        <label for="kanbanFiltroBusca" class="form-label mb-1">Buscar</label>
+                        <input type="text" class="form-control" id="kanbanFiltroBusca" placeholder="OS, cliente, item, pedido...">
+                    </div>
+                    <div class="col-12 col-md-4 col-lg-3">
+                        <label for="kanbanFiltroLista" class="form-label mb-1">Lista</label>
+                        <select class="form-select" id="kanbanFiltroLista">
+                            <option value="todas">Todas</option>
+                            {% for lista in listas %}
+                                <option value="{{ lista }}">{{ lista }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <div class="col-12 col-md-2 col-lg-2 d-grid">
+                        <button type="button" class="btn btn-outline-secondary" id="kanbanFiltroLimpar">
+                            <i class="fas fa-eraser"></i> Limpar
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
         
         <div class="kanban-container">
             {% for lista in listas %}
@@ -590,7 +615,7 @@
                 <div class="kanban-column-body" data-lista="{{ lista }}">
                     <!-- Cartões normais -->
                     {% for ordem in ordens[lista] %}
-                    <div class="kanban-card" data-ordem-id="{{ ordem.id }}">
+                    <div class="kanban-card" data-ordem-id="{{ ordem.id }}" data-search="{{ ordem.numero }} {% if ordem.pedidos %}{% for pedido_os in ordem.pedidos %} {{ pedido_os.pedido.cliente.nome if pedido_os.pedido and pedido_os.pedido.cliente else '' }} {{ pedido_os.pedido.numero_pedido_cliente if pedido_os.pedido and pedido_os.pedido.numero_pedido_cliente else '' }} {{ pedido_os.pedido.item.codigo_acb if pedido_os.pedido and pedido_os.pedido.item else '' }} {{ pedido_os.pedido.item.nome if pedido_os.pedido and pedido_os.pedido.item else '' }} {{ pedido_os.pedido.nome_item if pedido_os.pedido and pedido_os.pedido.nome_item else '' }}{% endfor %}{% endif %}">
                         <div class="drag-handle" style="position: absolute; top: 8px; left: 8px; cursor: grab; z-index: 10;">
                             <i class="fas fa-grip-lines"></i>
                         </div>
@@ -855,7 +880,7 @@
                     
                     <!-- Cartões fantasma -->
                     {% for cartao_fantasma in cartoes_fantasma[lista] %}
-                    <div class="kanban-card fantasma" data-cartao-id="{{ cartao_fantasma.id }}" data-fantasma-ordem-id="{{ cartao_fantasma.ordem_servico.id }}">
+                    <div class="kanban-card fantasma" data-cartao-id="{{ cartao_fantasma.id }}" data-fantasma-ordem-id="{{ cartao_fantasma.ordem_servico.id }}" data-search="{% if cartao_fantasma.ordem_servico %}{{ cartao_fantasma.ordem_servico.numero }}{% endif %} {% if cartao_fantasma.ordem_servico and cartao_fantasma.ordem_servico.pedidos %}{% for pedido_os in cartao_fantasma.ordem_servico.pedidos %} {{ pedido_os.pedido.cliente.nome if pedido_os.pedido and pedido_os.pedido.cliente else '' }} {{ pedido_os.pedido.numero_pedido_cliente if pedido_os.pedido and pedido_os.pedido.numero_pedido_cliente else '' }} {{ pedido_os.pedido.item.codigo_acb if pedido_os.pedido and pedido_os.pedido.item else '' }} {{ pedido_os.pedido.item.nome if pedido_os.pedido and pedido_os.pedido.item else '' }} {{ pedido_os.pedido.nome_item if pedido_os.pedido and pedido_os.pedido.nome_item else '' }}{% endfor %}{% endif %}">
                         <div class="kanban-card-header">
                             <div class="card-header-main">
                                 <div class="drag-handle" onclick="event.stopPropagation()">
@@ -1134,6 +1159,116 @@
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
     <script src="/static/js/kanban-sortable.js"></script>
     <script>
+        (function() {
+            const storageKeyBusca = 'kanban_filtro_busca';
+            const storageKeyLista = 'kanban_filtro_lista';
+
+            function normalize(str) {
+                return (str || '').toString().toLowerCase().trim();
+            }
+
+            function atualizarContadoresVisiveis() {
+                document.querySelectorAll('.kanban-column').forEach(col => {
+                    const body = col.querySelector('.kanban-column-body');
+                    const counter = col.querySelector('.column-counter');
+                    if (!body || !counter) return;
+                    const visibleCards = Array.from(body.querySelectorAll('.kanban-card')).filter(c => c.style.display !== 'none');
+                    counter.textContent = String(visibleCards.length);
+                });
+            }
+
+            function aplicarFiltrosKanban() {
+                const buscaEl = document.getElementById('kanbanFiltroBusca');
+                const listaEl = document.getElementById('kanbanFiltroLista');
+                if (!buscaEl || !listaEl) return;
+
+                const q = normalize(buscaEl.value);
+                const listaSelecionada = listaEl.value || 'todas';
+
+                document.querySelectorAll('.kanban-column').forEach(col => {
+                    const body = col.querySelector('.kanban-column-body');
+                    if (!body) return;
+                    const listaColuna = body.dataset.lista;
+
+                    const colOk = (listaSelecionada === 'todas') || (listaColuna === listaSelecionada);
+                    col.style.display = colOk ? '' : 'none';
+                    if (!colOk) return;
+
+                    let temCardVisivel = false;
+                    body.querySelectorAll('.kanban-card').forEach(card => {
+                        const txt = normalize(card.dataset.search || card.innerText || '');
+                        const ok = !q || txt.includes(q);
+                        card.style.display = ok ? '' : 'none';
+                        if (ok) temCardVisivel = true;
+                    });
+
+                    // Se há busca digitada, esconder listas sem resultado
+                    if (q) {
+                        col.style.display = temCardVisivel ? '' : 'none';
+                    }
+                });
+
+                atualizarContadoresVisiveis();
+            }
+
+            function salvarFiltros() {
+                const buscaEl = document.getElementById('kanbanFiltroBusca');
+                const listaEl = document.getElementById('kanbanFiltroLista');
+                if (!buscaEl || !listaEl) return;
+                try {
+                    localStorage.setItem(storageKeyBusca, buscaEl.value || '');
+                    localStorage.setItem(storageKeyLista, listaEl.value || 'todas');
+                } catch (e) {}
+            }
+
+            function restaurarFiltros() {
+                const buscaEl = document.getElementById('kanbanFiltroBusca');
+                const listaEl = document.getElementById('kanbanFiltroLista');
+                if (!buscaEl || !listaEl) return;
+                try {
+                    const savedBusca = localStorage.getItem(storageKeyBusca);
+                    const savedLista = localStorage.getItem(storageKeyLista);
+                    if (savedBusca !== null) buscaEl.value = savedBusca;
+                    if (savedLista && Array.from(listaEl.options).some(o => o.value === savedLista)) {
+                        listaEl.value = savedLista;
+                    }
+                } catch (e) {}
+            }
+
+            function initKanbanFiltroUI() {
+                const buscaEl = document.getElementById('kanbanFiltroBusca');
+                const listaEl = document.getElementById('kanbanFiltroLista');
+                const limparEl = document.getElementById('kanbanFiltroLimpar');
+                if (!buscaEl || !listaEl || !limparEl) return;
+
+                restaurarFiltros();
+                aplicarFiltrosKanban();
+
+                buscaEl.addEventListener('input', function() {
+                    salvarFiltros();
+                    aplicarFiltrosKanban();
+                });
+
+                listaEl.addEventListener('change', function() {
+                    salvarFiltros();
+                    aplicarFiltrosKanban();
+                });
+
+                limparEl.addEventListener('click', function() {
+                    buscaEl.value = '';
+                    listaEl.value = 'todas';
+                    salvarFiltros();
+                    aplicarFiltrosKanban();
+                });
+
+                document.addEventListener('sortable-drop-complete', function() {
+                    aplicarFiltrosKanban();
+                });
+            }
+
+            document.addEventListener('DOMContentLoaded', initKanbanFiltroUI);
+        })();
+
         function moverOrdem(ordemId, listaDestino) {
             // Encontrar o cartão
             const card = document.querySelector(`.kanban-card[data-ordem-id="${ordemId}"]`);
@@ -2557,6 +2692,21 @@
             document.body.style.removeProperty('padding-right');
         }
     });
+
+    (function() {
+        try {
+            const params = new URLSearchParams(window.location.search);
+            const ordemId = params.get('ordem_id');
+            if (ordemId && typeof openCardDetails === 'function') {
+                const ordemIdNum = parseInt(ordemId, 10);
+                if (!Number.isNaN(ordemIdNum)) {
+                    setTimeout(() => {
+                        try { openCardDetails(ordemIdNum); } catch (e) {}
+                    }, 400);
+                }
+            }
+        } catch (e) {}
+    })();
     
     // Configurar botões de ação dos cartões fantasma
     function configurarBotoesFantasma() {

@@ -41,10 +41,15 @@ def novo_item():
         # Gerar código ACB automaticamente
         novo_codigo = generate_next_code(Item, "ACB", "codigo_acb")
         
+        tipo_item = (request.form.get('tipo_item', 'producao') or 'producao').strip().lower()
+        categoria_montagem = (request.form.get('categoria_montagem') or '').strip() or None
+
         # Criar o item
         item = Item(
             nome=nome,
             codigo_acb=novo_codigo,
+            tipo_item=tipo_item,
+            categoria_montagem=categoria_montagem,
             tipo_bruto=request.form.get('tipo_bruto', ''),
             tamanho_peca=request.form.get('tamanho_peca', ''),
             tempera='tempera' in request.form,
@@ -58,6 +63,9 @@ def novo_item():
             tipo_zincagem=request.form.get('tipo_zincagem', ''),
             tipo_embalagem=request.form.get('tipo_embalagem', '')
         )
+
+        if item.tipo_item == 'montagem':
+            item.eh_composto = False
         
         # Validar e converter o peso
         try:
@@ -82,33 +90,34 @@ def novo_item():
         db.session.add(item)
         db.session.commit()
         
-        # Adicionar materiais
-        materiais_json = parse_json_field(request.form, 'materiais')
-        for mat in materiais_json:
-            try:
-                item_material = ItemMaterial(
-                    item_id=item.id,
-                    material_id=mat['id'],
-                    comprimento=float(mat.get('comprimento', 0) or 0),
-                    quantidade=int(mat.get('quantidade', 1) or 1)
-                )
-                db.session.add(item_material)
-            except (ValueError, KeyError) as e:
-                flash(f'Erro ao processar material: {str(e)}', 'danger')
-        
-        # Adicionar trabalhos
-        trabalhos_json = parse_json_field(request.form, 'trabalhos')
-        for trab in trabalhos_json:
-            try:
-                item_trabalho = ItemTrabalho(
-                    item_id=item.id,
-                    trabalho_id=trab['id'],
-                    tempo_setup=int(trab.get('tempo_setup', 0) or 0),
-                    tempo_peca=int(trab.get('tempo_peca', 0) or 0)
-                )
-                db.session.add(item_trabalho)
-            except (ValueError, KeyError) as e:
-                flash(f'Erro ao processar trabalho: {str(e)}', 'danger')
+        if item.tipo_item != 'montagem':
+            # Adicionar materiais
+            materiais_json = parse_json_field(request.form, 'materiais')
+            for mat in materiais_json:
+                try:
+                    item_material = ItemMaterial(
+                        item_id=item.id,
+                        material_id=mat['id'],
+                        comprimento=float(mat.get('comprimento', 0) or 0),
+                        quantidade=int(mat.get('quantidade', 1) or 1)
+                    )
+                    db.session.add(item_material)
+                except (ValueError, KeyError) as e:
+                    flash(f'Erro ao processar material: {str(e)}', 'danger')
+
+            # Adicionar trabalhos
+            trabalhos_json = parse_json_field(request.form, 'trabalhos')
+            for trab in trabalhos_json:
+                try:
+                    item_trabalho = ItemTrabalho(
+                        item_id=item.id,
+                        trabalho_id=trab['id'],
+                        tempo_setup=int(trab.get('tempo_setup', 0) or 0),
+                        tempo_peca=int(trab.get('tempo_peca', 0) or 0)
+                    )
+                    db.session.add(item_trabalho)
+                except (ValueError, KeyError) as e:
+                    flash(f'Erro ao processar trabalho: {str(e)}', 'danger')
         
         # Adicionar arquivos CNC
         if 'cnc_files' in request.files:
@@ -136,7 +145,10 @@ def novo_item():
     
     materiais = Material.query.all()
     trabalhos = Trabalho.query.all()
-    return render_template('itens/novo.html', materiais=materiais, trabalhos=trabalhos, item=None)
+    tipo_item_default = (request.args.get('tipo_item') or 'producao').strip().lower()
+    if tipo_item_default not in ('producao', 'montagem'):
+        tipo_item_default = 'producao'
+    return render_template('itens/novo.html', materiais=materiais, trabalhos=trabalhos, item=None, tipo_item_default=tipo_item_default)
 
 @itens.route('/itens/editar/<int:item_id>', methods=['GET', 'POST'])
 def editar_item(item_id):
@@ -161,8 +173,13 @@ def editar_item(item_id):
             flash('Já existe um item com este nome!', 'danger')
             return render_template('itens/editar.html', item=item, materiais=materiais, trabalhos=trabalhos)
         
+        tipo_item = (request.form.get('tipo_item', item.tipo_item or 'producao') or 'producao').strip().lower()
+        categoria_montagem = (request.form.get('categoria_montagem') or '').strip() or None
+
         # Atualizar dados do item
         item.nome = nome
+        item.tipo_item = tipo_item
+        item.categoria_montagem = categoria_montagem
         item.tipo_bruto = request.form.get('tipo_bruto', '')
         item.tamanho_peca = request.form.get('tamanho_peca', '')
         item.tempera = 'tempera' in request.form
@@ -193,44 +210,49 @@ def editar_item(item_id):
         
         if 'instrucoes_trabalho' in request.files and request.files['instrucoes_trabalho'].filename:
             item.instrucoes_trabalho = save_file(request.files['instrucoes_trabalho'], 'instrucoes')
-        
-        # Atualizar materiais
-        materiais_json = parse_json_field(request.form, 'materiais')
-        
-        # Remover materiais existentes
-        ItemMaterial.query.filter_by(item_id=item.id).delete()
-        
-        # Adicionar novos materiais
-        for mat in materiais_json:
-            try:
-                item_material = ItemMaterial(
-                    item_id=item.id,
-                    material_id=mat['id'],
-                    comprimento=float(mat.get('comprimento', 0) or 0),
-                    quantidade=int(mat.get('quantidade', 1) or 1)
-                )
-                db.session.add(item_material)
-            except (ValueError, KeyError) as e:
-                flash(f'Erro ao processar material: {str(e)}', 'danger')
-        
-        # Atualizar trabalhos
-        trabalhos_json = parse_json_field(request.form, 'trabalhos')
-        
-        # Remover trabalhos existentes
-        ItemTrabalho.query.filter_by(item_id=item.id).delete()
-        
-        # Adicionar novos trabalhos
-        for trab in trabalhos_json:
-            try:
-                item_trabalho = ItemTrabalho(
-                    item_id=item.id,
-                    trabalho_id=trab['id'],
-                    tempo_setup=int(trab.get('tempo_setup', 0) or 0),
-                    tempo_peca=int(trab.get('tempo_peca', 0) or 0)
-                )
-                db.session.add(item_trabalho)
-            except (ValueError, KeyError) as e:
-                flash(f'Erro ao processar trabalho: {str(e)}', 'danger')
+
+        if item.tipo_item == 'montagem':
+            item.eh_composto = False
+            ItemMaterial.query.filter_by(item_id=item.id).delete()
+            ItemTrabalho.query.filter_by(item_id=item.id).delete()
+        else:
+            # Atualizar materiais
+            materiais_json = parse_json_field(request.form, 'materiais')
+
+            # Remover materiais existentes
+            ItemMaterial.query.filter_by(item_id=item.id).delete()
+
+            # Adicionar novos materiais
+            for mat in materiais_json:
+                try:
+                    item_material = ItemMaterial(
+                        item_id=item.id,
+                        material_id=mat['id'],
+                        comprimento=float(mat.get('comprimento', 0) or 0),
+                        quantidade=int(mat.get('quantidade', 1) or 1)
+                    )
+                    db.session.add(item_material)
+                except (ValueError, KeyError) as e:
+                    flash(f'Erro ao processar material: {str(e)}', 'danger')
+
+            # Atualizar trabalhos
+            trabalhos_json = parse_json_field(request.form, 'trabalhos')
+
+            # Remover trabalhos existentes
+            ItemTrabalho.query.filter_by(item_id=item.id).delete()
+
+            # Adicionar novos trabalhos
+            for trab in trabalhos_json:
+                try:
+                    item_trabalho = ItemTrabalho(
+                        item_id=item.id,
+                        trabalho_id=trab['id'],
+                        tempo_setup=int(trab.get('tempo_setup', 0) or 0),
+                        tempo_peca=int(trab.get('tempo_peca', 0) or 0)
+                    )
+                    db.session.add(item_trabalho)
+                except (ValueError, KeyError) as e:
+                    flash(f'Erro ao processar trabalho: {str(e)}', 'danger')
         
         # Adicionar arquivos CNC
         if 'cnc_files' in request.files:
@@ -626,6 +648,18 @@ def visualizar_item_composto(item_id):
         return redirect(url_for('itens.listar_itens'))
     
     return render_template('itens/composto_visualizar.html', item=item)
+
+
+@itens.route('/itens/composto/imprimir/<int:item_id>')
+def imprimir_item_composto(item_id):
+    """Rota para imprimir a composição (BOM) de um item composto"""
+    item = Item.query.get_or_404(item_id)
+
+    if not item.eh_composto:
+        flash('Este item não é um item composto!', 'danger')
+        return redirect(url_for('itens.listar_itens'))
+
+    return render_template('itens/composto_imprimir.html', item=item, now=datetime.now())
 
 @itens.route('/api/itens/nao-compostos')
 def api_itens_nao_compostos():

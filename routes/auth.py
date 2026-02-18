@@ -2,6 +2,7 @@ from flask import Blueprint, render_template, request, redirect, url_for, flash,
 from werkzeug.security import generate_password_hash, check_password_hash
 from models import db, Usuario
 from functools import wraps
+import time
 
 auth = Blueprint('auth', __name__)
 
@@ -82,6 +83,9 @@ def login():
         session['acesso_pedidos'] = usuario.acesso_pedidos
         session['acesso_cadastros'] = usuario.acesso_cadastros
         session['pode_finalizar_os'] = usuario.pode_finalizar_os
+
+        if not session.get('release_2_0_seen_at'):
+            session['release_2_0_seen_at'] = int(time.time())
         
         next_page = request.args.get('next')
         if next_page:

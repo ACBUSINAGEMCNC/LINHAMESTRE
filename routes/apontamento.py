@@ -26,16 +26,15 @@ def to_brt_iso(dt):
         return None
     
     if dt.tzinfo is None:
-        # Detectar se é um registro antigo (antes da correção) ou novo
-        # Registros criados hoje ou após a correção já estão em BRT
+        # Detectar se é um registro antigo (naive UTC) ou novo (naive BRT).
+        # Problema comum: servidor roda em UTC e gravou timestamp naive em UTC.
+        # Heurística: se o timestamp estiver "no futuro" em relação ao agora BRT,
+        # é forte indício de que foi gravado em UTC (ex.: +3h).
         agora_brt = datetime.now(LOCAL_TZ).replace(tzinfo=None)
-        
-        # Se o datetime é muito recente (menos de 1 hora atrás), assumir que já está em BRT
-        if dt > agora_brt - timedelta(hours=1):
-            dt = dt.replace(tzinfo=LOCAL_TZ)
-        else:
-            # Registros mais antigos: assumir que são UTC e converter
+        if dt > agora_brt + timedelta(minutes=10):
             dt = dt.replace(tzinfo=UTC)
+        else:
+            dt = dt.replace(tzinfo=LOCAL_TZ)
     
     try:
         return dt.astimezone(LOCAL_TZ).isoformat()
@@ -348,6 +347,8 @@ def status_ativos():
     try:
         t_start = time.perf_counter()
         timings = {}
+
+        excluir_entregues = str(request.args.get('excluir_entregues', '')).strip().lower() in ('1', 'true', 'yes')
         # Query params (opcionais) para filtragem
         lista_filters_set = None
         lista_raw = (request.args.get('lista') or '').strip().lower()
@@ -465,23 +466,18 @@ def status_ativos():
             .all()
         )
         
-        # Filtrar manualmente OS com pedidos entregues
         status_ativos = []
         for status in status_ativos_raw:
             os = status.ordem_servico
-            if os and os.pedidos:
-                # Verificar se algum pedido está entregue
+            if excluir_entregues and os and os.pedidos:
                 tem_pedido_entregue = False
                 for pedido_os in os.pedidos:
                     if pedido_os.pedido and pedido_os.pedido.status == 'entregue':
                         tem_pedido_entregue = True
                         break
-                
-                if not tem_pedido_entregue:
-                    status_ativos.append(status)
-            else:
-                # OS sem pedidos ou sem relação - incluir
-                status_ativos.append(status)
+                if tem_pedido_entregue:
+                    continue
+            status_ativos.append(status)
         timings['status_ativos_query_ms'] = int((time.perf_counter() - t0) * 1000)
 
         logger.debug(f"Encontrados {len(status_ativos)} status ativos (pré-filtro)")
@@ -489,8 +485,10 @@ def status_ativos():
             logger.debug(f"Status ativo encontrado: ID={status.id}, ordem_servico_id={status.ordem_servico_id}, status_atual='{status.status_atual}'")
         
         # Buscar TODAS as OS que estão em máquinas (mesmo sem apontamento ativo)
-        # EXCLUINDO OS com pedidos já entregues
-        logger.debug("Buscando todas as OS em máquinas (excluindo entregues)...")
+        logger.debug(
+            "Buscando todas as OS em máquinas%s...",
+            " (excluindo entregues)" if excluir_entregues else ""
+        )
         logger.debug(f"Nomes das listas Kanban: {nomes_listas}")
         
         # Uso de comparação case-insensitive para evitar divergências de caixa
@@ -511,22 +509,17 @@ def status_ativos():
             .all()
         )
         
-        # Filtrar manualmente OS com pedidos entregues
         todas_os_em_maquinas = []
         for os in todas_os_em_maquinas_raw:
-            if os.pedidos:
-                # Verificar se algum pedido está entregue
+            if excluir_entregues and os.pedidos:
                 tem_pedido_entregue = False
                 for pedido_os in os.pedidos:
                     if pedido_os.pedido and pedido_os.pedido.status == 'entregue':
                         tem_pedido_entregue = True
                         break
-                
-                if not tem_pedido_entregue:
-                    todas_os_em_maquinas.append(os)
-            else:
-                # OS sem pedidos - incluir
-                todas_os_em_maquinas.append(os)
+                if tem_pedido_entregue:
+                    continue
+            todas_os_em_maquinas.append(os)
         timings['os_em_maquinas_query_ms'] = int((time.perf_counter() - t0) * 1000)
         logger.debug(f"Encontradas {len(todas_os_em_maquinas)} OS em máquinas")
         

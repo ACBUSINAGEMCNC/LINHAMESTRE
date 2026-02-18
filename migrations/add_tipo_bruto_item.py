@@ -15,6 +15,11 @@ except Exception:  # psycopg2 pode não estar instalado em ambiente SQLite local
 	psycopg2 = None
 	sql = None
 
+try:
+	import psycopg
+except Exception:  # psycopg3 pode não estar instalado
+	psycopg = None
+
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
 
@@ -23,19 +28,34 @@ def migrate_postgres():
     """Adiciona a coluna tipo_bruto à tabela item no PostgreSQL."""
     conn = None
     try:
-        if psycopg2 is None or sql is None:
-            logger.warning("psycopg2 não está disponível, pulando migração PostgreSQL")
-            return False
         load_dotenv()
         db_url = os.getenv('DATABASE_URL')
         if not db_url:
             logger.warning("DATABASE_URL não encontrada, pulando migração PostgreSQL")
             return False
 
-        conn = psycopg2.connect(db_url)
-        conn.autocommit = True
+        # Normalizar URLs SQLAlchemy (postgresql+psycopg://) para drivers nativos
+        if db_url.startswith('postgresql+psycopg://'):
+            db_url = 'postgresql://' + db_url[len('postgresql+psycopg://'):]
+        elif db_url.startswith('postgres://'):
+            db_url = 'postgresql://' + db_url[len('postgres://'):]
 
-        with conn.cursor() as cursor:
+        if psycopg is not None:
+            conn = psycopg.connect(db_url)
+            conn.autocommit = True
+            cursor_ctx = conn.cursor()
+            close_cursor = True
+        elif psycopg2 is not None and sql is not None:
+            conn = psycopg2.connect(db_url)
+            conn.autocommit = True
+            cursor_ctx = conn.cursor()
+            close_cursor = True
+        else:
+            logger.warning("psycopg/psycopg2 não estão disponíveis, pulando migração PostgreSQL")
+            return False
+
+        try:
+            cursor = cursor_ctx
             cursor.execute(
                 """
                 SELECT EXISTS (
@@ -50,15 +70,18 @@ def migrate_postgres():
                 logger.info("Coluna 'tipo_bruto' já existe na tabela 'item' (PostgreSQL)")
                 return True
 
-            query = sql.SQL(
+            cursor.execute(
                 """
                 ALTER TABLE item
                 ADD COLUMN IF NOT EXISTS tipo_bruto VARCHAR(50);
                 """
             )
-            cursor.execute(query)
             logger.info("Coluna 'tipo_bruto' adicionada com sucesso à tabela 'item' (PostgreSQL)")
             return True
+
+        finally:
+            if close_cursor:
+                cursor_ctx.close()
 
     except Exception as e:
         logger.error(f"Erro ao migrar PostgreSQL: {str(e)}")

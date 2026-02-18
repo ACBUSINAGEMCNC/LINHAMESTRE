@@ -1,7 +1,8 @@
-from flask import Blueprint, render_template, request, redirect, url_for, flash, jsonify, session, current_app, make_response
+from flask import Blueprint, render_template, request, redirect, url_for, flash, jsonify, session, current_app, make_response, abort
 from models import db, Usuario, OrdemServico, Pedido, PedidoOrdemServico, Item, Trabalho, ItemTrabalho, RegistroMensal, KanbanLista, CartaoFantasma
 from utils import validate_form_data, get_kanban_lists, get_kanban_categories, format_seconds_to_time
 from datetime import datetime
+import re
 
 kanban = Blueprint('kanban', __name__)
 
@@ -96,6 +97,53 @@ def index():
     if template_filename:
         response.headers['X-Kanban-Template-File'] = template_filename
     return response
+
+
+@kanban.route('/kanban/por-numero/<path:numero>')
+def abrir_os_por_numero(numero):
+    """Atalho: abrir o Kanban a partir do número da OS (ex: OS-00001)."""
+    ordem = OrdemServico.query.filter_by(numero=numero).first()
+    if not ordem:
+        abort(404)
+    return redirect(url_for('kanban.index', ordem_id=ordem.id))
+
+
+@kanban.route('/kanban/por-pedido/<int:pedido_id>')
+def abrir_os_por_pedido(pedido_id):
+    """Atalho: abrir o Kanban a partir de um Pedido.
+
+    - Se houver 1 OS associada ao pedido, abre direto.
+    - Se houver várias OS (ex.: item composto), mostra uma tela para selecionar qual OS abrir.
+    """
+    pedido = Pedido.query.get_or_404(pedido_id)
+
+    # OS diretamente associadas ao pedido (item simples)
+    ordens_set = {}
+    for assoc in getattr(pedido, 'ordens_servico', []) or []:
+        os_obj = getattr(assoc, 'ordem_servico', None)
+        if os_obj and os_obj.id not in ordens_set:
+            ordens_set[os_obj.id] = os_obj
+
+    # Para item composto, buscar OS através dos pedidos virtuais AUTO-...-{pedido_original_id}
+    if (not ordens_set) and pedido and getattr(pedido, 'item', None) and getattr(pedido.item, 'eh_composto', False):
+        virtuais = Pedido.query.filter(Pedido.numero_pedido.like(f"AUTO-%-{pedido.id}")).all()
+        for pv in virtuais:
+            for assoc in getattr(pv, 'ordens_servico', []) or []:
+                os_obj = getattr(assoc, 'ordem_servico', None)
+                if os_obj and os_obj.id not in ordens_set:
+                    ordens_set[os_obj.id] = os_obj
+
+    ordens = list(ordens_set.values())
+    ordens.sort(key=lambda o: (o.numero or '', o.id))
+
+    if not ordens:
+        flash('Nenhuma OS encontrada para este pedido.', 'warning')
+        return redirect(url_for('pedidos.listar_pedidos'))
+
+    if len(ordens) == 1:
+        return redirect(url_for('kanban.index', ordem_id=ordens[0].id))
+
+    return render_template('kanban/selecionar_os.html', pedido=pedido, ordens=ordens)
 
 @kanban.route('/kanban/mover', methods=['POST'])
 def mover_kanban():
@@ -222,9 +270,45 @@ def finalizar_kanban():
     ordem.status = 'Finalizado'
     
     # Atualizar data de entrega dos pedidos associados
+    pedidos_originais_ids = set()
     for pedido_os in ordem.pedidos:
         pedido = Pedido.query.get(pedido_os.pedido_id)
         pedido.data_entrega = datetime.now().date()
+
+        # Se for pedido virtual (AUTO-*), tentar concluir o pedido original do item composto
+        if pedido and pedido.numero_pedido and pedido.numero_pedido.startswith('AUTO-'):
+            m = re.search(r'-(\d+)$', pedido.numero_pedido)
+            if m:
+                try:
+                    pedidos_originais_ids.add(int(m.group(1)))
+                except Exception:
+                    pass
+
+    # Concluir pedidos originais somente quando todas OS dos componentes estiverem finalizadas
+    for original_id in sorted(list(pedidos_originais_ids)):
+        pedido_original = Pedido.query.get(original_id)
+        if not pedido_original or pedido_original.data_entrega:
+            continue
+
+        # Buscar todos pedidos virtuais gerados para este pedido original
+        virtuais = Pedido.query.filter(Pedido.numero_pedido.like(f"AUTO-%-{original_id}")).all()
+        if not virtuais:
+            continue
+
+        # Coletar status das OS associadas aos pedidos virtuais
+        os_status = []
+        for pv in virtuais:
+            for assoc in pv.ordens_servico or []:
+                if assoc.ordem_servico:
+                    os_status.append((assoc.ordem_servico_id, assoc.ordem_servico.status))
+
+        # Sem OS associada -> não dá pra inferir conclusão
+        if not os_status:
+            continue
+
+        # Considera concluído se todas as OS vinculadas aos componentes estiverem Finalizado
+        if all(st == 'Finalizado' for _, st in os_status):
+            pedido_original.data_entrega = datetime.now().date()
     
     # Adicionar ao registro mensal
     data_atual = datetime.now().date()
@@ -345,14 +429,21 @@ def registros_mensais():
     # Obter meses disponíveis
     meses_disponiveis = db.session.query(RegistroMensal.mes_referencia).distinct().all()
     meses_disponiveis = [mes[0] for mes in meses_disponiveis]
+    meses_disponiveis = sorted([m for m in meses_disponiveis if m], reverse=True)
     
     # Obter mês selecionado (padrão: mês atual)
     data_atual = datetime.now().date()
     mes_atual = f"{data_atual.year}-{data_atual.month:02d}"
-    mes_selecionado = request.args.get('mes', mes_atual)
+    mes_selecionado = (request.args.get('mes', mes_atual) or '').strip()
+    if not meses_disponiveis:
+        meses_disponiveis = [mes_atual]
     
-    # Obter registros do mês selecionado
-    registros = RegistroMensal.query.filter_by(mes_referencia=mes_selecionado).all()
+    # Obter registros do mês selecionado (ou todos)
+    if not mes_selecionado or mes_selecionado == 'todos':
+        registros = RegistroMensal.query.order_by(RegistroMensal.data_finalizacao.desc(), RegistroMensal.id.desc()).all()
+        mes_selecionado = 'todos'
+    else:
+        registros = RegistroMensal.query.filter_by(mes_referencia=mes_selecionado).all()
     
     return render_template('kanban/registros_mensais.html', 
                           registros=registros, 

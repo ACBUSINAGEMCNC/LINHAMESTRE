@@ -50,6 +50,28 @@
                     </div>
 
                     <div class="row mb-3">
+                        <div class="col-md-6">
+                            <label for="tipo_item" class="form-label">Tipo do Item</label>
+                            <select class="form-select" id="tipo_item" name="tipo_item">
+                                <option value="producao" {% if (item.tipo_item or 'producao') == 'producao' %}selected{% endif %}>Produção</option>
+                                <option value="montagem" {% if item.tipo_item == 'montagem' %}selected{% endif %}>Montagem</option>
+                            </select>
+                        </div>
+                        <div class="col-md-6" id="categoriaMontagemWrapper" style="display: none;">
+                            <label for="categoria_montagem" class="form-label">Categoria (Montagem)</label>
+                            <select class="form-select" id="categoria_montagem" name="categoria_montagem">
+                                <option value="" {% if not item.categoria_montagem %}selected{% endif %}>Selecione</option>
+                                <option value="Rolamento" {% if item.categoria_montagem == 'Rolamento' %}selected{% endif %}>Rolamento</option>
+                                <option value="Retentor" {% if item.categoria_montagem == 'Retentor' %}selected{% endif %}>Retentor</option>
+                                <option value="Oring" {% if item.categoria_montagem == 'Oring' %}selected{% endif %}>Oring</option>
+                                <option value="Peça pronta" {% if item.categoria_montagem == 'Peça pronta' %}selected{% endif %}>Peça pronta</option>
+                                <option value="Graxeira" {% if item.categoria_montagem == 'Graxeira' %}selected{% endif %}>Graxeira</option>
+                                <option value="Parafuso" {% if item.categoria_montagem == 'Parafuso' %}selected{% endif %}>Parafuso</option>
+                            </select>
+                        </div>
+                    </div>
+
+                    <div class="row mb-3">
                         <div class="col-md-12">
                             <label for="tipo_bruto" class="form-label">Tipo de Bruto</label>
                             <input type="text" class="form-control" id="tipo_bruto" name="tipo_bruto" 
@@ -66,6 +88,7 @@
                         </div>
                     </div>
 
+                    <div id="producaoFields">
                     <h4 class="mt-4 mb-3">Materiais Utilizados</h4>
                     <div class="card mb-4">
                         <div class="card-body">
@@ -562,6 +585,8 @@
                         </div>
                     </div>
 
+                    </div>
+
                     <div class="d-grid">
                         <button type="submit" class="btn btn-primary">
                             <i class="fas fa-save"></i> Salvar Alterações
@@ -574,6 +599,35 @@
 
     <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    <script>
+    document.addEventListener('DOMContentLoaded', function() {
+        const tipoSelect = document.getElementById('tipo_item');
+        const producaoFields = document.getElementById('producaoFields');
+        const categoriaWrapper = document.getElementById('categoriaMontagemWrapper');
+        const categoriaSelect = document.getElementById('categoria_montagem');
+        const materiaisJson = document.getElementById('materiais_json');
+        const trabalhosJson = document.getElementById('trabalhos_json');
+
+        function applyTipo() {
+            const tipo = (tipoSelect?.value || 'producao').toLowerCase();
+            const isMontagem = tipo === 'montagem';
+
+            if (producaoFields) producaoFields.style.display = isMontagem ? 'none' : '';
+            if (categoriaWrapper) categoriaWrapper.style.display = isMontagem ? '' : 'none';
+            if (!isMontagem && categoriaSelect) categoriaSelect.value = '';
+
+            if (isMontagem) {
+                if (materiaisJson) materiaisJson.value = '[]';
+                if (trabalhosJson) trabalhosJson.value = '[]';
+            }
+        }
+
+        if (tipoSelect) {
+            tipoSelect.addEventListener('change', applyTipo);
+        }
+        applyTipo();
+    });
+    </script>
     <script type="application/json" id="item_materiais_data">{{ item_materiais|tojson }}</script>
     <script type="application/json" id="item_trabalhos_data">{{ item_trabalhos|tojson }}</script>
     <script>

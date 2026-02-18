@@ -29,7 +29,7 @@ def verificar_inicializar_banco():
     database_url = '' if force_sqlite else os.getenv('DATABASE_URL', '')
     
     # Se for PostgreSQL (Supabase), usar script de migração rápido
-    if database_url.startswith('postgresql://'):
+    if database_url.startswith('postgresql://') or database_url.startswith('postgresql+psycopg://') or database_url.startswith('postgresql+psycopg2://'):
         logger.info("Usando PostgreSQL (Supabase) - verificando tabelas de apontamento...")
         try:
             # Usar script rápido com timeout
@@ -102,6 +102,36 @@ def verificar_inicializar_banco():
                 logger.warning("Falha ao verificar/adicionar coluna tamanho_peca.")
         except Exception as col_err:
             logger.warning(f"Erro ao migrar coluna tamanho_peca: {str(col_err)}")
+
+        # Executar migração para adicionar colunas tipo_item e categoria_montagem em Item
+        try:
+            from migrations.add_tipo_item_categoria_montagem_item import migrate_postgres as migrate_tipo_item_postgres
+            if migrate_tipo_item_postgres():
+                logger.info("Colunas tipo_item/categoria_montagem verificadas/adicionadas com sucesso.")
+            else:
+                logger.warning("Falha ao verificar/adicionar colunas tipo_item/categoria_montagem.")
+        except Exception as col_err:
+            logger.warning(f"Erro ao migrar colunas tipo_item/categoria_montagem: {str(col_err)}")
+
+        # Executar migração para criar tabelas de Pedido de Montagem
+        try:
+            from migrations.add_pedido_montagem_tables import migrate_postgres as migrate_pedido_montagem_postgres
+            if migrate_pedido_montagem_postgres():
+                logger.info("Tabelas/colunas de Pedido de Montagem verificadas/criadas com sucesso.")
+            else:
+                logger.warning("Falha ao verificar/criar tabelas/colunas de Pedido de Montagem.")
+        except Exception as col_err:
+            logger.warning(f"Erro ao migrar tabelas/colunas de Pedido de Montagem: {str(col_err)}")
+
+        # Executar migração para criar tabelas de cotação/comparativo de Pedido de Montagem
+        try:
+            from migrations.add_cotacao_pedido_montagem_tables import migrate_postgres as migrate_cotacao_pedido_montagem_postgres
+            if migrate_cotacao_pedido_montagem_postgres():
+                logger.info("Tabelas de cotação/comparativo de Pedido de Montagem verificadas/criadas com sucesso.")
+            else:
+                logger.warning("Falha ao verificar/criar tabelas de cotação/comparativo de Pedido de Montagem.")
+        except Exception as col_err:
+            logger.warning(f"Erro ao migrar tabelas de cotação/comparativo de Pedido de Montagem: {str(col_err)}")
             
         # Executar migração para adicionar colunas imagem e data_cadastro
         try:
@@ -189,6 +219,42 @@ def verificar_inicializar_banco():
                             logger.info("Coluna tamanho_peca adicionada com sucesso à tabela item.")
                         else:
                             logger.warning("Falha ao adicionar coluna tamanho_peca à tabela item.")
+
+                    if 'tipo_item' not in item_columns or 'categoria_montagem' not in item_columns:
+                        logger.info("Colunas tipo_item/categoria_montagem não encontradas na tabela item. Executando migração...")
+                        from migrations.add_tipo_item_categoria_montagem_item import migrate_sqlite as migrate_tipo_item_sqlite
+                        if migrate_tipo_item_sqlite():
+                            logger.info("Colunas tipo_item/categoria_montagem adicionadas com sucesso à tabela item.")
+                        else:
+                            logger.warning("Falha ao adicionar colunas tipo_item/categoria_montagem à tabela item.")
+
+                    # Tabelas/coluna de pedido de montagem
+                    cursor.execute("PRAGMA table_info(pedido)")
+                    pedido_columns = [column[1] for column in cursor.fetchall()]
+                    cursor.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='pedido_montagem';")
+                    has_pedido_montagem_table = cursor.fetchone() is not None
+                    cursor.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='item_pedido_montagem';")
+                    has_item_pedido_montagem_table = cursor.fetchone() is not None
+                    if 'numero_pedido_montagem' not in pedido_columns or (not has_pedido_montagem_table) or (not has_item_pedido_montagem_table):
+                        logger.info("Estruturas de Pedido de Montagem não encontradas. Executando migração...")
+                        from migrations.add_pedido_montagem_tables import migrate_sqlite as migrate_pedido_montagem_sqlite
+                        if migrate_pedido_montagem_sqlite():
+                            logger.info("Estruturas de Pedido de Montagem criadas com sucesso.")
+                        else:
+                            logger.warning("Falha ao criar estruturas de Pedido de Montagem.")
+
+                    # Tabelas de cotação/comparativo de pedido de montagem
+                    cursor.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='cotacao_pedido_montagem';")
+                    has_cotacao_pm = cursor.fetchone() is not None
+                    cursor.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='cotacao_item_pedido_montagem';")
+                    has_cotacao_item_pm = cursor.fetchone() is not None
+                    if (not has_cotacao_pm) or (not has_cotacao_item_pm):
+                        logger.info("Estruturas de comparativo (Pedido de Montagem) não encontradas. Executando migração...")
+                        from migrations.add_cotacao_pedido_montagem_tables import migrate_sqlite as migrate_cotacao_pm_sqlite
+                        if migrate_cotacao_pm_sqlite():
+                            logger.info("Estruturas de comparativo (Pedido de Montagem) criadas com sucesso.")
+                        else:
+                            logger.warning("Falha ao criar estruturas de comparativo (Pedido de Montagem).")
                 except Exception as col_err:
                     logger.warning(f"Erro ao verificar/adicionar coluna tipo_bruto na tabela item: {str(col_err)}")
             except Exception as col_err:
@@ -241,7 +307,12 @@ def create_app():
                 pass
     
     app.config['SQLALCHEMY_DATABASE_URI'] = database_url
-    app.logger.info("Usando banco: %s", 'PostgreSQL (Supabase)' if database_url.startswith('postgresql://') else 'SQLite')
+    app.logger.info(
+        "Usando banco: %s",
+        'PostgreSQL (Supabase)'
+        if (database_url.startswith('postgresql://') or database_url.startswith('postgresql+'))
+        else 'SQLite'
+    )
     app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
     if database_url and database_url.lower().startswith('postgresql'):
         app.config['SQLALCHEMY_ENGINE_OPTIONS'] = {
@@ -421,7 +492,8 @@ def create_app():
     if not skip_db_checks:
         with app.app_context():
             db.create_all()
-            db_type = 'PostgreSQL (Supabase)' if app.config['SQLALCHEMY_DATABASE_URI'].startswith('postgresql://') else 'SQLite'
+            uri = app.config.get('SQLALCHEMY_DATABASE_URI') or ''
+            db_type = 'PostgreSQL (Supabase)' if (uri.startswith('postgresql://') or uri.startswith('postgresql+')) else 'SQLite'
             app.logger.info("Tabelas %s criadas/verificadas com sucesso.", db_type)
             
             # Executar migração para adicionar numero_pedido_cliente
@@ -485,6 +557,7 @@ def create_app():
     from routes.pedidos import pedidos
     from routes.ordens import ordens
     from routes.pedidos_material import pedidos_material
+    from routes.pedidos_montagem import pedidos_montagem
     from routes.estoque import estoque
     from routes.kanban import kanban
     from routes.arquivos import arquivos
@@ -508,6 +581,7 @@ def create_app():
     app.register_blueprint(pedidos)
     app.register_blueprint(ordens)
     app.register_blueprint(pedidos_material)
+    app.register_blueprint(pedidos_montagem)
     app.register_blueprint(estoque)
     app.register_blueprint(kanban)
     app.register_blueprint(arquivos)
@@ -567,7 +641,7 @@ def create_app():
             return
 
         # Permissões por módulo
-        if blueprint in ('pedidos', 'ordens', 'pedidos_material', 'clientes'):
+        if blueprint in ('pedidos', 'ordens', 'pedidos_material', 'pedidos_montagem', 'clientes'):
             if not usuario.acesso_pedidos:
                 flash('Você não tem permissão para acessar esta área', 'danger')
                 return redirect(url_for('main.index'))
@@ -768,6 +842,34 @@ def create_app():
             return {'app_version': APP_VERSION}
         except Exception:
             return {'app_version': ''}
+
+    @app.context_processor
+    def inject_release_banner():
+        try:
+            import time
+            if not session.get('usuario_id'):
+                return {'release_2_0_show_banner': False}
+            seen_at = session.get('release_2_0_seen_at')
+            if not seen_at:
+                return {'release_2_0_show_banner': False}
+            try:
+                seen_at = int(seen_at)
+            except Exception:
+                return {'release_2_0_show_banner': False}
+
+            prazo_seg = 5 * 24 * 60 * 60
+            show = (time.time() - seen_at) < prazo_seg
+            return {
+                'release_2_0_show_banner': bool(show),
+                'release_2_0_items': [
+                    'Kanban: filtro por busca e lista (com persistência).',
+                    'Kanban: link por pedido para OS compostas (seleção quando há múltiplas OS).',
+                    'Registros mensais: busca + imagem/nome do item + opção “Todos os meses”.',
+                    'Apontamentos: logs detalhados por OS (inclusive finalizadas) e correções de fuso/cronômetro.'
+                ]
+            }
+        except Exception:
+            return {'release_2_0_show_banner': False}
     
     # Adicionar função now() para os templates
     @app.context_processor

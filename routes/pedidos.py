@@ -1,5 +1,5 @@
 from flask import Blueprint, render_template, request, redirect, url_for, flash, jsonify, current_app
-from models import db, Pedido, Cliente, UnidadeEntrega, Item, PedidoOrdemServico, OrdemServico, Material, Trabalho, PedidoMaterial, ItemPedidoMaterial, ItemMaterial, ItemComposto
+from models import db, Pedido, Cliente, UnidadeEntrega, Item, PedidoOrdemServico, OrdemServico, Material, Trabalho, PedidoMaterial, ItemPedidoMaterial, ItemMaterial, ItemComposto, PedidoMontagem, ItemPedidoMontagem
 from utils import validate_form_data, parse_json_field, generate_next_code, generate_next_os_code
 from datetime import datetime
 import logging
@@ -389,8 +389,10 @@ def gerar_pedido_material_multiplo():
         return redirect(url_for('pedidos.listar_pedidos'))
     
     # Agregar materiais de todos os pedidos válidos (incluindo desmembramento de itens compostos)
+    # e separar itens de montagem em um Pedido de Montagem
     materiais_agrupados = {}
     materiais_agrupados_qtd = {}
+    itens_montagem_agrupados = {}
     for pedido in pedidos_para_processar:
         item = Item.query.get(pedido.item_id)
         
@@ -399,6 +401,10 @@ def gerar_pedido_material_multiplo():
             for componente_rel in item.componentes:
                 item_componente = componente_rel.item_componente
                 quantidade_componente = componente_rel.quantidade * pedido.quantidade
+
+                if item_componente and (getattr(item_componente, 'tipo_item', None) or 'producao') == 'montagem':
+                    itens_montagem_agrupados[item_componente.id] = itens_montagem_agrupados.get(item_componente.id, 0) + quantidade_componente
+                    continue
                 
                 # Buscar materiais do componente
                 item_materiais = ItemMaterial.query.filter_by(item_id=item_componente.id).all()
@@ -418,6 +424,9 @@ def gerar_pedido_material_multiplo():
                             materiais_agrupados[item_material.material_id] = comprimento_necessario
         else:
             # ITEM SIMPLES: Processar normalmente
+            if item and (getattr(item, 'tipo_item', None) or 'producao') == 'montagem':
+                itens_montagem_agrupados[item.id] = itens_montagem_agrupados.get(item.id, 0) + (pedido.quantidade or 0)
+                continue
             item_materiais = ItemMaterial.query.filter_by(item_id=pedido.item_id).all()
             for item_material in item_materiais:
                 material = Material.query.get(item_material.material_id)
@@ -434,49 +443,77 @@ def gerar_pedido_material_multiplo():
                     else:
                         materiais_agrupados[item_material.material_id] = comprimento_necessario
     
-    if not materiais_agrupados and not materiais_agrupados_qtd:
-        flash('Nenhum material associado aos itens dos pedidos selecionados', 'warning')
+    if not materiais_agrupados and not materiais_agrupados_qtd and not itens_montagem_agrupados:
+        flash('Nenhum material ou item de montagem associado aos itens dos pedidos selecionados', 'warning')
         return redirect(url_for('pedidos.listar_pedidos'))
     
-    # Gerar um único código de pedido de material
-    codigo_pm = generate_next_code(PedidoMaterial, 'PM', 'numero', padding=5)
-    logger.info("Gerando Pedido de Material %s", codigo_pm)
-    
-    # Criar um único pedido de material
-    pm = PedidoMaterial(
-        numero=codigo_pm,
-        data_criacao=datetime.now().date()
-    )
-    db.session.add(pm)
-    db.session.flush()
-    logger.debug("Pedido de Material %s criado no banco", codigo_pm)
-    
-    # Criar associações ItemPedidoMaterial para cada material agrupado
-    for material_id, comprimento_total in materiais_agrupados.items():
-        assoc = ItemPedidoMaterial(
-            pedido_material_id=pm.id,
-            material_id=material_id,
-            comprimento=comprimento_total
-        )
-        db.session.add(assoc)
+    codigo_pm = None
+    if materiais_agrupados or materiais_agrupados_qtd:
+        # Gerar um único código de pedido de material
+        codigo_pm = generate_next_code(PedidoMaterial, 'PM', 'numero', padding=5)
+        logger.info("Gerando Pedido de Material %s", codigo_pm)
 
-    for material_id, qtd_total in materiais_agrupados_qtd.items():
-        assoc = ItemPedidoMaterial(
-            pedido_material_id=pm.id,
-            material_id=material_id,
-            quantidade=qtd_total
+        # Criar um único pedido de material
+        pm = PedidoMaterial(
+            numero=codigo_pm,
+            data_criacao=datetime.now().date()
         )
-        db.session.add(assoc)
-    
-    # Atualizar numero_pedido_material para todos os pedidos processados
+        db.session.add(pm)
+        db.session.flush()
+        logger.debug("Pedido de Material %s criado no banco", codigo_pm)
+
+        # Criar associações ItemPedidoMaterial para cada material agrupado
+        for material_id, comprimento_total in materiais_agrupados.items():
+            assoc = ItemPedidoMaterial(
+                pedido_material_id=pm.id,
+                material_id=material_id,
+                comprimento=comprimento_total
+            )
+            db.session.add(assoc)
+
+        for material_id, qtd_total in materiais_agrupados_qtd.items():
+            assoc = ItemPedidoMaterial(
+                pedido_material_id=pm.id,
+                material_id=material_id,
+                quantidade=qtd_total
+            )
+            db.session.add(assoc)
+
+    codigo_pmont = None
+    if itens_montagem_agrupados:
+        codigo_pmont = generate_next_code(PedidoMontagem, 'PMT', 'numero', padding=5)
+        logger.info("Gerando Pedido de Montagem %s", codigo_pmont)
+
+        pmont = PedidoMontagem(
+            numero=codigo_pmont,
+            data_criacao=datetime.now().date()
+        )
+        db.session.add(pmont)
+        db.session.flush()
+
+        for item_id, qtd_total in itens_montagem_agrupados.items():
+            assoc = ItemPedidoMontagem(
+                pedido_montagem_id=pmont.id,
+                item_id=item_id,
+                quantidade=int(qtd_total or 0)
+            )
+            db.session.add(assoc)
+
+    # Atualizar numeros para todos os pedidos processados
     for pedido in pedidos_para_processar:
-        pedido.numero_pedido_material = codigo_pm
-    
+        if codigo_pm:
+            pedido.numero_pedido_material = codigo_pm
+        if codigo_pmont:
+            pedido.numero_pedido_montagem = codigo_pmont
+
     db.session.commit()
-    for pedido in pedidos_para_processar:
-        logger.debug("Pedido ID %s atualizado com numero_pedido_material: %s", pedido.id, pedido.numero_pedido_material)
-    logger.info("Pedido de Material %s salvo com sucesso. Itens associados: %s materiais agrupados.", codigo_pm, len(materiais_agrupados))
-    flash(f'Pedido de Material gerado com sucesso: {codigo_pm}', 'success')
+
+    msg = []
+    if codigo_pm:
+        msg.append(f"Material: {codigo_pm}")
+    if codigo_pmont:
+        msg.append(f"Montagem: {codigo_pmont}")
+    flash('Pedidos gerados com sucesso: ' + ' | '.join(msg), 'success')
     return redirect(url_for('pedidos.listar_pedidos'))
 
 @pedidos.route('/pedidos/novo', methods=['GET', 'POST'])

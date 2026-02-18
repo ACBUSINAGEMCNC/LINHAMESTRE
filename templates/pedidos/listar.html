@@ -189,6 +189,7 @@
                                     <th>Data de Entrada</th>
                                     <th>Nº OS</th>
                                     <th>Nº Ped. Mat.</th>
+                                    <th>Nº Ped. Mont.</th>
                                     <th>Previsão de Entrega</th>
                                     <th>Status</th>
                                     <th>Ações</th>
@@ -215,10 +216,11 @@
                                                     {{ pedido.item.codigo_acb }}
                                                 </a>
                                             {% else %}
-                                                <span class="text-primary">{{ pedido.item.codigo_acb }}</span>
+                                                <a href="/itens/editar/{{ pedido.item.id }}" class="text-primary" onclick="event.stopPropagation();">{{ pedido.item.codigo_acb }}</a>
                                             {% endif %}
                                             </small>
-                                            <br>{{ pedido.item.nome }}
+                                            <br>
+                                            <a href="/itens/editar/{{ pedido.item.id }}" class="text-decoration-none" onclick="event.stopPropagation();">{{ pedido.item.nome }}</a>
                                         {% else %}
                                             {{ pedido.nome_item }}
                                             <a href="/pedidos/cadastrar-item/{{ pedido.id }}" class="btn btn-sm btn-success" title="Cadastrar item completo" data-bs-toggle="tooltip">
@@ -228,8 +230,24 @@
                                     </td>
                                     <td>{{ pedido.quantidade }}</td>
                                     <td>{{ pedido.data_entrada.strftime('%d/%m/%Y') }}</td>
-                                    <td>{{ pedido.numero_oc or '' }}</td>
-                                    <td data-numero-pedido-material="{{ pedido.numero_pedido_material }}">{{ pedido.numero_pedido_material }}</td>
+                                    <td>
+                                        {% if pedido.numero_oc %}
+                                            <span>{{ pedido.numero_oc }}</span>
+                                            <a href="/kanban/por-pedido/{{ pedido.id }}" class="btn btn-sm btn-outline-primary ms-1" title="Abrir no Kanban" data-bs-toggle="tooltip" onclick="event.stopPropagation();">
+                                                <i class="fas fa-tasks"></i>
+                                            </a>
+                                        {% endif %}
+                                    </td>
+                                    <td data-numero-pedido-material="{{ pedido.numero_pedido_material }}">
+                                        {% if pedido.numero_pedido_material %}
+                                            <a href="/pedidos-material/numero/{{ pedido.numero_pedido_material }}" onclick="event.stopPropagation();">{{ pedido.numero_pedido_material }}</a>
+                                        {% endif %}
+                                    </td>
+                                    <td data-numero-pedido-montagem="{{ pedido.numero_pedido_montagem }}">
+                                        {% if pedido.numero_pedido_montagem %}
+                                            <a href="/pedidos-montagem/numero/{{ pedido.numero_pedido_montagem }}" onclick="event.stopPropagation();">{{ pedido.numero_pedido_montagem }}</a>
+                                        {% endif %}
+                                    </td>
                                     <td>{{ pedido.previsao_entrega.strftime('%d/%m/%Y') if pedido.previsao_entrega else '' }}</td>
                                     <td>
                                         {% if pedido.status == 'entregue' %}

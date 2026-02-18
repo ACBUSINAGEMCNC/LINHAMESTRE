@@ -63,6 +63,13 @@
             <button class="btn btn-primary" onclick="window.print()">Imprimir</button>
             <a href="/pedidos-material" class="btn btn-secondary">Voltar</a>
         </div>
+
+        {% if usuario_nivel == 'admin' or usuario_nome == 'ARTCOMPANY' %}
+        <div class="no-print form-check form-switch mb-3">
+            <input class="form-check-input" type="checkbox" role="switch" id="toggleItemInfo">
+            <label class="form-check-label" for="toggleItemInfo">Mostrar item / imagem</label>
+        </div>
+        {% endif %}
         
         <div class="header">
             <div class="row g-2 align-items-center">
@@ -102,6 +109,7 @@
                     <tr>
                         <th style="width: 120px;">Quantidade</th>
                         <th>Material</th>
+                        <th class="pm-item-col">Item</th>
                     </tr>
                 </thead>
                 <tbody>
@@ -113,12 +121,30 @@
                             <tr>
                                 <td>{{ item.quantidade or 0 }}</td>
                                 <td>{{ material.nome }}</td>
+                                <td class="pm-item-col">
+                                    {% set itens_rel = material_item_map.get(item.material_id) if material_item_map is defined else None %}
+                                    {% if itens_rel %}
+                                        {% for it in itens_rel %}
+                                            <div class="d-flex align-items-center gap-2 mb-1">
+                                                {% if it.imagem_url %}
+                                                    <img src="{{ it.imagem_url }}" alt="" style="height: 28px; width: 28px; object-fit: cover; border-radius: 4px;" onerror="this.style.display='none'">
+                                                {% endif %}
+                                                <div style="line-height: 1.1;">
+                                                    <div class="fw-semibold" style="font-size: 12px;">{{ it.codigo_acb }}</div>
+                                                    <div class="text-muted" style="font-size: 11px;">{{ it.nome }}</div>
+                                                </div>
+                                            </div>
+                                        {% endfor %}
+                                    {% else %}
+                                        <span class="text-muted" style="font-size: 12px;">-</span>
+                                    {% endif %}
+                                </td>
                             </tr>
                         {% endif %}
                     {% endfor %}
                     {% if not tem_especificos %}
                         <tr>
-                            <td colspan="2">Nenhum material específico.</td>
+                            <td colspan="3">Nenhum material específico.</td>
                         </tr>
                     {% endif %}
                 </tbody>
@@ -134,6 +160,7 @@
                         <th>Tipo</th>
                         <th>Dimensões</th>
                         <th style="width: 140px;">Comprimento (m)</th>
+                        <th class="pm-item-col">Item</th>
                     </tr>
                 </thead>
                 <tbody>
@@ -157,12 +184,30 @@
                                     {% endif %}
                                 </td>
                                 <td>{{ ((item.comprimento or 0) / 1000.0) | round(2) }}</td>
+                                <td class="pm-item-col">
+                                    {% set itens_rel = material_item_map.get(item.material_id) if material_item_map is defined else None %}
+                                    {% if itens_rel %}
+                                        {% for it in itens_rel %}
+                                            <div class="d-flex align-items-center gap-2 mb-1">
+                                                {% if it.imagem_url %}
+                                                    <img src="{{ it.imagem_url }}" alt="" style="height: 28px; width: 28px; object-fit: cover; border-radius: 4px;" onerror="this.style.display='none'">
+                                                {% endif %}
+                                                <div style="line-height: 1.1;">
+                                                    <div class="fw-semibold" style="font-size: 12px;">{{ it.codigo_acb }}</div>
+                                                    <div class="text-muted" style="font-size: 11px;">{{ it.nome }}</div>
+                                                </div>
+                                            </div>
+                                        {% endfor %}
+                                    {% else %}
+                                        <span class="text-muted" style="font-size: 12px;">-</span>
+                                    {% endif %}
+                                </td>
                             </tr>
                         {% endif %}
                     {% endfor %}
                     {% if not tem_barra %}
                         <tr>
-                            <td colspan="4">Nenhum material em barra.</td>
+                            <td colspan="5">Nenhum material em barra.</td>
                         </tr>
                     {% endif %}
                 </tbody>
@@ -189,5 +234,33 @@
             <p>ACB Usinagem CNC - Todos os direitos reservados</p>
         </div>
     </div>
+
+    <script>
+        (function () {
+            const toggle = document.getElementById('toggleItemInfo');
+            const cols = document.querySelectorAll('.pm-item-col');
+
+            if (!toggle || !cols || cols.length === 0) return;
+
+            const key = 'pm_show_item_info';
+            const saved = localStorage.getItem(key);
+            const enabled = saved === '1';
+
+            function apply(v) {
+                cols.forEach(el => {
+                    el.style.display = v ? '' : 'none';
+                });
+                toggle.checked = v;
+            }
+
+            apply(enabled);
+
+            toggle.addEventListener('change', function () {
+                const v = !!toggle.checked;
+                localStorage.setItem(key, v ? '1' : '0');
+                apply(v);
+            });
+        })();
+    </script>
 </body>
 </html>

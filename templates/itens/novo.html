@@ -50,6 +50,28 @@
                     </div>
 
                     <div class="row mb-3">
+                        <div class="col-md-6">
+                            <label for="tipo_item" class="form-label">Tipo do Item</label>
+                            <select class="form-select" id="tipo_item" name="tipo_item">
+                                <option value="producao" {% if (tipo_item_default or 'producao') == 'producao' %}selected{% endif %}>Produção</option>
+                                <option value="montagem" {% if (tipo_item_default or 'producao') == 'montagem' %}selected{% endif %}>Montagem</option>
+                            </select>
+                        </div>
+                        <div class="col-md-6" id="categoriaMontagemWrapper" style="display: none;">
+                            <label for="categoria_montagem" class="form-label">Categoria (Montagem)</label>
+                            <select class="form-select" id="categoria_montagem" name="categoria_montagem">
+                                <option value="">Selecione</option>
+                                <option value="Rolamento">Rolamento</option>
+                                <option value="Retentor">Retentor</option>
+                                <option value="Oring">Oring</option>
+                                <option value="Peça pronta">Peça pronta</option>
+                                <option value="Graxeira">Graxeira</option>
+                                <option value="Parafuso">Parafuso</option>
+                            </select>
+                        </div>
+                    </div>
+
+                    <div class="row mb-3">
                         <div class="col-md-12">
                             <label for="tipo_bruto" class="form-label">Tipo de Bruto</label>
                             <input type="text" class="form-control" id="tipo_bruto" name="tipo_bruto" 
@@ -65,6 +87,7 @@
                         </div>
                     </div>
 
+                    <div id="producaoFields">
                     <h4 class="mt-4 mb-3">Materiais Utilizados</h4>
                     <div class="card mb-4">
                         <div class="card-body">
@@ -428,6 +451,8 @@
                         </div>
                     </div>
 
+                    </div>
+
                     <div class="d-grid">
                         <button type="submit" class="btn btn-primary">
                             <i class="fas fa-save"></i> Salvar Item
@@ -441,6 +466,35 @@
     <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/Sortable/1.14.0/Sortable.min.js"></script>
+    <script>
+    document.addEventListener('DOMContentLoaded', function() {
+        const tipoSelect = document.getElementById('tipo_item');
+        const producaoFields = document.getElementById('producaoFields');
+        const categoriaWrapper = document.getElementById('categoriaMontagemWrapper');
+        const categoriaSelect = document.getElementById('categoria_montagem');
+        const materiaisJson = document.getElementById('materiais_json');
+        const trabalhosJson = document.getElementById('trabalhos_json');
+
+        function applyTipo() {
+            const tipo = (tipoSelect.value || 'producao').toLowerCase();
+            const isMontagem = tipo === 'montagem';
+
+            if (producaoFields) producaoFields.style.display = isMontagem ? 'none' : '';
+            if (categoriaWrapper) categoriaWrapper.style.display = isMontagem ? '' : 'none';
+            if (!isMontagem && categoriaSelect) categoriaSelect.value = '';
+
+            if (isMontagem) {
+                if (materiaisJson) materiaisJson.value = '[]';
+                if (trabalhosJson) trabalhosJson.value = '[]';
+            }
+        }
+
+        if (tipoSelect) {
+            tipoSelect.addEventListener('change', applyTipo);
+            applyTipo();
+        }
+    });
+    </script>
     <style>
         /* Evitar seleção de texto */
         .kanban-card, .kanban-card * {
