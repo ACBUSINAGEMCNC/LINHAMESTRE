@@ -23,13 +23,33 @@ WRITABLE_DIR = '/tmp' if os.getenv('VERCEL') else basedir
 # Logger do módulo
 logger = logging.getLogger(__name__)
 
+
+def _env_flag(name: str) -> bool:
+    val = os.getenv(name, '').strip().lower()
+    return val in ('1', 'true', 'yes', 'on')
+
+
+def _is_max_connections_error(exc: Exception) -> bool:
+    msg = str(exc or '')
+    return 'Max client connections reached' in msg or 'max client connections reached' in msg
+
 def verificar_inicializar_banco():
     """Verifica se o banco de dados existe e o inicializa se necessário."""
+    if _env_flag('SKIP_DB_CHECKS'):
+        logger.info("SKIP_DB_CHECKS ativo - pulando verificações/migrações de banco")
+        return
+
     force_sqlite = os.getenv('FORCE_SQLITE', '').strip().lower() in ('1', 'true', 'yes')
     database_url = '' if force_sqlite else os.getenv('DATABASE_URL', '')
     
     # Se for PostgreSQL (Supabase), usar script de migração rápido
     if database_url.startswith('postgresql://') or database_url.startswith('postgresql+psycopg://') or database_url.startswith('postgresql+psycopg2://'):
+        is_serverless = bool(os.getenv('VERCEL') or os.environ.get("AWS_LAMBDA_FUNCTION_NAME"))
+        run_startup_migrations = _env_flag('RUN_STARTUP_MIGRATIONS')
+        if is_serverless and not run_startup_migrations:
+            logger.info("Ambiente serverless detectado: pulando migrações de startup (defina RUN_STARTUP_MIGRATIONS=1 para habilitar)")
+            return
+
         logger.info("Usando PostgreSQL (Supabase) - verificando tabelas de apontamento...")
         try:
             # Usar script rápido com timeout
@@ -81,6 +101,9 @@ def verificar_inicializar_banco():
             else:
                 logger.warning("Falha ao verificar/criar índices de FKs e PKs de tabelas backup (Supabase).")
         except Exception as col_err:
+            if _is_max_connections_error(col_err):
+                logger.warning("Supabase sem conexões disponíveis (Max client connections reached). Pulando demais migrações de startup.")
+                return
             logger.warning(f"Erro ao migrar coluna categoria_trabalho: {str(col_err)}")
             
         # Executar migração para adicionar coluna tipo_bruto em Item
@@ -91,6 +114,9 @@ def verificar_inicializar_banco():
             else:
                 logger.warning("Falha ao verificar/adicionar coluna tipo_bruto.")
         except Exception as col_err:
+            if _is_max_connections_error(col_err):
+                logger.warning("Supabase sem conexões disponíveis (Max client connections reached). Pulando demais migrações de startup.")
+                return
             logger.warning(f"Erro ao migrar coluna tipo_bruto: {str(col_err)}")
             
         # Executar migração para adicionar coluna tamanho_peca em Item
@@ -101,6 +127,9 @@ def verificar_inicializar_banco():
             else:
                 logger.warning("Falha ao verificar/adicionar coluna tamanho_peca.")
         except Exception as col_err:
+            if _is_max_connections_error(col_err):
+                logger.warning("Supabase sem conexões disponíveis (Max client connections reached). Pulando demais migrações de startup.")
+                return
             logger.warning(f"Erro ao migrar coluna tamanho_peca: {str(col_err)}")
 
         # Executar migração para adicionar colunas tipo_item e categoria_montagem em Item
@@ -111,6 +140,9 @@ def verificar_inicializar_banco():
             else:
                 logger.warning("Falha ao verificar/adicionar colunas tipo_item/categoria_montagem.")
         except Exception as col_err:
+            if _is_max_connections_error(col_err):
+                logger.warning("Supabase sem conexões disponíveis (Max client connections reached). Pulando demais migrações de startup.")
+                return
             logger.warning(f"Erro ao migrar colunas tipo_item/categoria_montagem: {str(col_err)}")
 
         # Executar migração para criar tabelas de Pedido de Montagem
@@ -121,6 +153,9 @@ def verificar_inicializar_banco():
             else:
                 logger.warning("Falha ao verificar/criar tabelas/colunas de Pedido de Montagem.")
         except Exception as col_err:
+            if _is_max_connections_error(col_err):
+                logger.warning("Supabase sem conexões disponíveis (Max client connections reached). Pulando demais migrações de startup.")
+                return
             logger.warning(f"Erro ao migrar tabelas/colunas de Pedido de Montagem: {str(col_err)}")
 
         # Executar migração para criar tabelas de cotação/comparativo de Pedido de Montagem
@@ -131,6 +166,9 @@ def verificar_inicializar_banco():
             else:
                 logger.warning("Falha ao verificar/criar tabelas de cotação/comparativo de Pedido de Montagem.")
         except Exception as col_err:
+            if _is_max_connections_error(col_err):
+                logger.warning("Supabase sem conexões disponíveis (Max client connections reached). Pulando demais migrações de startup.")
+                return
             logger.warning(f"Erro ao migrar tabelas de cotação/comparativo de Pedido de Montagem: {str(col_err)}")
             
         # Executar migração para adicionar colunas imagem e data_cadastro
@@ -141,6 +179,9 @@ def verificar_inicializar_banco():
             else:
                 logger.warning("Falha ao verificar/adicionar colunas imagem e data_cadastro.")
         except Exception as cols_err:
+            if _is_max_connections_error(cols_err):
+                logger.warning("Supabase sem conexões disponíveis (Max client connections reached). Pulando demais migrações de startup.")
+                return
             logger.warning(f"Erro ao migrar colunas imagem e data_cadastro: {str(cols_err)}")
             
         return
