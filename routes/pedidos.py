@@ -6,6 +6,8 @@ import logging
 from sqlalchemy import and_
 from openpyxl import load_workbook
 from datetime import date
+import re
+import unicodedata
 
 pedidos = Blueprint('pedidos', __name__)
 logger = logging.getLogger(__name__)
@@ -33,7 +35,31 @@ def _parse_date_cell(value):
 def _normalize_header(value):
     if value is None:
         return ''
-    return str(value).strip().lower()
+    s = str(value).strip().lower()
+    s = unicodedata.normalize('NFKD', s)
+    s = ''.join(ch for ch in s if not unicodedata.combining(ch))
+    s = re.sub(r'[^a-z0-9]+', '_', s)
+    s = re.sub(r'_+', '_', s).strip('_')
+    return s
+
+
+def _canonical_column_name(header: str) -> str:
+    """Mapeia variações comuns de cabeçalho para o nome canônico usado no importador."""
+    h = _normalize_header(header)
+    aliases = {
+        'cliente': {'cliente', 'nome_cliente'},
+        'unidade': {'unidade', 'unidade_entrega', 'unidade_de_entrega', 'unidadeentrega'},
+        'item': {'item', 'codigo_acb', 'codigo', 'cod_item', 'cod'},
+        'quantidade': {'quantidade', 'qtd', 'qtde'},
+        'numero_pedido_cliente': {
+            'numero_pedido_cliente', 'n_pedido_cliente', 'numero_pedido', 'n_pedido', 'pedido_cliente', 'oc', 'ordem_compra'
+        },
+        'prazo_entrega': {'prazo_entrega', 'prazo', 'entrega', 'data_entrega', 'previsao_entrega', 'previsao'},
+    }
+    for canonical, opts in aliases.items():
+        if h in opts:
+            return canonical
+    return h
 
 
 def _generate_next_pedido_code():
@@ -75,13 +101,20 @@ def importar_pedidos_excel():
         flash('XLSX vazio ou sem cabeçalho.', 'danger')
         return redirect(url_for('pedidos.importar_pedidos_excel'))
 
-    headers = [_normalize_header(h) for h in header_row]
-    col_index = {h: i for i, h in enumerate(headers) if h}
+    headers = [_canonical_column_name(h) for h in header_row]
+    col_index = {}
+    for i, h in enumerate(headers):
+        if not h:
+            continue
+        # Não sobrescrever primeira ocorrência (evita confusão se existir coluna repetida)
+        col_index.setdefault(h, i)
 
     required = ['cliente', 'unidade', 'item', 'quantidade', 'numero_pedido_cliente', 'prazo_entrega']
     missing = [c for c in required if c not in col_index]
     if missing:
+        encontrados = [h for h in headers if h]
         flash('Colunas obrigatórias ausentes no Excel: ' + ', '.join(missing), 'danger')
+        flash('Cabeçalhos encontrados: ' + ', '.join(encontrados[:30]) + ('...' if len(encontrados) > 30 else ''), 'warning')
         return redirect(url_for('pedidos.importar_pedidos_excel'))
 
     preview_rows = []
@@ -104,6 +137,10 @@ def importar_pedidos_excel():
         numero_pedido_cliente_s = str(numero_pedido_cliente).strip()
         prazo = _parse_date_cell(prazo_entrega_val)
 
+        # Pular linhas totalmente vazias
+        if not any([cliente_nome_s, unidade_nome_s, item_s, numero_pedido_cliente_s, str(quantidade_val or '').strip(), prazo_entrega_val]):
+            continue
+
         if not cliente_nome_s:
             errors.append('Cliente vazio')
         if not unidade_nome_s:
@@ -116,7 +153,9 @@ def importar_pedidos_excel():
             errors.append('Prazo entrega inválido')
 
         try:
-            quantidade_int = int(quantidade_val)
+            if isinstance(quantidade_val, float) and quantidade_val.is_integer():
+                quantidade_val = int(quantidade_val)
+            quantidade_int = int(str(quantidade_val).strip())
             if quantidade_int <= 0:
                 errors.append('Quantidade deve ser > 0')
         except Exception:
@@ -141,6 +180,12 @@ def importar_pedidos_excel():
                 errors.append('Unidade não encontrada para o cliente')
 
         if item_s:
+            # Itens/códigos podem vir como número no Excel (ex.: 123 vira 123.0)
+            if item_s.endswith('.0'):
+                try:
+                    item_s = str(int(float(item_s)))
+                except Exception:
+                    pass
             item = Item.query.filter(Item.codigo_acb.ilike(item_s)).first()
             if not item:
                 item = Item.query.filter(Item.nome.ilike(item_s)).first()
