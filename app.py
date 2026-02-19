@@ -356,10 +356,17 @@ def create_app():
     )
     app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
     if database_url and database_url.lower().startswith('postgresql'):
-        app.config['SQLALCHEMY_ENGINE_OPTIONS'] = {
+        engine_options = {
             'pool_pre_ping': True,
             'pool_recycle': 180,
         }
+        # Supabase / poolers podem causar "DuplicatePreparedStatement" no psycopg3.
+        # Desativar prepared statements evita esse erro.
+        if database_url.lower().startswith('postgresql+psycopg://'):
+            engine_options['connect_args'] = {
+                'prepare_threshold': 0,
+            }
+        app.config['SQLALCHEMY_ENGINE_OPTIONS'] = engine_options
     app.config['UPLOAD_FOLDER_DESENHOS'] = os.path.join(basedir, 'uploads/desenhos')
     app.config['UPLOAD_FOLDER_INSTRUCOES'] = os.path.join(basedir, 'uploads/instrucoes')
     app.config['UPLOAD_FOLDER_IMAGENS'] = os.path.join(basedir, 'uploads/imagens')

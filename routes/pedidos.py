@@ -4,6 +4,7 @@ from utils import validate_form_data, parse_json_field, generate_next_code, gene
 from datetime import datetime
 import logging
 from sqlalchemy import and_
+from sqlalchemy.orm import joinedload
 from openpyxl import load_workbook
 from datetime import date
 import re
@@ -109,7 +110,7 @@ def importar_pedidos_excel():
         # Não sobrescrever primeira ocorrência (evita confusão se existir coluna repetida)
         col_index.setdefault(h, i)
 
-    required = ['cliente', 'unidade', 'item', 'quantidade', 'numero_pedido_cliente', 'prazo_entrega']
+    required = ['cliente', 'unidade', 'item', 'quantidade', 'numero_pedido_cliente']
     missing = [c for c in required if c not in col_index]
     if missing:
         encontrados = [h for h in headers if h]
@@ -121,6 +122,9 @@ def importar_pedidos_excel():
     ok_rows = []
     ok_count = 0
     err_count = 0
+    warn_count = 0
+
+    prazo_col = col_index.get('prazo_entrega')
 
     for row_number, values in enumerate(ws.iter_rows(min_row=2, values_only=True), start=2):
         cliente_nome = (values[col_index['cliente']] or '')
@@ -128,9 +132,10 @@ def importar_pedidos_excel():
         item_val = (values[col_index['item']] or '')
         quantidade_val = values[col_index['quantidade']]
         numero_pedido_cliente = (values[col_index['numero_pedido_cliente']] or '')
-        prazo_entrega_val = values[col_index['prazo_entrega']]
+        prazo_entrega_val = values[prazo_col] if prazo_col is not None else None
 
         errors = []
+        warnings = []
         cliente_nome_s = str(cliente_nome).strip()
         unidade_nome_s = str(unidade_nome).strip()
         item_s = str(item_val).strip()
@@ -149,7 +154,8 @@ def importar_pedidos_excel():
             errors.append('Item vazio')
         if not numero_pedido_cliente_s:
             errors.append('Nº pedido cliente vazio')
-        if prazo is None:
+        # Prazo de entrega é opcional (pode ficar em branco)
+        if prazo_entrega_val not in (None, '') and prazo is None:
             errors.append('Prazo entrega inválido')
 
         try:
@@ -189,20 +195,24 @@ def importar_pedidos_excel():
             item = Item.query.filter(Item.codigo_acb.ilike(item_s)).first()
             if not item:
                 item = Item.query.filter(Item.nome.ilike(item_s)).first()
+            # Item pode não existir no cadastro: nesse caso, vamos importar como nome_item
             if not item:
-                errors.append('Item não encontrado (codigo_acb/nome)')
+                warnings.append('Item não cadastrado: será importado como texto (cadastre depois)')
 
         prazo_str = prazo.strftime('%d/%m/%Y') if prazo else ''
         ok = len(errors) == 0
         if ok:
             ok_count += 1
+            if warnings:
+                warn_count += 1
             ok_rows.append({
                 'cliente_id': cliente.id,
                 'unidade_entrega_id': unidade.id,
-                'item_id': item.id,
+                'item_id': item.id if item else None,
+                'nome_item': None if item else item_s,
                 'quantidade': quantidade_int,
                 'numero_pedido_cliente': numero_pedido_cliente_s,
-                'previsao_entrega': prazo.isoformat(),
+                'previsao_entrega': prazo.isoformat() if prazo else None,
             })
         else:
             err_count += 1
@@ -217,6 +227,7 @@ def importar_pedidos_excel():
             'prazo_entrega': prazo_str,
             'ok': ok,
             'errors': errors,
+            'warnings': warnings,
         })
 
     session['import_pedidos_excel_rows'] = ok_rows
@@ -225,6 +236,7 @@ def importar_pedidos_excel():
         preview_rows=preview_rows,
         preview_ok_count=ok_count,
         preview_error_count=err_count,
+        preview_warning_count=warn_count,
     )
 
 
@@ -240,22 +252,26 @@ def confirmar_importacao_pedidos_excel():
 
         grupos = {}
         for r in ok_rows:
-            k = (r['cliente_id'], r['unidade_entrega_id'], r['numero_pedido_cliente'], r['previsao_entrega'])
+            k = (r['cliente_id'], r['unidade_entrega_id'], r['numero_pedido_cliente'], r.get('previsao_entrega'))
             grupos.setdefault(k, []).append(r)
 
         for _, linhas in grupos.items():
             numero_interno = _generate_next_pedido_code()
             for r in linhas:
+                previsao_entrega = None
+                if r.get('previsao_entrega'):
+                    previsao_entrega = datetime.strptime(r['previsao_entrega'], '%Y-%m-%d').date()
+
                 novo_pedido = Pedido(
                     numero_pedido=numero_interno,
                     numero_pedido_cliente=r['numero_pedido_cliente'],
                     cliente_id=r['cliente_id'],
                     unidade_entrega_id=r['unidade_entrega_id'],
-                    item_id=r['item_id'],
-                    nome_item=None,
+                    item_id=r.get('item_id'),
+                    nome_item=r.get('nome_item'),
                     quantidade=r['quantidade'],
                     data_entrada=data_entrada,
-                    previsao_entrega=datetime.strptime(r['previsao_entrega'], '%Y-%m-%d').date(),
+                    previsao_entrega=previsao_entrega,
                     descricao=None,
                 )
                 db.session.add(novo_pedido)
@@ -867,7 +883,7 @@ def listar_pedidos():
     # O usuário pode usar filtros para vê-los
     mostrar_todos = request.args.get('mostrar_todos', '0') == '1'
     
-    query = Pedido.query.filter(
+    query = Pedido.query.options(joinedload(Pedido.item)).filter(
         (Pedido.numero_pedido == None) | (~Pedido.numero_pedido.like('AUTO-%'))
     )
     

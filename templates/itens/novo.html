@@ -6,6 +6,7 @@
     <title>Novo Item - ACB Usinagem CNC</title>
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+    <link href="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/css/select2.min.css" rel="stylesheet" />
 </head>
 <body>
     <nav class="navbar navbar-expand-lg navbar-dark bg-primary">
@@ -94,7 +95,7 @@
                             <div class="row mb-3">
                                 <div class="col-md-5">
                                     <label for="material_select" class="form-label">Material</label>
-                                    <select class="form-select" id="material_select">
+                                    <select class="form-select select2" id="material_select">
                                         <option value="">Selecione um material</option>
                                         {% for material in materiais %}
                                         <option value="{{ material.id }}" 
@@ -464,6 +465,7 @@
     </div>
 
     <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/js/select2.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/Sortable/1.14.0/Sortable.min.js"></script>
     <script>
@@ -683,6 +685,12 @@
             // Arrays para armazenar materiais e trabalhos
             let materiais = [];
             let trabalhos = [];
+
+            $('.select2').select2({
+                placeholder: "Selecione um material",
+                allowClear: true,
+                width: '100%'
+            });
             
             // Adicionar material à tabela
             $('#btn_adicionar_material').click(function() {
@@ -723,7 +731,7 @@
                 atualizarTabelaMateriais();
                 
                 // Limpar campos
-                $('#material_select').val('');
+                $('#material_select').val('').trigger('change');
                 $('#material_comprimento').val('');
                 $('#material_quantidade').val('1');
             });

@@ -6,13 +6,17 @@ from datetime import datetime
 from models import db, Item, Material, Trabalho, ItemMaterial, ItemTrabalho, Pedido, ArquivoCNC, ItemComposto
 from utils import validate_form_data, save_file, generate_next_code, parse_json_field
 from flask import current_app
+from sqlalchemy.orm import selectinload
 
 itens = Blueprint('itens', __name__)
 
 @itens.route('/itens')
 def listar_itens():
     """Rota para listar todos os itens"""
-    itens = Item.query.all()
+    itens = Item.query.options(
+        selectinload(Item.materiais),
+        selectinload(Item.trabalhos),
+    ).all()
     return render_template('itens/listar.html', itens=itens)
 
 @itens.route('/itens/novo', methods=['GET', 'POST'])

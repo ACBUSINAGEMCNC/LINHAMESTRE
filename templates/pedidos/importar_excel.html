@@ -32,6 +32,9 @@
       <div class="fw-semibold">Pré-visualização</div>
       <span class="badge bg-success">OK: {{ preview_ok_count }}</span>
       <span class="badge bg-danger">Erros: {{ preview_error_count }}</span>
+      {% if preview_warning_count is defined %}
+      <span class="badge bg-warning text-dark">Avisos: {{ preview_warning_count }}</span>
+      {% endif %}
     </div>
 
     <div class="table-responsive">
@@ -71,6 +74,12 @@
               <div class="small">
                 {% for e in r.errors %}
                 <div>{{ e }}</div>
+                {% endfor %}
+              </div>
+              {% elif r.warnings %}
+              <div class="small text-warning">
+                {% for w in r.warnings %}
+                <div>{{ w }}</div>
                 {% endfor %}
               </div>
               {% endif %}
