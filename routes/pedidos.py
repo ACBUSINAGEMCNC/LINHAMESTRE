@@ -1,12 +1,228 @@
-from flask import Blueprint, render_template, request, redirect, url_for, flash, jsonify, current_app
+from flask import Blueprint, render_template, request, redirect, url_for, flash, jsonify, current_app, session
 from models import db, Pedido, Cliente, UnidadeEntrega, Item, PedidoOrdemServico, OrdemServico, Material, Trabalho, PedidoMaterial, ItemPedidoMaterial, ItemMaterial, ItemComposto, PedidoMontagem, ItemPedidoMontagem
 from utils import validate_form_data, parse_json_field, generate_next_code, generate_next_os_code
 from datetime import datetime
 import logging
 from sqlalchemy import and_
+from openpyxl import load_workbook
+from datetime import date
 
 pedidos = Blueprint('pedidos', __name__)
 logger = logging.getLogger(__name__)
+
+
+def _parse_date_cell(value):
+    if value is None or value == '':
+        return None
+    if isinstance(value, datetime):
+        return value.date()
+    if isinstance(value, date):
+        return value
+    if isinstance(value, str):
+        v = value.strip()
+        if not v:
+            return None
+        for fmt in ('%Y-%m-%d', '%d/%m/%Y', '%d-%m-%Y'):
+            try:
+                return datetime.strptime(v, fmt).date()
+            except Exception:
+                pass
+    return None
+
+
+def _normalize_header(value):
+    if value is None:
+        return ''
+    return str(value).strip().lower()
+
+
+def _generate_next_pedido_code():
+    ultimo_pedido = Pedido.query.filter(
+        (Pedido.numero_pedido != None) & (~Pedido.numero_pedido.like('AUTO-%'))
+    ).order_by(Pedido.numero_pedido.desc()).first()
+    if ultimo_pedido and ultimo_pedido.numero_pedido:
+        try:
+            ultimo_numero = int(ultimo_pedido.numero_pedido.split('-')[-1])
+            return f"PED-{str(ultimo_numero + 1).zfill(5)}"
+        except Exception:
+            return "PED-00001"
+    return "PED-00001"
+
+
+@pedidos.route('/pedidos/importar-excel', methods=['GET', 'POST'])
+def importar_pedidos_excel():
+    if request.method == 'GET':
+        session.pop('import_pedidos_excel_rows', None)
+        return render_template('pedidos/importar_excel.html')
+
+    arquivo = request.files.get('arquivo')
+    if not arquivo or not arquivo.filename:
+        flash('Selecione um arquivo XLSX para importar.', 'danger')
+        return redirect(url_for('pedidos.importar_pedidos_excel'))
+
+    try:
+        wb = load_workbook(arquivo, data_only=True)
+        ws = wb.active
+    except Exception as e:
+        flash(f'Erro ao ler XLSX: {e}', 'danger')
+        return redirect(url_for('pedidos.importar_pedidos_excel'))
+
+    header_row = None
+    for row in ws.iter_rows(min_row=1, max_row=1, values_only=True):
+        header_row = row
+        break
+    if not header_row:
+        flash('XLSX vazio ou sem cabeçalho.', 'danger')
+        return redirect(url_for('pedidos.importar_pedidos_excel'))
+
+    headers = [_normalize_header(h) for h in header_row]
+    col_index = {h: i for i, h in enumerate(headers) if h}
+
+    required = ['cliente', 'unidade', 'item', 'quantidade', 'numero_pedido_cliente', 'prazo_entrega']
+    missing = [c for c in required if c not in col_index]
+    if missing:
+        flash('Colunas obrigatórias ausentes no Excel: ' + ', '.join(missing), 'danger')
+        return redirect(url_for('pedidos.importar_pedidos_excel'))
+
+    preview_rows = []
+    ok_rows = []
+    ok_count = 0
+    err_count = 0
+
+    for row_number, values in enumerate(ws.iter_rows(min_row=2, values_only=True), start=2):
+        cliente_nome = (values[col_index['cliente']] or '')
+        unidade_nome = (values[col_index['unidade']] or '')
+        item_val = (values[col_index['item']] or '')
+        quantidade_val = values[col_index['quantidade']]
+        numero_pedido_cliente = (values[col_index['numero_pedido_cliente']] or '')
+        prazo_entrega_val = values[col_index['prazo_entrega']]
+
+        errors = []
+        cliente_nome_s = str(cliente_nome).strip()
+        unidade_nome_s = str(unidade_nome).strip()
+        item_s = str(item_val).strip()
+        numero_pedido_cliente_s = str(numero_pedido_cliente).strip()
+        prazo = _parse_date_cell(prazo_entrega_val)
+
+        if not cliente_nome_s:
+            errors.append('Cliente vazio')
+        if not unidade_nome_s:
+            errors.append('Unidade vazia')
+        if not item_s:
+            errors.append('Item vazio')
+        if not numero_pedido_cliente_s:
+            errors.append('Nº pedido cliente vazio')
+        if prazo is None:
+            errors.append('Prazo entrega inválido')
+
+        try:
+            quantidade_int = int(quantidade_val)
+            if quantidade_int <= 0:
+                errors.append('Quantidade deve ser > 0')
+        except Exception:
+            quantidade_int = None
+            errors.append('Quantidade inválida')
+
+        cliente = None
+        unidade = None
+        item = None
+
+        if cliente_nome_s:
+            cliente = Cliente.query.filter(Cliente.nome.ilike(cliente_nome_s)).first()
+            if not cliente:
+                errors.append('Cliente não encontrado')
+
+        if cliente and unidade_nome_s:
+            unidade = UnidadeEntrega.query.filter(
+                UnidadeEntrega.cliente_id == cliente.id,
+                UnidadeEntrega.nome.ilike(unidade_nome_s)
+            ).first()
+            if not unidade:
+                errors.append('Unidade não encontrada para o cliente')
+
+        if item_s:
+            item = Item.query.filter(Item.codigo_acb.ilike(item_s)).first()
+            if not item:
+                item = Item.query.filter(Item.nome.ilike(item_s)).first()
+            if not item:
+                errors.append('Item não encontrado (codigo_acb/nome)')
+
+        prazo_str = prazo.strftime('%d/%m/%Y') if prazo else ''
+        ok = len(errors) == 0
+        if ok:
+            ok_count += 1
+            ok_rows.append({
+                'cliente_id': cliente.id,
+                'unidade_entrega_id': unidade.id,
+                'item_id': item.id,
+                'quantidade': quantidade_int,
+                'numero_pedido_cliente': numero_pedido_cliente_s,
+                'previsao_entrega': prazo.isoformat(),
+            })
+        else:
+            err_count += 1
+
+        preview_rows.append({
+            'row_number': row_number,
+            'cliente': cliente_nome_s,
+            'unidade': unidade_nome_s,
+            'item': item_s,
+            'quantidade': '' if quantidade_int is None else quantidade_int,
+            'numero_pedido_cliente': numero_pedido_cliente_s,
+            'prazo_entrega': prazo_str,
+            'ok': ok,
+            'errors': errors,
+        })
+
+    session['import_pedidos_excel_rows'] = ok_rows
+    return render_template(
+        'pedidos/importar_excel.html',
+        preview_rows=preview_rows,
+        preview_ok_count=ok_count,
+        preview_error_count=err_count,
+    )
+
+
+@pedidos.route('/pedidos/importar-excel/confirmar', methods=['POST'])
+def confirmar_importacao_pedidos_excel():
+    ok_rows = session.get('import_pedidos_excel_rows')
+    if not ok_rows:
+        flash('Nenhuma importação pendente. Faça o upload do Excel novamente.', 'warning')
+        return redirect(url_for('pedidos.importar_pedidos_excel'))
+
+    try:
+        data_entrada = datetime.now().date()
+
+        grupos = {}
+        for r in ok_rows:
+            k = (r['cliente_id'], r['unidade_entrega_id'], r['numero_pedido_cliente'], r['previsao_entrega'])
+            grupos.setdefault(k, []).append(r)
+
+        for _, linhas in grupos.items():
+            numero_interno = _generate_next_pedido_code()
+            for r in linhas:
+                novo_pedido = Pedido(
+                    numero_pedido=numero_interno,
+                    numero_pedido_cliente=r['numero_pedido_cliente'],
+                    cliente_id=r['cliente_id'],
+                    unidade_entrega_id=r['unidade_entrega_id'],
+                    item_id=r['item_id'],
+                    nome_item=None,
+                    quantidade=r['quantidade'],
+                    data_entrada=data_entrada,
+                    previsao_entrega=datetime.strptime(r['previsao_entrega'], '%Y-%m-%d').date(),
+                    descricao=None,
+                )
+                db.session.add(novo_pedido)
+
+        db.session.commit()
+        session.pop('import_pedidos_excel_rows', None)
+        flash(f'Importação concluída com sucesso! Itens importados: {len(ok_rows)}', 'success')
+        return redirect(url_for('pedidos.listar_pedidos'))
+    except Exception as e:
+        db.session.rollback()
+        flash(f'Erro ao importar pedidos: {e}', 'danger')
+        return redirect(url_for('pedidos.importar_pedidos_excel'))
 
 @pedidos.route('/pedidos/gerar-os-multipla', methods=['POST'])
 def gerar_ordem_servico_multipla():
