@@ -216,7 +216,8 @@
                                  data-id="{{ item.id }}" 
                                  data-nome="{{ item.nome }}" 
                                  data-codigo="{{ item.codigo_acb }}"
-                                 data-peso="{{ item.peso or 0 }}">
+                                 data-peso="{{ item.peso or 0 }}"
+                                 data-categoria-montagem="{{ item.categoria_montagem or '' }}">
                                 <div class="d-flex justify-content-between align-items-center">
                                     <div>
                                         <strong>{{ item.codigo_acb }}</strong><br>
@@ -253,6 +254,10 @@
                     <div class="mb-3">
                         <label for="quantidadeComponente" class="form-label">Quantidade *</label>
                         <input type="number" class="form-control" id="quantidadeComponente" min="1" value="1" required>
+                    </div>
+                    <div class="mb-3">
+                        <label for="comprimentoComponente" class="form-label">Comprimento (mm)</label>
+                        <input type="number" class="form-control" id="comprimentoComponente" min="0" step="0.01" value="">
                     </div>
                     <div class="mb-3">
                         <label for="observacoesComponente" class="form-label">Observações</label>
@@ -310,7 +315,8 @@
                     id: itemDiv.dataset.id,
                     nome: itemDiv.dataset.nome,
                     codigo: itemDiv.dataset.codigo,
-                    peso: itemDiv.dataset.peso
+                    peso: itemDiv.dataset.peso,
+                    categoria_montagem: itemDiv.dataset.categoriaMontagem || ''
                 };
                 
                 document.getElementById('itemSelecionado').innerHTML = `
@@ -320,7 +326,12 @@
                 
                 // Limpar campos do modal
                 document.getElementById('quantidadeComponente').value = 1;
+                document.getElementById('comprimentoComponente').value = '';
                 document.getElementById('observacoesComponente').value = '';
+
+                const isChaveta = (itemSelecionadoTemp.categoria_montagem || '').toLowerCase() === 'chaveta';
+                const comprimentoWrapper = document.getElementById('comprimentoComponente')?.closest('.mb-3');
+                if (comprimentoWrapper) comprimentoWrapper.style.display = isChaveta ? '' : 'none';
                 
                 // Mostrar modal
                 new bootstrap.Modal(document.getElementById('modalComponente')).show();
@@ -332,17 +343,42 @@
             if (!itemSelecionadoTemp) return;
             
             const quantidade = parseInt(document.getElementById('quantidadeComponente').value);
+            const comprimento_mm_raw = document.getElementById('comprimentoComponente').value;
             const observacoes = document.getElementById('observacoesComponente').value;
+
+            let comprimento_mm = null;
+            if (comprimento_mm_raw !== null && String(comprimento_mm_raw).trim() !== '') {
+                const val = parseFloat(String(comprimento_mm_raw).replace(',', '.'));
+                if (!isNaN(val) && val >= 0) {
+                    comprimento_mm = val;
+                }
+            }
             
             if (quantidade < 1) {
                 alert('A quantidade deve ser maior que zero');
                 return;
             }
-            
+
+            const isChaveta = (itemSelecionadoTemp.categoria_montagem || '').toLowerCase() === 'chaveta';
+
             // Verificar se o item já foi adicionado
             const jaExiste = componentesData.find(comp => comp.id == itemSelecionadoTemp.id);
-            if (jaExiste) {
+            if (jaExiste && !isChaveta) {
                 alert('Este item já foi adicionado como componente');
+                return;
+            }
+
+            if (jaExiste && isChaveta) {
+                const addLen = (comprimento_mm || 0) * quantidade;
+                jaExiste.comprimento_mm = (jaExiste.comprimento_mm || 0) + addLen;
+                jaExiste.quantidade = 1;
+                if (observacoes && String(observacoes).trim() !== '') {
+                    jaExiste.observacoes = (jaExiste.observacoes || '');
+                    jaExiste.observacoes = jaExiste.observacoes ? (jaExiste.observacoes + ' | ' + observacoes) : observacoes;
+                }
+                atualizarListaComponentes();
+                bootstrap.Modal.getInstance(document.getElementById('modalComponente')).hide();
+                itemSelecionadoTemp = null;
                 return;
             }
             
@@ -352,7 +388,9 @@
                 nome: itemSelecionadoTemp.nome,
                 codigo: itemSelecionadoTemp.codigo,
                 peso: itemSelecionadoTemp.peso,
-                quantidade: quantidade,
+                categoria_montagem: itemSelecionadoTemp.categoria_montagem,
+                quantidade: isChaveta ? 1 : quantidade,
+                comprimento_mm: isChaveta ? ((comprimento_mm || 0) * quantidade) : null,
                 observacoes: observacoes
             };
             
@@ -375,6 +413,7 @@
             
             let html = '';
             componentesData.forEach((comp, index) => {
+                const isChaveta = (comp.categoria_montagem || '').toLowerCase() === 'chaveta';
                 html += `
                     <div class="componente-item">
                         <div class="componente-header">
@@ -392,12 +431,12 @@
                                 <strong>${comp.quantidade}</strong>
                             </div>
                             <div class="col-md-4">
-                                <small class="text-muted">Peso unitário:</small><br>
-                                <strong>${comp.peso} kg</strong>
+                                <small class="text-muted">${isChaveta ? 'Comprimento (mm)' : 'Peso unitário' }:</small><br>
+                                <strong>${isChaveta ? ((comp.comprimento_mm !== null && comp.comprimento_mm !== undefined) ? comp.comprimento_mm : '-') : (comp.peso + ' kg')}</strong>
                             </div>
                             <div class="col-md-4">
-                                <small class="text-muted">Peso total:</small><br>
-                                <strong>${(comp.peso * comp.quantidade).toFixed(2)} kg</strong>
+                                <small class="text-muted">${isChaveta ? 'Total (m)' : 'Peso total' }:</small><br>
+                                <strong>${isChaveta ? (((comp.comprimento_mm || 0) / 1000.0).toFixed(2) + ' m') : ((comp.peso * comp.quantidade).toFixed(2) + ' kg')}</strong>
                             </div>
                         </div>
                         ${comp.observacoes ? `<div class="mt-2"><small class="text-muted">Obs: ${comp.observacoes}</small></div>` : ''}

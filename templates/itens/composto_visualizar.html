@@ -165,6 +165,16 @@
                                             <small class="text-muted">Peso Total:</small><br>
                                             <strong>{{ "%.2f"|format(componente_rel.peso_total_componente) }} kg</strong>
                                         </div>
+                                        {% if (componente_rel.item_componente.categoria_montagem or '')|lower == 'chaveta' %}
+                                        <div class="col-md-3">
+                                            <small class="text-muted">Comprimento (mm):</small><br>
+                                            <strong>{{ componente_rel.comprimento_mm if componente_rel.comprimento_mm is not none else '-' }}</strong>
+                                        </div>
+                                        <div class="col-md-3">
+                                            <small class="text-muted">Total (m):</small><br>
+                                            <strong>{{ "%.2f"|format(componente_rel.comprimento_total_m) }} m</strong>
+                                        </div>
+                                        {% else %}
                                         <div class="col-md-3">
                                             <small class="text-muted">Materiais:</small><br>
                                             <strong>{{ componente_rel.item_componente.materiais|length }}</strong>
@@ -173,6 +183,7 @@
                                             <small class="text-muted">Trabalhos:</small><br>
                                             <strong>{{ componente_rel.item_componente.trabalhos|length }}</strong>
                                         </div>
+                                        {% endif %}
                                     </div>
                                     
                                     {% if componente_rel.observacoes %}

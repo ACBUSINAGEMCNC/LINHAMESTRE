@@ -517,22 +517,68 @@ def novo_item_composto():
         
         # Adicionar componentes
         componentes_json = parse_json_field(request.form, 'componentes')
+        componentes_map = {}
         for comp in componentes_json:
             try:
                 # Verificar se não está tentando adicionar o próprio item como componente
                 if int(comp['id']) == item.id:
                     flash('Um item não pode ser componente de si mesmo!', 'danger')
                     continue
-                
-                item_composto = ItemComposto(
-                    item_pai_id=item.id,
-                    item_componente_id=int(comp['id']),
-                    quantidade=int(comp.get('quantidade', 1) or 1),
-                    observacoes=comp.get('observacoes', '')
-                )
-                db.session.add(item_composto)
+
+                componente_id = int(comp['id'])
+                componente = Item.query.get(componente_id)
+                if not componente:
+                    continue
+
+                comprimento_mm = comp.get('comprimento_mm', None)
+                if comprimento_mm is not None and str(comprimento_mm).strip() == '':
+                    comprimento_mm = None
+                if comprimento_mm is not None:
+                    try:
+                        comprimento_mm = float(str(comprimento_mm).replace(',', '.'))
+                    except ValueError:
+                        comprimento_mm = None
+
+                is_chaveta = (componente.categoria_montagem or '').strip().lower() == 'chaveta'
+                if not is_chaveta:
+                    comprimento_mm = None
+
+                qtd = int(comp.get('quantidade', 1) or 1)
+
+                if is_chaveta:
+                    entry = componentes_map.get(componente_id)
+                    if not entry:
+                        componentes_map[componente_id] = {
+                            'quantidade': 1,
+                            'comprimento_mm': (comprimento_mm or 0.0) * qtd,
+                            'observacoes': comp.get('observacoes', '')
+                        }
+                    else:
+                        entry['comprimento_mm'] = (entry.get('comprimento_mm') or 0.0) + ((comprimento_mm or 0.0) * qtd)
+                        obs = (comp.get('observacoes', '') or '').strip()
+                        if obs:
+                            prev = (entry.get('observacoes', '') or '').strip()
+                            entry['observacoes'] = (prev + ' | ' + obs) if prev else obs
+                else:
+                    if componente_id in componentes_map:
+                        continue
+                    componentes_map[componente_id] = {
+                        'quantidade': qtd,
+                        'comprimento_mm': None,
+                        'observacoes': comp.get('observacoes', '')
+                    }
             except (ValueError, KeyError) as e:
                 flash(f'Erro ao processar componente: {str(e)}', 'danger')
+
+        for componente_id, payload in componentes_map.items():
+            item_composto = ItemComposto(
+                item_pai_id=item.id,
+                item_componente_id=componente_id,
+                quantidade=int(payload.get('quantidade', 1) or 1),
+                comprimento_mm=payload.get('comprimento_mm', None),
+                observacoes=payload.get('observacoes', '')
+            )
+            db.session.add(item_composto)
         
         db.session.commit()
         flash('Item composto cadastrado com sucesso!', 'success')
@@ -594,29 +640,73 @@ def editar_item_composto(item_id):
         if 'instrucoes_trabalho' in request.files and request.files['instrucoes_trabalho'].filename:
             item.instrucoes_trabalho = save_file(request.files['instrucoes_trabalho'], 'instrucoes')
         
-        # Atualizar componentes
-        componentes_json = parse_json_field(request.form, 'componentes')
-        
         # Remover componentes existentes
         ItemComposto.query.filter_by(item_pai_id=item.id).delete()
         
         # Adicionar novos componentes
+        componentes_json = parse_json_field(request.form, 'componentes')
+        componentes_map = {}
         for comp in componentes_json:
             try:
                 # Verificar se não está tentando adicionar o próprio item como componente
                 if int(comp['id']) == item.id:
                     flash('Um item não pode ser componente de si mesmo!', 'danger')
                     continue
-                
-                item_composto = ItemComposto(
-                    item_pai_id=item.id,
-                    item_componente_id=int(comp['id']),
-                    quantidade=int(comp.get('quantidade', 1) or 1),
-                    observacoes=comp.get('observacoes', '')
-                )
-                db.session.add(item_composto)
+
+                componente_id = int(comp['id'])
+                componente = Item.query.get(componente_id)
+                if not componente:
+                    continue
+
+                comprimento_mm = comp.get('comprimento_mm', None)
+                if comprimento_mm is not None and str(comprimento_mm).strip() == '':
+                    comprimento_mm = None
+                if comprimento_mm is not None:
+                    try:
+                        comprimento_mm = float(str(comprimento_mm).replace(',', '.'))
+                    except ValueError:
+                        comprimento_mm = None
+
+                is_chaveta = (componente.categoria_montagem or '').strip().lower() == 'chaveta'
+                if not is_chaveta:
+                    comprimento_mm = None
+
+                qtd = int(comp.get('quantidade', 1) or 1)
+
+                if is_chaveta:
+                    entry = componentes_map.get(componente_id)
+                    if not entry:
+                        componentes_map[componente_id] = {
+                            'quantidade': 1,
+                            'comprimento_mm': (comprimento_mm or 0.0) * qtd,
+                            'observacoes': comp.get('observacoes', '')
+                        }
+                    else:
+                        entry['comprimento_mm'] = (entry.get('comprimento_mm') or 0.0) + ((comprimento_mm or 0.0) * qtd)
+                        obs = (comp.get('observacoes', '') or '').strip()
+                        if obs:
+                            prev = (entry.get('observacoes', '') or '').strip()
+                            entry['observacoes'] = (prev + ' | ' + obs) if prev else obs
+                else:
+                    if componente_id in componentes_map:
+                        continue
+                    componentes_map[componente_id] = {
+                        'quantidade': qtd,
+                        'comprimento_mm': None,
+                        'observacoes': comp.get('observacoes', '')
+                    }
             except (ValueError, KeyError) as e:
                 flash(f'Erro ao processar componente: {str(e)}', 'danger')
+
+        for componente_id, payload in componentes_map.items():
+            item_composto = ItemComposto(
+                item_pai_id=item.id,
+                item_componente_id=componente_id,
+                quantidade=int(payload.get('quantidade', 1) or 1),
+                comprimento_mm=payload.get('comprimento_mm', None),
+                observacoes=payload.get('observacoes', '')
+            )
+            db.session.add(item_composto)
         
         db.session.commit()
         flash('Item composto atualizado com sucesso!', 'success')
@@ -633,7 +723,9 @@ def editar_item_composto(item_id):
             'id': ic.item_componente_id,
             'nome': componente.nome,
             'codigo': componente.codigo_acb,
+            'categoria_montagem': componente.categoria_montagem or '',
             'quantidade': ic.quantidade,
+            'comprimento_mm': ic.comprimento_mm,
             'observacoes': ic.observacoes or ''
         })
     

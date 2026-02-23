@@ -100,27 +100,32 @@
                     </tr>
                 </thead>
                 <tbody>
+                    {% set tem_itens = false %}
                     {% if itens and itens|length > 0 %}
                         {% for row in itens %}
-                        <tr>
-                            <td>{{ row.quantidade or 0 }}</td>
-                            <td>
-                                {% if row.item and row.item.imagem_path %}
-                                    <img src="{{ row.item.imagem_path }}" class="thumb" alt="" onerror="this.style.display='none'">
-                                {% endif %}
-                            </td>
-                            <td>
-                                {% if row.item %}
-                                    <div class="fw-semibold" style="font-size: 12px;">{{ row.item.codigo_acb }}</div>
-                                    <div class="text-muted" style="font-size: 11px;">{{ row.item.nome }}</div>
-                                {% else %}
-                                    <span class="text-muted">-</span>
-                                {% endif %}
-                            </td>
-                            <td>{{ row.item.categoria_montagem if row.item else '' }}</td>
-                        </tr>
+                            {% if (row.quantidade or 0) > 0 %}
+                                {% set tem_itens = true %}
+                                <tr>
+                                    <td>{{ row.quantidade or 0 }}</td>
+                                    <td>
+                                        {% if row.item and row.item.imagem_path %}
+                                            <img src="{{ row.item.imagem_path }}" class="thumb" alt="" onerror="this.style.display='none'">
+                                        {% endif %}
+                                    </td>
+                                    <td>
+                                        {% if row.item %}
+                                            <div class="fw-semibold" style="font-size: 12px;">{{ row.item.codigo_acb }}</div>
+                                            <div class="text-muted" style="font-size: 11px;">{{ row.item.nome }}</div>
+                                        {% else %}
+                                            <span class="text-muted">-</span>
+                                        {% endif %}
+                                    </td>
+                                    <td>{{ row.item.categoria_montagem if row.item else '' }}</td>
+                                </tr>
+                            {% endif %}
                         {% endfor %}
-                    {% else %}
+                    {% endif %}
+                    {% if not tem_itens %}
                         <tr>
                             <td colspan="4">Nenhum item de montagem.</td>
                         </tr>

@@ -58,11 +58,21 @@
                 <div class="table-responsive">
                     <table class="table table-striped mb-0">
                         <thead>
+                            {% set has_chaveta = false %}
+                            {% for componente_rel in item.componentes %}
+                                {% if (componente_rel.item_componente.categoria_montagem or '')|lower == 'chaveta' %}
+                                    {% set has_chaveta = true %}
+                                {% endif %}
+                            {% endfor %}
                             <tr>
                                 <th style="width: 60px;">Imagem</th>
                                 <th style="width: 140px;">Código</th>
                                 <th>Nome</th>
                                 <th style="width: 90px;" class="text-end">Qtd</th>
+                                {% if has_chaveta %}
+                                <th style="width: 140px;" class="text-end">Comprimento (mm)</th>
+                                <th style="width: 120px;" class="text-end">Total (m)</th>
+                                {% endif %}
                                 <th style="width: 260px;">Obs.</th>
                             </tr>
                         </thead>
@@ -79,12 +89,24 @@
                                 <td><strong>{{ componente_rel.item_componente.codigo_acb }}</strong></td>
                                 <td>{{ componente_rel.item_componente.nome }}</td>
                                 <td class="text-end"><strong>{{ componente_rel.quantidade }}</strong></td>
+                                {% if has_chaveta %}
+                                <td class="text-end">
+                                    {% if (componente_rel.item_componente.categoria_montagem or '')|lower == 'chaveta' %}
+                                        {{ componente_rel.comprimento_mm if componente_rel.comprimento_mm is not none else '' }}
+                                    {% endif %}
+                                </td>
+                                <td class="text-end">
+                                    {% if (componente_rel.item_componente.categoria_montagem or '')|lower == 'chaveta' %}
+                                        {{ "%.2f"|format(componente_rel.comprimento_total_m) }}
+                                    {% endif %}
+                                </td>
+                                {% endif %}
                                 <td>{{ componente_rel.observacoes or '' }}</td>
                             </tr>
                             {% endfor %}
                             {% if not item.componentes %}
                             <tr>
-                                <td colspan="5" class="text-center text-muted py-4">Nenhum componente cadastrado</td>
+                                <td colspan="{{ 7 if has_chaveta else 5 }}" class="text-center text-muted py-4">Nenhum componente cadastrado</td>
                             </tr>
                             {% endif %}
                         </tbody>

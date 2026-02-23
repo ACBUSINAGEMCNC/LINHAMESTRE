@@ -68,6 +68,7 @@
                                 <option value="Peça pronta" {% if item.categoria_montagem == 'Peça pronta' %}selected{% endif %}>Peça pronta</option>
                                 <option value="Graxeira" {% if item.categoria_montagem == 'Graxeira' %}selected{% endif %}>Graxeira</option>
                                 <option value="Parafuso" {% if item.categoria_montagem == 'Parafuso' %}selected{% endif %}>Parafuso</option>
+                                <option value="Chaveta" {% if item.categoria_montagem == 'Chaveta' %}selected{% endif %}>Chaveta</option>
                             </select>
                         </div>
                     </div>
@@ -635,8 +636,8 @@
     <script>
         $(document).ready(function() {
             // Arrays para armazenar materiais e trabalhos
-            let materiais = {{ item_materiais|tojson|safe }};
-            let trabalhos = {{ item_trabalhos|tojson|safe }};
+            let materiais = [];
+            let trabalhos = [];
 
             $('.select2').select2({
                 placeholder: "Selecione um material",

@@ -403,6 +403,7 @@ class ItemComposto(db.Model):
     item_pai_id = db.Column(db.Integer, db.ForeignKey('item.id'), nullable=False)
     item_componente_id = db.Column(db.Integer, db.ForeignKey('item.id'), nullable=False)
     quantidade = db.Column(db.Integer, nullable=False, default=1)
+    comprimento_mm = db.Column(db.Float, nullable=True)
     observacoes = db.Column(db.Text)
     data_criacao = db.Column(db.DateTime, default=datetime.utcnow)
     
@@ -414,6 +415,13 @@ class ItemComposto(db.Model):
         """Calcula o peso total deste componente considerando a quantidade"""
         peso_unitario = self.item_componente.peso or 0
         return peso_unitario * self.quantidade
+
+    @property
+    def comprimento_total_m(self):
+        """Retorna o comprimento total (m) baseado no comprimento_mm e na quantidade."""
+        if not self.comprimento_mm:
+            return 0
+        return (self.comprimento_mm * (self.quantidade or 0)) / 1000.0
     
 class ArquivoCNC(db.Model):
     id = db.Column(db.Integer, primary_key=True)

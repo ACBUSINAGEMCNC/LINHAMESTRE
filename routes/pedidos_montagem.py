@@ -4,6 +4,7 @@ from models import (
     db,
     PedidoMontagem,
     ItemPedidoMontagem,
+    Item,
     Fornecedor,
     CotacaoPedidoMontagem,
     CotacaoItemPedidoMontagem,
@@ -22,7 +23,8 @@ def listar_pedidos_montagem():
 def visualizar_pedido_montagem(pedido_id):
     pedido = PedidoMontagem.query.get_or_404(pedido_id)
     itens = ItemPedidoMontagem.query.filter_by(pedido_montagem_id=pedido.id).all()
-    return render_template('pedidos_montagem/visualizar.html', pedido=pedido, itens=itens)
+    itens_disponiveis = Item.query.filter_by(tipo_item='montagem').order_by(Item.codigo_acb.asc()).all()
+    return render_template('pedidos_montagem/visualizar.html', pedido=pedido, itens=itens, itens_disponiveis=itens_disponiveis)
 
 
 @pedidos_montagem.route('/pedidos-montagem/numero/<string:numero>')
@@ -37,6 +39,75 @@ def imprimir_pedido_montagem(pedido_id):
     pedido = PedidoMontagem.query.get_or_404(pedido_id)
     itens = ItemPedidoMontagem.query.filter_by(pedido_montagem_id=pedido.id).all()
     return render_template('pedidos_montagem/imprimir.html', pedido=pedido, itens=itens)
+
+
+@pedidos_montagem.route('/pedidos-montagem/atualizar/<int:pedido_id>', methods=['POST'])
+def atualizar_pedido_montagem(pedido_id):
+    """Atualiza manualmente as quantidades dos itens de um pedido de montagem"""
+    pedido = PedidoMontagem.query.get_or_404(pedido_id)
+
+    itens = ItemPedidoMontagem.query.filter_by(pedido_montagem_id=pedido.id).all()
+    for item in itens:
+        campo = f"qtd_{item.id}"
+        if campo in request.form:
+            try:
+                qtd = int(request.form.get(campo) or 0)
+                item.quantidade = max(qtd, 0)
+            except ValueError:
+                pass
+
+    db.session.commit()
+    flash('Pedido de montagem atualizado.', 'success')
+    return redirect(url_for('pedidos_montagem.visualizar_pedido_montagem', pedido_id=pedido.id))
+
+
+@pedidos_montagem.route('/pedidos-montagem/adicionar-item/<int:pedido_id>', methods=['POST'])
+def adicionar_item_pedido_montagem(pedido_id):
+    pedido = PedidoMontagem.query.get_or_404(pedido_id)
+
+    item_id = request.form.get('item_id')
+    qtd_raw = request.form.get('quantidade')
+
+    try:
+        item_id_int = int(item_id)
+    except (TypeError, ValueError):
+        flash('Selecione um item válido.', 'warning')
+        return redirect(url_for('pedidos_montagem.visualizar_pedido_montagem', pedido_id=pedido.id))
+
+    try:
+        qtd = int(qtd_raw or 0)
+    except (TypeError, ValueError):
+        qtd = 0
+
+    if qtd < 0:
+        qtd = 0
+
+    item = Item.query.get(item_id_int)
+    if not item or (item.tipo_item or '').strip().lower() != 'montagem':
+        flash('Item inválido para montagem.', 'warning')
+        return redirect(url_for('pedidos_montagem.visualizar_pedido_montagem', pedido_id=pedido.id))
+
+    existente = ItemPedidoMontagem.query.filter_by(pedido_montagem_id=pedido.id, item_id=item.id).first()
+    if existente:
+        existente.quantidade = (existente.quantidade or 0) + qtd
+    else:
+        novo = ItemPedidoMontagem(pedido_montagem_id=pedido.id, item_id=item.id, quantidade=qtd)
+        db.session.add(novo)
+
+    db.session.commit()
+    flash('Item adicionado ao pedido de montagem.', 'success')
+    return redirect(url_for('pedidos_montagem.visualizar_pedido_montagem', pedido_id=pedido.id))
+
+
+@pedidos_montagem.route('/pedidos-montagem/remover-item/<int:item_pedido_id>', methods=['POST'])
+def remover_item_pedido_montagem(item_pedido_id):
+    item_pedido = ItemPedidoMontagem.query.get_or_404(item_pedido_id)
+    pedido_id = item_pedido.pedido_montagem_id
+
+    db.session.delete(item_pedido)
+    db.session.commit()
+    flash('Item removido do pedido de montagem.', 'success')
+    return redirect(url_for('pedidos_montagem.visualizar_pedido_montagem', pedido_id=pedido_id))
 
 
 @pedidos_montagem.route('/pedidos-montagem/comparativo/<int:pedido_id>')

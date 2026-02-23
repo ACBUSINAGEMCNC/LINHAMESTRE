@@ -145,6 +145,19 @@ def verificar_inicializar_banco():
                 return
             logger.warning(f"Erro ao migrar colunas tipo_item/categoria_montagem: {str(col_err)}")
 
+        # Executar migração para adicionar coluna comprimento_mm em item_composto
+        try:
+            from migrations.add_comprimento_mm_item_composto import migrate_postgres as migrate_composto_mm_postgres
+            if migrate_composto_mm_postgres():
+                logger.info("Coluna comprimento_mm verificada/adicionada com sucesso em item_composto.")
+            else:
+                logger.warning("Falha ao verificar/adicionar coluna comprimento_mm em item_composto.")
+        except Exception as col_err:
+            if _is_max_connections_error(col_err):
+                logger.warning("Supabase sem conexões disponíveis (Max client connections reached). Pulando demais migrações de startup.")
+                return
+            logger.warning(f"Erro ao migrar coluna comprimento_mm em item_composto: {str(col_err)}")
+
         # Executar migração para criar tabelas de Pedido de Montagem
         try:
             from migrations.add_pedido_montagem_tables import migrate_postgres as migrate_pedido_montagem_postgres
@@ -241,6 +254,20 @@ def verificar_inicializar_banco():
                         logger.info("Coluna quantidade_snapshot adicionada com sucesso à tabela pedido_ordem_servico.")
                     else:
                         logger.warning("Falha ao adicionar coluna quantidade_snapshot à tabela pedido_ordem_servico.")
+
+                # Verificar se tabela item_composto tem a coluna comprimento_mm
+                try:
+                    cursor.execute("PRAGMA table_info(item_composto)")
+                    composto_columns = [column[1] for column in cursor.fetchall()]
+                    if 'comprimento_mm' not in composto_columns:
+                        logger.info("Coluna comprimento_mm não encontrada na tabela item_composto. Executando migração...")
+                        from migrations.add_comprimento_mm_item_composto import migrate_sqlite as migrate_composto_mm_sqlite
+                        if migrate_composto_mm_sqlite():
+                            logger.info("Coluna comprimento_mm adicionada com sucesso à tabela item_composto.")
+                        else:
+                            logger.warning("Falha ao adicionar coluna comprimento_mm à tabela item_composto.")
+                except Exception as e:
+                    logger.warning(f"Erro ao verificar/migrar coluna comprimento_mm em item_composto: {str(e)}")
                         
                 # Verificar se tabela item tem a coluna tipo_bruto
                 try:
