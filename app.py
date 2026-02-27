@@ -399,7 +399,6 @@ def create_app():
         if is_serverless:
             engine_options['poolclass'] = NullPool
             engine_options['pool_recycle'] = 60
-            engine_options['pool_timeout'] = 5
         else:
             engine_options['pool_recycle'] = 180
             engine_options['pool_size'] = int(os.getenv('DB_POOL_SIZE', '2') or 2)
