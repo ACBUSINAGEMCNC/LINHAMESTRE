@@ -8,6 +8,8 @@ import json
 from flask import Flask, render_template, redirect, url_for, flash, request, session, send_file, g, has_request_context
 from flask_sqlalchemy import SQLAlchemy
 from sqlalchemy import event, inspect
+from sqlalchemy.pool import NullPool
+from sqlalchemy.exc import OperationalError
 from werkzeug.security import generate_password_hash, check_password_hash
 from werkzeug.utils import secure_filename
 from dotenv import load_dotenv
@@ -343,11 +345,17 @@ def create_app():
     # Definir diretório de banco gravável para init_db.py
     os.environ['DB_DIR'] = WRITABLE_DIR
     # Verificar e inicializar o banco de dados antes de criar a aplicação (a menos que pulado)
-    skip_db_checks = os.getenv('SKIP_DB_CHECKS', '').strip().lower() in ('1', 'true', 'yes')
+    is_serverless = bool(os.getenv('VERCEL') or os.environ.get("AWS_LAMBDA_FUNCTION_NAME"))
+    run_startup_migrations = _env_flag('RUN_STARTUP_MIGRATIONS')
+    skip_db_checks = _env_flag('SKIP_DB_CHECKS') or (is_serverless and not run_startup_migrations)
+
     if not skip_db_checks:
         verificar_inicializar_banco()
     else:
-        logger.info("SKIP_DB_CHECKS habilitado: pulando verificar_inicializar_banco()")
+        if is_serverless and not run_startup_migrations and not _env_flag('SKIP_DB_CHECKS'):
+            logger.info("Ambiente serverless detectado: pulando verificar_inicializar_banco() (defina RUN_STARTUP_MIGRATIONS=1 para habilitar)")
+        else:
+            logger.info("SKIP_DB_CHECKS habilitado: pulando verificar_inicializar_banco()")
     
     app = Flask(__name__)
     app.config['SECRET_KEY'] = os.getenv('SECRET_KEY', 'acbusinagem2023')
@@ -385,8 +393,18 @@ def create_app():
     if database_url and database_url.lower().startswith('postgresql'):
         engine_options = {
             'pool_pre_ping': True,
-            'pool_recycle': 180,
         }
+
+        # Em ambiente serverless, evitar pool de conexões para reduzir "Max client connections reached".
+        if is_serverless:
+            engine_options['poolclass'] = NullPool
+            engine_options['pool_recycle'] = 60
+            engine_options['pool_timeout'] = 5
+        else:
+            engine_options['pool_recycle'] = 180
+            engine_options['pool_size'] = int(os.getenv('DB_POOL_SIZE', '2') or 2)
+            engine_options['max_overflow'] = int(os.getenv('DB_MAX_OVERFLOW', '0') or 0)
+            engine_options['pool_timeout'] = int(os.getenv('DB_POOL_TIMEOUT', '10') or 10)
         # Supabase / poolers podem causar "DuplicatePreparedStatement" no psycopg3.
         # Desativar prepared statements evita esse erro.
         if database_url.lower().startswith('postgresql+psycopg://'):
@@ -566,7 +584,15 @@ def create_app():
     
     if not skip_db_checks:
         with app.app_context():
-            db.create_all()
+            try:
+                db.create_all()
+            except OperationalError as e:
+                if _is_max_connections_error(e):
+                    app.logger.warning("Supabase sem conexões disponíveis (Max client connections reached). Pulando db.create_all()/seed nesta inicialização.")
+                    # Deixar o app subir; requisições que dependem do DB serão tratadas com 503.
+                    return app
+                raise
+
             uri = app.config.get('SQLALCHEMY_DATABASE_URI') or ''
             db_type = 'PostgreSQL (Supabase)' if (uri.startswith('postgresql://') or uri.startswith('postgresql+')) else 'SQLite'
             app.logger.info("Tabelas %s criadas/verificadas com sucesso.", db_type)
@@ -622,7 +648,10 @@ def create_app():
             else:
                 app.logger.info("Usuário admin já existe no banco %s.", db_type)
     else:
-        app.logger.info("SKIP_DB_CHECKS habilitado: pulando db.create_all() e seed do usuário admin")
+        if is_serverless and not run_startup_migrations and not _env_flag('SKIP_DB_CHECKS'):
+            app.logger.info("Ambiente serverless detectado: pulando db.create_all()/seed (defina RUN_STARTUP_MIGRATIONS=1 para habilitar)")
+        else:
+            app.logger.info("SKIP_DB_CHECKS habilitado: pulando db.create_all() e seed do usuário admin")
     
     # Registrar blueprints
     from routes.clientes import clientes
@@ -699,7 +728,16 @@ def create_app():
 
         # Carregar usuário e validar sessão
         from models import Usuario
-        usuario = Usuario.query.get(session.get('usuario_id'))
+        try:
+            usuario = Usuario.query.get(session.get('usuario_id'))
+        except OperationalError as e:
+            # Evitar 500 quando o Supabase estiver com limite de conexões estourado.
+            if _is_max_connections_error(e):
+                return (
+                    "Banco de dados temporariamente ocupado (limite de conexões). Tente novamente em alguns segundos.",
+                    503,
+                )
+            raise
         if not usuario:
             session.clear()
             flash('Sessão inválida. Faça login novamente.', 'warning')
