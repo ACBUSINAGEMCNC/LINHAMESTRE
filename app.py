@@ -185,6 +185,18 @@ def verificar_inicializar_banco():
                 logger.warning("Supabase sem conexões disponíveis (Max client connections reached). Pulando demais migrações de startup.")
                 return
             logger.warning(f"Erro ao migrar tabelas de cotação/comparativo de Pedido de Montagem: {str(col_err)}")
+
+        try:
+            from migrations.add_aprovacao_campos import migrate_postgres as migrate_aprovacao_postgres
+            if migrate_aprovacao_postgres():
+                logger.info("Campos de aprovação verificados/adicionados com sucesso.")
+            else:
+                logger.warning("Falha ao verificar/adicionar campos de aprovação.")
+        except Exception as col_err:
+            if _is_max_connections_error(col_err):
+                logger.warning("Supabase sem conexões disponíveis (Max client connections reached). Pulando demais migrações de startup.")
+                return
+            logger.warning(f"Erro ao migrar campos de aprovação: {str(col_err)}")
             
         # Executar migração para adicionar colunas imagem e data_cadastro
         try:
@@ -325,6 +337,15 @@ def verificar_inicializar_banco():
                             logger.info("Estruturas de comparativo (Pedido de Montagem) criadas com sucesso.")
                         else:
                             logger.warning("Falha ao criar estruturas de comparativo (Pedido de Montagem).")
+
+                    try:
+                        from migrations.add_aprovacao_campos import migrate_sqlite as migrate_aprovacao_sqlite
+                        if migrate_aprovacao_sqlite():
+                            logger.info("Campos de aprovação verificados/adicionados com sucesso.")
+                        else:
+                            logger.warning("Falha ao verificar/adicionar campos de aprovação.")
+                    except Exception as e:
+                        logger.warning(f"Erro ao verificar/migrar campos de aprovação: {str(e)}")
                 except Exception as col_err:
                     logger.warning(f"Erro ao verificar/adicionar coluna tipo_bruto na tabela item: {str(col_err)}")
             except Exception as col_err:

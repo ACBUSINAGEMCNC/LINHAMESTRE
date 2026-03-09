@@ -36,6 +36,21 @@
         <div class="d-flex justify-content-between align-items-center mb-4">
             <h1>Pedido de Material: {{ pedido.numero }}</h1>
             <div>
+                {% if usuario_nivel == 'admin' %}
+                    {% if pedido.aprovado_em %}
+                        <form method="POST" action="/pedidos-material/desaprovar/{{ pedido.id }}" style="display:inline-block;">
+                            <button type="submit" class="btn btn-outline-warning">
+                                <i class="fas fa-check"></i> Aprovado
+                            </button>
+                        </form>
+                    {% else %}
+                        <form method="POST" action="/pedidos-material/aprovar/{{ pedido.id }}" style="display:inline-block;">
+                            <button type="submit" class="btn btn-outline-success">
+                                <i class="fas fa-stamp"></i> Aprovar
+                            </button>
+                        </form>
+                    {% endif %}
+                {% endif %}
                 <a href="/pedidos-material/comparativo/{{ pedido.id }}" class="btn btn-info">
                     <i class="fas fa-balance-scale"></i> Comparativo
                 </a>
@@ -71,6 +86,17 @@
                         <p><strong>Total de Itens:</strong> {{ pedido.itens|length }}</p>
                     </div>
                 </div>
+                {% if pedido.aprovado_em %}
+                <div class="alert alert-success mb-0 mt-3">
+                    <strong>Aprovado</strong>
+                    {% if pedido.aprovado_por_nome %}
+                        por {{ pedido.aprovado_por_nome }}
+                    {% endif %}
+                    {% if pedido.aprovado_em %}
+                        em {{ pedido.aprovado_em.strftime('%d/%m/%Y %H:%M') }}
+                    {% endif %}
+                </div>
+                {% endif %}
             </div>
         </div>
 

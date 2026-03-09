@@ -481,6 +481,9 @@ class OrdemServico(db.Model):
     data_criacao = db.Column(db.Date, default=datetime.now().date())
     status = db.Column(db.String(50), default='Entrada')
     posicao = db.Column(db.Integer, nullable=False, default=0)
+    aprovado_em = db.Column(db.DateTime, nullable=True)
+    aprovado_por_id = db.Column(db.Integer, db.ForeignKey('usuario.id'), nullable=True)
+    aprovado_por_nome = db.Column(db.String(120), nullable=True)
     pedidos = db.relationship('PedidoOrdemServico', backref='ordem_servico', lazy=True, cascade="all, delete-orphan")
     
     def __repr__(self):
@@ -547,6 +550,9 @@ class PedidoMaterial(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     numero = db.Column(db.String(20), unique=True)
     data_criacao = db.Column(db.Date, default=datetime.now().date())
+    aprovado_em = db.Column(db.DateTime, nullable=True)
+    aprovado_por_id = db.Column(db.Integer, db.ForeignKey('usuario.id'), nullable=True)
+    aprovado_por_nome = db.Column(db.String(120), nullable=True)
     itens = db.relationship('ItemPedidoMaterial', backref='pedido_material', lazy=True, cascade="all, delete-orphan")
     
     def __repr__(self):
@@ -575,6 +581,9 @@ class PedidoMontagem(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     numero = db.Column(db.String(20), unique=True)
     data_criacao = db.Column(db.Date, default=datetime.now().date())
+    aprovado_em = db.Column(db.DateTime, nullable=True)
+    aprovado_por_id = db.Column(db.Integer, db.ForeignKey('usuario.id'), nullable=True)
+    aprovado_por_nome = db.Column(db.String(120), nullable=True)
     itens = db.relationship('ItemPedidoMontagem', backref='pedido_montagem', lazy=True, cascade="all, delete-orphan")
 
     def __repr__(self):

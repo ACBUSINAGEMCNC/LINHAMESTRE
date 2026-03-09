@@ -4,6 +4,7 @@ from utils import validate_form_data, generate_next_code
 from datetime import datetime
 from sqlalchemy.exc import IntegrityError
 import re
+from flask import g
 
 ordens = Blueprint('ordens', __name__)
 
@@ -277,6 +278,38 @@ def imprimir_ordem_servico(ordem_id):
     # Modo bonito preserva o layout de tela e cores na impressão
     modo_bonito = request.args.get('bonito') == '1' or request.args.get('modo') == 'bonito'
     return render_template('ordens/imprimir.html', ordem=ordem, Item=Item, Pedido=Pedido, modo_bonito=modo_bonito)
+
+
+@ordens.route('/ordens-servico/aprovar/<int:ordem_id>', methods=['POST'])
+def aprovar_ordem_servico(ordem_id):
+    ordem = OrdemServico.query.get_or_404(ordem_id)
+    usuario = getattr(g, 'usuario', None)
+    if not usuario or getattr(usuario, 'nivel_acesso', None) != 'admin':
+        flash('Você não tem permissão para aprovar este documento.', 'danger')
+        return redirect(url_for('ordens.visualizar_ordem_servico', ordem_id=ordem.id))
+
+    ordem.aprovado_em = datetime.utcnow()
+    ordem.aprovado_por_id = usuario.id
+    ordem.aprovado_por_nome = getattr(usuario, 'nome', None)
+    db.session.commit()
+    flash('OS aprovada.', 'success')
+    return redirect(url_for('ordens.visualizar_ordem_servico', ordem_id=ordem.id))
+
+
+@ordens.route('/ordens-servico/desaprovar/<int:ordem_id>', methods=['POST'])
+def desaprovar_ordem_servico(ordem_id):
+    ordem = OrdemServico.query.get_or_404(ordem_id)
+    usuario = getattr(g, 'usuario', None)
+    if not usuario or getattr(usuario, 'nivel_acesso', None) != 'admin':
+        flash('Você não tem permissão para remover a aprovação deste documento.', 'danger')
+        return redirect(url_for('ordens.visualizar_ordem_servico', ordem_id=ordem.id))
+
+    ordem.aprovado_em = None
+    ordem.aprovado_por_id = None
+    ordem.aprovado_por_nome = None
+    db.session.commit()
+    flash('Aprovação removida.', 'success')
+    return redirect(url_for('ordens.visualizar_ordem_servico', ordem_id=ordem.id))
 
 @ordens.route('/ordens-servico/imprimir-desenho/<int:ordem_id>')
 def imprimir_desenho(ordem_id):

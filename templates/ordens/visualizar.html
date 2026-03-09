@@ -10,6 +10,21 @@
             <div class="text-muted small">Status: {{ ordem.status }}</div>
         </div>
         <div class="d-flex gap-2">
+            {% if usuario_nivel == 'admin' %}
+                {% if ordem.aprovado_em %}
+                    <form method="POST" action="{{ url_for('ordens.desaprovar_ordem_servico', ordem_id=ordem.id) }}" class="d-inline">
+                        <button type="submit" class="btn btn-outline-warning">
+                            <i class="fas fa-check"></i> Aprovado
+                        </button>
+                    </form>
+                {% else %}
+                    <form method="POST" action="{{ url_for('ordens.aprovar_ordem_servico', ordem_id=ordem.id) }}" class="d-inline">
+                        <button type="submit" class="btn btn-outline-success">
+                            <i class="fas fa-stamp"></i> Aprovar
+                        </button>
+                    </form>
+                {% endif %}
+            {% endif %}
             <a class="btn btn-outline-secondary" href="{{ url_for('ordens.listar_ordens_servico') }}">
                 <i class="fas fa-arrow-left"></i> Voltar
             </a>
@@ -31,6 +46,17 @@
                     <div><strong>Data:</strong> {{ ordem.data_criacao.strftime('%d/%m/%Y') if ordem.data_criacao else '' }}</div>
                     <div><strong>Status:</strong> {{ ordem.status }}</div>
                     <div><strong>Pedidos vinculados:</strong> {{ ordem.pedidos|length }}</div>
+                    {% if ordem.aprovado_em %}
+                    <div class="alert alert-success mt-3 mb-0">
+                        <strong>Aprovado</strong>
+                        {% if ordem.aprovado_por_nome %}
+                            por {{ ordem.aprovado_por_nome }}
+                        {% endif %}
+                        {% if ordem.aprovado_em %}
+                            em {{ ordem.aprovado_em.strftime('%d/%m/%Y %H:%M') }}
+                        {% endif %}
+                    </div>
+                    {% endif %}
                 </div>
             </div>
         </div>

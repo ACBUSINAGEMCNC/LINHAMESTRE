@@ -49,10 +49,45 @@
             object-fit: cover;
             border-radius: 4px;
         }
+
+        .stamp-approved {
+            position: fixed;
+            top: 14mm;
+            right: 14mm;
+            border: 3px solid #198754;
+            color: #198754;
+            padding: 8px 10px;
+            border-radius: 8px;
+            transform: rotate(6deg);
+            text-align: center;
+            font-weight: 800;
+            background: rgba(255, 255, 255, 0.85);
+            z-index: 9999;
+            min-width: 180px;
+        }
+        .stamp-approved .stamp-title {
+            font-size: 16px;
+            letter-spacing: 1px;
+        }
+        .stamp-approved .stamp-meta {
+            font-weight: 600;
+            font-size: 11px;
+            line-height: 1.2;
+            margin-top: 3px;
+        }
     </style>
 </head>
 <body>
     <div class="container mt-4">
+        {% if pedido.aprovado_em %}
+        <div class="stamp-approved">
+            <div class="stamp-title">APROVADO</div>
+            <div class="stamp-meta">
+                {% if pedido.aprovado_por_nome %}{{ pedido.aprovado_por_nome }}{% endif %}
+                {% if pedido.aprovado_em %}<div>{{ pedido.aprovado_em.strftime('%d/%m/%Y %H:%M') }}</div>{% endif %}
+            </div>
+        </div>
+        {% endif %}
         <div class="no-print mb-3">
             <button class="btn btn-primary" onclick="window.print()">Imprimir</button>
             <a href="/pedidos-montagem" class="btn btn-secondary">Voltar</a>

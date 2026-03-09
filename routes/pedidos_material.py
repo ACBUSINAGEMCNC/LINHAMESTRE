@@ -3,6 +3,7 @@ from models import db, PedidoMaterial, ItemPedidoMaterial, Material, Item, ItemM
 from utils import validate_form_data, generate_next_code, parse_json_field
 from datetime import datetime
 from sqlalchemy.exc import IntegrityError
+from flask import g
 
 pedidos_material = Blueprint('pedidos_material', __name__)
 
@@ -133,6 +134,38 @@ def imprimir_pedido_material(pedido_id):
     pedido = PedidoMaterial.query.get_or_404(pedido_id)
     material_item_map = _build_material_item_map(pedido)
     return render_template('pedidos_material/imprimir.html', pedido=pedido, Material=Material, material_item_map=material_item_map)
+
+
+@pedidos_material.route('/pedidos-material/aprovar/<int:pedido_id>', methods=['POST'])
+def aprovar_pedido_material(pedido_id):
+    pedido = PedidoMaterial.query.get_or_404(pedido_id)
+    usuario = getattr(g, 'usuario', None)
+    if not usuario or getattr(usuario, 'nivel_acesso', None) != 'admin':
+        flash('Você não tem permissão para aprovar este documento.', 'danger')
+        return redirect(url_for('pedidos_material.visualizar_pedido_material', pedido_id=pedido.id))
+
+    pedido.aprovado_em = datetime.utcnow()
+    pedido.aprovado_por_id = usuario.id
+    pedido.aprovado_por_nome = getattr(usuario, 'nome', None)
+    db.session.commit()
+    flash('Pedido de material aprovado.', 'success')
+    return redirect(url_for('pedidos_material.visualizar_pedido_material', pedido_id=pedido.id))
+
+
+@pedidos_material.route('/pedidos-material/desaprovar/<int:pedido_id>', methods=['POST'])
+def desaprovar_pedido_material(pedido_id):
+    pedido = PedidoMaterial.query.get_or_404(pedido_id)
+    usuario = getattr(g, 'usuario', None)
+    if not usuario or getattr(usuario, 'nivel_acesso', None) != 'admin':
+        flash('Você não tem permissão para remover a aprovação deste documento.', 'danger')
+        return redirect(url_for('pedidos_material.visualizar_pedido_material', pedido_id=pedido.id))
+
+    pedido.aprovado_em = None
+    pedido.aprovado_por_id = None
+    pedido.aprovado_por_nome = None
+    db.session.commit()
+    flash('Aprovação removida.', 'success')
+    return redirect(url_for('pedidos_material.visualizar_pedido_material', pedido_id=pedido.id))
 
 
 @pedidos_material.route('/pedidos-material/comparativo/<int:pedido_id>')

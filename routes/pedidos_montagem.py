@@ -1,5 +1,6 @@
 from flask import Blueprint, render_template, redirect, url_for, request, flash
 from datetime import datetime
+from flask import g
 from models import (
     db,
     PedidoMontagem,
@@ -39,6 +40,38 @@ def imprimir_pedido_montagem(pedido_id):
     pedido = PedidoMontagem.query.get_or_404(pedido_id)
     itens = ItemPedidoMontagem.query.filter_by(pedido_montagem_id=pedido.id).all()
     return render_template('pedidos_montagem/imprimir.html', pedido=pedido, itens=itens)
+
+
+@pedidos_montagem.route('/pedidos-montagem/aprovar/<int:pedido_id>', methods=['POST'])
+def aprovar_pedido_montagem(pedido_id):
+    pedido = PedidoMontagem.query.get_or_404(pedido_id)
+    usuario = getattr(g, 'usuario', None)
+    if not usuario or getattr(usuario, 'nivel_acesso', None) != 'admin':
+        flash('Você não tem permissão para aprovar este documento.', 'danger')
+        return redirect(url_for('pedidos_montagem.visualizar_pedido_montagem', pedido_id=pedido.id))
+
+    pedido.aprovado_em = datetime.utcnow()
+    pedido.aprovado_por_id = usuario.id
+    pedido.aprovado_por_nome = getattr(usuario, 'nome', None)
+    db.session.commit()
+    flash('Pedido de montagem aprovado.', 'success')
+    return redirect(url_for('pedidos_montagem.visualizar_pedido_montagem', pedido_id=pedido.id))
+
+
+@pedidos_montagem.route('/pedidos-montagem/desaprovar/<int:pedido_id>', methods=['POST'])
+def desaprovar_pedido_montagem(pedido_id):
+    pedido = PedidoMontagem.query.get_or_404(pedido_id)
+    usuario = getattr(g, 'usuario', None)
+    if not usuario or getattr(usuario, 'nivel_acesso', None) != 'admin':
+        flash('Você não tem permissão para remover a aprovação deste documento.', 'danger')
+        return redirect(url_for('pedidos_montagem.visualizar_pedido_montagem', pedido_id=pedido.id))
+
+    pedido.aprovado_em = None
+    pedido.aprovado_por_id = None
+    pedido.aprovado_por_nome = None
+    db.session.commit()
+    flash('Aprovação removida.', 'success')
+    return redirect(url_for('pedidos_montagem.visualizar_pedido_montagem', pedido_id=pedido.id))
 
 
 @pedidos_montagem.route('/pedidos-montagem/atualizar/<int:pedido_id>', methods=['POST'])
