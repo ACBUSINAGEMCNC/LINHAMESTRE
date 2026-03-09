@@ -226,6 +226,35 @@
                             <a href="{{ item.desenho_tecnico_path }}" class="btn btn-sm btn-outline-primary" target="_blank">
                                 <i class="fas fa-file-pdf"></i> Visualizar Desenho
                             </a>
+                            <a href="{{ url_for('itens.imprimir_desenho_item', item_id=item.id) }}" class="btn btn-sm btn-outline-secondary" target="_blank">
+                                <i class="fas fa-print"></i> Imprimir Desenho
+                            </a>
+                            {% if usuario_nivel == 'admin' %}
+                                {% if item.desenho_aprovado_em %}
+                                    <form method="POST" action="{{ url_for('itens.desaprovar_desenho_item', item_id=item.id) }}" style="display:inline-block;">
+                                        <button type="submit" class="btn btn-sm btn-outline-warning">
+                                            <i class="fas fa-check"></i> Aprovado
+                                        </button>
+                                    </form>
+                                {% else %}
+                                    <form method="POST" action="{{ url_for('itens.aprovar_desenho_item', item_id=item.id) }}" style="display:inline-block;">
+                                        <button type="submit" class="btn btn-sm btn-outline-success">
+                                            <i class="fas fa-stamp"></i> Aprovar
+                                        </button>
+                                    </form>
+                                {% endif %}
+                            {% endif %}
+                            {% if item.desenho_aprovado_em %}
+                            <div class="alert alert-success mt-2 mb-0">
+                                <strong>Aprovado</strong>
+                                {% if item.desenho_aprovado_por_nome %}
+                                    por {{ item.desenho_aprovado_por_nome }}
+                                {% endif %}
+                                {% if item.desenho_aprovado_em %}
+                                    em {{ item.desenho_aprovado_em.strftime('%d/%m/%Y %H:%M') }}
+                                {% endif %}
+                            </div>
+                            {% endif %}
                         </div>
                         {% endif %}
 

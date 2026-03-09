@@ -22,6 +22,8 @@ def _normalize_db_url(db_url: str) -> str:
         return db_url
     if db_url.startswith('postgresql+psycopg://'):
         return 'postgresql://' + db_url[len('postgresql+psycopg://'):]
+    if db_url.startswith('postgresql+psycopg2://'):
+        return 'postgresql://' + db_url[len('postgresql+psycopg2://'):]
     if db_url.startswith('postgres://'):
         return 'postgresql://' + db_url[len('postgres://'):]
     return db_url
@@ -51,15 +53,9 @@ def migrate_postgres() -> bool:
             return False
 
         stmts = [
-            "ALTER TABLE ordem_servico ADD COLUMN IF NOT EXISTS aprovado_em TIMESTAMP NULL;",
-            "ALTER TABLE ordem_servico ADD COLUMN IF NOT EXISTS aprovado_por_id INTEGER NULL;",
-            "ALTER TABLE ordem_servico ADD COLUMN IF NOT EXISTS aprovado_por_nome VARCHAR(120) NULL;",
-            "ALTER TABLE pedido_material ADD COLUMN IF NOT EXISTS aprovado_em TIMESTAMP NULL;",
-            "ALTER TABLE pedido_material ADD COLUMN IF NOT EXISTS aprovado_por_id INTEGER NULL;",
-            "ALTER TABLE pedido_material ADD COLUMN IF NOT EXISTS aprovado_por_nome VARCHAR(120) NULL;",
-            "ALTER TABLE pedido_montagem ADD COLUMN IF NOT EXISTS aprovado_em TIMESTAMP NULL;",
-            "ALTER TABLE pedido_montagem ADD COLUMN IF NOT EXISTS aprovado_por_id INTEGER NULL;",
-            "ALTER TABLE pedido_montagem ADD COLUMN IF NOT EXISTS aprovado_por_nome VARCHAR(120) NULL;",
+            "ALTER TABLE item ADD COLUMN IF NOT EXISTS desenho_aprovado_em TIMESTAMP NULL;",
+            "ALTER TABLE item ADD COLUMN IF NOT EXISTS desenho_aprovado_por_id INTEGER NULL;",
+            "ALTER TABLE item ADD COLUMN IF NOT EXISTS desenho_aprovado_por_nome VARCHAR(120) NULL;",
         ]
 
         for s in stmts:
@@ -73,19 +69,6 @@ def migrate_postgres() -> bool:
     finally:
         if conn:
             conn.close()
-
-
-def run() -> bool:
-    load_dotenv()
-    db_url = os.getenv('DATABASE_URL', '') or ''
-    if db_url.lower().startswith('postgres'):
-        return migrate_postgres()
-    return migrate_sqlite()
-
-
-if __name__ == '__main__':
-    ok = run()
-    raise SystemExit(0 if ok else 1)
 
 
 def _sqlite_add_column_if_missing(cursor, table: str, column: str, ddl: str) -> None:
@@ -108,10 +91,9 @@ def migrate_sqlite() -> bool:
         conn = sqlite3.connect(db_path)
         cursor = conn.cursor()
 
-        for table in ('ordem_servico', 'pedido_material', 'pedido_montagem'):
-            _sqlite_add_column_if_missing(cursor, table, 'aprovado_em', 'DATETIME NULL')
-            _sqlite_add_column_if_missing(cursor, table, 'aprovado_por_id', 'INTEGER NULL')
-            _sqlite_add_column_if_missing(cursor, table, 'aprovado_por_nome', 'VARCHAR(120) NULL')
+        _sqlite_add_column_if_missing(cursor, 'item', 'desenho_aprovado_em', 'DATETIME NULL')
+        _sqlite_add_column_if_missing(cursor, 'item', 'desenho_aprovado_por_id', 'INTEGER NULL')
+        _sqlite_add_column_if_missing(cursor, 'item', 'desenho_aprovado_por_nome', 'VARCHAR(120) NULL')
 
         conn.commit()
         return True
@@ -121,3 +103,16 @@ def migrate_sqlite() -> bool:
     finally:
         if conn:
             conn.close()
+
+
+def run() -> bool:
+    load_dotenv()
+    db_url = os.getenv('DATABASE_URL', '') or ''
+    if db_url.lower().startswith('postgres'):
+        return migrate_postgres()
+    return migrate_sqlite()
+
+
+if __name__ == '__main__':
+    ok = run()
+    raise SystemExit(0 if ok else 1)

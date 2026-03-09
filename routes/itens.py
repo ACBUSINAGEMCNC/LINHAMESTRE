@@ -5,7 +5,7 @@ import json
 from datetime import datetime
 from models import db, Item, Material, Trabalho, ItemMaterial, ItemTrabalho, Pedido, ArquivoCNC, ItemComposto
 from utils import validate_form_data, save_file, generate_next_code, parse_json_field
-from flask import current_app
+from flask import current_app, g
 from sqlalchemy.orm import selectinload
 
 itens = Blueprint('itens', __name__)
@@ -444,6 +444,49 @@ def visualizar_item(item_id):
     """Rota para visualizar detalhes de um item"""
     item = Item.query.get_or_404(item_id)
     return render_template('itens/visualizar.html', item=item)
+
+
+@itens.route('/itens/imprimir-desenho/<int:item_id>')
+def imprimir_desenho_item(item_id):
+    """Impressão do desenho técnico do Item com carimbo de aprovação."""
+    item = Item.query.get_or_404(item_id)
+    return render_template('itens/imprimir_desenho.html', item=item)
+
+
+@itens.route('/itens/aprovar-desenho/<int:item_id>', methods=['POST'])
+def aprovar_desenho_item(item_id):
+    item = Item.query.get_or_404(item_id)
+    usuario = getattr(g, 'usuario', None)
+    if not usuario or getattr(usuario, 'nivel_acesso', None) != 'admin':
+        flash('Você não tem permissão para aprovar o desenho.', 'danger')
+        return redirect(url_for('itens.visualizar_item', item_id=item.id))
+
+    if not item.desenho_tecnico:
+        flash('Este item não possui desenho técnico para aprovar.', 'warning')
+        return redirect(url_for('itens.visualizar_item', item_id=item.id))
+
+    item.desenho_aprovado_em = datetime.utcnow()
+    item.desenho_aprovado_por_id = usuario.id
+    item.desenho_aprovado_por_nome = getattr(usuario, 'nome', None)
+    db.session.commit()
+    flash('Desenho aprovado.', 'success')
+    return redirect(url_for('itens.visualizar_item', item_id=item.id))
+
+
+@itens.route('/itens/desaprovar-desenho/<int:item_id>', methods=['POST'])
+def desaprovar_desenho_item(item_id):
+    item = Item.query.get_or_404(item_id)
+    usuario = getattr(g, 'usuario', None)
+    if not usuario or getattr(usuario, 'nivel_acesso', None) != 'admin':
+        flash('Você não tem permissão para remover aprovação do desenho.', 'danger')
+        return redirect(url_for('itens.visualizar_item', item_id=item.id))
+
+    item.desenho_aprovado_em = None
+    item.desenho_aprovado_por_id = None
+    item.desenho_aprovado_por_nome = None
+    db.session.commit()
+    flash('Aprovação do desenho removida.', 'success')
+    return redirect(url_for('itens.visualizar_item', item_id=item.id))
 
 @itens.route('/api/item/<int:item_id>')
 def api_item(item_id):

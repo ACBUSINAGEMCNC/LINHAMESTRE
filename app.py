@@ -346,6 +346,15 @@ def verificar_inicializar_banco():
                             logger.warning("Falha ao verificar/adicionar campos de aprovação.")
                     except Exception as e:
                         logger.warning(f"Erro ao verificar/migrar campos de aprovação: {str(e)}")
+
+                    try:
+                        from migrations.add_item_desenho_aprovacao_campos import migrate_sqlite as migrate_item_desenho_aprovacao_sqlite
+                        if migrate_item_desenho_aprovacao_sqlite():
+                            logger.info("Campos de aprovação de desenho do Item verificados/adicionados com sucesso.")
+                        else:
+                            logger.warning("Falha ao verificar/adicionar campos de aprovação de desenho do Item.")
+                    except Exception as e:
+                        logger.warning(f"Erro ao verificar/migrar campos de aprovação de desenho do Item: {str(e)}")
                 except Exception as col_err:
                     logger.warning(f"Erro ao verificar/adicionar coluna tipo_bruto na tabela item: {str(col_err)}")
             except Exception as col_err:
@@ -644,6 +653,15 @@ def create_app():
                 upgrade(db.engine)
             except Exception as e:
                 app.logger.warning(f"Migração suporte_bt/comprimento_fora (ferramentas): {str(e)}")
+
+            try:
+                from migrations.add_item_desenho_aprovacao_campos import migrate_postgres as migrate_item_desenho_aprovacao_postgres
+                if migrate_item_desenho_aprovacao_postgres():
+                    app.logger.info("Campos de aprovação de desenho do Item verificados/adicionados com sucesso.")
+                else:
+                    app.logger.warning("Falha ao verificar/adicionar campos de aprovação de desenho do Item.")
+            except Exception as e:
+                app.logger.warning(f"Migração aprovação desenho do Item: {str(e)}")
             
             # Garantir que o usuário admin existe (especialmente importante no Vercel)
             from models import Usuario
