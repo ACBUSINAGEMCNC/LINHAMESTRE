@@ -49,7 +49,7 @@
                             <select class="form-select select2" id="estoque_id" name="estoque_id" required>
                                 <option value="">Selecione um item</option>
                                 {% for item in estoque %}
-                                <option value="{{ item.id }}">{{ item.item.codigo_acb }} - {{ item.item.nome }} (Disponível: {{ item.quantidade }})</option>
+                                <option value="{{ item.id }}" data-codigo="{{ item.item.codigo_acb }}" data-nome="{{ item.item.nome }}" data-imagem="{{ item.item.imagem_path or '' }}" data-qty="{{ item.quantidade }}">{{ item.item.codigo_acb }} - {{ item.item.nome }} (Disponível: {{ item.quantidade }})</option>
                                 {% endfor %}
                             </select>
                         </div>
@@ -83,9 +83,34 @@
     <script src="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/js/select2.min.js"></script>
     <script>
         $(document).ready(function() {
+            function formatItem(item) {
+                if (!item.id) {
+                    return item.text;
+                }
+                const $el = $(item.element);
+                const codigo = $el.data('codigo') || '';
+                const nome = $el.data('nome') || '';
+                const img = $el.data('imagem') || '';
+                const qty = $el.data('qty');
+
+                const $container = $('<div class="d-flex align-items-center gap-2"></div>');
+                if (img) {
+                    $container.append($('<img>').attr('src', img).css({ width: '34px', height: '34px', objectFit: 'cover', borderRadius: '6px', border: '1px solid #ddd' }));
+                }
+                const $txt = $('<div></div>');
+                $txt.append($('<div class="fw-semibold"></div>').text((codigo ? codigo + ' - ' : '') + nome));
+                if (qty !== undefined && qty !== null) {
+                    $txt.append($('<div class="text-muted small"></div>').text('Disponível: ' + qty));
+                }
+                $container.append($txt);
+                return $container;
+            }
+
             $('.select2').select2({
                 theme: 'bootstrap-5',
-                width: '100%'
+                width: '100%',
+                templateResult: formatItem,
+                templateSelection: formatItem
             });
         });
     </script>

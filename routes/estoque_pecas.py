@@ -9,8 +9,12 @@ estoque_pecas = Blueprint('estoque_pecas', __name__)
 def index():
     """Rota para a página principal do estoque de peças"""
     # Organizar estoque por prateleira
-    estoque = EstoquePecas.query.order_by(EstoquePecas.prateleira, EstoquePecas.posicao).all()
-    return render_template('estoque_pecas/index.html', estoque=estoque)
+    show_zero = (request.args.get('show_zero') or '').strip().lower() in ('1', 'true', 'yes', 'sim')
+    q = EstoquePecas.query
+    if not show_zero:
+        q = q.filter(EstoquePecas.quantidade > 0)
+    estoque = q.order_by(EstoquePecas.prateleira, EstoquePecas.posicao).all()
+    return render_template('estoque_pecas/index.html', estoque=estoque, show_zero=show_zero)
 
 @estoque_pecas.route('/estoque-pecas/entrada', methods=['GET', 'POST'])
 def entrada():

@@ -49,7 +49,7 @@
                             <select class="form-select select2" id="item_id" name="item_id" required>
                                 <option value="">Selecione um item</option>
                                 {% for item in itens %}
-                                <option value="{{ item.id }}">{{ item.codigo_acb }} - {{ item.nome }}</option>
+                                <option value="{{ item.id }}" data-codigo="{{ item.codigo_acb }}" data-nome="{{ item.nome }}" data-imagem="{{ item.imagem_path or '' }}">{{ item.codigo_acb }} - {{ item.nome }}</option>
                                 {% endfor %}
                             </select>
                         </div>
@@ -95,9 +95,30 @@
     <script src="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/js/select2.min.js"></script>
     <script>
         $(document).ready(function() {
+            function formatItem(item) {
+                if (!item.id) {
+                    return item.text;
+                }
+                const $el = $(item.element);
+                const codigo = $el.data('codigo') || '';
+                const nome = $el.data('nome') || '';
+                const img = $el.data('imagem') || '';
+
+                const $container = $('<div class="d-flex align-items-center gap-2"></div>');
+                if (img) {
+                    $container.append($('<img>').attr('src', img).css({ width: '34px', height: '34px', objectFit: 'cover', borderRadius: '6px', border: '1px solid #ddd' }));
+                }
+                const $txt = $('<div></div>');
+                $txt.append($('<div class="fw-semibold"></div>').text((codigo ? codigo + ' - ' : '') + nome));
+                $container.append($txt);
+                return $container;
+            }
+
             $('.select2').select2({
                 theme: 'bootstrap-5',
-                width: '100%'
+                width: '100%',
+                templateResult: formatItem,
+                templateSelection: formatItem
             });
         });
     </script>
