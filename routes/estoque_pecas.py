@@ -46,6 +46,23 @@ def entrada():
         observacao = request.form.get('observacao', '')
         prateleira = request.form.get('prateleira', '')
         posicao = request.form.get('posicao', '')
+        estante = request.form.get('estante')
+        secao = request.form.get('secao')
+        linha = request.form.get('linha')
+        coluna = request.form.get('coluna')
+
+        def _to_int(v):
+            try:
+                if v is None or str(v).strip() == '':
+                    return None
+                return int(v)
+            except Exception:
+                return None
+
+        estante_i = _to_int(estante)
+        secao_i = _to_int(secao)
+        linha_i = _to_int(linha)
+        coluna_i = _to_int(coluna)
         
         # Verificar se já existe um registro para este item
         estoque_existente = EstoquePecas.query.filter_by(item_id=item_id).first()
@@ -59,6 +76,15 @@ def entrada():
                 estoque_existente.prateleira = prateleira
             if posicao:
                 estoque_existente.posicao = posicao
+
+            if estante_i:
+                estoque_existente.estante = estante_i
+            if secao_i:
+                estoque_existente.secao = secao_i
+            if linha_i:
+                estoque_existente.linha = linha_i
+            if coluna_i:
+                estoque_existente.coluna = coluna_i
             
             # Registrar movimentação
             movimentacao = MovimentacaoEstoquePecas(
@@ -79,6 +105,10 @@ def entrada():
                 data_entrada=datetime.now().date(),
                 prateleira=prateleira,
                 posicao=posicao,
+                estante=estante_i,
+                secao=secao_i,
+                linha=linha_i,
+                coluna=coluna_i,
                 observacao=observacao
             )
             
@@ -172,6 +202,96 @@ def historico(estoque_id):
     
     return render_template('estoque_pecas/historico.html', estoque=estoque_item, movimentacoes=movimentacoes)
 
+
+@estoque_pecas.route('/estoque-pecas/mapa')
+def mapa():
+    estante = request.args.get('estante')
+    try:
+        estante_i = int(estante) if estante is not None and str(estante).strip() != '' else 1
+    except Exception:
+        estante_i = 1
+    if estante_i < 1 or estante_i > 8:
+        estante_i = 1
+
+    itens_estoque = EstoquePecas.query.order_by(EstoquePecas.id.desc()).all()
+    ocupados = (
+        EstoquePecas.query
+        .filter(EstoquePecas.estante == estante_i)
+        .all()
+    )
+
+    ocupados_map = {}
+    for e in ocupados:
+        if e.secao and e.linha and e.coluna:
+            ocupados_map[(int(e.secao), int(e.linha), int(e.coluna))] = e
+
+    return render_template(
+        'estoque_pecas/mapa.html',
+        estante=estante_i,
+        ocupados_map=ocupados_map,
+        itens_estoque=itens_estoque,
+    )
+
+
+@estoque_pecas.route('/estoque-pecas/mapa/definir', methods=['POST'])
+def definir_localizacao_mapa():
+    estoque_id = request.form.get('estoque_id')
+    estante = request.form.get('estante')
+    secao = request.form.get('secao')
+    linha = request.form.get('linha')
+    coluna = request.form.get('coluna')
+
+    def _to_int(v):
+        try:
+            if v is None or str(v).strip() == '':
+                return None
+            return int(v)
+        except Exception:
+            return None
+
+    estoque_id_i = _to_int(estoque_id)
+    estante_i = _to_int(estante)
+    secao_i = _to_int(secao)
+    linha_i = _to_int(linha)
+    coluna_i = _to_int(coluna)
+
+    if not estoque_id_i:
+        flash('Selecione um item do estoque.', 'danger')
+        return redirect(url_for('estoque_pecas.mapa', estante=estante_i or 1))
+
+    if not (estante_i and secao_i and linha_i and coluna_i):
+        flash('Informe Estante, Seção, Linha e Coluna.', 'danger')
+        return redirect(url_for('estoque_pecas.mapa', estante=estante_i or 1))
+
+    if estante_i < 1 or estante_i > 8 or secao_i < 1 or secao_i > 4 or linha_i < 1 or linha_i > 2 or coluna_i < 1 or coluna_i > 10:
+        flash('Endereço inválido.', 'danger')
+        return redirect(url_for('estoque_pecas.mapa', estante=estante_i or 1))
+
+    estoque_item = EstoquePecas.query.get_or_404(estoque_id_i)
+
+    ocupado = (
+        EstoquePecas.query
+        .filter(
+            EstoquePecas.estante == estante_i,
+            EstoquePecas.secao == secao_i,
+            EstoquePecas.linha == linha_i,
+            EstoquePecas.coluna == coluna_i,
+            EstoquePecas.id != estoque_item.id,
+        )
+        .first()
+    )
+    if ocupado:
+        flash('Esta posição já está ocupada por outro item. Remova/alterne antes.', 'warning')
+        return redirect(url_for('estoque_pecas.mapa', estante=estante_i))
+
+    estoque_item.estante = estante_i
+    estoque_item.secao = secao_i
+    estoque_item.linha = linha_i
+    estoque_item.coluna = coluna_i
+    db.session.commit()
+    flash('Localização atualizada com sucesso!', 'success')
+    return redirect(url_for('estoque_pecas.mapa', estante=estante_i))
+
 @estoque_pecas.route('/estoque-pecas/atualizar-localizacao/<int:estoque_id>', methods=['POST'])
 def atualizar_localizacao(estoque_id):
     """Rota para atualizar a localização (prateleira e posição) de um item no estoque"""
@@ -180,9 +300,25 @@ def atualizar_localizacao(estoque_id):
     if request.method == 'POST':
         prateleira = request.form.get('prateleira', '')
         posicao = request.form.get('posicao', '')
+        estante = request.form.get('estante')
+        secao = request.form.get('secao')
+        linha = request.form.get('linha')
+        coluna = request.form.get('coluna')
+
+        def _to_int(v):
+            try:
+                if v is None or str(v).strip() == '':
+                    return None
+                return int(v)
+            except Exception:
+                return None
         
         estoque_item.prateleira = prateleira
         estoque_item.posicao = posicao
+        estoque_item.estante = _to_int(estante)
+        estoque_item.secao = _to_int(secao)
+        estoque_item.linha = _to_int(linha)
+        estoque_item.coluna = _to_int(coluna)
         
         db.session.commit()
         flash('Localização atualizada com sucesso!', 'success')

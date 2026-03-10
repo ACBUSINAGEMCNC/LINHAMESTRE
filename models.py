@@ -649,6 +649,10 @@ class EstoquePecas(db.Model):
     data_entrada = db.Column(db.Date, default=datetime.now().date())
     prateleira = db.Column(db.String(10))  # Novo campo para armazenar a prateleira
     posicao = db.Column(db.String(10))     # Novo campo para armazenar a posição
+    estante = db.Column(db.Integer)        # 1..8
+    secao = db.Column(db.Integer)          # 1..4
+    linha = db.Column(db.Integer)          # 1..2
+    coluna = db.Column(db.Integer)         # 1..10
     observacao = db.Column(db.Text)
     item = relationship('Item', backref='estoque_pecas', lazy=True)
     movimentacoes = relationship('MovimentacaoEstoquePecas', backref='estoque_pecas', lazy=True, cascade="all, delete-orphan")

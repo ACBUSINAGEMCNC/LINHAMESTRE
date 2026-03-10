@@ -71,6 +71,44 @@
                         </div>
                     </div>
                     <div class="row mb-3">
+                        <div class="col-md-3">
+                            <label for="estante" class="form-label">Estante</label>
+                            <select class="form-select" id="estante" name="estante">
+                                <option value="">--</option>
+                                {% for n in range(1, 9) %}
+                                <option value="{{ n }}">{{ n }}</option>
+                                {% endfor %}
+                            </select>
+                        </div>
+                        <div class="col-md-3">
+                            <label for="secao" class="form-label">Seção</label>
+                            <select class="form-select" id="secao" name="secao">
+                                <option value="">--</option>
+                                {% for n in range(1, 5) %}
+                                <option value="{{ n }}">{{ n }}</option>
+                                {% endfor %}
+                            </select>
+                        </div>
+                        <div class="col-md-3">
+                            <label for="linha" class="form-label">Linha</label>
+                            <select class="form-select" id="linha" name="linha">
+                                <option value="">--</option>
+                                {% for n in range(1, 3) %}
+                                <option value="{{ n }}">{{ n }}</option>
+                                {% endfor %}
+                            </select>
+                        </div>
+                        <div class="col-md-3">
+                            <label for="coluna" class="form-label">Coluna</label>
+                            <select class="form-select" id="coluna" name="coluna">
+                                <option value="">--</option>
+                                {% for n in range(1, 11) %}
+                                <option value="{{ n }}">{{ n }}</option>
+                                {% endfor %}
+                            </select>
+                        </div>
+                    </div>
+                    <div class="row mb-3">
                         <div class="col-md-6">
                             <label for="referencia" class="form-label">Referência</label>
                             <input type="text" class="form-control" id="referencia" name="referencia" placeholder="Número de OS, pedido, etc.">

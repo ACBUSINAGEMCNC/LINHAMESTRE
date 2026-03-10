@@ -1,0 +1,250 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Mapa do Estoque de Peças - ACB Usinagem CNC</title>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css">
+    <link href="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/css/select2.min.css" rel="stylesheet" />
+    <link href="https://cdn.jsdelivr.net/npm/select2-bootstrap-5-theme@1.3.0/dist/select2-bootstrap-5-theme.min.css" rel="stylesheet" />
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+    <style>
+        .grid {
+            display: grid;
+            grid-template-columns: repeat(10, minmax(64px, 1fr));
+            gap: 8px;
+        }
+        .cell {
+            border: 1px solid #dee2e6;
+            border-radius: 10px;
+            padding: 8px;
+            background: #fff;
+            min-height: 74px;
+            cursor: pointer;
+            transition: transform .08s ease, box-shadow .08s ease;
+        }
+        .cell:hover {
+            transform: translateY(-1px);
+            box-shadow: 0 6px 18px rgba(0,0,0,.08);
+        }
+        .cell.empty {
+            background: #f8f9fa;
+        }
+        .cell .code {
+            font-size: 11px;
+            font-weight: 700;
+            line-height: 1.1;
+        }
+        .cell .name {
+            font-size: 10px;
+            color: #6c757d;
+            line-height: 1.1;
+            margin-top: 2px;
+            max-height: 24px;
+            overflow: hidden;
+        }
+        .thumb {
+            width: 100%;
+            height: 36px;
+            object-fit: cover;
+            border-radius: 8px;
+            border: 1px solid #e9ecef;
+            margin-bottom: 6px;
+            background: #fff;
+        }
+        .secao-title {
+            font-weight: 800;
+            margin-bottom: 8px;
+        }
+    </style>
+</head>
+<body>
+    <nav class="navbar navbar-expand-lg navbar-dark bg-primary">
+        <div class="container">
+            <a class="navbar-brand" href="/">ACB Usinagem CNC</a>
+            <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav">
+                <span class="navbar-toggler-icon"></span>
+            </button>
+            <div class="collapse navbar-collapse" id="navbarNav">
+                <ul class="navbar-nav">
+                    <li class="nav-item"><a class="nav-link" href="/"><i class="fas fa-home"></i> Home</a></li>
+                    <li class="nav-item"><a class="nav-link" href="/estoque"><i class="fas fa-warehouse"></i> Estoque</a></li>
+                    <li class="nav-item"><a class="nav-link active" href="/estoque-pecas"><i class="fas fa-boxes"></i> Estoque de Peças</a></li>
+                </ul>
+            </div>
+        </div>
+    </nav>
+
+    <div class="container py-4">
+        <div class="d-flex justify-content-between align-items-center mb-3">
+            <h1 class="mb-0">Mapa do Estoque</h1>
+            <div class="d-flex gap-2">
+                <a href="/estoque-pecas" class="btn btn-secondary"><i class="fas fa-arrow-left"></i> Voltar</a>
+            </div>
+        </div>
+
+        <div class="card mb-3">
+            <div class="card-body d-flex flex-wrap justify-content-between align-items-center gap-3">
+                <div>
+                    <div class="fw-semibold">Estante</div>
+                    <div class="text-muted small">Selecione a estante (1 a 8)</div>
+                </div>
+                <div class="d-flex align-items-center gap-2">
+                    <select id="estanteSelect" class="form-select" style="width: 160px;">
+                        {% for n in range(1, 9) %}
+                        <option value="{{ n }}" {% if estante == n %}selected{% endif %}>{{ n }}</option>
+                        {% endfor %}
+                    </select>
+                    <a id="btnIr" href="{{ url_for('estoque_pecas.mapa', estante=estante) }}" class="btn btn-primary">Ir</a>
+                </div>
+            </div>
+        </div>
+
+        <div class="row g-3">
+            {% for sec in range(1, 5) %}
+            <div class="col-12 col-xl-6">
+                <div class="card h-100">
+                    <div class="card-body">
+                        <div class="secao-title">Seção {{ sec }}</div>
+
+                        {% for lin in range(1, 3) %}
+                        <div class="mb-2">
+                            <div class="text-muted small mb-1">Linha {{ lin }}</div>
+                            <div class="grid">
+                                {% for col in range(1, 11) %}
+                                    {% set key = (sec, lin, col) %}
+                                    {% set e = ocupados_map.get(key) %}
+                                    <div class="cell {% if not e %}empty{% endif %}" data-secao="{{ sec }}" data-linha="{{ lin }}" data-coluna="{{ col }}">
+                                        {% if e %}
+                                            {% if e.item and e.item.imagem_path %}
+                                            <img class="thumb" src="{{ e.item.imagem_path }}" alt="Imagem">
+                                            {% endif %}
+                                            <div class="code">{{ e.item.codigo_acb if e.item else '---' }}</div>
+                                            <div class="name">{{ e.item.nome if e.item else '' }}</div>
+                                        {% else %}
+                                            <div class="text-muted small">Vazio</div>
+                                            <div class="text-muted" style="font-size: 10px;">C{{ col }}</div>
+                                        {% endif %}
+                                    </div>
+                                {% endfor %}
+                            </div>
+                        </div>
+                        {% endfor %}
+
+                    </div>
+                </div>
+            </div>
+            {% endfor %}
+        </div>
+
+        <div class="modal fade" id="definirModal" tabindex="-1" aria-hidden="true">
+            <div class="modal-dialog">
+                <div class="modal-content">
+                    <div class="modal-header">
+                        <h5 class="modal-title">Definir localização</h5>
+                        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Fechar"></button>
+                    </div>
+                    <form method="POST" action="{{ url_for('estoque_pecas.definir_localizacao_mapa') }}">
+                        <div class="modal-body">
+                            <input type="hidden" name="estante" id="mEstante" value="{{ estante }}">
+                            <input type="hidden" name="secao" id="mSecao">
+                            <input type="hidden" name="linha" id="mLinha">
+                            <input type="hidden" name="coluna" id="mColuna">
+
+                            <div class="mb-2">
+                                <span class="badge bg-primary" id="mEndereco"></span>
+                            </div>
+
+                            <div class="mb-3">
+                                <label class="form-label">Item do estoque</label>
+                                <select class="form-select select2" name="estoque_id" id="mEstoqueId" required>
+                                    <option value="">Selecione...</option>
+                                    {% for e in itens_estoque %}
+                                    <option value="{{ e.id }}" data-codigo="{{ e.item.codigo_acb if e.item else '' }}" data-nome="{{ e.item.nome if e.item else '' }}" data-imagem="{{ e.item.imagem_path if e.item and e.item.imagem_path else '' }}" data-qty="{{ e.quantidade }}">
+                                        {{ e.item.codigo_acb if e.item else '' }} - {{ e.item.nome if e.item else '' }} (Qtd: {{ e.quantidade }})
+                                    </option>
+                                    {% endfor %}
+                                </select>
+                                <div class="text-muted small mt-1">Você pode pesquisar pelo nome/código.</div>
+                            </div>
+                        </div>
+                        <div class="modal-footer">
+                            <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
+                            <button type="submit" class="btn btn-primary">Salvar</button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+
+    </div>
+
+    <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/js/select2.min.js"></script>
+    <script>
+        (function() {
+            const estanteSelect = document.getElementById('estanteSelect');
+            const btnIr = document.getElementById('btnIr');
+            if (estanteSelect && btnIr) {
+                estanteSelect.addEventListener('change', function() {
+                    btnIr.href = `{{ url_for('estoque_pecas.mapa') }}?estante=${encodeURIComponent(estanteSelect.value)}`;
+                });
+            }
+        })();
+
+        $(document).ready(function() {
+            function formatItem(item) {
+                if (!item.id) {
+                    return item.text;
+                }
+                const $el = $(item.element);
+                const codigo = $el.data('codigo') || '';
+                const nome = $el.data('nome') || '';
+                const img = $el.data('imagem') || '';
+                const qty = $el.data('qty');
+
+                const $container = $('<div class="d-flex align-items-center gap-2"></div>');
+                if (img) {
+                    $container.append($('<img>').attr('src', img).css({ width: '34px', height: '34px', objectFit: 'cover', borderRadius: '6px', border: '1px solid #ddd' }));
+                }
+                const $txt = $('<div></div>');
+                $txt.append($('<div class="fw-semibold"></div>').text((codigo ? codigo + ' - ' : '') + nome));
+                if (qty !== undefined && qty !== null) {
+                    $txt.append($('<div class="text-muted small"></div>').text('Qtd: ' + qty));
+                }
+                $container.append($txt);
+                return $container;
+            }
+
+            $('.select2').select2({
+                theme: 'bootstrap-5',
+                width: '100%',
+                dropdownParent: $('#definirModal'),
+                templateResult: formatItem,
+                templateSelection: formatItem
+            });
+
+            const modalEl = document.getElementById('definirModal');
+            const modal = modalEl ? new bootstrap.Modal(modalEl) : null;
+
+            $(document).on('click', '.cell', function() {
+                const secao = $(this).data('secao');
+                const linha = $(this).data('linha');
+                const coluna = $(this).data('coluna');
+
+                $('#mSecao').val(secao);
+                $('#mLinha').val(linha);
+                $('#mColuna').val(coluna);
+                $('#mEndereco').text(`E{{ estante }}-S${secao}-L${linha}-C${coluna}`);
+
+                $('#mEstoqueId').val('').trigger('change');
+
+                if (modal) {
+                    modal.show();
+                }
+            });
+        });
+    </script>
+</body>
+</html>
