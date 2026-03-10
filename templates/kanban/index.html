@@ -743,7 +743,7 @@
                                     <div class="mb-2">
                                         <strong>Desenho do Item:</strong>
                                     </div>
-                                    <a href="{{ pedido_primeiro.pedido.item.desenho_tecnico_path }}" class="file-link" target="_blank">
+                                    <a href="{{ url_for('itens.desenho_pdf_item', item_id=pedido_primeiro.pedido.item.id) }}" class="file-link" target="_blank">
                                         <i class="fas fa-file-pdf pdf-icon"></i>
                                         Visualizar PDF
                                     </a>

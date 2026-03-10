@@ -41,32 +41,6 @@
             display: block;
             margin: 0 auto;
         }
-
-        .stamp-approved {
-            position: fixed;
-            top: 14mm;
-            right: 14mm;
-            border: 3px solid #198754;
-            color: #198754;
-            padding: 8px 10px;
-            border-radius: 8px;
-            transform: rotate(6deg);
-            text-align: center;
-            font-weight: 800;
-            background: rgba(255, 255, 255, 0.85);
-            z-index: 9999;
-            min-width: 180px;
-        }
-        .stamp-approved .stamp-title {
-            font-size: 16px;
-            letter-spacing: 1px;
-        }
-        .stamp-approved .stamp-meta {
-            font-weight: 600;
-            font-size: 11px;
-            line-height: 1.2;
-            margin-top: 3px;
-        }
         .footer {
             margin-top: 50px;
             border-top: 1px solid #ddd;
@@ -96,22 +70,15 @@
         
         {% for pedido_os in ordem.pedidos %}
         <div class="desenho-container page-break">
-            {% if pedido_os.pedido.item and pedido_os.pedido.item.desenho_aprovado_em %}
-            <div class="stamp-approved">
-                <div class="stamp-title">APROVADO</div>
-                <div class="stamp-meta">
-                    {% if pedido_os.pedido.item.desenho_aprovado_por_nome %}{{ pedido_os.pedido.item.desenho_aprovado_por_nome }}{% endif %}
-                    {% if pedido_os.pedido.item.desenho_aprovado_em %}<div>{{ pedido_os.pedido.item.desenho_aprovado_em.strftime('%d/%m/%Y %H:%M') }}</div>{% endif %}
-                </div>
-            </div>
-            {% endif %}
             <h3>{{ pedido_os.pedido.item.codigo_acb }} - {{ pedido_os.pedido.item.nome }}</h3>
             <p><strong>Cliente:</strong> {{ pedido_os.pedido.cliente.nome }} - {{ pedido_os.pedido.unidade_entrega.nome }}</p>
             <p><strong>Quantidade:</strong> {{ pedido_os.pedido.quantidade }}</p>
             
             {% if pedido_os.pedido.item.desenho_tecnico %}
             <div class="text-center mt-4">
-                <img src="{{ pedido_os.pedido.item.desenho_tecnico_path }}" alt="Desenho Técnico" class="desenho-img">
+                <a href="{{ url_for('itens.desenho_pdf_item', item_id=pedido_os.pedido.item.id) }}" class="btn btn-outline-primary" target="_blank">
+                    <i class="fas fa-file-pdf"></i> Abrir PDF do Desenho
+                </a>
             </div>
             {% else %}
             <div class="alert alert-warning">
