@@ -163,10 +163,18 @@
                                 <div class="col-md-3">
                                     <label for="tempo_setup" class="form-label">Tempo de Setup (segundos)</label>
                                     <input type="number" class="form-control" id="tempo_setup" min="0">
+                                    <div class="mt-1">
+                                        <label for="tempo_setup_min" class="form-label small mb-0">Tempo de Setup (minutos)</label>
+                                        <input type="number" class="form-control form-control-sm" id="tempo_setup_min" min="0" step="0.01">
+                                    </div>
                                 </div>
                                 <div class="col-md-3">
                                     <label for="tempo_peca" class="form-label">Tempo por Peça (segundos)</label>
                                     <input type="number" class="form-control" id="tempo_peca" min="0">
+                                    <div class="mt-1">
+                                        <label for="tempo_peca_min" class="form-label small mb-0">Tempo por Peça (minutos)</label>
+                                        <input type="number" class="form-control form-control-sm" id="tempo_peca_min" min="0" step="0.01">
+                                    </div>
                                 </div>
                                 <div class="col-md-2">
                                     <label class="form-label d-block">&nbsp;</label>
@@ -747,15 +755,29 @@
                 }
                 
                 const trabalhoNome = $('#trabalho_select option:selected').data('nome');
-                const tempoSetup = $('#tempo_setup').val();
-                const tempoPeca = $('#tempo_peca').val();
-                
-                if (!tempoSetup || tempoSetup < 0) {
+                const tempoSetupRaw = $('#tempo_setup').val();
+                const tempoSetupMinRaw = $('#tempo_setup_min').val();
+                const tempoPecaRaw = $('#tempo_peca').val();
+                const tempoPecaMinRaw = $('#tempo_peca_min').val();
+
+                const tempoSetup = (tempoSetupRaw !== '' && tempoSetupRaw !== null)
+                    ? parseInt(tempoSetupRaw, 10)
+                    : (tempoSetupMinRaw !== '' && tempoSetupMinRaw !== null)
+                        ? Math.round(parseFloat(tempoSetupMinRaw) * 60)
+                        : NaN;
+
+                const tempoPeca = (tempoPecaRaw !== '' && tempoPecaRaw !== null)
+                    ? parseInt(tempoPecaRaw, 10)
+                    : (tempoPecaMinRaw !== '' && tempoPecaMinRaw !== null)
+                        ? Math.round(parseFloat(tempoPecaMinRaw) * 60)
+                        : NaN;
+
+                if (!Number.isFinite(tempoSetup) || tempoSetup < 0) {
                     alert('Informe um tempo de setup válido');
                     return;
                 }
-                
-                if (!tempoPeca || tempoPeca < 0) {
+
+                if (!Number.isFinite(tempoPeca) || tempoPeca < 0) {
                     alert('Informe um tempo por peça válido');
                     return;
                 }
@@ -777,6 +799,8 @@
                 $('#trabalho_select').val('');
                 $('#tempo_setup').val('');
                 $('#tempo_peca').val('');
+                $('#tempo_setup_min').val('');
+                $('#tempo_peca_min').val('');
             });
             
             // Função para atualizar a tabela de materiais
@@ -810,11 +834,38 @@
                 tbody.empty();
                 
                 trabalhos.forEach((trabalho, index) => {
+                    const setupSec = parseInt(trabalho.tempo_setup || 0, 10);
+                    const pecaSec = parseInt(trabalho.tempo_peca || 0, 10);
+                    const setupMin = (setupSec / 60);
+                    const pecaMin = (pecaSec / 60);
+
                     tbody.append(`
                         <tr>
                             <td>${trabalho.nome}</td>
-                            <td>${trabalho.tempo_setup} segundos</td>
-                            <td>${trabalho.tempo_peca} segundos</td>
+                            <td>
+                                <div class="row g-2 align-items-end">
+                                    <div class="col-6">
+                                        <label class="form-label small mb-0">seg</label>
+                                        <input type="number" class="form-control form-control-sm trabalho-tempo" data-index="${index}" data-field="tempo_setup" data-unit="sec" min="0" value="${setupSec}">
+                                    </div>
+                                    <div class="col-6">
+                                        <label class="form-label small mb-0">min</label>
+                                        <input type="number" class="form-control form-control-sm trabalho-tempo" data-index="${index}" data-field="tempo_setup" data-unit="min" min="0" step="0.01" value="${setupMin.toFixed(2)}">
+                                    </div>
+                                </div>
+                            </td>
+                            <td>
+                                <div class="row g-2 align-items-end">
+                                    <div class="col-6">
+                                        <label class="form-label small mb-0">seg</label>
+                                        <input type="number" class="form-control form-control-sm trabalho-tempo" data-index="${index}" data-field="tempo_peca" data-unit="sec" min="0" value="${pecaSec}">
+                                    </div>
+                                    <div class="col-6">
+                                        <label class="form-label small mb-0">min</label>
+                                        <input type="number" class="form-control form-control-sm trabalho-tempo" data-index="${index}" data-field="tempo_peca" data-unit="min" min="0" step="0.01" value="${pecaMin.toFixed(2)}">
+                                    </div>
+                                </div>
+                            </td>
                             <td>
                                 <button type="button" class="btn btn-sm btn-danger btn-remover-trabalho" data-index="${index}">
                                     <i class="fas fa-trash"></i>
@@ -827,6 +878,82 @@
                 // Atualizar campo hidden
                 $('#trabalhos_json').val(JSON.stringify(trabalhos));
             }
+
+            function syncTempoInputs($input, secondsValue) {
+                const idx = $input.data('index');
+                const field = $input.data('field');
+                const unit = $input.data('unit');
+                const otherUnit = unit === 'sec' ? 'min' : 'sec';
+                const otherValue = otherUnit === 'min'
+                    ? (secondsValue / 60).toFixed(2)
+                    : String(secondsValue);
+                $(`.trabalho-tempo[data-index="${idx}"][data-field="${field}"][data-unit="${otherUnit}"]`).val(otherValue);
+            }
+
+            function updateTrabalhoTempoFromInput($input) {
+                const idx = parseInt($input.data('index'), 10);
+                const field = $input.data('field');
+                const unit = $input.data('unit');
+                if (!Number.isFinite(idx) || idx < 0 || idx >= trabalhos.length) {
+                    return;
+                }
+
+                const raw = $input.val();
+                if (raw === '' || raw === null || raw === undefined) {
+                    return;
+                }
+
+                let seconds;
+                if (unit === 'sec') {
+                    seconds = Math.round(parseFloat(raw));
+                } else {
+                    seconds = Math.round(parseFloat(raw) * 60);
+                }
+
+                if (!Number.isFinite(seconds) || seconds < 0) {
+                    return;
+                }
+
+                trabalhos[idx][field] = seconds;
+                syncTempoInputs($input, seconds);
+                $('#trabalhos_json').val(JSON.stringify(trabalhos));
+            }
+
+            // Edição inline dos tempos
+            $(document).on('input', '.trabalho-tempo', function() {
+                updateTrabalhoTempoFromInput($(this));
+            });
+
+            // Sincronizar inputs de adicionar trabalho (sec <-> min)
+            function syncAddTempo($src, $dst, multiplier) {
+                const raw = $src.val();
+                if (raw === '' || raw === null || raw === undefined) {
+                    return;
+                }
+                const v = parseFloat(raw);
+                if (!Number.isFinite(v) || v < 0) {
+                    return;
+                }
+                const out = v * multiplier;
+                if ($dst.attr('step') === '0.01') {
+                    $dst.val((out).toFixed(2));
+                } else {
+                    $dst.val(Math.round(out));
+                }
+            }
+
+            $('#tempo_setup').on('input', function() {
+                syncAddTempo($('#tempo_setup'), $('#tempo_setup_min'), 1 / 60);
+            });
+            $('#tempo_setup_min').on('input', function() {
+                syncAddTempo($('#tempo_setup_min'), $('#tempo_setup'), 60);
+            });
+            $('#tempo_peca').on('input', function() {
+                syncAddTempo($('#tempo_peca'), $('#tempo_peca_min'), 1 / 60);
+            });
+            $('#tempo_peca_min').on('input', function() {
+                syncAddTempo($('#tempo_peca_min'), $('#tempo_peca'), 60);
+            });
             
             // Remover material
             $(document).on('click', '.btn-remover-material', function() {
