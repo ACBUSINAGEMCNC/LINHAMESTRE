@@ -292,6 +292,35 @@ def definir_localizacao_mapa():
     flash('Localização atualizada com sucesso!', 'success')
     return redirect(url_for('estoque_pecas.mapa', estante=estante_i))
 
+
+@estoque_pecas.route('/estoque-pecas/mapa/remover', methods=['POST'])
+def remover_localizacao_mapa():
+    estoque_id = request.form.get('estoque_id')
+    estante = request.form.get('estante')
+
+    def _to_int(v):
+        try:
+            if v is None or str(v).strip() == '':
+                return None
+            return int(v)
+        except Exception:
+            return None
+
+    estoque_id_i = _to_int(estoque_id)
+    estante_i = _to_int(estante) or 1
+    if not estoque_id_i:
+        flash('Selecione um item do estoque.', 'danger')
+        return redirect(url_for('estoque_pecas.mapa', estante=estante_i))
+
+    estoque_item = EstoquePecas.query.get_or_404(estoque_id_i)
+    estoque_item.estante = None
+    estoque_item.secao = None
+    estoque_item.linha = None
+    estoque_item.coluna = None
+    db.session.commit()
+    flash('Localização removida com sucesso!', 'success')
+    return redirect(url_for('estoque_pecas.mapa', estante=estante_i))
+
 @estoque_pecas.route('/estoque-pecas/atualizar-localizacao/<int:estoque_id>', methods=['POST'])
 def atualizar_localizacao(estoque_id):
     """Rota para atualizar a localização (prateleira e posição) de um item no estoque"""

@@ -9,10 +9,17 @@
     <link href="https://cdn.jsdelivr.net/npm/select2-bootstrap-5-theme@1.3.0/dist/select2-bootstrap-5-theme.min.css" rel="stylesheet" />
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
     <style>
+        .grid-wrap {
+            width: 100%;
+            overflow-x: auto;
+            padding-bottom: 6px;
+        }
         .grid {
             display: grid;
-            grid-template-columns: repeat(10, minmax(64px, 1fr));
+            grid-template-columns: repeat(10, 72px);
             gap: 8px;
+            justify-content: center;
+            min-width: calc(10 * 72px + 9 * 8px);
         }
         .cell {
             border: 1px solid #dee2e6;
@@ -110,23 +117,25 @@
                         {% for lin in range(1, 3) %}
                         <div class="mb-2">
                             <div class="text-muted small mb-1">Linha {{ lin }}</div>
-                            <div class="grid">
-                                {% for col in range(1, 11) %}
-                                    {% set key = (sec, lin, col) %}
-                                    {% set e = ocupados_map.get(key) %}
-                                    <div class="cell {% if not e %}empty{% endif %}" data-secao="{{ sec }}" data-linha="{{ lin }}" data-coluna="{{ col }}">
-                                        {% if e %}
-                                            {% if e.item and e.item.imagem_path %}
-                                            <img class="thumb" src="{{ e.item.imagem_path }}" alt="Imagem">
+                            <div class="grid-wrap">
+                                <div class="grid">
+                                    {% for col in range(1, 11) %}
+                                        {% set key = (sec, lin, col) %}
+                                        {% set e = ocupados_map.get(key) %}
+                                        <div class="cell {% if not e %}empty{% endif %}" data-secao="{{ sec }}" data-linha="{{ lin }}" data-coluna="{{ col }}" data-estoque-id="{{ e.id if e else '' }}">
+                                            {% if e %}
+                                                {% if e.item and e.item.imagem_path %}
+                                                <img class="thumb" src="{{ e.item.imagem_path }}" alt="Imagem">
+                                                {% endif %}
+                                                <div class="code">{{ e.item.codigo_acb if e.item else '---' }}</div>
+                                                <div class="name">{{ e.item.nome if e.item else '' }}</div>
+                                            {% else %}
+                                                <div class="text-muted small">Vazio</div>
+                                                <div class="text-muted" style="font-size: 10px;">C{{ col }}</div>
                                             {% endif %}
-                                            <div class="code">{{ e.item.codigo_acb if e.item else '---' }}</div>
-                                            <div class="name">{{ e.item.nome if e.item else '' }}</div>
-                                        {% else %}
-                                            <div class="text-muted small">Vazio</div>
-                                            <div class="text-muted" style="font-size: 10px;">C{{ col }}</div>
-                                        {% endif %}
-                                    </div>
-                                {% endfor %}
+                                        </div>
+                                    {% endfor %}
+                                </div>
                             </div>
                         </div>
                         {% endfor %}
@@ -170,6 +179,7 @@
                         </div>
                         <div class="modal-footer">
                             <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
+                            <button type="button" id="btnRemoverLocal" class="btn btn-outline-danger">Remover Local</button>
                             <button type="submit" class="btn btn-primary">Salvar</button>
                         </div>
                     </form>
@@ -232,17 +242,35 @@
                 const secao = $(this).data('secao');
                 const linha = $(this).data('linha');
                 const coluna = $(this).data('coluna');
+                const estoqueId = $(this).data('estoque-id');
 
                 $('#mSecao').val(secao);
                 $('#mLinha').val(linha);
                 $('#mColuna').val(coluna);
                 $('#mEndereco').text(`E{{ estante }}-S${secao}-L${linha}-C${coluna}`);
 
-                $('#mEstoqueId').val('').trigger('change');
+                if (estoqueId) {
+                    $('#mEstoqueId').val(String(estoqueId)).trigger('change');
+                } else {
+                    $('#mEstoqueId').val('').trigger('change');
+                }
 
                 if (modal) {
                     modal.show();
                 }
+            });
+
+            $('#btnRemoverLocal').on('click', function() {
+                const estoqueId = $('#mEstoqueId').val();
+                if (!estoqueId) {
+                    return;
+                }
+                const form = $('<form method="POST"></form>');
+                form.attr('action', "{{ url_for('estoque_pecas.remover_localizacao_mapa') }}");
+                form.append($('<input type="hidden" name="estoque_id">').val(estoqueId));
+                form.append($('<input type="hidden" name="estante">').val('{{ estante }}'));
+                $(document.body).append(form);
+                form.submit();
             });
         });
     </script>
