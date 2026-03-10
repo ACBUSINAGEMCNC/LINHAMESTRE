@@ -53,12 +53,18 @@
 
         <div class="card">
             <div class="card-body">
+                <div class="row g-2 mb-3">
+                    <div class="col-12 col-md-6">
+                        <input id="estoqueSearch" type="text" class="form-control" placeholder="Pesquisar no estoque (código, item, endereço)">
+                    </div>
+                </div>
                 <div class="table-responsive">
                     <table id="estoquePecasTable" class="table table-striped table-hover">
                         <thead>
                             <tr>
                                 <th>Código</th>
                                 <th>Item</th>
+                                <th>Arquivos</th>
                                 <th>Endereço</th>
                                 <th>Quantidade</th>
                                 <th>Data de Entrada</th>
@@ -71,6 +77,20 @@
                             <tr>
                                 <td>{{ item.item.codigo_acb }}</td>
                                 <td>{{ item.item.nome }}</td>
+                                <td>
+                                    <div class="btn-group">
+                                        {% if item.item.imagem_path %}
+                                        <button type="button" class="btn btn-sm btn-outline-secondary" data-bs-toggle="modal" data-bs-target="#previewArquivoModal" data-img="{{ item.item.imagem_path }}" data-pdf="{{ url_for('itens.desenho_pdf_item', item_id=item.item.id) if item.item.desenho_tecnico else '' }}" data-codigo="{{ item.item.codigo_acb }}" data-nome="{{ item.item.nome }}">
+                                            <i class="fas fa-image"></i>
+                                        </button>
+                                        {% endif %}
+                                        {% if item.item.desenho_tecnico %}
+                                        <a class="btn btn-sm btn-outline-danger" href="{{ url_for('itens.desenho_pdf_item', item_id=item.item.id) }}" target="_blank" rel="noopener">
+                                            <i class="fas fa-file-pdf"></i>
+                                        </a>
+                                        {% endif %}
+                                    </div>
+                                </td>
                                 <td>
                                     {% if item.estante and item.secao and item.linha and item.coluna %}
                                         <span class="badge bg-primary">E{{ item.estante }}-S{{ item.secao }}-L{{ item.linha }}-C{{ item.coluna }}</span>
@@ -229,20 +249,87 @@
         </div>
     </div>
 
+    <div class="modal fade" id="previewArquivoModal" tabindex="-1" aria-hidden="true">
+        <div class="modal-dialog modal-lg">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title" id="previewArquivoTitulo"></h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Fechar"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="row g-3">
+                        <div class="col-12 col-lg-6">
+                            <img id="previewArquivoImg" src="" alt="Imagem" style="width:100%;height:360px;object-fit:contain;border:1px solid #e9ecef;border-radius:10px;display:none;">
+                        </div>
+                        <div class="col-12 col-lg-6">
+                            <div class="text-muted small mb-2" id="previewArquivoNome"></div>
+                            <a id="previewArquivoPdf" href="#" target="_blank" rel="noopener" class="btn btn-outline-danger" style="display:none;">
+                                <i class="fas fa-file-pdf"></i> Abrir PDF do desenho
+                            </a>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
     <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
     <script src="https://cdn.datatables.net/1.11.5/js/jquery.dataTables.min.js"></script>
     <script src="https://cdn.datatables.net/1.11.5/js/dataTables.bootstrap5.min.js"></script>
     <script>
         $(document).ready(function() {
-            $('#estoquePecasTable').DataTable({
+            const dt = $('#estoquePecasTable').DataTable({
                 language: {
                     url: '//cdn.datatables.net/plug-ins/1.11.5/i18n/pt-BR.json'
                 },
                 columnDefs: [
-                    { orderable: false, targets: [7] }
+                    { orderable: false, targets: [2, 7] }
                 ]
             });
+
+            $('#estoqueSearch').on('input', function() {
+                dt.search(this.value).draw();
+            });
+
+            const previewModal = document.getElementById('previewArquivoModal');
+            if (previewModal) {
+                previewModal.addEventListener('show.bs.modal', function(event) {
+                    const button = event.relatedTarget;
+                    if (!button) return;
+                    const img = button.getAttribute('data-img') || '';
+                    const pdf = button.getAttribute('data-pdf') || '';
+                    const codigo = button.getAttribute('data-codigo') || '';
+                    const nome = button.getAttribute('data-nome') || '';
+
+                    const titleEl = document.getElementById('previewArquivoTitulo');
+                    const nomeEl = document.getElementById('previewArquivoNome');
+                    const imgEl = document.getElementById('previewArquivoImg');
+                    const pdfEl = document.getElementById('previewArquivoPdf');
+
+                    if (titleEl) titleEl.textContent = codigo;
+                    if (nomeEl) nomeEl.textContent = nome;
+
+                    if (imgEl) {
+                        if (img) {
+                            imgEl.src = img;
+                            imgEl.style.display = '';
+                            imgEl.onerror = function() { imgEl.style.display = 'none'; };
+                        } else {
+                            imgEl.style.display = 'none';
+                        }
+                    }
+
+                    if (pdfEl) {
+                        if (pdf) {
+                            pdfEl.href = pdf;
+                            pdfEl.style.display = '';
+                        } else {
+                            pdfEl.style.display = 'none';
+                        }
+                    }
+                });
+            }
         });
     </script>
 </body>

@@ -9,24 +9,18 @@
     <link href="https://cdn.jsdelivr.net/npm/select2-bootstrap-5-theme@1.3.0/dist/select2-bootstrap-5-theme.min.css" rel="stylesheet" />
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
     <style>
-        .grid-wrap {
-            width: 100%;
-            overflow-x: auto;
-            padding-bottom: 6px;
-        }
         .grid {
             display: grid;
-            grid-template-columns: repeat(10, 72px);
-            gap: 8px;
-            justify-content: center;
-            min-width: calc(10 * 72px + 9 * 8px);
+            grid-template-columns: repeat(10, minmax(0, 1fr));
+            gap: 6px;
+            justify-content: stretch;
         }
         .cell {
             border: 1px solid #dee2e6;
             border-radius: 10px;
-            padding: 8px;
+            padding: 6px;
             background: #fff;
-            min-height: 74px;
+            min-height: 66px;
             cursor: pointer;
             transition: transform .08s ease, box-shadow .08s ease;
         }
@@ -52,16 +46,23 @@
         }
         .thumb {
             width: 100%;
-            height: 36px;
+            height: 28px;
             object-fit: cover;
             border-radius: 8px;
             border: 1px solid #e9ecef;
-            margin-bottom: 6px;
+            margin-bottom: 4px;
             background: #fff;
         }
         .secao-title {
             font-weight: 800;
             margin-bottom: 8px;
+        }
+        .cell.highlight {
+            outline: 3px solid rgba(13,110,253,.35);
+            box-shadow: 0 10px 22px rgba(13,110,253,.12);
+        }
+        .cell.dim {
+            opacity: .25;
         }
     </style>
 </head>
@@ -107,6 +108,20 @@
             </div>
         </div>
 
+        <div class="card mb-3">
+            <div class="card-body">
+                <div class="row g-2 align-items-center">
+                    <div class="col-12 col-lg-5">
+                        <label class="form-label mb-1">Pesquisar no mapa</label>
+                        <input id="mapSearch" type="text" class="form-control" placeholder="Digite código ou nome (ex: CQ67400)">
+                    </div>
+                    <div class="col-12 col-lg-7 text-muted small">
+                        Digite para destacar no mapa. Limpe o campo para voltar ao normal.
+                    </div>
+                </div>
+            </div>
+        </div>
+
         <div class="row g-3">
             {% for sec in range(1, 5) %}
             <div class="col-12 col-xl-6">
@@ -117,25 +132,31 @@
                         {% for lin in range(1, 3) %}
                         <div class="mb-2">
                             <div class="text-muted small mb-1">Linha {{ lin }}</div>
-                            <div class="grid-wrap">
-                                <div class="grid">
-                                    {% for col in range(1, 11) %}
-                                        {% set key = (sec, lin, col) %}
-                                        {% set e = ocupados_map.get(key) %}
-                                        <div class="cell {% if not e %}empty{% endif %}" data-secao="{{ sec }}" data-linha="{{ lin }}" data-coluna="{{ col }}" data-estoque-id="{{ e.id if e else '' }}">
-                                            {% if e %}
-                                                {% if e.item and e.item.imagem_path %}
-                                                <img class="thumb" src="{{ e.item.imagem_path }}" alt="Imagem">
-                                                {% endif %}
-                                                <div class="code">{{ e.item.codigo_acb if e.item else '---' }}</div>
-                                                <div class="name">{{ e.item.nome if e.item else '' }}</div>
-                                            {% else %}
-                                                <div class="text-muted small">Vazio</div>
-                                                <div class="text-muted" style="font-size: 10px;">C{{ col }}</div>
+                            <div class="grid">
+                                {% for col in range(1, 11) %}
+                                    {% set key = (sec, lin, col) %}
+                                    {% set e = ocupados_map.get(key) %}
+                                    <div class="cell {% if not e %}empty{% endif %}"
+                                         data-secao="{{ sec }}"
+                                         data-linha="{{ lin }}"
+                                         data-coluna="{{ col }}"
+                                         data-estoque-id="{{ e.id if e else '' }}"
+                                         data-codigo="{{ e.item.codigo_acb if e and e.item and e.item.codigo_acb else '' }}"
+                                         data-nome="{{ e.item.nome if e and e.item and e.item.nome else '' }}"
+                                         data-imagem="{{ e.item.imagem_path if e and e.item and e.item.imagem_path else '' }}"
+                                         data-pdf="{{ url_for('itens.desenho_pdf_item', item_id=e.item.id) if e and e.item and e.item.desenho_tecnico else '' }}">
+                                        {% if e %}
+                                            {% if e.item and e.item.imagem_path %}
+                                            <img class="thumb" src="{{ e.item.imagem_path }}" alt="Imagem" onerror="this.style.display='none';">
                                             {% endif %}
-                                        </div>
-                                    {% endfor %}
-                                </div>
+                                            <div class="code">{{ e.item.codigo_acb if e.item else '---' }}</div>
+                                            <div class="name">{{ e.item.nome if e.item else '' }}</div>
+                                        {% else %}
+                                            <div class="text-muted small">Vazio</div>
+                                            <div class="text-muted" style="font-size: 10px;">C{{ col }}</div>
+                                        {% endif %}
+                                    </div>
+                                {% endfor %}
                             </div>
                         </div>
                         {% endfor %}
@@ -162,6 +183,19 @@
 
                             <div class="mb-2">
                                 <span class="badge bg-primary" id="mEndereco"></span>
+                            </div>
+
+                            <div id="mPreview" class="border rounded p-2 mb-3" style="display:none;">
+                                <div class="d-flex gap-2 align-items-start">
+                                    <img id="mPreviewImg" src="" alt="Imagem" style="width:110px;height:110px;object-fit:cover;border-radius:10px;border:1px solid #e9ecef;display:none;">
+                                    <div class="flex-grow-1">
+                                        <div class="fw-semibold" id="mPreviewTitulo"></div>
+                                        <div class="text-muted small" id="mPreviewNome"></div>
+                                        <div class="mt-2 d-flex gap-2">
+                                            <a id="mBtnPdf" href="#" target="_blank" class="btn btn-sm btn-outline-primary" style="display:none;"><i class="fas fa-file-pdf"></i> PDF Desenho</a>
+                                        </div>
+                                    </div>
+                                </div>
                             </div>
 
                             <div class="mb-3">
@@ -204,7 +238,7 @@
         })();
 
         $(document).ready(function() {
-            function formatItem(item) {
+            function formatItemResult(item) {
                 if (!item.id) {
                     return item.text;
                 }
@@ -216,7 +250,7 @@
 
                 const $container = $('<div class="d-flex align-items-center gap-2"></div>');
                 if (img) {
-                    $container.append($('<img>').attr('src', img).css({ width: '34px', height: '34px', objectFit: 'cover', borderRadius: '6px', border: '1px solid #ddd' }));
+                    $container.append($('<img>').attr('src', img).css({ width: '34px', height: '34px', objectFit: 'cover', borderRadius: '6px', border: '1px solid #ddd' }).on('error', function(){ $(this).remove(); }));
                 }
                 const $txt = $('<div></div>');
                 $txt.append($('<div class="fw-semibold"></div>').text((codigo ? codigo + ' - ' : '') + nome));
@@ -227,12 +261,22 @@
                 return $container;
             }
 
+            function formatItemSelection(item) {
+                if (!item.id) {
+                    return item.text;
+                }
+                const $el = $(item.element);
+                const codigo = $el.data('codigo') || '';
+                const nome = $el.data('nome') || '';
+                return (codigo ? codigo + ' - ' : '') + nome;
+            }
+
             $('.select2').select2({
                 theme: 'bootstrap-5',
                 width: '100%',
                 dropdownParent: $('#definirModal'),
-                templateResult: formatItem,
-                templateSelection: formatItem
+                templateResult: formatItemResult,
+                templateSelection: formatItemSelection
             });
 
             const modalEl = document.getElementById('definirModal');
@@ -243,6 +287,10 @@
                 const linha = $(this).data('linha');
                 const coluna = $(this).data('coluna');
                 const estoqueId = $(this).data('estoque-id');
+                const codigo = $(this).data('codigo') || '';
+                const nome = $(this).data('nome') || '';
+                const img = $(this).data('imagem') || '';
+                const pdf = $(this).data('pdf') || '';
 
                 $('#mSecao').val(secao);
                 $('#mLinha').val(linha);
@@ -253,6 +301,24 @@
                     $('#mEstoqueId').val(String(estoqueId)).trigger('change');
                 } else {
                     $('#mEstoqueId').val('').trigger('change');
+                }
+
+                if (estoqueId) {
+                    $('#mPreview').show();
+                    $('#mPreviewTitulo').text(codigo);
+                    $('#mPreviewNome').text(nome);
+                    if (img) {
+                        $('#mPreviewImg').attr('src', img).show().off('error').on('error', function(){ $(this).hide(); });
+                    } else {
+                        $('#mPreviewImg').hide();
+                    }
+                    if (pdf) {
+                        $('#mBtnPdf').attr('href', pdf).show();
+                    } else {
+                        $('#mBtnPdf').hide();
+                    }
+                } else {
+                    $('#mPreview').hide();
                 }
 
                 if (modal) {
@@ -272,6 +338,34 @@
                 $(document.body).append(form);
                 form.submit();
             });
+
+            function applyMapSearch() {
+                const q = ($('#mapSearch').val() || '').toString().trim().toLowerCase();
+                $('.cell').removeClass('highlight dim');
+                if (!q) {
+                    return;
+                }
+                $('.cell').each(function() {
+                    const $c = $(this);
+                    const codigo = ($c.data('codigo') || '').toString().toLowerCase();
+                    const nome = ($c.data('nome') || '').toString().toLowerCase();
+                    const hasItem = ($c.data('estoque-id') || '').toString().trim() !== '';
+
+                    if (!hasItem) {
+                        $c.addClass('dim');
+                        return;
+                    }
+
+                    if ((codigo && codigo.includes(q)) || (nome && nome.includes(q))) {
+                        $c.addClass('highlight');
+                    } else {
+                        $c.addClass('dim');
+                    }
+                });
+            }
+
+            $('#mapSearch').on('input', applyMapSearch);
+            applyMapSearch();
         });
     </script>
 </body>
