@@ -1013,14 +1013,9 @@ def create_app():
             return {
                 'release_2_0_show_banner': bool(show),
                 'release_2_0_items': [
-                    'Kanban: filtro por busca e lista (com persistência).',
-                    'Kanban: link por pedido para OS compostas (seleção quando há múltiplas OS).',
-                    'Registros mensais: busca + imagem/nome do item + opção “Todos os meses”.',
-                    'Apontamentos: logs detalhados por OS (inclusive finalizadas) e correções de fuso/cronômetro.',
-                    'Implementação completa de Itens de Montagem (cadastro e visualizações).',
-                    'Melhorias nas visualizações (itens e telas relacionadas).',
-                    'Pedidos de Materiais: melhorias e fluxo de novo pedido.',
-                    'Pedidos de Montagem: novo módulo/fluxo e telas de listagem/visualização/impressão.'
+                    'Desenho do Item: aprovação com carimbo APROVADO dentro do PDF (nome e data).',
+                    'Kanban: links do desenho agora abrem o PDF carimbado quando aprovado.',
+                    'Editar Item: tempos de setup e por peça em minutos/segundos com cálculo automático.',
                 ]
             }
         except Exception:
