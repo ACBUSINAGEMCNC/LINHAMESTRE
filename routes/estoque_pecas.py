@@ -13,7 +13,7 @@ def index():
     q = EstoquePecas.query
     if not show_zero:
         q = q.filter(EstoquePecas.quantidade > 0)
-    estoque = q.order_by(EstoquePecas.prateleira, EstoquePecas.posicao).all()
+    estoque = q.order_by(EstoquePecas.estante, EstoquePecas.secao, EstoquePecas.linha, EstoquePecas.coluna).all()
     return render_template('estoque_pecas/index.html', estoque=estoque, show_zero=show_zero)
 
 @estoque_pecas.route('/estoque-pecas/entrada', methods=['GET', 'POST'])
@@ -44,8 +44,6 @@ def entrada():
         
         referencia = request.form.get('referencia', '')
         observacao = request.form.get('observacao', '')
-        prateleira = request.form.get('prateleira', '')
-        posicao = request.form.get('posicao', '')
         estante = request.form.get('estante')
         secao = request.form.get('secao')
         linha = request.form.get('linha')
@@ -70,12 +68,6 @@ def entrada():
         if estoque_existente:
             # Atualizar estoque existente
             estoque_existente.quantidade += quantidade
-            
-            # Atualizar prateleira e posição se fornecidas
-            if prateleira:
-                estoque_existente.prateleira = prateleira
-            if posicao:
-                estoque_existente.posicao = posicao
 
             if estante_i:
                 estoque_existente.estante = estante_i
@@ -103,8 +95,6 @@ def entrada():
                 item_id=item_id,
                 quantidade=quantidade,
                 data_entrada=datetime.now().date(),
-                prateleira=prateleira,
-                posicao=posicao,
                 estante=estante_i,
                 secao=secao_i,
                 linha=linha_i,
@@ -143,7 +133,7 @@ def saida():
         if errors:
             for error in errors:
                 flash(error, 'danger')
-            estoque = EstoquePecas.query.order_by(EstoquePecas.prateleira, EstoquePecas.posicao).all()
+            estoque = EstoquePecas.query.order_by(EstoquePecas.estante, EstoquePecas.secao, EstoquePecas.linha, EstoquePecas.coluna).all()
             return render_template('estoque_pecas/saida.html', estoque=estoque)
         
         estoque_id = request.form['estoque_id']
@@ -153,11 +143,11 @@ def saida():
             quantidade = int(request.form['quantidade'])
             if quantidade <= 0:
                 flash('A quantidade deve ser maior que zero', 'danger')
-                estoque = EstoquePecas.query.order_by(EstoquePecas.prateleira, EstoquePecas.posicao).all()
+                estoque = EstoquePecas.query.order_by(EstoquePecas.estante, EstoquePecas.secao, EstoquePecas.linha, EstoquePecas.coluna).all()
                 return render_template('estoque_pecas/saida.html', estoque=estoque)
         except ValueError:
             flash('A quantidade deve ser um número inteiro', 'danger')
-            estoque = EstoquePecas.query.order_by(EstoquePecas.prateleira, EstoquePecas.posicao).all()
+            estoque = EstoquePecas.query.order_by(EstoquePecas.estante, EstoquePecas.secao, EstoquePecas.linha, EstoquePecas.coluna).all()
             return render_template('estoque_pecas/saida.html', estoque=estoque)
         
         referencia = request.form.get('referencia', '')
@@ -169,7 +159,7 @@ def saida():
         # Verificar se há quantidade suficiente
         if estoque_item.quantidade < quantidade:
             flash('Quantidade insuficiente em estoque!', 'danger')
-            estoque = EstoquePecas.query.order_by(EstoquePecas.prateleira, EstoquePecas.posicao).all()
+            estoque = EstoquePecas.query.order_by(EstoquePecas.estante, EstoquePecas.secao, EstoquePecas.linha, EstoquePecas.coluna).all()
             return render_template('estoque_pecas/saida.html', estoque=estoque)
         
         # Atualizar estoque
@@ -191,7 +181,7 @@ def saida():
         flash('Saída de peças registrada com sucesso!', 'success')
         return redirect(url_for('estoque_pecas.index'))
     
-    estoque = EstoquePecas.query.order_by(EstoquePecas.prateleira, EstoquePecas.posicao).all()
+    estoque = EstoquePecas.query.order_by(EstoquePecas.estante, EstoquePecas.secao, EstoquePecas.linha, EstoquePecas.coluna).all()
     return render_template('estoque_pecas/saida.html', estoque=estoque)
 
 @estoque_pecas.route('/estoque-pecas/historico/<int:estoque_id>')
@@ -327,8 +317,6 @@ def atualizar_localizacao(estoque_id):
     estoque_item = EstoquePecas.query.get_or_404(estoque_id)
     
     if request.method == 'POST':
-        prateleira = request.form.get('prateleira', '')
-        posicao = request.form.get('posicao', '')
         estante = request.form.get('estante')
         secao = request.form.get('secao')
         linha = request.form.get('linha')
@@ -342,8 +330,8 @@ def atualizar_localizacao(estoque_id):
             except Exception:
                 return None
         
-        estoque_item.prateleira = prateleira
-        estoque_item.posicao = posicao
+        estoque_item.prateleira = None
+        estoque_item.posicao = None
         estoque_item.estante = _to_int(estante)
         estoque_item.secao = _to_int(secao)
         estoque_item.linha = _to_int(linha)

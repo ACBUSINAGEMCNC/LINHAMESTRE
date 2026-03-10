@@ -59,8 +59,6 @@
                             <tr>
                                 <th>Código</th>
                                 <th>Item</th>
-                                <th>Prateleira</th>
-                                <th>Posição</th>
                                 <th>Endereço</th>
                                 <th>Quantidade</th>
                                 <th>Data de Entrada</th>
@@ -74,18 +72,14 @@
                                 <td>{{ item.item.codigo_acb }}</td>
                                 <td>{{ item.item.nome }}</td>
                                 <td>
-                                    <span class="badge bg-secondary">{{ item.prateleira or 'Não definida' }}</span>
-                                    <button type="button" class="btn btn-sm btn-outline-primary" data-bs-toggle="modal" data-bs-target="#localizacaoModal{{ item.id }}">
-                                        <i class="fas fa-edit"></i>
-                                    </button>
-                                </td>
-                                <td>{{ item.posicao or 'Não definida' }}</td>
-                                <td>
                                     {% if item.estante and item.secao and item.linha and item.coluna %}
                                         <span class="badge bg-primary">E{{ item.estante }}-S{{ item.secao }}-L{{ item.linha }}-C{{ item.coluna }}</span>
                                     {% else %}
                                         <span class="text-muted">--</span>
                                     {% endif %}
+                                    <button type="button" class="btn btn-sm btn-outline-primary ms-2" data-bs-toggle="modal" data-bs-target="#localizacaoModal{{ item.id }}">
+                                        <i class="fas fa-edit"></i>
+                                    </button>
                                 </td>
                                 <td>{{ item.quantidade }}</td>
                                 <td>{{ item.data_entrada.strftime('%d/%m/%Y') }}</td>
@@ -115,14 +109,6 @@
                                         </div>
                                         <form action="/estoque-pecas/atualizar-localizacao/{{ item.id }}" method="post">
                                             <div class="modal-body">
-                                                <div class="mb-3">
-                                                    <label for="prateleira{{ item.id }}" class="form-label">Prateleira</label>
-                                                    <input type="text" class="form-control" id="prateleira{{ item.id }}" name="prateleira" value="{{ item.prateleira or '' }}">
-                                                </div>
-                                                <div class="mb-3">
-                                                    <label for="posicao{{ item.id }}" class="form-label">Posição</label>
-                                                    <input type="text" class="form-control" id="posicao{{ item.id }}" name="posicao" value="{{ item.posicao or '' }}">
-                                                </div>
                                                 <div class="row g-2">
                                                     <div class="col-3">
                                                         <label class="form-label">Estante</label>
