@@ -2,6 +2,7 @@ from flask import Blueprint, render_template, request, redirect, url_for, flash,
 from werkzeug.utils import secure_filename
 import os
 import json
+import io
 from datetime import datetime
 from models import db, Item, Material, Trabalho, ItemMaterial, ItemTrabalho, Pedido, ArquivoCNC, ItemComposto
 from utils import validate_form_data, save_file, generate_next_code, parse_json_field
@@ -446,11 +447,165 @@ def visualizar_item(item_id):
     return render_template('itens/visualizar.html', item=item)
 
 
+def _build_supabase_public_url_from_file_path(file_path: str) -> str | None:
+    if not file_path:
+        return None
+
+    if not (file_path.startswith('supabase://') or file_path.startswith('supabase:/')):
+        return None
+
+    import os
+    from urllib.parse import quote
+
+    supabase_url = os.environ.get('SUPABASE_URL', '').rstrip('/')
+    bucket_env = os.environ.get('SUPABASE_BUCKET', 'uploads')
+    if not supabase_url:
+        return None
+
+    file_name = file_path.replace('supabase://', '').replace('supabase:/', '').lstrip('/')
+    KNOWN_FOLDERS = {'imagens', 'desenhos', 'instrucoes', 'cnc_files', 'maquinas', 'castanhas', 'gabaritos', 'folhas_processo'}
+    parts = file_name.split('/', 1)
+    if len(parts) > 1 and parts[0] not in KNOWN_FOLDERS:
+        bucket = parts[0]
+        rel_path = parts[1]
+    else:
+        bucket = bucket_env
+        rel_path = file_name
+
+    rel_encoded = quote(rel_path, safe='/')
+    return f"{supabase_url}/storage/v1/object/public/{bucket}/{rel_encoded}"
+
+
+def _get_item_desenho_pdf_bytes(item: Item) -> tuple[bytes | None, str | None]:
+    file_path = item.desenho_tecnico
+    if not file_path:
+        return None, None
+
+    if file_path.startswith('http://') or file_path.startswith('https://'):
+        import requests
+        resp = requests.get(file_path, timeout=30)
+        if resp.status_code != 200:
+            return None, None
+        return resp.content, 'application/pdf'
+
+    if file_path.startswith('supabase://') or file_path.startswith('supabase:/'):
+        import requests
+        public_url = _build_supabase_public_url_from_file_path(file_path)
+        if not public_url:
+            return None, None
+        resp = requests.get(public_url, timeout=30)
+        if resp.status_code != 200:
+            return None, None
+        return resp.content, 'application/pdf'
+
+    normalized = file_path.replace('\\', '/').lstrip('/')
+    if normalized.startswith('uploads/'):
+        normalized = normalized[len('uploads/'):]
+
+    if normalized.startswith('desenhos/'):
+        filename = normalized.split('/', 1)[1]
+        local_path = os.path.join(current_app.config['UPLOAD_FOLDER_DESENHOS'], filename)
+        if not os.path.exists(local_path):
+            return None, None
+        with open(local_path, 'rb') as f:
+            return f.read(), 'application/pdf'
+
+    return None, None
+
+
+def _stamp_pdf_approved(pdf_bytes: bytes, aprovado_por_nome: str | None, aprovado_em: datetime | None) -> bytes:
+    from pypdf import PdfReader, PdfWriter
+    from reportlab.pdfgen import canvas
+    from reportlab.lib.colors import HexColor
+
+    reader = PdfReader(io.BytesIO(pdf_bytes))
+    writer = PdfWriter()
+
+    nome = (aprovado_por_nome or '').strip()
+    data_str = aprovado_em.strftime('%d/%m/%Y %H:%M') if aprovado_em else ''
+
+    for page in reader.pages:
+        mb = page.mediabox
+        width = float(mb.width)
+        height = float(mb.height)
+
+        overlay_stream = io.BytesIO()
+        c = canvas.Canvas(overlay_stream, pagesize=(width, height))
+
+        c.saveState()
+        c.setStrokeColor(HexColor('#198754'))
+        c.setFillColor(HexColor('#198754'))
+        c.setLineWidth(3)
+
+        stamp_w = 180
+        stamp_h = 60
+        margin = 40
+        x = width - margin - stamp_w
+        y = height - margin - stamp_h
+
+        c.translate(x + stamp_w / 2, y + stamp_h / 2)
+        c.rotate(6)
+        c.roundRect(-stamp_w / 2, -stamp_h / 2, stamp_w, stamp_h, 8, stroke=1, fill=0)
+        c.setFont('Helvetica-Bold', 16)
+        c.drawCentredString(0, 10, 'APROVADO')
+        c.setFont('Helvetica-Bold', 9)
+        if nome:
+            c.drawCentredString(0, -4, nome)
+        if data_str:
+            c.setFont('Helvetica', 8)
+            c.drawCentredString(0, -18, data_str)
+        c.restoreState()
+
+        c.showPage()
+        c.save()
+        overlay_stream.seek(0)
+        overlay_pdf = PdfReader(overlay_stream)
+        overlay_page = overlay_pdf.pages[0]
+
+        page.merge_page(overlay_page)
+        writer.add_page(page)
+
+    out = io.BytesIO()
+    writer.write(out)
+    out.seek(0)
+    return out.read()
+
+
+@itens.route('/itens/desenho-pdf/<int:item_id>')
+def desenho_pdf_item(item_id):
+    item = Item.query.get_or_404(item_id)
+    if not item.desenho_tecnico:
+        flash('Este item não possui desenho técnico.', 'warning')
+        return redirect(url_for('itens.visualizar_item', item_id=item.id))
+
+    if not item.desenho_aprovado_em:
+        return redirect(item.desenho_tecnico_path)
+
+    pdf_bytes, _mime = _get_item_desenho_pdf_bytes(item)
+    if not pdf_bytes:
+        flash('Não foi possível obter o PDF do desenho para carimbar.', 'danger')
+        return redirect(item.desenho_tecnico_path)
+
+    try:
+        stamped = _stamp_pdf_approved(pdf_bytes, item.desenho_aprovado_por_nome, item.desenho_aprovado_em)
+    except Exception:
+        flash('Erro ao gerar PDF carimbado.', 'danger')
+        return redirect(item.desenho_tecnico_path)
+
+    filename = f"{(item.codigo_acb or 'DESENHO')}_{(item.nome or 'item')}.pdf".replace(' ', '_')
+    return send_file(
+        io.BytesIO(stamped),
+        mimetype='application/pdf',
+        as_attachment=False,
+        download_name=filename,
+    )
+
+
 @itens.route('/itens/imprimir-desenho/<int:item_id>')
 def imprimir_desenho_item(item_id):
     """Impressão do desenho técnico do Item com carimbo de aprovação."""
     item = Item.query.get_or_404(item_id)
-    return render_template('itens/imprimir_desenho.html', item=item)
+    return redirect(url_for('itens.desenho_pdf_item', item_id=item.id))
 
 
 @itens.route('/itens/aprovar-desenho/<int:item_id>', methods=['POST'])
