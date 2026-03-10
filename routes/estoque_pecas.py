@@ -62,6 +62,22 @@ def entrada():
         secao_i = _to_int(secao)
         linha_i = _to_int(linha)
         coluna_i = _to_int(coluna)
+
+        if estante_i and secao_i and linha_i and coluna_i:
+            ocupado = (
+                EstoquePecas.query
+                .filter(
+                    EstoquePecas.estante == estante_i,
+                    EstoquePecas.secao == secao_i,
+                    EstoquePecas.linha == linha_i,
+                    EstoquePecas.coluna == coluna_i,
+                )
+                .first()
+            )
+            if ocupado and str(ocupado.item_id) != str(item_id):
+                flash('Este endereço já está ocupado por outro item. Escolha outra posição.', 'warning')
+                itens = Item.query.all()
+                return render_template('estoque_pecas/entrada.html', itens=itens)
         
         # Verificar se já existe um registro para este item
         estoque_existente = EstoquePecas.query.filter_by(item_id=item_id).first()
@@ -376,10 +392,32 @@ def atualizar_localizacao(estoque_id):
         
         estoque_item.prateleira = None
         estoque_item.posicao = None
-        estoque_item.estante = _to_int(estante)
-        estoque_item.secao = _to_int(secao)
-        estoque_item.linha = _to_int(linha)
-        estoque_item.coluna = _to_int(coluna)
+
+        estante_i = _to_int(estante)
+        secao_i = _to_int(secao)
+        linha_i = _to_int(linha)
+        coluna_i = _to_int(coluna)
+
+        if estante_i and secao_i and linha_i and coluna_i:
+            ocupado = (
+                EstoquePecas.query
+                .filter(
+                    EstoquePecas.estante == estante_i,
+                    EstoquePecas.secao == secao_i,
+                    EstoquePecas.linha == linha_i,
+                    EstoquePecas.coluna == coluna_i,
+                    EstoquePecas.id != estoque_item.id,
+                )
+                .first()
+            )
+            if ocupado:
+                flash('Este endereço já está ocupado por outro item. Escolha outra posição.', 'warning')
+                return redirect(url_for('estoque_pecas.index'))
+
+        estoque_item.estante = estante_i
+        estoque_item.secao = secao_i
+        estoque_item.linha = linha_i
+        estoque_item.coluna = coluna_i
         
         db.session.commit()
         flash('Localização atualizada com sucesso!', 'success')

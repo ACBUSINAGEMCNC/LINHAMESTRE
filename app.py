@@ -1034,6 +1034,8 @@ def create_app():
                     'Desenho do Item: aprovação com carimbo APROVADO dentro do PDF (nome e data).',
                     'Kanban: links do desenho agora abrem o PDF carimbado quando aprovado.',
                     'Editar Item: tempos de setup e por peça em minutos/segundos com cálculo automático.',
+                    'Estoque de Peças: endereçamento por Estante/Seção/Linha/Coluna e mapa interativo.',
+                    'Estoque de Peças: busca com imagem + PDF do desenho e pesquisa global no mapa.',
                 ]
             }
         except Exception:
