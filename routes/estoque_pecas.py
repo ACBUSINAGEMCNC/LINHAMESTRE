@@ -1,4 +1,5 @@
 from flask import Blueprint, render_template, request, redirect, url_for, flash, jsonify
+from sqlalchemy import or_
 from models import db, EstoquePecas, Item, MovimentacaoEstoquePecas
 from utils import validate_form_data
 from datetime import datetime
@@ -221,6 +222,49 @@ def mapa():
         ocupados_map=ocupados_map,
         itens_estoque=itens_estoque,
     )
+
+
+@estoque_pecas.route('/estoque-pecas/mapa/search')
+def mapa_search():
+    q = (request.args.get('q') or '').strip()
+    if not q:
+        return jsonify({'results': []})
+
+    like = f"%{q}%"
+    rows = (
+        EstoquePecas.query
+        .join(Item, EstoquePecas.item_id == Item.id)
+        .filter(
+            or_(
+                Item.codigo_acb.ilike(like),
+                Item.nome.ilike(like),
+            )
+        )
+        .filter(EstoquePecas.estante.isnot(None))
+        .filter(EstoquePecas.secao.isnot(None))
+        .filter(EstoquePecas.linha.isnot(None))
+        .filter(EstoquePecas.coluna.isnot(None))
+        .order_by(EstoquePecas.estante, EstoquePecas.secao, EstoquePecas.linha, EstoquePecas.coluna)
+        .limit(40)
+        .all()
+    )
+
+    results = []
+    for e in rows:
+        results.append({
+            'estoque_id': e.id,
+            'item_id': e.item.id if e.item else None,
+            'codigo': (e.item.codigo_acb if e.item else '') or '',
+            'nome': (e.item.nome if e.item else '') or '',
+            'imagem': (e.item.imagem_path if e.item and e.item.imagem_path else '') or '',
+            'pdf': url_for('itens.desenho_pdf_item', item_id=e.item.id) if e.item and e.item.desenho_tecnico else '',
+            'estante': e.estante,
+            'secao': e.secao,
+            'linha': e.linha,
+            'coluna': e.coluna,
+        })
+
+    return jsonify({'results': results})
 
 
 @estoque_pecas.route('/estoque-pecas/mapa/definir', methods=['POST'])
