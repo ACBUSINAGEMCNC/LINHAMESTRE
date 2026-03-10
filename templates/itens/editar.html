@@ -205,9 +205,41 @@
                                     {% if item.desenho_tecnico %}
                                     <div class="mt-2">
                                         <div class="small text-muted mb-1">Atual: {{ item.desenho_tecnico }}</div>
-                                        <a href="{{ item.desenho_tecnico_path }}" target="_blank" class="btn btn-sm btn-info">
+                                        <a href="{{ url_for('itens.desenho_pdf_item', item_id=item.id) }}" target="_blank" class="btn btn-sm btn-info">
                                             <i class="fas fa-file-pdf"></i> Ver desenho atual
                                         </a>
+                                    </div>
+                                    {% endif %}
+
+                                    {% if usuario_nivel == 'admin' %}
+                                        <div class="mt-2">
+                                            {% if item.desenho_tecnico %}
+                                                {% if item.desenho_aprovado_em %}
+                                                    <form method="POST" action="{{ url_for('itens.desaprovar_desenho_item', item_id=item.id) }}" style="display:inline-block;">
+                                                        <button type="submit" class="btn btn-sm btn-outline-warning">
+                                                            <i class="fas fa-check"></i> Aprovado
+                                                        </button>
+                                                    </form>
+                                                {% else %}
+                                                    <form method="POST" action="{{ url_for('itens.aprovar_desenho_item', item_id=item.id) }}" style="display:inline-block;">
+                                                        <button type="submit" class="btn btn-sm btn-outline-success">
+                                                            <i class="fas fa-stamp"></i> Aprovar
+                                                        </button>
+                                                    </form>
+                                                {% endif %}
+                                            {% endif %}
+                                        </div>
+                                    {% endif %}
+
+                                    {% if item.desenho_aprovado_em %}
+                                    <div class="alert alert-success mt-2 mb-0">
+                                        <strong>Aprovado</strong>
+                                        {% if item.desenho_aprovado_por_nome %}
+                                            por {{ item.desenho_aprovado_por_nome }}
+                                        {% endif %}
+                                        {% if item.desenho_aprovado_em %}
+                                            em {{ item.desenho_aprovado_em.strftime('%d/%m/%Y %H:%M') }}
+                                        {% endif %}
                                     </div>
                                     {% endif %}
                                 </div>
