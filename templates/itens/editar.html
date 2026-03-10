@@ -215,17 +215,13 @@
                                         <div class="mt-2">
                                             {% if item.desenho_tecnico %}
                                                 {% if item.desenho_aprovado_em %}
-                                                    <form method="POST" action="{{ url_for('itens.desaprovar_desenho_item', item_id=item.id) }}" style="display:inline-block;">
-                                                        <button type="submit" class="btn btn-sm btn-outline-warning">
-                                                            <i class="fas fa-check"></i> Aprovado
-                                                        </button>
-                                                    </form>
+                                                    <button type="submit" class="btn btn-sm btn-outline-warning" formmethod="POST" formaction="{{ url_for('itens.desaprovar_desenho_item', item_id=item.id) }}">
+                                                        <i class="fas fa-check"></i> Aprovado
+                                                    </button>
                                                 {% else %}
-                                                    <form method="POST" action="{{ url_for('itens.aprovar_desenho_item', item_id=item.id) }}" style="display:inline-block;">
-                                                        <button type="submit" class="btn btn-sm btn-outline-success">
-                                                            <i class="fas fa-stamp"></i> Aprovar
-                                                        </button>
-                                                    </form>
+                                                    <button type="submit" class="btn btn-sm btn-outline-success" formmethod="POST" formaction="{{ url_for('itens.aprovar_desenho_item', item_id=item.id) }}">
+                                                        <i class="fas fa-stamp"></i> Aprovar
+                                                    </button>
                                                 {% endif %}
                                             {% endif %}
                                         </div>
