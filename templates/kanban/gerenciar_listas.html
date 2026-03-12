@@ -258,7 +258,14 @@ document.addEventListener('DOMContentLoaded', function() {
                 },
                 body: JSON.stringify({ ordem: ordem })
             })
-            .then(response => response.json())
+            .then(async (response) => {
+                const text = await response.text();
+                try {
+                    return JSON.parse(text);
+                } catch (e) {
+                    return { success: false, message: text || 'Resposta inválida do servidor' };
+                }
+            })
             .then(data => {
                 if (data.success) {
                     // Atualizar badges de ordem
@@ -269,7 +276,8 @@ document.addEventListener('DOMContentLoaded', function() {
                     // Mostrar mensagem de sucesso
                     showToast('success', data.message);
                 } else {
-                    showToast('error', data.message);
+                    const msg = data.message || (Array.isArray(data.errors) ? data.errors.join(', ') : '') || 'Erro ao reordenar listas';
+                    showToast('error', msg);
                     // Reverter ordem em caso de erro
                     setTimeout(() => location.reload(), 1500);
                 }
