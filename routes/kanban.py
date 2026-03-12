@@ -542,11 +542,16 @@ def reordenar_listas():
         listas_db = {l.id: l for l in KanbanLista.query.filter(KanbanLista.id.in_(ordem_ids)).all()}
         if not ordem_ids:
             return jsonify({'success': False, 'message': 'Lista de ordem vazia.'})
-        # Verificar primeiro e último nome
-        first_name = listas_db[ordem_ids[0]].nome
-        last_name = listas_db[ordem_ids[-1]].nome
-        if first_name not in PROTECTED_LISTS or last_name not in PROTECTED_LISTS:
-            return jsonify({'success': False, 'message': 'Entrada deve permanecer primeiro e Expedição último.'})
+
+        # Só aplicar a regra de proteção se as listas protegidas existirem no payload.
+        present_names = {listas_db[lid].nome for lid in ordem_ids if lid in listas_db}
+        has_entrada = 'Entrada' in present_names
+        has_expedicao = 'Expedição' in present_names
+        if has_entrada and has_expedicao:
+            first_name = listas_db[ordem_ids[0]].nome
+            last_name = listas_db[ordem_ids[-1]].nome
+            if first_name != 'Entrada' or last_name != 'Expedição':
+                return jsonify({'success': False, 'message': 'Entrada deve permanecer primeiro e Expedição último.'})
 
         for i, lista_id in enumerate(ordem_ids):
             lista = listas_db.get(lista_id)
