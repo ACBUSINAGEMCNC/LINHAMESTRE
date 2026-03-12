@@ -67,11 +67,11 @@
                                 {% if lista.nome not in ['Entrada', 'Expedição'] %}
                                 <div class="btn-group">
                                     <button type="button" class="btn btn-sm btn-outline-primary" 
-                                            onclick="editarLista({{ lista.id }}, '{{ lista.nome }}', '{{ lista.tipo_servico or '' }}', '{{ lista.cor }}', {{ lista.ativa|lower }})">
+                                            onclick="editarLista({{ lista.id }}, {{ lista.nome|tojson }}, {{ (lista.tipo_servico or '')|tojson }}, {{ lista.cor|tojson }}, {{ 'true' if lista.ativa else 'false' }})">
                                         <i class="fas fa-edit"></i>
                                     </button>
                                     <button type="button" class="btn btn-sm btn-outline-danger" 
-                                            onclick="confirmarExclusao({{ lista.id }}, '{{ lista.nome }}')">
+                                            onclick="confirmarExclusao({{ lista.id }}, {{ lista.nome|tojson }})">
                                         <i class="fas fa-trash"></i>
                                     </button>
                                 </div>
@@ -229,6 +229,7 @@ document.addEventListener('DOMContentLoaded', function() {
     // Inicializar Sortable para reordenação
     const sortable = Sortable.create(document.getElementById('listas-sortable'), {
         filter: '.locked, .btn-group, button, a, input, select, textarea',
+        handle: '.kanban-list-drag-handle',
         draggable: '.list-group-item:not(.locked)',
         animation: 150,
         forceFallback: isIOS,
