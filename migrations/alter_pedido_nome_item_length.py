@@ -26,6 +26,12 @@ def migrate_postgres():
 			logger.warning("DATABASE_URL não encontrada, pulando migração PostgreSQL")
 			return False
 
+		# psycopg2 não entende drivers no scheme (postgresql+psycopg:// / postgresql+psycopg2://)
+		db_url = db_url.replace('postgresql+psycopg://', 'postgresql://')
+		db_url = db_url.replace('postgresql+psycopg2://', 'postgresql://')
+		if db_url.startswith('postgres://'):
+			db_url = 'postgresql://' + db_url[len('postgres://'):]
+
 		conn = psycopg2.connect(db_url)
 		conn.autocommit = True
 
