@@ -91,6 +91,12 @@ def verificar_inicializar_banco():
             else:
                 logger.warning("Falha ao verificar/adicionar coluna quantidade_snapshot.")
 
+            from migrations.alter_pedido_nome_item_length import migrate_postgres as migrate_pedido_nome_item_len
+            if migrate_pedido_nome_item_len():
+                logger.info("Coluna pedido.nome_item verificada/alterada para VARCHAR(255) (Supabase).")
+            else:
+                logger.warning("Falha ao verificar/alterar coluna pedido.nome_item (Supabase).")
+
             from migrations.enable_rls_public_tables import migrate_postgres as migrate_rls_public
             if migrate_rls_public():
                 logger.info("RLS verificado/habilitado nas tabelas public (Supabase).")

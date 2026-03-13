@@ -444,7 +444,7 @@ class Pedido(db.Model):
     cliente_id = db.Column(db.Integer, db.ForeignKey('cliente.id'), nullable=False)
     unidade_entrega_id = db.Column(db.Integer, db.ForeignKey('unidade_entrega.id'), nullable=False)
     item_id = db.Column(db.Integer, db.ForeignKey('item.id'), nullable=True)
-    nome_item = db.Column(db.String(100), nullable=True)
+    nome_item = db.Column(db.String(255), nullable=True)
     descricao = db.Column(db.Text)
     quantidade = db.Column(db.Integer, nullable=False)
     data_entrada = db.Column(db.Date, nullable=False, default=datetime.now().date())
