@@ -35,6 +35,14 @@ def _is_max_connections_error(exc: Exception) -> bool:
     msg = str(exc or '')
     return 'Max client connections reached' in msg or 'max client connections reached' in msg
 
+
+def _get_database_url_from_env() -> str:
+    return (
+        os.getenv('DATABASE_URL', '')
+        or os.getenv('URL_DO_BANCO_DE_DADOS', '')
+        or os.getenv('URL_BANCO_DE_DADOS', '')
+    )
+
 def verificar_inicializar_banco():
     """Verifica se o banco de dados existe e o inicializa se necessário."""
     if _env_flag('SKIP_DB_CHECKS'):
@@ -42,7 +50,7 @@ def verificar_inicializar_banco():
         return
 
     force_sqlite = os.getenv('FORCE_SQLITE', '').strip().lower() in ('1', 'true', 'yes')
-    database_url = '' if force_sqlite else os.getenv('DATABASE_URL', '')
+    database_url = '' if force_sqlite else _get_database_url_from_env()
     
     # Se for PostgreSQL (Supabase), usar script de migração rápido
     if database_url.startswith('postgresql://') or database_url.startswith('postgresql+psycopg://') or database_url.startswith('postgresql+psycopg2://'):
@@ -431,7 +439,7 @@ def create_app():
     # Configurar DATABASE_URL: PostgreSQL (produção) ou SQLite (desenvolvimento/temporário)
     # FORCE_SQLITE: força SQLite mesmo que DATABASE_URL esteja configurada (útil para testes locais)
     force_sqlite = os.getenv('FORCE_SQLITE', '').strip().lower() in ('1', 'true', 'yes')
-    database_url = None if force_sqlite else os.getenv('DATABASE_URL')
+    database_url = None if force_sqlite else _get_database_url_from_env()
     if not database_url:
         # Usar SQLite local como fallback ou quando FORCE_SQLITE está ativo
         db_path = os.path.join(WRITABLE_DIR, 'database.db')
