@@ -84,25 +84,49 @@ def verificar_inicializar_banco():
                 logger.info("Coluna categoria_trabalho verificada/adicionada com sucesso.")
             else:
                 logger.warning("Falha ao verificar/adicionar coluna categoria_trabalho.")
-            
+        except Exception as col_err:
+            if _is_max_connections_error(col_err):
+                logger.warning("Supabase sem conexões disponíveis (Max client connections reached). Pulando demais migrações de startup.")
+                return
+            logger.warning(f"Erro ao migrar coluna categoria_trabalho: {str(col_err)}")
+
+        try:
             from migrations.add_quantidade_snapshot import migrate_postgres as migrate_snapshot_pg
             if migrate_snapshot_pg():
                 logger.info("Coluna quantidade_snapshot verificada/adicionada com sucesso.")
             else:
                 logger.warning("Falha ao verificar/adicionar coluna quantidade_snapshot.")
+        except Exception as col_err:
+            if _is_max_connections_error(col_err):
+                logger.warning("Supabase sem conexões disponíveis (Max client connections reached). Pulando demais migrações de startup.")
+                return
+            logger.warning(f"Erro ao migrar coluna quantidade_snapshot: {str(col_err)}")
 
+        try:
             from migrations.alter_pedido_nome_item_length import migrate_postgres as migrate_pedido_nome_item_len
             if migrate_pedido_nome_item_len():
                 logger.info("Coluna pedido.nome_item verificada/alterada para VARCHAR(255) (Supabase).")
             else:
                 logger.warning("Falha ao verificar/alterar coluna pedido.nome_item (Supabase).")
+        except Exception as col_err:
+            if _is_max_connections_error(col_err):
+                logger.warning("Supabase sem conexões disponíveis (Max client connections reached). Pulando demais migrações de startup.")
+                return
+            logger.warning(f"Erro ao migrar coluna pedido.nome_item: {str(col_err)}")
 
+        try:
             from migrations.enable_rls_public_tables import migrate_postgres as migrate_rls_public
             if migrate_rls_public():
                 logger.info("RLS verificado/habilitado nas tabelas public (Supabase).")
             else:
                 logger.warning("Falha ao verificar/habilitar RLS nas tabelas public.")
+        except Exception as col_err:
+            if _is_max_connections_error(col_err):
+                logger.warning("Supabase sem conexões disponíveis (Max client connections reached). Pulando demais migrações de startup.")
+                return
+            logger.warning(f"Erro ao migrar RLS public tables: {str(col_err)}")
 
+        try:
             from migrations.add_indexes_and_pk_postgres import migrate_postgres as migrate_indexes_pk
             if migrate_indexes_pk():
                 logger.info("Índices de FKs e PKs de tabelas backup verificados/criados (Supabase).")
@@ -112,7 +136,7 @@ def verificar_inicializar_banco():
             if _is_max_connections_error(col_err):
                 logger.warning("Supabase sem conexões disponíveis (Max client connections reached). Pulando demais migrações de startup.")
                 return
-            logger.warning(f"Erro ao migrar coluna categoria_trabalho: {str(col_err)}")
+            logger.warning(f"Erro ao migrar índices/PKs Postgres: {str(col_err)}")
             
         # Executar migração para adicionar coluna tipo_bruto em Item
         try:

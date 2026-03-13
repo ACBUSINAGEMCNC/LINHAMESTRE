@@ -10,6 +10,11 @@ except Exception:
 	psycopg2 = None
 	sql = None
 
+try:
+	import psycopg
+except Exception:
+	psycopg = None
+
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
 
@@ -17,9 +22,6 @@ logger = logging.getLogger(__name__)
 def migrate_postgres():
 	conn = None
 	try:
-		if psycopg2 is None or sql is None:
-			logger.warning("psycopg2 não está disponível, pulando migração PostgreSQL")
-			return False
 		load_dotenv()
 		db_url = os.getenv('DATABASE_URL')
 		if not db_url:
@@ -32,33 +34,64 @@ def migrate_postgres():
 		if db_url.startswith('postgres://'):
 			db_url = 'postgresql://' + db_url[len('postgres://'):]
 
-		conn = psycopg2.connect(db_url)
-		conn.autocommit = True
+		if psycopg2 is not None:
+			conn = psycopg2.connect(db_url)
+			conn.autocommit = True
 
-		with conn.cursor() as cursor:
-			cursor.execute(
-				"""
-				SELECT character_maximum_length
-				FROM information_schema.columns
-				WHERE table_name = 'pedido' AND column_name = 'nome_item';
-				"""
-			)
-			row = cursor.fetchone()
-			if not row:
-				logger.warning("Coluna 'nome_item' não encontrada na tabela 'pedido' (PostgreSQL)")
-				return False
+			with conn.cursor() as cursor:
+				cursor.execute(
+					"""
+					SELECT character_maximum_length
+					FROM information_schema.columns
+					WHERE table_name = 'pedido' AND column_name = 'nome_item';
+					"""
+				)
+				row = cursor.fetchone()
+				if not row:
+					logger.warning("Coluna 'nome_item' não encontrada na tabela 'pedido' (PostgreSQL)")
+					return False
 
-			max_len = row[0]
-			if max_len is None:
-				logger.info("Coluna 'nome_item' já é tipo sem limite definido (PostgreSQL)")
+				max_len = row[0]
+				if max_len is None:
+					logger.info("Coluna 'nome_item' já é tipo sem limite definido (PostgreSQL)")
+					return True
+				if int(max_len) >= 255:
+					logger.info("Coluna 'nome_item' já possui tamanho >= 255 (PostgreSQL)")
+					return True
+
+				cursor.execute("ALTER TABLE pedido ALTER COLUMN nome_item TYPE VARCHAR(255);")
+				logger.info("Coluna 'nome_item' alterada para VARCHAR(255) na tabela 'pedido' (PostgreSQL)")
 				return True
-			if int(max_len) >= 255:
-				logger.info("Coluna 'nome_item' já possui tamanho >= 255 (PostgreSQL)")
-				return True
 
-			cursor.execute("ALTER TABLE pedido ALTER COLUMN nome_item TYPE VARCHAR(255);")
-			logger.info("Coluna 'nome_item' alterada para VARCHAR(255) na tabela 'pedido' (PostgreSQL)")
-			return True
+		if psycopg is not None:
+			with psycopg.connect(db_url, autocommit=True) as conn3:
+				with conn3.cursor() as cursor:
+					cursor.execute(
+						"""
+						SELECT character_maximum_length
+						FROM information_schema.columns
+						WHERE table_name = 'pedido' AND column_name = 'nome_item';
+						"""
+					)
+					row = cursor.fetchone()
+					if not row:
+						logger.warning("Coluna 'nome_item' não encontrada na tabela 'pedido' (PostgreSQL)")
+						return False
+
+					max_len = row[0]
+					if max_len is None:
+						logger.info("Coluna 'nome_item' já é tipo sem limite definido (PostgreSQL)")
+						return True
+					if int(max_len) >= 255:
+						logger.info("Coluna 'nome_item' já possui tamanho >= 255 (PostgreSQL)")
+						return True
+
+					cursor.execute("ALTER TABLE pedido ALTER COLUMN nome_item TYPE VARCHAR(255);")
+					logger.info("Coluna 'nome_item' alterada para VARCHAR(255) na tabela 'pedido' (PostgreSQL)")
+					return True
+
+		logger.warning("Nem psycopg2 nem psycopg (v3) estão disponíveis, pulando migração PostgreSQL")
+		return False
 
 	except Exception as e:
 		logger.error(f"Erro ao migrar PostgreSQL: {str(e)}")
