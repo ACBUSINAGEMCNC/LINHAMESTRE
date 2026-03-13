@@ -536,7 +536,12 @@ def editar_lista(lista_id):
 def reordenar_listas():
     """Rota para reordenar as listas Kanban, mantendo listas protegidas nas posições extremas"""
     try:
-        ordem_ids = request.json.get('ordem', [])
+        ordem_ids_raw = request.json.get('ordem', [])
+
+        try:
+            ordem_ids = [int(x) for x in ordem_ids_raw]
+        except Exception:
+            return jsonify({'success': False, 'message': 'Payload inválido: lista de IDs deve conter apenas números.'})
 
         # Garantir que posições extremas continuem protegidas
         listas_db = {l.id: l for l in KanbanLista.query.filter(KanbanLista.id.in_(ordem_ids)).all()}
