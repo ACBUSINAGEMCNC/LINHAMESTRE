@@ -138,10 +138,15 @@
                     {% set tem_itens = false %}
                     {% if itens and itens|length > 0 %}
                         {% for row in itens %}
-                            {% if (row.quantidade or 0) > 0 %}
-                                {% set tem_itens = true %}
-                                <tr>
-                                    <td>{{ row.quantidade or 0 }}</td>
+                            {% set tem_itens = true %}
+                            <tr {% if (row.quantidade or 0) == 0 %}class="table-warning"{% endif %}>
+                                    <td>
+                                        {% if (row.quantidade or 0) == 0 %}
+                                            <strong class="text-danger">0</strong>
+                                        {% else %}
+                                            {{ row.quantidade or 0 }}
+                                        {% endif %}
+                                    </td>
                                     <td>
                                         {% if row.item and row.item.imagem_path %}
                                             <img src="{{ row.item.imagem_path }}" class="thumb" alt="" onerror="this.style.display='none'">
@@ -157,7 +162,6 @@
                                     </td>
                                     <td>{{ row.item.categoria_montagem if row.item else '' }}</td>
                                 </tr>
-                            {% endif %}
                         {% endfor %}
                     {% endif %}
                     {% if not tem_itens %}
