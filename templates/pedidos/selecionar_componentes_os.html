@@ -1,0 +1,92 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Selecionar Componentes - Gerar OS</title>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css">
+</head>
+<body>
+    <div class="container mt-4">
+        <div class="d-flex align-items-center justify-content-between mb-3">
+            <h4 class="mb-0">Gerar OS - Item composto</h4>
+            <a href="/pedidos" class="btn btn-outline-secondary">Voltar</a>
+        </div>
+
+        <div class="card mb-3">
+            <div class="card-body">
+                <div><strong>Item:</strong> {{ item_composto.codigo_acb }} - {{ item_composto.nome }}</div>
+                <div><strong>Pedidos selecionados:</strong> {{ pedidos_grupo|length }}</div>
+                <div><strong>Quantidade total:</strong> {{ quantidade_total_composto }}</div>
+            </div>
+        </div>
+
+        <form method="POST" action="/pedidos/gerar-os-composto-confirmar">
+            {% if csrf_token is defined %}
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+            {% endif %}
+
+            {% for p in pedidos_grupo %}
+                <input type="hidden" name="pedidos[]" value="{{ p.id }}">
+            {% endfor %}
+            <input type="hidden" name="item_composto_id" value="{{ item_composto.id }}">
+
+            <div class="card">
+                <div class="card-header d-flex align-items-center justify-content-between">
+                    <div class="fw-semibold">Selecione quais componentes vão gerar OS</div>
+                    <div class="d-flex gap-2">
+                        <button type="button" class="btn btn-sm btn-outline-primary" onclick="marcarTodos(true)">Marcar todos</button>
+                        <button type="button" class="btn btn-sm btn-outline-secondary" onclick="marcarTodos(false)">Desmarcar todos</button>
+                    </div>
+                </div>
+                <div class="card-body p-0">
+                    <div class="table-responsive">
+                        <table class="table table-striped table-hover align-middle mb-0">
+                            <thead>
+                                <tr>
+                                    <th style="width: 60px;"></th>
+                                    <th>Componente</th>
+                                    <th style="width: 160px;">Tipo</th>
+                                    <th style="width: 180px;">Qtd necessária</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% if componentes and componentes|length > 0 %}
+                                    {% for c in componentes %}
+                                    <tr>
+                                        <td class="text-center">
+                                            <input class="form-check-input" type="checkbox" name="componentes[]" value="{{ c.item_id }}" checked>
+                                        </td>
+                                        <td>
+                                            <div class="fw-semibold" style="font-size: 12px;">{{ c.codigo_acb }}</div>
+                                            <div class="text-muted" style="font-size: 11px;">{{ c.nome }}</div>
+                                        </td>
+                                        <td>{{ c.tipo_item }}</td>
+                                        <td>{{ c.quantidade_necessaria }}</td>
+                                    </tr>
+                                    {% endfor %}
+                                {% else %}
+                                    <tr>
+                                        <td colspan="4">Nenhum componente elegível para OS (produção).</td>
+                                    </tr>
+                                {% endif %}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+                <div class="card-footer d-flex align-items-center justify-content-end gap-2">
+                    <button type="submit" class="btn btn-success">Gerar OS</button>
+                </div>
+            </div>
+        </form>
+    </div>
+
+    <script>
+        function marcarTodos(flag) {
+            document.querySelectorAll('input[name="componentes[]"]').forEach(function(cb) {
+                cb.checked = !!flag;
+            });
+        }
+    </script>
+</body>
+</html>

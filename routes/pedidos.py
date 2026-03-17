@@ -362,13 +362,88 @@ def gerar_ordem_servico_multipla():
     print(f"   É composto: {item_principal.eh_composto}")
     
     if item_principal.eh_composto:
-        print("   ➡️  REDIRECIONANDO PARA DESMEMBRAMENTO")
-        # ITEM COMPOSTO: Desmembrar em múltiplas OS
-        return gerar_os_item_composto(pedidos_grupo, item_principal)
+        print("   ➡️  SELEÇÃO DE COMPONENTES (ITEM COMPOSTO)")
+        quantidade_total_composto = sum((p.quantidade or 0) for p in pedidos_grupo)
+
+        # Componentes elegíveis para OS: apenas tipo_item != 'montagem'
+        componentes = []
+        for componente_rel in (item_principal.componentes or []):
+            item_componente = componente_rel.item_componente
+            if not item_componente:
+                continue
+            if (item_componente.tipo_item or '').strip().lower() == 'montagem':
+                continue
+            qtd_necessaria = (componente_rel.quantidade or 0) * quantidade_total_composto
+            componentes.append({
+                'item_id': item_componente.id,
+                'codigo_acb': item_componente.codigo_acb,
+                'nome': item_componente.nome,
+                'tipo_item': (item_componente.tipo_item or 'producao'),
+                'quantidade_necessaria': qtd_necessaria,
+            })
+
+        # Renderizar tela para o usuário escolher quais componentes gerar OS
+        return render_template(
+            'pedidos/selecionar_componentes_os.html',
+            item_composto=item_principal,
+            pedidos_grupo=pedidos_grupo,
+            quantidade_total_composto=quantidade_total_composto,
+            componentes=componentes,
+        )
     else:
         print("   ➡️  GERANDO OS SIMPLES")
         # ITEM SIMPLES: Gerar OS normal
         return gerar_os_item_simples(pedidos_grupo)
+
+
+@pedidos.route('/pedidos/gerar-os-composto-confirmar', methods=['POST'])
+def gerar_os_composto_confirmar():
+    """Confirmação: gerar OS apenas para componentes selecionados (ignora montagem)."""
+    pedidos_ids = request.form.getlist('pedidos[]')
+    item_composto_id = request.form.get('item_composto_id')
+    componentes_ids = request.form.getlist('componentes[]')
+
+    if not pedidos_ids or not item_composto_id:
+        flash('Dados inválidos para gerar OS do item composto.', 'danger')
+        return redirect(url_for('pedidos.listar_pedidos'))
+
+    try:
+        item_composto_id_int = int(item_composto_id)
+    except Exception:
+        flash('Item composto inválido.', 'danger')
+        return redirect(url_for('pedidos.listar_pedidos'))
+
+    pedidos_grupo = []
+    for pid in pedidos_ids:
+        pedido = Pedido.query.get(pid)
+        if pedido and not (hasattr(pedido, 'cancelado') and pedido.cancelado) and pedido.item_id:
+            pedidos_grupo.append(pedido)
+
+    if not pedidos_grupo:
+        flash('Não há pedidos válidos para gerar OS.', 'danger')
+        return redirect(url_for('pedidos.listar_pedidos'))
+
+    item_principal = Item.query.get(pedidos_grupo[0].item_id)
+    if not item_principal or not item_principal.eh_composto or item_principal.id != item_composto_id_int:
+        flash('Item do pedido não corresponde ao item composto informado.', 'danger')
+        return redirect(url_for('pedidos.listar_pedidos'))
+
+    # Garantir grupo de um único item
+    if any(p.item_id != item_principal.id for p in pedidos_grupo):
+        flash('Selecione apenas pedidos do mesmo item para gerar OS.', 'warning')
+        return redirect(url_for('pedidos.listar_pedidos'))
+
+    # Componentes selecionados
+    try:
+        componentes_ids_int = {int(x) for x in componentes_ids}
+    except Exception:
+        componentes_ids_int = set()
+
+    if not componentes_ids_int:
+        flash('Nenhum componente selecionado para gerar OS.', 'warning')
+        return redirect(url_for('pedidos.listar_pedidos'))
+
+    return gerar_os_item_composto_seletivo(pedidos_grupo, item_principal, componentes_ids_int)
 
 def gerar_os_item_simples(pedidos_grupo):
     """Gera uma OS normal para item simples"""
@@ -408,6 +483,10 @@ def gerar_os_item_composto(pedidos_grupo, item_composto):
         for componente_rel in item_composto.componentes:
             item_componente = componente_rel.item_componente
             quantidade_componente = componente_rel.quantidade * quantidade_total_composto
+
+            # Componentes de montagem não geram OS (vão para fluxo de materiais/montagem)
+            if item_componente and (item_componente.tipo_item or '').strip().lower() == 'montagem':
+                continue
             
             print(f"   📦 Processando componente: {item_componente.codigo_acb}")
             print(f"      Quantidade necessária: {quantidade_componente}")
@@ -493,6 +572,106 @@ def gerar_os_item_composto(pedidos_grupo, item_composto):
     except Exception as e:
         db.session.rollback()
         flash(f'Erro ao desmembrar item composto: {str(e)}', 'danger')
+        return redirect(url_for('pedidos.listar_pedidos'))
+
+
+def gerar_os_item_composto_seletivo(pedidos_grupo, item_composto, componentes_ids_selecionados):
+    """Gera OS apenas para componentes selecionados (ignorando montagem)."""
+    try:
+        os_geradas = []
+        quantidade_total_composto = sum((pedido.quantidade or 0) for pedido in pedidos_grupo)
+
+        for componente_rel in (item_composto.componentes or []):
+            item_componente = componente_rel.item_componente
+            if not item_componente:
+                continue
+
+            if item_componente.id not in componentes_ids_selecionados:
+                continue
+
+            if (item_componente.tipo_item or '').strip().lower() == 'montagem':
+                continue
+
+            quantidade_componente = (componente_rel.quantidade or 0) * quantidade_total_composto
+            if quantidade_componente <= 0:
+                continue
+
+            numero_os = generate_next_os_code()
+
+            os_componente = OrdemServico(
+                numero=numero_os,
+                data_criacao=datetime.now().date(),
+                status='Entrada',
+            )
+            try:
+                max_pos = db.session.query(db.func.max(OrdemServico.posicao)).filter_by(status='Entrada').scalar()
+                os_componente.posicao = (max_pos or 0) + 1
+            except Exception:
+                os_componente.posicao = 0
+
+            db.session.add(os_componente)
+            db.session.flush()
+
+            # Criar pedidos virtuais por pedido original (preserva cliente/unidade)
+            for pedido_original in pedidos_grupo:
+                quantidade_virtual = (componente_rel.quantidade or 0) * (pedido_original.quantidade or 0)
+                if quantidade_virtual <= 0:
+                    continue
+
+                pedido_virtual = Pedido(
+                    cliente_id=pedido_original.cliente_id,
+                    unidade_entrega_id=pedido_original.unidade_entrega_id,
+                    item_id=item_componente.id,
+                    nome_item=f"{item_componente.nome} (Componente de {item_composto.nome})",
+                    descricao=f"Componente gerado automaticamente do item composto {item_composto.codigo_acb}",
+                    quantidade=quantidade_virtual,
+                    data_entrada=datetime.now().date(),
+                    numero_pedido=f"AUTO-{numero_os}-{pedido_original.id}",
+                    previsao_entrega=pedido_original.previsao_entrega,
+                    numero_oc=numero_os,
+                )
+                db.session.add(pedido_virtual)
+                db.session.flush()
+
+                assoc = PedidoOrdemServico(
+                    pedido_id=pedido_virtual.id,
+                    ordem_servico_id=os_componente.id,
+                    quantidade_snapshot=pedido_virtual.quantidade,
+                )
+                db.session.add(assoc)
+
+            os_geradas.append({
+                'numero': numero_os,
+                'componente': item_componente.nome,
+                'quantidade': quantidade_componente,
+            })
+
+        # Atualizar pedidos originais com referência às OS geradas
+        numeros_os = [os['numero'] for os in os_geradas]
+        resumo = None
+        if numeros_os:
+            primeiro = numeros_os[0]
+            extra = len(numeros_os) - 1
+            resumo = primeiro if extra <= 0 else f"{primeiro} (+{extra})"
+
+        for pedido in pedidos_grupo:
+            if resumo:
+                pedido.numero_oc = resumo[:20]
+
+        db.session.commit()
+
+        if os_geradas:
+            detalhes = []
+            for os_info in os_geradas:
+                detalhes.append(f"OS {os_info['numero']}: {os_info['componente']} (Qtd: {os_info['quantidade']})")
+            flash(f'Geradas {len(os_geradas)} OS do item composto: {"; ".join(detalhes)}', 'success')
+        else:
+            flash('Nenhuma OS foi gerada para o item composto.', 'warning')
+
+        return redirect(url_for('pedidos.listar_pedidos'))
+    except Exception as e:
+        db.session.rollback()
+        flash(f'Erro ao gerar OS do item composto: {str(e)}', 'danger')
         return redirect(url_for('pedidos.listar_pedidos'))
 
 
