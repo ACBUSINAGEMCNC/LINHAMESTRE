@@ -151,16 +151,10 @@
                     {% set tem_especificos = false %}
                     {% for item in pedido.itens %}
                         {% set material = item.material %}
-                        {% if material and material.especifico %}
+                        {% if material and material.especifico and (item.quantidade or 0) > 0 %}
                             {% set tem_especificos = true %}
-                            <tr {% if (item.quantidade or 0) == 0 %}class="table-warning"{% endif %}>
-                                <td>
-                                    {% if (item.quantidade or 0) == 0 %}
-                                        <strong class="text-danger">0</strong>
-                                    {% else %}
-                                        {{ item.quantidade or 0 }}
-                                    {% endif %}
-                                </td>
+                            <tr>
+                                <td>{{ item.quantidade or 0 }}</td>
                                 <td>{{ material.nome }}</td>
                                 <td class="pm-item-col">
                                     {% set itens_rel = material_item_map.get(item.material_id) if material_item_map is defined else None %}
@@ -208,9 +202,9 @@
                     {% set tem_barra = false %}
                     {% for item in pedido.itens %}
                         {% set material = item.material %}
-                        {% if not material or not material.especifico %}
+                        {% if (not material or not material.especifico) and ((item.comprimento or 0) / 1000.0) > 0 %}
                             {% set tem_barra = true %}
-                            <tr {% if ((item.comprimento or 0) / 1000.0) == 0 %}class="table-warning"{% endif %}>
+                            <tr>
                                 <td>{{ material.nome if material else '' }}</td>
                                 <td>{{ material.tipo if material else '' }}</td>
                                 <td>
@@ -224,13 +218,7 @@
                                         -
                                     {% endif %}
                                 </td>
-                                <td>
-                                    {% if ((item.comprimento or 0) / 1000.0) == 0 %}
-                                        <strong class="text-danger">0</strong>
-                                    {% else %}
-                                        {{ ((item.comprimento or 0) / 1000.0) | round(2) }}
-                                    {% endif %}
-                                </td>
+                                <td>{{ ((item.comprimento or 0) / 1000.0) | round(2) }}</td>
                                 <td class="pm-item-col">
                                     {% set itens_rel = material_item_map.get(item.material_id) if material_item_map is defined else None %}
                                     {% if itens_rel %}
