@@ -85,45 +85,26 @@ def _reconciliar_os_componente_por_composto(ordem_servico):
     if not componente_rel:
         return False, 'Este item não foi encontrado como componente do composto informado.'
 
-    # Determinar o grupo de pedidos originais do composto
-    # Buscar o grupo mais recente de pedidos não-AUTO do composto que tenha múltiplos clientes
-    todos_pedidos = (
-        Pedido.query
-        .filter(Pedido.item_id == item_composto.id)
-        .filter(Pedido.numero_pedido.isnot(None))
-        .filter(~Pedido.numero_pedido.like('AUTO-%'))
-        .order_by(Pedido.id.desc())
-        .all()
-    )
-    
-    if not todos_pedidos:
-        return False, 'Nenhum pedido original encontrado para o item composto.'
-    
-    # Agrupar por numero_oc e pegar o grupo mais recente com mais de 1 pedido
-    grupos_oc = {}
-    for p in todos_pedidos:
-        oc = p.numero_oc or 'SEM_OC'
-        if oc not in grupos_oc:
-            grupos_oc[oc] = []
-        grupos_oc[oc].append(p)
-    
-    pedidos_originais = []
-    for oc in sorted(grupos_oc.keys(), reverse=True):
-        grupo = grupos_oc[oc]
-        if len(grupo) > 1:
-            pedidos_originais = grupo
-            break
-    
-    # Fallback: se não houver grupo com múltiplos pedidos, usar o último pedido individualmente
+    # Determinar pedidos originais a partir dos próprios pedidos AUTO desta OS.
+    # Evita "puxar" grupos errados do banco e inflar quantidade na impressão.
+    original_ids = set()
+    for p in pedidos_os:
+        if not p or not p.numero_pedido or not p.numero_pedido.startswith('AUTO-'):
+            continue
+        m = re.search(r'-(\d+)$', p.numero_pedido)
+        if not m:
+            continue
+        try:
+            original_ids.add(int(m.group(1)))
+        except Exception:
+            continue
+
+    if not original_ids:
+        return False, 'Não foi possível identificar os pedidos originais desta OS (AUTO-*).'
+
+    pedidos_originais = Pedido.query.filter(Pedido.id.in_(sorted(list(original_ids)))).all()
     if not pedidos_originais:
-        pedido_ref = todos_pedidos[0]
-        if pedido_ref.numero_oc:
-            pedidos_originais = [p for p in todos_pedidos if p.numero_oc == pedido_ref.numero_oc]
-        else:
-            pedidos_originais = [pedido_ref]
-    
-    if not pedidos_originais:
-        return False, 'Não foi possível montar o grupo de pedidos originais para o composto.'
+        return False, 'Pedidos originais não encontrados para reconciliar esta OS.'
 
     _recriar_pedidos_virtuais_os_componente(ordem_servico, pedidos_originais, item_composto, componente_rel)
     return True, f"Pedidos virtuais atualizados ({len(pedidos_originais)} pedido(s) do composto)."
@@ -149,39 +130,24 @@ def _precisa_reconciliar_os_componente_por_composto(ordem_servico):
     if not item_composto or not item_composto.eh_composto:
         return False
 
-    # Buscar o grupo mais recente de pedidos originais com múltiplos clientes
-    todos_pedidos = (
-        Pedido.query
-        .filter(Pedido.item_id == item_composto.id)
-        .filter(Pedido.numero_pedido.isnot(None))
-        .filter(~Pedido.numero_pedido.like('AUTO-%'))
-        .order_by(Pedido.id.desc())
-        .all()
-    )
-    
-    if not todos_pedidos:
-        return False
-    
-    # Agrupar por numero_oc e pegar o grupo mais recente com mais de 1 pedido
-    grupos_oc = {}
-    for p in todos_pedidos:
-        oc = p.numero_oc or 'SEM_OC'
-        if oc not in grupos_oc:
-            grupos_oc[oc] = []
-        grupos_oc[oc].append(p)
-    
-    total_originais = 0
-    for oc in sorted(grupos_oc.keys(), reverse=True):
-        grupo = grupos_oc[oc]
-        if len(grupo) > 1:
-            total_originais = len(grupo)
-            break
-    
-    if total_originais <= 1:
+    # Regra segura: só reconciliar se existir evidência de que há mais de um pedido original
+    # já representado nesta OS (pelos sufixos AUTO-...-<pedido_id>) e estiver faltando algum.
+    original_ids = set()
+    for p in pedidos_auto:
+        m = re.search(r'-(\d+)$', p.numero_pedido or '')
+        if not m:
+            continue
+        try:
+            original_ids.add(int(m.group(1)))
+        except Exception:
+            continue
+
+    # Se a OS só referencia 1 pedido original, não reconciliamos automaticamente.
+    if len(original_ids) <= 1:
         return False
 
-    # Se ainda não existem AUTO suficientes para separar por cliente/unidade, reconciliar.
-    return len(pedidos_auto) < total_originais
+    # Se já há 1 AUTO por pedido original, não precisa.
+    return len(pedidos_auto) < len(original_ids)
 
 @ordens.route('/ordens-servico')
 def listar_ordens_servico():
