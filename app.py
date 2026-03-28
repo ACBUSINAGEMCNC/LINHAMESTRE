@@ -478,9 +478,9 @@ def create_app():
             engine_options['pool_recycle'] = 60
         else:
             engine_options['pool_recycle'] = 180
-            engine_options['pool_size'] = int(os.getenv('DB_POOL_SIZE', '2') or 2)
-            engine_options['max_overflow'] = int(os.getenv('DB_MAX_OVERFLOW', '0') or 0)
-            engine_options['pool_timeout'] = int(os.getenv('DB_POOL_TIMEOUT', '10') or 10)
+            engine_options['pool_size'] = int(os.getenv('DB_POOL_SIZE', '5') or 5)
+            engine_options['max_overflow'] = int(os.getenv('DB_MAX_OVERFLOW', '5') or 5)
+            engine_options['pool_timeout'] = int(os.getenv('DB_POOL_TIMEOUT', '30') or 30)
         # Supabase / poolers podem causar "DuplicatePreparedStatement" no psycopg3.
         # Desativar prepared statements evita esse erro.
         if database_url.lower().startswith('postgresql+psycopg://'):
