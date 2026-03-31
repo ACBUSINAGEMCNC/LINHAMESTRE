@@ -57,6 +57,8 @@ def migrate_postgres() -> bool:
             "ALTER TABLE estoque_pecas ADD COLUMN IF NOT EXISTS secao INTEGER NULL;",
             "ALTER TABLE estoque_pecas ADD COLUMN IF NOT EXISTS linha INTEGER NULL;",
             "ALTER TABLE estoque_pecas ADD COLUMN IF NOT EXISTS coluna INTEGER NULL;",
+            "ALTER TABLE estoque_pecas ADD COLUMN IF NOT EXISTS coluna_fim INTEGER NULL;",
+            "ALTER TABLE estoque_pecas ADD COLUMN IF NOT EXISTS permitir_compartilhado BOOLEAN NOT NULL DEFAULT FALSE;",
         ]
 
         for s in stmts:
@@ -96,6 +98,8 @@ def migrate_sqlite() -> bool:
         _sqlite_add_column_if_missing(cursor, 'estoque_pecas', 'secao', 'INTEGER NULL')
         _sqlite_add_column_if_missing(cursor, 'estoque_pecas', 'linha', 'INTEGER NULL')
         _sqlite_add_column_if_missing(cursor, 'estoque_pecas', 'coluna', 'INTEGER NULL')
+        _sqlite_add_column_if_missing(cursor, 'estoque_pecas', 'coluna_fim', 'INTEGER NULL')
+        _sqlite_add_column_if_missing(cursor, 'estoque_pecas', 'permitir_compartilhado', 'INTEGER NOT NULL DEFAULT 0')
 
         conn.commit()
         return True

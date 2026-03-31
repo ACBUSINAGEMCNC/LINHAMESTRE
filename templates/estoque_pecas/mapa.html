@@ -11,7 +11,7 @@
     <style>
         .grid {
             display: grid;
-            grid-template-columns: repeat(10, minmax(0, 1fr));
+            grid-template-columns: repeat(6, minmax(0, 1fr));
             gap: 6px;
             justify-content: stretch;
         }
@@ -108,13 +108,10 @@
                     <div class="fw-semibold">Estante</div>
                     <div class="text-muted small">Selecione a estante (1 a 8)</div>
                 </div>
-                <div class="d-flex align-items-center gap-2">
-                    <select id="estanteSelect" class="form-select" style="width: 160px;">
-                        {% for n in range(1, 9) %}
-                        <option value="{{ n }}" {% if estante == n %}selected{% endif %}>{{ n }}</option>
-                        {% endfor %}
-                    </select>
-                    <a id="btnIr" href="{{ url_for('estoque_pecas.mapa', estante=estante) }}" class="btn btn-primary">Ir</a>
+                <div class="d-flex flex-wrap gap-2">
+                    {% for n in range(1, 9) %}
+                        <a class="btn {% if estante == n %}btn-primary{% else %}btn-outline-primary{% endif %}" href="{{ url_for('estoque_pecas.mapa', estante=n) }}">{{ n }}</a>
+                    {% endfor %}
                 </div>
             </div>
         </div>
@@ -148,14 +145,20 @@
                         <div class="mb-2">
                             <div class="text-muted small mb-1">Linha {{ lin }}</div>
                             <div class="grid">
-                                {% for col in range(1, 11) %}
+                                {% for col in range(1, 7) %}
                                     {% set key = (sec, lin, col) %}
-                                    {% set e = ocupados_map.get(key) %}
-                                    <div class="cell {% if not e %}empty{% endif %}"
+                                    {% set items = ocupados_map.get(key) %}
+                                    {% set t = temp_map.get(key) if temp_map is defined else None %}
+                                    {% set e = items[0] if items else None %}
+                                    <div class="cell {% if not e and not t %}empty{% endif %}"
+                                         id="cell-{{ sec }}-{{ lin }}-{{ col }}"
                                          data-secao="{{ sec }}"
                                          data-linha="{{ lin }}"
                                          data-coluna="{{ col }}"
                                          data-estoque-id="{{ e.id if e else '' }}"
+                                         data-count="{{ items|length if items else 0 }}"
+                                         data-temp-id="{{ t.id if t else '' }}"
+                                         data-temp-nome="{{ t.nome if t and t.nome else '' }}"
                                          data-codigo="{{ e.item.codigo_acb if e and e.item and e.item.codigo_acb else '' }}"
                                          data-nome="{{ e.item.nome if e and e.item and e.item.nome else '' }}"
                                          data-imagem="{{ e.item.imagem_path if e and e.item and e.item.imagem_path else '' }}"
@@ -166,9 +169,18 @@
                                             {% endif %}
                                             <div class="code">{{ e.item.codigo_acb if e.item else '---' }}</div>
                                             <div class="name">{{ e.item.nome if e.item else '' }}</div>
+                                            {% if items and (items|length) > 1 %}
+                                                <div class="mt-1"><span class="badge bg-primary">+{{ (items|length) - 1 }}</span></div>
+                                            {% endif %}
                                         {% else %}
-                                            <div class="text-muted small">Vazio</div>
-                                            <div class="text-muted" style="font-size: 10px;">C{{ col }}</div>
+                                            {% if t %}
+                                                <div class="fw-semibold" style="font-size: 11px;">TEMP</div>
+                                                <div class="text-muted" style="font-size: 10px;">{{ t.nome if t and t.nome else 'Temporário' }}</div>
+                                                <div class="mt-1"><span class="badge bg-warning text-dark">{{ estante }}-{{ ['A','B','C','D'][sec-1] }}-{{ (lin-1)*6 + col }}</span></div>
+                                            {% else %}
+                                                <div class="text-muted small">Vazio</div>
+                                                <div class="text-muted" style="font-size: 10px;">{{ estante }}-{{ ['A','B','C','D'][sec-1] }}-{{ (lin-1)*6 + col }}</div>
+                                            {% endif %}
                                         {% endif %}
                                     </div>
                                 {% endfor %}
@@ -198,6 +210,50 @@
 
                             <div class="mb-2">
                                 <span class="badge bg-primary" id="mEndereco"></span>
+                            </div>
+
+                            <div class="row g-2 mb-3">
+                                <div class="col-12 col-sm-6">
+                                    <label class="form-label">Ocupar até a coluna (opcional)</label>
+                                    <select class="form-select" name="coluna_fim" id="mColunaFim">
+                                        <option value="">Somente este slot</option>
+                                        {% for c in range(1, 7) %}
+                                            <option value="{{ c }}">{{ c }}</option>
+                                        {% endfor %}
+                                    </select>
+                                    <div class="text-muted small mt-1">Use para mesclar slots na mesma linha.</div>
+                                </div>
+                                <div class="col-12 col-sm-6 d-flex align-items-end">
+                                    <div class="form-check">
+                                        <input class="form-check-input" type="checkbox" name="permitir_compartilhado" id="mCompartilhar" value="1">
+                                        <label class="form-check-label" for="mCompartilhar">Permitir compartilhado</label>
+                                        <div class="text-muted small">Permite mais de um item no mesmo slot.</div>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div class="card mb-3">
+                                <div class="card-body">
+                                    <div class="form-check">
+                                        <input class="form-check-input" type="checkbox" name="usar_temporario" id="mTemporario" value="1">
+                                        <label class="form-check-label" for="mTemporario">Slot temporário</label>
+                                        <div class="text-muted small">Cria/usa um endereço temporário. Se ficar vazio, ele some.</div>
+                                    </div>
+                                    <div class="mt-2">
+                                        <label class="form-label">Nome do temporário (opcional)</label>
+                                        <input type="text" class="form-control" name="temporario_nome" id="mTemporarioNome" maxlength="80" placeholder="Ex: Separado / Em inspeção">
+                                    </div>
+
+                                    <div class="mt-3" id="tempActions" style="display:none;">
+                                        <form method="POST" action="{{ url_for('estoque_pecas.remover_slot_temporario_mapa') }}">
+                                            <input type="hidden" name="estante" value="{{ estante }}">
+                                            <input type="hidden" name="secao" id="rtSecao">
+                                            <input type="hidden" name="linha" id="rtLinha">
+                                            <input type="hidden" name="coluna" id="rtColuna">
+                                            <button type="submit" class="btn btn-sm btn-outline-danger">Remover temporário (se vazio)</button>
+                                        </form>
+                                    </div>
+                                </div>
                             </div>
 
                             <div id="mPreview" class="border rounded p-2 mb-3" style="display:none;">
@@ -306,16 +362,42 @@
                 const nome = $(this).data('nome') || '';
                 const img = $(this).data('imagem') || '';
                 const pdf = $(this).data('pdf') || '';
+                const count = parseInt($(this).data('count') || 0);
+                const tempId = $(this).data('temp-id');
+                const tempNome = $(this).data('temp-nome') || '';
+
+                const quad = ['A','B','C','D'][parseInt(secao) - 1] || 'A';
+                const slot = ((parseInt(linha) - 1) * 6) + parseInt(coluna);
 
                 $('#mSecao').val(secao);
                 $('#mLinha').val(linha);
                 $('#mColuna').val(coluna);
-                $('#mEndereco').text(`E{{ estante }}-S${secao}-L${linha}-C${coluna}`);
+                $('#mEndereco').text(`{{ estante }}-${quad}-${slot}`);
 
-                if (estoqueId) {
-                    $('#mEstoqueId').val(String(estoqueId)).trigger('change');
+                $('#rtSecao').val(secao);
+                $('#rtLinha').val(linha);
+                $('#rtColuna').val(coluna);
+
+                if (tempId) {
+                    $('#tempActions').show();
+                    $('#mTemporario').prop('checked', true);
+                    $('#mTemporarioNome').val(tempNome);
                 } else {
+                    $('#tempActions').hide();
+                    $('#mTemporario').prop('checked', false);
+                    $('#mTemporarioNome').val('');
+                }
+
+                // Se houver mais de 1 item no slot, não pré-selecionar automaticamente
+                if (count > 1) {
                     $('#mEstoqueId').val('').trigger('change');
+                    $('#mPreview').hide();
+                } else {
+                    if (estoqueId) {
+                        $('#mEstoqueId').val(String(estoqueId)).trigger('change');
+                    } else {
+                        $('#mEstoqueId').val('').trigger('change');
+                    }
                 }
 
                 if (estoqueId) {
@@ -335,6 +417,9 @@
                 } else {
                     $('#mPreview').hide();
                 }
+
+                $('#mColunaFim').val('');
+                $('#mCompartilhar').prop('checked', false);
 
                 if (modal) {
                     modal.show();
@@ -381,7 +466,9 @@
 
                         $('#mapSearchResults').show();
                         results.forEach(res => {
-                            const endereco = `E${res.estante}-S${res.secao}-L${res.linha}-C${res.coluna}`;
+                            const quad = ['A','B','C','D'][parseInt(res.secao) - 1] || 'A';
+                            const slot = ((parseInt(res.linha) - 1) * 6) + parseInt(res.coluna);
+                            const endereco = `${res.estante}-${quad}-${slot}`;
                             const title = `${res.codigo} - ${res.nome}`;
                             const href = `{{ url_for('estoque_pecas.mapa') }}?estante=${encodeURIComponent(res.estante)}#cell-${res.secao}-${res.linha}-${res.coluna}`;
                             const item = $(

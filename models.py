@@ -653,8 +653,12 @@ class EstoquePecas(db.Model):
     secao = db.Column(db.Integer)          # 1..4
     linha = db.Column(db.Integer)          # 1..2
     coluna = db.Column(db.Integer)         # 1..10
+    coluna_fim = db.Column(db.Integer)     # 1..10 (opcional, para ocupar múltiplos slots na mesma linha)
+    permitir_compartilhado = db.Column(db.Boolean, default=False)  # permite múltiplos itens no mesmo slot
+    slot_temp_id = db.Column(db.Integer, db.ForeignKey('estoque_pecas_slot_temp.id'), nullable=True)
     observacao = db.Column(db.Text)
     item = relationship('Item', backref='estoque_pecas', lazy=True)
+    slot_temp = relationship('EstoquePecasSlotTemp', backref='itens', lazy=True)
     movimentacoes = relationship('MovimentacaoEstoquePecas', backref='estoque_pecas', lazy=True, cascade="all, delete-orphan")
     
     def __repr__(self):
@@ -671,6 +675,23 @@ class MovimentacaoEstoquePecas(db.Model):
     
     def __repr__(self):
         return f'<MovimentacaoEstoquePecas {self.id}>'
+
+
+class EstoquePecasSlotTemp(db.Model):
+    __tablename__ = 'estoque_pecas_slot_temp'
+
+    id = db.Column(db.Integer, primary_key=True)
+    nome = db.Column(db.String(80), nullable=True)
+    estante = db.Column(db.Integer, nullable=False)       # 1..8
+    secao = db.Column(db.Integer, nullable=False)         # 1..4
+    linha = db.Column(db.Integer, nullable=False)         # 1..2
+    coluna = db.Column(db.Integer, nullable=False)        # 1..6
+    coluna_fim = db.Column(db.Integer, nullable=True)     # 1..6 (opcional)
+    permitir_compartilhado = db.Column(db.Boolean, default=True)
+    criado_em = db.Column(db.DateTime, default=datetime.utcnow)
+
+    def __repr__(self):
+        return f'<EstoquePecasSlotTemp {self.id}>'
 
 # Novo modelo para registro mensal de cartões finalizados
 class RegistroMensal(db.Model):

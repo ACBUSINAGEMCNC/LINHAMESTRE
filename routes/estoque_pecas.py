@@ -1,6 +1,6 @@
 from flask import Blueprint, render_template, request, redirect, url_for, flash, jsonify
 from sqlalchemy import or_
-from models import db, EstoquePecas, Item, MovimentacaoEstoquePecas
+from models import db, EstoquePecas, Item, MovimentacaoEstoquePecas, EstoquePecasSlotTemp
 from utils import validate_form_data
 from datetime import datetime
 
@@ -64,6 +64,10 @@ def entrada():
         coluna_i = _to_int(coluna)
 
         if estante_i and secao_i and linha_i and coluna_i:
+            if coluna_i < 1 or coluna_i > 6:
+                flash('Coluna inválida para o mapa (use 1 a 6).', 'warning')
+                itens = Item.query.all()
+                return render_template('estoque_pecas/entrada.html', itens=itens)
             ocupado = (
                 EstoquePecas.query
                 .filter(
@@ -221,21 +225,79 @@ def mapa():
         estante_i = 1
 
     itens_estoque = EstoquePecas.query.order_by(EstoquePecas.id.desc()).all()
+
+    # Slots temporários da estante
+    slots_temp = (
+        EstoquePecasSlotTemp.query
+        .filter(EstoquePecasSlotTemp.estante == estante_i)
+        .order_by(EstoquePecasSlotTemp.id.desc())
+        .all()
+    )
     ocupados = (
         EstoquePecas.query
         .filter(EstoquePecas.estante == estante_i)
+        .filter(EstoquePecas.slot_temp_id.is_(None))
         .all()
     )
+
+    # Itens que estão em slots temporários desta estante
+    slot_ids = [s.id for s in slots_temp]
+    itens_em_temp = []
+    if slot_ids:
+        itens_em_temp = (
+            EstoquePecas.query
+            .filter(EstoquePecas.slot_temp_id.in_(slot_ids))
+            .all()
+        )
 
     ocupados_map = {}
     for e in ocupados:
         if e.secao and e.linha and e.coluna:
-            ocupados_map[(int(e.secao), int(e.linha), int(e.coluna))] = e
+            sec = int(e.secao)
+            lin = int(e.linha)
+            col_ini = int(e.coluna)
+            col_fim = int(e.coluna_fim) if getattr(e, 'coluna_fim', None) else col_ini
+            # Limitar ao grid atual (6 colunas por linha)
+            col_fim = max(col_ini, min(col_fim, 6))
+            for c in range(col_ini, col_fim + 1):
+                k = (sec, lin, c)
+                if k not in ocupados_map:
+                    ocupados_map[k] = []
+                ocupados_map[k].append(e)
+
+    # Mapa de slots temporários por célula (para renderização)
+    temp_map = {}
+    for s in slots_temp:
+        sec = int(s.secao)
+        lin = int(s.linha)
+        col_ini = int(s.coluna)
+        col_fim = int(s.coluna_fim) if getattr(s, 'coluna_fim', None) else col_ini
+        col_fim = max(col_ini, min(col_fim, 6))
+        for c in range(col_ini, col_fim + 1):
+            temp_map[(sec, lin, c)] = s
+
+    # Itens dentro de temporário aparecem como ocupados no endereço do temporário
+    slot_by_id = {s.id: s for s in slots_temp}
+    for e in itens_em_temp:
+        s = slot_by_id.get(e.slot_temp_id)
+        if not s:
+            continue
+        sec = int(s.secao)
+        lin = int(s.linha)
+        col_ini = int(s.coluna)
+        col_fim = int(s.coluna_fim) if getattr(s, 'coluna_fim', None) else col_ini
+        col_fim = max(col_ini, min(col_fim, 6))
+        for c in range(col_ini, col_fim + 1):
+            k = (sec, lin, c)
+            if k not in ocupados_map:
+                ocupados_map[k] = []
+            ocupados_map[k].append(e)
 
     return render_template(
         'estoque_pecas/mapa.html',
         estante=estante_i,
         ocupados_map=ocupados_map,
+        temp_map=temp_map,
         itens_estoque=itens_estoque,
     )
 
@@ -290,6 +352,10 @@ def definir_localizacao_mapa():
     secao = request.form.get('secao')
     linha = request.form.get('linha')
     coluna = request.form.get('coluna')
+    coluna_fim = request.form.get('coluna_fim')
+    permitir_compartilhado = (request.form.get('permitir_compartilhado') or '').strip().lower() in ('1', 'true', 'yes', 'sim', 'on')
+    usar_temporario = (request.form.get('usar_temporario') or '').strip().lower() in ('1', 'true', 'yes', 'sim', 'on')
+    temporario_nome = (request.form.get('temporario_nome') or '').strip()
 
     def _to_int(v):
         try:
@@ -304,40 +370,109 @@ def definir_localizacao_mapa():
     secao_i = _to_int(secao)
     linha_i = _to_int(linha)
     coluna_i = _to_int(coluna)
+    coluna_fim_i = _to_int(coluna_fim)
 
-    if not estoque_id_i:
-        flash('Selecione um item do estoque.', 'danger')
+    if not estoque_id_i and not usar_temporario:
+        flash('Selecione um item do estoque (ou marque Temporário).', 'danger')
         return redirect(url_for('estoque_pecas.mapa', estante=estante_i or 1))
 
     if not (estante_i and secao_i and linha_i and coluna_i):
         flash('Informe Estante, Seção, Linha e Coluna.', 'danger')
         return redirect(url_for('estoque_pecas.mapa', estante=estante_i or 1))
 
-    if estante_i < 1 or estante_i > 8 or secao_i < 1 or secao_i > 4 or linha_i < 1 or linha_i > 2 or coluna_i < 1 or coluna_i > 10:
+    if estante_i < 1 or estante_i > 8 or secao_i < 1 or secao_i > 4 or linha_i < 1 or linha_i > 2 or coluna_i < 1 or coluna_i > 6:
         flash('Endereço inválido.', 'danger')
         return redirect(url_for('estoque_pecas.mapa', estante=estante_i or 1))
 
-    estoque_item = EstoquePecas.query.get_or_404(estoque_id_i)
+    if coluna_fim_i is not None:
+        if coluna_fim_i < coluna_i:
+            coluna_fim_i = coluna_i
+        if coluna_fim_i < 1 or coluna_fim_i > 6:
+            flash('Coluna final inválida.', 'danger')
+            return redirect(url_for('estoque_pecas.mapa', estante=estante_i or 1))
 
-    ocupado = (
+    estoque_item = EstoquePecas.query.get(estoque_id_i) if estoque_id_i else None
+
+    # Ocupação: considera coluna..coluna_fim na mesma linha
+    col_fim_check = coluna_fim_i if coluna_fim_i is not None else coluna_i
+    col_ini_check = coluna_i
+    ocupacoes = (
         EstoquePecas.query
         .filter(
             EstoquePecas.estante == estante_i,
             EstoquePecas.secao == secao_i,
             EstoquePecas.linha == linha_i,
-            EstoquePecas.coluna == coluna_i,
-            EstoquePecas.id != estoque_item.id,
         )
-        .first()
+        .all()
     )
-    if ocupado:
-        flash('Esta posição já está ocupada por outro item. Remova/alterne antes.', 'warning')
-        return redirect(url_for('estoque_pecas.mapa', estante=estante_i))
 
-    estoque_item.estante = estante_i
-    estoque_item.secao = secao_i
-    estoque_item.linha = linha_i
-    estoque_item.coluna = coluna_i
+    def _ranges_overlap(a1, a2, b1, b2):
+        return max(a1, b1) <= min(a2, b2)
+
+    conflita = []
+    for o in ocupacoes:
+        if estoque_item and o.id == estoque_item.id:
+            continue
+        o_ini = int(o.coluna) if o.coluna else None
+        if not o_ini:
+            continue
+        o_fim = int(o.coluna_fim) if getattr(o, 'coluna_fim', None) else o_ini
+        o_fim = max(o_ini, min(o_fim, 6))
+        if _ranges_overlap(col_ini_check, col_fim_check, o_ini, o_fim):
+            conflita.append(o)
+
+    if conflita:
+        if not permitir_compartilhado:
+            flash('Esta posição já está ocupada por outro item. Marque "Permitir compartilhado" para permitir mais de um item no mesmo slot.', 'warning')
+            return redirect(url_for('estoque_pecas.mapa', estante=estante_i))
+        # Só permite compartilhar se todas as ocupações já estiverem marcadas como compartilháveis
+        if any(not getattr(o, 'permitir_compartilhado', False) for o in conflita):
+            flash('Esta posição já tem item(s) que não permitem compartilhamento. Ajuste o(s) item(ns) existente(s) para permitir compartilhamento antes.', 'warning')
+            return redirect(url_for('estoque_pecas.mapa', estante=estante_i))
+
+    # Se for temporário, criamos (ou atualizamos) o slot temporário neste endereço.
+    slot_temp = None
+    if usar_temporario:
+        # Só pode haver 1 temporário por célula de início
+        slot_temp = (
+            EstoquePecasSlotTemp.query
+            .filter_by(estante=estante_i, secao=secao_i, linha=linha_i, coluna=coluna_i)
+            .first()
+        )
+        if not slot_temp:
+            slot_temp = EstoquePecasSlotTemp(
+                estante=estante_i,
+                secao=secao_i,
+                linha=linha_i,
+                coluna=coluna_i,
+            )
+            db.session.add(slot_temp)
+            db.session.flush()
+
+        slot_temp.nome = temporario_nome or slot_temp.nome
+        slot_temp.coluna_fim = coluna_fim_i
+        slot_temp.permitir_compartilhado = True if permitir_compartilhado else False
+
+    # Se selecionou item, atualiza local.
+    if estoque_item:
+        if slot_temp:
+            # Endereço passa a ser regido pelo temporário
+            estoque_item.slot_temp_id = slot_temp.id
+            estoque_item.estante = None
+            estoque_item.secao = None
+            estoque_item.linha = None
+            estoque_item.coluna = None
+            estoque_item.coluna_fim = None
+            estoque_item.permitir_compartilhado = permitir_compartilhado
+        else:
+            estoque_item.slot_temp_id = None
+            estoque_item.estante = estante_i
+            estoque_item.secao = secao_i
+            estoque_item.linha = linha_i
+            estoque_item.coluna = coluna_i
+            estoque_item.coluna_fim = coluna_fim_i
+            estoque_item.permitir_compartilhado = permitir_compartilhado
+
     db.session.commit()
     flash('Localização atualizada com sucesso!', 'success')
     return redirect(url_for('estoque_pecas.mapa', estante=estante_i))
@@ -363,12 +498,71 @@ def remover_localizacao_mapa():
         return redirect(url_for('estoque_pecas.mapa', estante=estante_i))
 
     estoque_item = EstoquePecas.query.get_or_404(estoque_id_i)
+    slot_temp_id = getattr(estoque_item, 'slot_temp_id', None)
+
+    estoque_item.slot_temp_id = None
     estoque_item.estante = None
     estoque_item.secao = None
     estoque_item.linha = None
     estoque_item.coluna = None
+    estoque_item.coluna_fim = None
     db.session.commit()
+
+    # Se estava em temporário, remover o temporário quando ficar vazio
+    if slot_temp_id:
+        rest = EstoquePecas.query.filter_by(slot_temp_id=slot_temp_id).first()
+        if not rest:
+            slot = EstoquePecasSlotTemp.query.get(slot_temp_id)
+            if slot:
+                db.session.delete(slot)
+                db.session.commit()
+
     flash('Localização removida com sucesso!', 'success')
+    return redirect(url_for('estoque_pecas.mapa', estante=estante_i))
+
+
+@estoque_pecas.route('/estoque-pecas/mapa/temp/remover', methods=['POST'])
+def remover_slot_temporario_mapa():
+    estante = request.form.get('estante')
+    secao = request.form.get('secao')
+    linha = request.form.get('linha')
+    coluna = request.form.get('coluna')
+
+    def _to_int(v):
+        try:
+            if v is None or str(v).strip() == '':
+                return None
+            return int(v)
+        except Exception:
+            return None
+
+    estante_i = _to_int(estante) or 1
+    secao_i = _to_int(secao)
+    linha_i = _to_int(linha)
+    coluna_i = _to_int(coluna)
+
+    if not (secao_i and linha_i and coluna_i):
+        flash('Endereço inválido para remover temporário.', 'danger')
+        return redirect(url_for('estoque_pecas.mapa', estante=estante_i))
+
+    slot = (
+        EstoquePecasSlotTemp.query
+        .filter_by(estante=estante_i, secao=secao_i, linha=linha_i, coluna=coluna_i)
+        .first()
+    )
+    if not slot:
+        flash('Slot temporário não encontrado.', 'warning')
+        return redirect(url_for('estoque_pecas.mapa', estante=estante_i))
+
+    # Só remove se estiver vazio
+    existe = EstoquePecas.query.filter_by(slot_temp_id=slot.id).first()
+    if existe:
+        flash('Este temporário ainda possui itens. Remova os itens primeiro.', 'warning')
+        return redirect(url_for('estoque_pecas.mapa', estante=estante_i))
+
+    db.session.delete(slot)
+    db.session.commit()
+    flash('Slot temporário removido.', 'success')
     return redirect(url_for('estoque_pecas.mapa', estante=estante_i))
 
 @estoque_pecas.route('/estoque-pecas/atualizar-localizacao/<int:estoque_id>', methods=['POST'])
@@ -399,6 +593,9 @@ def atualizar_localizacao(estoque_id):
         coluna_i = _to_int(coluna)
 
         if estante_i and secao_i and linha_i and coluna_i:
+            if coluna_i < 1 or coluna_i > 6:
+                flash('Coluna inválida para o mapa (use 1 a 6).', 'warning')
+                return redirect(url_for('estoque_pecas.index'))
             ocupado = (
                 EstoquePecas.query
                 .filter(
@@ -418,6 +615,9 @@ def atualizar_localizacao(estoque_id):
         estoque_item.secao = secao_i
         estoque_item.linha = linha_i
         estoque_item.coluna = coluna_i
+        # Limpar mescla/compartilhado neste fluxo simples de edição
+        estoque_item.coluna_fim = None
+        estoque_item.permitir_compartilhado = False
         
         db.session.commit()
         flash('Localização atualizada com sucesso!', 'success')
