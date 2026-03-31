@@ -57,7 +57,36 @@ def verificar_inicializar_banco():
         is_serverless = bool(os.getenv('VERCEL') or os.environ.get("AWS_LAMBDA_FUNCTION_NAME"))
         run_startup_migrations = _env_flag('RUN_STARTUP_MIGRATIONS')
         if is_serverless and not run_startup_migrations:
-            logger.info("Ambiente serverless detectado: pulando migrações de startup (defina RUN_STARTUP_MIGRATIONS=1 para habilitar)")
+            logger.info("Ambiente serverless detectado: rodando apenas migrações críticas (defina RUN_STARTUP_MIGRATIONS=1 para habilitar todas)")
+
+            # Migrações críticas para evitar 500 por colunas/tabelas faltantes
+            try:
+                from migrations.add_estoque_pecas_localizacao_grid import migrate_postgres as migrate_estoque_grid_pg
+                migrate_estoque_grid_pg()
+            except Exception as col_err:
+                if _is_max_connections_error(col_err):
+                    logger.warning("Supabase sem conexões disponíveis (Max client connections reached). Pulando migrações críticas do estoque.")
+                    return
+                logger.warning(f"Erro ao migrar estoque_pecas (localizacao grid): {str(col_err)}")
+
+            try:
+                from migrations.add_estoque_pecas_merge_compartilhado import migrate_postgres as migrate_estoque_merge_pg
+                migrate_estoque_merge_pg()
+            except Exception as col_err:
+                if _is_max_connections_error(col_err):
+                    logger.warning("Supabase sem conexões disponíveis (Max client connections reached). Pulando migrações críticas do estoque.")
+                    return
+                logger.warning(f"Erro ao migrar estoque_pecas (merge/compartilhado): {str(col_err)}")
+
+            try:
+                from migrations.add_estoque_pecas_slot_temporario import migrate_postgres as migrate_estoque_temp_pg
+                migrate_estoque_temp_pg()
+            except Exception as col_err:
+                if _is_max_connections_error(col_err):
+                    logger.warning("Supabase sem conexões disponíveis (Max client connections reached). Pulando migrações críticas do estoque.")
+                    return
+                logger.warning(f"Erro ao migrar estoque_pecas (slot temporário): {str(col_err)}")
+
             return
 
         logger.info("Usando PostgreSQL (Supabase) - verificando tabelas de apontamento...")
