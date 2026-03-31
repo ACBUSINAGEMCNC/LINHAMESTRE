@@ -113,6 +113,37 @@ def verificar_inicializar_banco():
             logger.warning(f"Migração retornou código {e.returncode}, mas pode estar OK")
         except Exception as e:
             logger.warning(f"Erro na migração PostgreSQL: {str(e)[:100]} - continuando")
+
+        # Migrações do Estoque de Peças (críticas para evitar 500 por coluna/tabela faltante)
+        try:
+            from migrations.add_estoque_pecas_localizacao_grid import migrate_postgres as migrate_estoque_grid_pg
+            migrate_estoque_grid_pg()
+            logger.info("Colunas de localização do estoque_pecas verificadas/adicionadas (Supabase).")
+        except Exception as col_err:
+            if _is_max_connections_error(col_err):
+                logger.warning("Supabase sem conexões disponíveis (Max client connections reached). Pulando migrações de estoque_pecas.")
+                return
+            logger.warning(f"Erro ao migrar estoque_pecas (localizacao grid): {str(col_err)}")
+
+        try:
+            from migrations.add_estoque_pecas_merge_compartilhado import migrate_postgres as migrate_estoque_merge_pg
+            migrate_estoque_merge_pg()
+            logger.info("Colunas de mescla/compartilhado do estoque_pecas verificadas/adicionadas (Supabase).")
+        except Exception as col_err:
+            if _is_max_connections_error(col_err):
+                logger.warning("Supabase sem conexões disponíveis (Max client connections reached). Pulando migrações de estoque_pecas.")
+                return
+            logger.warning(f"Erro ao migrar estoque_pecas (merge/compartilhado): {str(col_err)}")
+
+        try:
+            from migrations.add_estoque_pecas_slot_temporario import migrate_postgres as migrate_estoque_temp_pg
+            migrate_estoque_temp_pg()
+            logger.info("Tabela/coluna de slot temporário do estoque_pecas verificadas/criadas (Supabase).")
+        except Exception as col_err:
+            if _is_max_connections_error(col_err):
+                logger.warning("Supabase sem conexões disponíveis (Max client connections reached). Pulando migrações de estoque_pecas.")
+                return
+            logger.warning(f"Erro ao migrar estoque_pecas (slot temporário): {str(col_err)}")
             
         # Executar migrações adicionais para PostgreSQL
         try:
