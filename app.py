@@ -37,11 +37,28 @@ def _is_max_connections_error(exc: Exception) -> bool:
 
 
 def _get_database_url_from_env() -> str:
-    return (
+    url = (
         os.getenv('DATABASE_URL', '')
         or os.getenv('URL_DO_BANCO_DE_DADOS', '')
         or os.getenv('URL_BANCO_DE_DADOS', '')
     )
+    if not url:
+        return ''
+
+    url_lower = url.lower()
+    if url_lower.startswith('postgres://'):
+        url = 'postgresql://' + url[len('postgres://'):]
+        url_lower = url.lower()
+
+    # Preferir psycopg3 quando URL for postgresql genérica
+    if url_lower.startswith('postgresql://') and '+psycopg' not in url_lower and '+psycopg2' not in url_lower:
+        try:
+            import psycopg  # noqa: F401
+            url = 'postgresql+psycopg://' + url[len('postgresql://'):]
+        except Exception:
+            pass
+
+    return url
 
 def verificar_inicializar_banco():
     """Verifica se o banco de dados existe e o inicializa se necessário."""
@@ -144,6 +161,26 @@ def verificar_inicializar_banco():
                 logger.warning("Supabase sem conexões disponíveis (Max client connections reached). Pulando migrações de estoque_pecas.")
                 return
             logger.warning(f"Erro ao migrar estoque_pecas (slot temporário): {str(col_err)}")
+
+        try:
+            from migrations.add_estoque_pecas_linha_fim import migrate_postgres as migrate_estoque_linha_fim_pg
+            migrate_estoque_linha_fim_pg()
+            logger.info("Colunas linha_fim do estoque_pecas/slot_temp verificadas/adicionadas (Supabase).")
+        except Exception as col_err:
+            if _is_max_connections_error(col_err):
+                logger.warning("Supabase sem conexões disponíveis (Max client connections reached). Pulando migrações de estoque_pecas.")
+                return
+            logger.warning(f"Erro ao migrar estoque_pecas (linha_fim): {str(col_err)}")
+
+        try:
+            from migrations.add_estoque_pecas_slots_json import migrate_postgres as migrate_estoque_slots_json_pg
+            migrate_estoque_slots_json_pg()
+            logger.info("Colunas slots_json do estoque_pecas/slot_temp verificadas/adicionadas (Supabase).")
+        except Exception as col_err:
+            if _is_max_connections_error(col_err):
+                logger.warning("Supabase sem conexões disponíveis (Max client connections reached). Pulando migrações de estoque_pecas.")
+                return
+            logger.warning(f"Erro ao migrar estoque_pecas (slots_json): {str(col_err)}")
             
         # Executar migrações adicionais para PostgreSQL
         try:
@@ -462,6 +499,24 @@ def verificar_inicializar_banco():
                             logger.warning("Falha ao verificar/adicionar campos de localização (grid) do Estoque de Peças.")
                     except Exception as e:
                         logger.warning(f"Erro ao verificar/migrar campos de localização (grid) do Estoque de Peças: {str(e)}")
+
+                    try:
+                        from migrations.add_estoque_pecas_linha_fim import migrate_sqlite as migrate_estoque_pecas_linha_fim_sqlite
+                        if migrate_estoque_pecas_linha_fim_sqlite():
+                            logger.info("Campos linha_fim do Estoque de Peças verificados/adicionados com sucesso.")
+                        else:
+                            logger.warning("Falha ao verificar/adicionar campos linha_fim do Estoque de Peças.")
+                    except Exception as e:
+                        logger.warning(f"Erro ao verificar/migrar campos linha_fim do Estoque de Peças: {str(e)}")
+
+                    try:
+                        from migrations.add_estoque_pecas_slots_json import migrate_sqlite as migrate_estoque_pecas_slots_json_sqlite
+                        if migrate_estoque_pecas_slots_json_sqlite():
+                            logger.info("Campos slots_json do Estoque de Peças verificados/adicionados com sucesso.")
+                        else:
+                            logger.warning("Falha ao verificar/adicionar campos slots_json do Estoque de Peças.")
+                    except Exception as e:
+                        logger.warning(f"Erro ao verificar/migrar campos slots_json do Estoque de Peças: {str(e)}")
                 except Exception as col_err:
                     logger.warning(f"Erro ao verificar/adicionar coluna tipo_bruto na tabela item: {str(col_err)}")
             except Exception as col_err:

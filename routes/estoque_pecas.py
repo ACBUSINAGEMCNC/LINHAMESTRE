@@ -1,10 +1,65 @@
-from flask import Blueprint, render_template, request, redirect, url_for, flash, jsonify
+import json
+
+from flask import Blueprint, render_template, request, redirect, url_for, flash, jsonify, current_app
 from sqlalchemy import or_
+from sqlalchemy.exc import ProgrammingError
 from models import db, EstoquePecas, Item, MovimentacaoEstoquePecas, EstoquePecasSlotTemp
 from utils import validate_form_data
 from datetime import datetime
 
 estoque_pecas = Blueprint('estoque_pecas', __name__)
+
+
+def _normalize_slots(slots, estante_padrao=None):
+    out = []
+    seen = set()
+    for s in slots or []:
+        try:
+            est = int(s.get('estante') if isinstance(s, dict) else s[0])
+            sec = int(s.get('secao') if isinstance(s, dict) else s[1])
+            lin = int(s.get('linha') if isinstance(s, dict) else s[2])
+            col = int(s.get('coluna') if isinstance(s, dict) else s[3])
+        except Exception:
+            continue
+        if estante_padrao is not None:
+            est = int(estante_padrao)
+        if est < 1 or est > 8 or sec < 1 or sec > 4 or lin < 1 or lin > 2 or col < 1 or col > 6:
+            continue
+        key = (est, sec, lin, col)
+        if key in seen:
+            continue
+        seen.add(key)
+        out.append({'estante': est, 'secao': sec, 'linha': lin, 'coluna': col})
+    out.sort(key=lambda x: (x['estante'], x['secao'], x['linha'], x['coluna']))
+    return out
+
+
+def _load_slots_json(raw, estante_padrao=None):
+    if not raw:
+        return []
+    try:
+        data = json.loads(raw)
+    except Exception:
+        return []
+    return _normalize_slots(data, estante_padrao=estante_padrao)
+
+
+def _dump_slots_json(slots):
+    return json.dumps(_normalize_slots(slots), ensure_ascii=False)
+
+
+def _slots_from_entity(entity):
+    slots = _load_slots_json(getattr(entity, 'slots_json', None))
+    if slots:
+        return slots
+    if getattr(entity, 'estante', None) and getattr(entity, 'secao', None) and getattr(entity, 'linha', None) and getattr(entity, 'coluna', None):
+        return _normalize_slots([{
+            'estante': int(entity.estante),
+            'secao': int(entity.secao),
+            'linha': int(entity.linha),
+            'coluna': int(entity.coluna),
+        }])
+    return []
 
 @estoque_pecas.route('/estoque-pecas')
 def index():
@@ -216,7 +271,7 @@ def historico(estoque_id):
 
 @estoque_pecas.route('/estoque-pecas/mapa')
 def mapa():
-    estante = request.args.get('estante')
+    estante = request.args.get('estante', '1')
     try:
         estante_i = int(estante) if estante is not None and str(estante).strip() != '' else 1
     except Exception:
@@ -224,7 +279,37 @@ def mapa():
     if estante_i < 1 or estante_i > 8:
         estante_i = 1
 
-    itens_estoque = EstoquePecas.query.order_by(EstoquePecas.id.desc()).all()
+    def _fetch_mapa_data():
+        itens = EstoquePecas.query.order_by(EstoquePecas.id.desc()).all()
+        ocup = (
+            EstoquePecas.query
+            .filter(EstoquePecas.estante == estante_i)
+            .all()
+        )
+        temps = (
+            EstoquePecasSlotTemp.query
+            .filter(EstoquePecasSlotTemp.estante == estante_i)
+            .all()
+        )
+        return itens, ocup, temps
+
+    try:
+        itens_estoque, ocupados, slots_temp = _fetch_mapa_data()
+    except ProgrammingError as e:
+        msg = str(e or '')
+        if 'linha_fim' not in msg:
+            raise
+        try:
+            from migrations.add_estoque_pecas_linha_fim import migrate_postgres, migrate_sqlite
+            db_url = current_app.config.get('SQLALCHEMY_DATABASE_URI', '') or ''
+            if str(db_url).lower().startswith('postgresql'):
+                migrate_postgres()
+            else:
+                migrate_sqlite()
+            db.session.remove()
+            itens_estoque, ocupados, slots_temp = _fetch_mapa_data()
+        except Exception:
+            raise
 
     # Slots temporários da estante
     slots_temp = (
@@ -250,31 +335,32 @@ def mapa():
             .all()
         )
 
+    def _slot_index(linha_v: int, coluna_v: int) -> int:
+        return ((int(linha_v) - 1) * 6) + int(coluna_v)
+
+    def _index_to_cell(idx: int):
+        idx_i = int(idx)
+        lin = 1 if idx_i <= 6 else 2
+        col = idx_i if idx_i <= 6 else (idx_i - 6)
+        return lin, col
+
     ocupados_map = {}
     for e in ocupados:
-        if e.secao and e.linha and e.coluna:
-            sec = int(e.secao)
-            lin = int(e.linha)
-            col_ini = int(e.coluna)
-            col_fim = int(e.coluna_fim) if getattr(e, 'coluna_fim', None) else col_ini
-            # Limitar ao grid atual (6 colunas por linha)
-            col_fim = max(col_ini, min(col_fim, 6))
-            for c in range(col_ini, col_fim + 1):
-                k = (sec, lin, c)
-                if k not in ocupados_map:
-                    ocupados_map[k] = []
-                ocupados_map[k].append(e)
+        for s in _slots_from_entity(e):
+            if int(s['estante']) != estante_i:
+                continue
+            k = (int(s['secao']), int(s['linha']), int(s['coluna']))
+            if k not in ocupados_map:
+                ocupados_map[k] = []
+            ocupados_map[k].append(e)
 
     # Mapa de slots temporários por célula (para renderização)
     temp_map = {}
     for s in slots_temp:
-        sec = int(s.secao)
-        lin = int(s.linha)
-        col_ini = int(s.coluna)
-        col_fim = int(s.coluna_fim) if getattr(s, 'coluna_fim', None) else col_ini
-        col_fim = max(col_ini, min(col_fim, 6))
-        for c in range(col_ini, col_fim + 1):
-            temp_map[(sec, lin, c)] = s
+        for slot in _slots_from_entity(s):
+            if int(slot['estante']) != estante_i:
+                continue
+            temp_map[(int(slot['secao']), int(slot['linha']), int(slot['coluna']))] = s
 
     # Itens dentro de temporário aparecem como ocupados no endereço do temporário
     slot_by_id = {s.id: s for s in slots_temp}
@@ -282,13 +368,10 @@ def mapa():
         s = slot_by_id.get(e.slot_temp_id)
         if not s:
             continue
-        sec = int(s.secao)
-        lin = int(s.linha)
-        col_ini = int(s.coluna)
-        col_fim = int(s.coluna_fim) if getattr(s, 'coluna_fim', None) else col_ini
-        col_fim = max(col_ini, min(col_fim, 6))
-        for c in range(col_ini, col_fim + 1):
-            k = (sec, lin, c)
+        for slot in _slots_from_entity(s):
+            if int(slot['estante']) != estante_i:
+                continue
+            k = (int(slot['secao']), int(slot['linha']), int(slot['coluna']))
             if k not in ocupados_map:
                 ocupados_map[k] = []
             ocupados_map[k].append(e)
@@ -352,7 +435,9 @@ def definir_localizacao_mapa():
     secao = request.form.get('secao')
     linha = request.form.get('linha')
     coluna = request.form.get('coluna')
+    linha_fim = request.form.get('linha_fim')
     coluna_fim = request.form.get('coluna_fim')
+    slots_json = request.form.get('slots_json')
     permitir_compartilhado = (request.form.get('permitir_compartilhado') or '').strip().lower() in ('1', 'true', 'yes', 'sim', 'on')
     usar_temporario = (request.form.get('usar_temporario') or '').strip().lower() in ('1', 'true', 'yes', 'sim', 'on')
     temporario_nome = (request.form.get('temporario_nome') or '').strip()
@@ -370,7 +455,9 @@ def definir_localizacao_mapa():
     secao_i = _to_int(secao)
     linha_i = _to_int(linha)
     coluna_i = _to_int(coluna)
+    linha_fim_i = _to_int(linha_fim)
     coluna_fim_i = _to_int(coluna_fim)
+    slots_sel = _normalize_slots(_load_slots_json(slots_json, estante_padrao=estante_i), estante_padrao=estante_i)
 
     if not estoque_id_i and not usar_temporario:
         flash('Selecione um item do estoque (ou marque Temporário).', 'danger')
@@ -384,6 +471,16 @@ def definir_localizacao_mapa():
         flash('Endereço inválido.', 'danger')
         return redirect(url_for('estoque_pecas.mapa', estante=estante_i or 1))
 
+    if not slots_sel:
+        slots_sel = _normalize_slots([{'estante': estante_i, 'secao': secao_i, 'linha': linha_i, 'coluna': coluna_i}], estante_padrao=estante_i)
+
+    if linha_fim_i is not None:
+        if linha_fim_i < linha_i:
+            linha_fim_i = linha_i
+        if linha_fim_i < 1 or linha_fim_i > 2:
+            flash('Linha final inválida.', 'danger')
+            return redirect(url_for('estoque_pecas.mapa', estante=estante_i or 1))
+
     if coluna_fim_i is not None:
         if coluna_fim_i < coluna_i:
             coluna_fim_i = coluna_i
@@ -393,32 +490,20 @@ def definir_localizacao_mapa():
 
     estoque_item = EstoquePecas.query.get(estoque_id_i) if estoque_id_i else None
 
-    # Ocupação: considera coluna..coluna_fim na mesma linha
-    col_fim_check = coluna_fim_i if coluna_fim_i is not None else coluna_i
-    col_ini_check = coluna_i
     ocupacoes = (
         EstoquePecas.query
-        .filter(
-            EstoquePecas.estante == estante_i,
-            EstoquePecas.secao == secao_i,
-            EstoquePecas.linha == linha_i,
-        )
+        .filter(EstoquePecas.estante == estante_i)
         .all()
     )
 
-    def _ranges_overlap(a1, a2, b1, b2):
-        return max(a1, b1) <= min(a2, b2)
+    slots_sel_set = {(int(s['estante']), int(s['secao']), int(s['linha']), int(s['coluna'])) for s in slots_sel}
 
     conflita = []
     for o in ocupacoes:
         if estoque_item and o.id == estoque_item.id:
             continue
-        o_ini = int(o.coluna) if o.coluna else None
-        if not o_ini:
-            continue
-        o_fim = int(o.coluna_fim) if getattr(o, 'coluna_fim', None) else o_ini
-        o_fim = max(o_ini, min(o_fim, 6))
-        if _ranges_overlap(col_ini_check, col_fim_check, o_ini, o_fim):
+        o_slots_set = {(int(s['estante']), int(s['secao']), int(s['linha']), int(s['coluna'])) for s in _slots_from_entity(o)}
+        if slots_sel_set & o_slots_set:
             conflita.append(o)
 
     if conflita:
@@ -450,7 +535,13 @@ def definir_localizacao_mapa():
             db.session.flush()
 
         slot_temp.nome = temporario_nome or slot_temp.nome
+        slot_temp.linha_fim = linha_fim_i
         slot_temp.coluna_fim = coluna_fim_i
+        slot_temp.estante = int(slots_sel[0]['estante'])
+        slot_temp.secao = int(slots_sel[0]['secao'])
+        slot_temp.linha = int(slots_sel[0]['linha'])
+        slot_temp.coluna = int(slots_sel[0]['coluna'])
+        slot_temp.slots_json = _dump_slots_json(slots_sel)
         slot_temp.permitir_compartilhado = True if permitir_compartilhado else False
 
     # Se selecionou item, atualiza local.
@@ -462,15 +553,19 @@ def definir_localizacao_mapa():
             estoque_item.secao = None
             estoque_item.linha = None
             estoque_item.coluna = None
+            estoque_item.linha_fim = None
             estoque_item.coluna_fim = None
+            estoque_item.slots_json = None
             estoque_item.permitir_compartilhado = permitir_compartilhado
         else:
             estoque_item.slot_temp_id = None
-            estoque_item.estante = estante_i
-            estoque_item.secao = secao_i
-            estoque_item.linha = linha_i
-            estoque_item.coluna = coluna_i
+            estoque_item.estante = int(slots_sel[0]['estante'])
+            estoque_item.secao = int(slots_sel[0]['secao'])
+            estoque_item.linha = int(slots_sel[0]['linha'])
+            estoque_item.coluna = int(slots_sel[0]['coluna'])
+            estoque_item.linha_fim = linha_fim_i
             estoque_item.coluna_fim = coluna_fim_i
+            estoque_item.slots_json = _dump_slots_json(slots_sel)
             estoque_item.permitir_compartilhado = permitir_compartilhado
 
     db.session.commit()
@@ -505,7 +600,9 @@ def remover_localizacao_mapa():
     estoque_item.secao = None
     estoque_item.linha = None
     estoque_item.coluna = None
+    estoque_item.linha_fim = None
     estoque_item.coluna_fim = None
+    estoque_item.slots_json = None
     db.session.commit()
 
     # Se estava em temporário, remover o temporário quando ficar vazio
@@ -575,6 +672,8 @@ def atualizar_localizacao(estoque_id):
         secao = request.form.get('secao')
         linha = request.form.get('linha')
         coluna = request.form.get('coluna')
+        coluna_fim = request.form.get('coluna_fim')
+        permitir_compartilhado = (request.form.get('permitir_compartilhado') or '').strip().lower() in ('1', 'true', 'yes', 'sim', 'on')
 
         def _to_int(v):
             try:
@@ -591,33 +690,60 @@ def atualizar_localizacao(estoque_id):
         secao_i = _to_int(secao)
         linha_i = _to_int(linha)
         coluna_i = _to_int(coluna)
+        coluna_fim_i = _to_int(coluna_fim)
 
         if estante_i and secao_i and linha_i and coluna_i:
             if coluna_i < 1 or coluna_i > 6:
                 flash('Coluna inválida para o mapa (use 1 a 6).', 'warning')
                 return redirect(url_for('estoque_pecas.index'))
-            ocupado = (
+
+            if coluna_fim_i is not None:
+                if coluna_fim_i < coluna_i:
+                    coluna_fim_i = coluna_i
+                if coluna_fim_i < 1 or coluna_fim_i > 6:
+                    flash('Coluna final inválida para o mapa (use 1 a 6).', 'warning')
+                    return redirect(url_for('estoque_pecas.index'))
+
+            col_fim_check = coluna_fim_i if coluna_fim_i is not None else coluna_i
+            col_ini_check = coluna_i
+            ocupacoes = (
                 EstoquePecas.query
                 .filter(
                     EstoquePecas.estante == estante_i,
                     EstoquePecas.secao == secao_i,
                     EstoquePecas.linha == linha_i,
-                    EstoquePecas.coluna == coluna_i,
                     EstoquePecas.id != estoque_item.id,
                 )
-                .first()
+                .all()
             )
-            if ocupado:
-                flash('Este endereço já está ocupado por outro item. Escolha outra posição.', 'warning')
-                return redirect(url_for('estoque_pecas.index'))
+
+            def _ranges_overlap(a1, a2, b1, b2):
+                return max(a1, b1) <= min(a2, b2)
+
+            conflita = []
+            for o in ocupacoes:
+                o_ini = int(o.coluna) if o.coluna else None
+                if not o_ini:
+                    continue
+                o_fim = int(o.coluna_fim) if getattr(o, 'coluna_fim', None) else o_ini
+                o_fim = max(o_ini, min(o_fim, 6))
+                if _ranges_overlap(col_ini_check, col_fim_check, o_ini, o_fim):
+                    conflita.append(o)
+
+            if conflita:
+                if not permitir_compartilhado:
+                    flash('Esta posição já está ocupada por outro item. Marque "Permitir compartilhado" para permitir mais de um item no mesmo slot.', 'warning')
+                    return redirect(url_for('estoque_pecas.index'))
+                if any(not getattr(o, 'permitir_compartilhado', False) for o in conflita):
+                    flash('Esta posição já tem item(s) que não permitem compartilhamento. Ajuste o(s) item(ns) existente(s) para permitir compartilhamento antes.', 'warning')
+                    return redirect(url_for('estoque_pecas.index'))
 
         estoque_item.estante = estante_i
         estoque_item.secao = secao_i
         estoque_item.linha = linha_i
         estoque_item.coluna = coluna_i
-        # Limpar mescla/compartilhado neste fluxo simples de edição
-        estoque_item.coluna_fim = None
-        estoque_item.permitir_compartilhado = False
+        estoque_item.coluna_fim = coluna_fim_i
+        estoque_item.permitir_compartilhado = permitir_compartilhado
         
         db.session.commit()
         flash('Localização atualizada com sucesso!', 'success')

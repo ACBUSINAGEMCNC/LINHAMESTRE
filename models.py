@@ -653,7 +653,9 @@ class EstoquePecas(db.Model):
     secao = db.Column(db.Integer)          # 1..4
     linha = db.Column(db.Integer)          # 1..2
     coluna = db.Column(db.Integer)         # 1..10
+    linha_fim = db.Column(db.Integer)      # 1..2 (opcional, para ocupar múltiplos slots atravessando linhas na mesma seção)
     coluna_fim = db.Column(db.Integer)     # 1..10 (opcional, para ocupar múltiplos slots na mesma linha)
+    slots_json = db.Column(db.Text)        # JSON com slots arbitrários selecionados no mapa
     permitir_compartilhado = db.Column(db.Boolean, default=False)  # permite múltiplos itens no mesmo slot
     slot_temp_id = db.Column(db.Integer, db.ForeignKey('estoque_pecas_slot_temp.id'), nullable=True)
     observacao = db.Column(db.Text)
@@ -686,7 +688,9 @@ class EstoquePecasSlotTemp(db.Model):
     secao = db.Column(db.Integer, nullable=False)         # 1..4
     linha = db.Column(db.Integer, nullable=False)         # 1..2
     coluna = db.Column(db.Integer, nullable=False)        # 1..6
+    linha_fim = db.Column(db.Integer, nullable=True)      # 1..2 (opcional)
     coluna_fim = db.Column(db.Integer, nullable=True)     # 1..6 (opcional)
+    slots_json = db.Column(db.Text, nullable=True)        # JSON com slots arbitrários do temporário
     permitir_compartilhado = db.Column(db.Boolean, default=True)
     criado_em = db.Column(db.DateTime, default=datetime.utcnow)
 

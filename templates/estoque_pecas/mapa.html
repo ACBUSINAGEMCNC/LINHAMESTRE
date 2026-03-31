@@ -64,6 +64,14 @@
         .cell.dim {
             opacity: .25;
         }
+
+        .floating-ok {
+            position: fixed;
+            right: 18px;
+            bottom: 18px;
+            z-index: 2000;
+            display: none;
+        }
     </style>
 </head>
 <body data-estante="{{ estante }}">
@@ -201,12 +209,14 @@
                         <h5 class="modal-title">Definir localização</h5>
                         <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Fechar"></button>
                     </div>
-                    <form method="POST" action="{{ url_for('estoque_pecas.definir_localizacao_mapa') }}">
+                    <form method="POST" action="{{ url_for('estoque_pecas.definir_localizacao_mapa') }}" id="definirLocalForm">
                         <div class="modal-body">
                             <input type="hidden" name="estante" id="mEstante" value="{{ estante }}">
                             <input type="hidden" name="secao" id="mSecao">
                             <input type="hidden" name="linha" id="mLinha">
                             <input type="hidden" name="coluna" id="mColuna">
+                            <input type="hidden" name="linha_fim" id="mLinhaFim">
+                            <input type="hidden" name="slots_json" id="mSlotsJson">
 
                             <div class="mb-2">
                                 <span class="badge bg-primary" id="mEndereco"></span>
@@ -214,14 +224,7 @@
 
                             <div class="row g-2 mb-3">
                                 <div class="col-12 col-sm-6">
-                                    <label class="form-label">Ocupar até a coluna (opcional)</label>
-                                    <select class="form-select" name="coluna_fim" id="mColunaFim">
-                                        <option value="">Somente este slot</option>
-                                        {% for c in range(1, 7) %}
-                                            <option value="{{ c }}">{{ c }}</option>
-                                        {% endfor %}
-                                    </select>
-                                    <div class="text-muted small mt-1">Use para mesclar slots na mesma linha.</div>
+                                    <div class="text-muted small mt-4">Selecione livremente no mapa. Cada clique marca ou desmarca um slot.</div>
                                 </div>
                                 <div class="col-12 col-sm-6 d-flex align-items-end">
                                     <div class="form-check">
@@ -230,6 +233,11 @@
                                         <div class="text-muted small">Permite mais de um item no mesmo slot.</div>
                                     </div>
                                 </div>
+                            </div>
+
+                            <div class="mb-3">
+                                <button type="button" class="btn btn-sm btn-outline-primary" id="btnSelecionarEspacos">Selecionar mais espaços</button>
+                                <div class="text-muted small mt-1">Você vai escolher no mapa e depois clicar OK.</div>
                             </div>
 
                             <div class="card mb-3">
@@ -245,13 +253,8 @@
                                     </div>
 
                                     <div class="mt-3" id="tempActions" style="display:none;">
-                                        <form method="POST" action="{{ url_for('estoque_pecas.remover_slot_temporario_mapa') }}">
-                                            <input type="hidden" name="estante" value="{{ estante }}">
-                                            <input type="hidden" name="secao" id="rtSecao">
-                                            <input type="hidden" name="linha" id="rtLinha">
-                                            <input type="hidden" name="coluna" id="rtColuna">
-                                            <button type="submit" class="btn btn-sm btn-outline-danger">Remover temporário (se vazio)</button>
-                                        </form>
+                                        <input type="hidden" id="rtEstante" value="{{ estante }}">
+                                        <button type="button" class="btn btn-sm btn-outline-danger" id="btnRemoverTemp">Remover temporário (se vazio)</button>
                                     </div>
                                 </div>
                             </div>
@@ -271,7 +274,7 @@
 
                             <div class="mb-3">
                                 <label class="form-label">Item do estoque</label>
-                                <select class="form-select select2" name="estoque_id" id="mEstoqueId" required>
+                                <select class="form-select select2" name="estoque_id" id="mEstoqueId">
                                     <option value="">Selecione...</option>
                                     {% for e in itens_estoque %}
                                     <option value="{{ e.id }}" data-codigo="{{ e.item.codigo_acb if e.item else '' }}" data-nome="{{ e.item.nome if e.item else '' }}" data-imagem="{{ e.item.imagem_path if e.item and e.item.imagem_path else '' }}" data-qty="{{ e.quantidade }}">
@@ -297,6 +300,11 @@
     <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/js/select2.min.js"></script>
+
+    <div class="floating-ok" id="floatingOkWrap">
+        <button type="button" class="btn btn-primary shadow" id="floatingOkBtn">OK</button>
+    </div>
+
     <script>
         (function() {
             const estanteSelect = document.getElementById('estanteSelect');
@@ -353,6 +361,86 @@
             const modalEl = document.getElementById('definirModal');
             const modal = modalEl ? new bootstrap.Modal(modalEl) : null;
 
+            let _selectionMode = false;
+            let _selectionBase = null;
+            let _selectedSlots = [];
+
+            function clearRangeHighlight() {
+                $('.cell').removeClass('highlight');
+            }
+
+            function _slotKey(slot) {
+                return `${slot.estante}-${slot.secao}-${slot.linha}-${slot.coluna}`;
+            }
+
+            function _slotObj(estante, secao, linha, coluna) {
+                return {
+                    estante: parseInt(estante),
+                    secao: parseInt(secao),
+                    linha: parseInt(linha),
+                    coluna: parseInt(coluna),
+                };
+            }
+
+            function highlightSelection() {
+                clearRangeHighlight();
+                _selectedSlots.forEach(function(slot) {
+                    const sel = `#cell-${slot.secao}-${slot.linha}-${slot.coluna}`;
+                    $(sel).addClass('highlight');
+                });
+            }
+
+            function syncSelectedSlotsToForm() {
+                $('#mSlotsJson').val(JSON.stringify(_selectedSlots));
+                if (_selectedSlots.length > 0) {
+                    const first = _selectedSlots[0];
+                    $('#mSecao').val(String(first.secao));
+                    $('#mLinha').val(String(first.linha));
+                    $('#mColuna').val(String(first.coluna));
+                }
+            }
+
+            function enterSelectionMode() {
+                if (!_selectionBase) {
+                    return;
+                }
+                _selectionMode = true;
+                if (_selectedSlots.length === 0) {
+                    _selectedSlots = [_selectionBase];
+                }
+                highlightSelection();
+
+                if (modal) {
+                    modal.hide();
+                }
+                $('#floatingOkWrap').show();
+            }
+
+            function exitSelectionMode(apply) {
+                if (!_selectionMode) {
+                    return;
+                }
+                _selectionMode = false;
+                $('#floatingOkWrap').hide();
+
+                if (apply && _selectedSlots.length > 0) {
+                    _selectedSlots.sort(function(a, b) {
+                        return (a.estante - b.estante) || (a.secao - b.secao) || (a.linha - b.linha) || (a.coluna - b.coluna);
+                    });
+                    _selectionBase = _selectedSlots[0];
+                    syncSelectedSlotsToForm();
+                    highlightSelection();
+                } else {
+                    _selectedSlots = _selectionBase ? [_selectionBase] : [];
+                    syncSelectedSlotsToForm();
+                    clearRangeHighlight();
+                }
+
+                if (modal) {
+                    modal.show();
+                }
+            }
+
             $(document).on('click', '.cell', function() {
                 const secao = $(this).data('secao');
                 const linha = $(this).data('linha');
@@ -369,9 +457,27 @@
                 const quad = ['A','B','C','D'][parseInt(secao) - 1] || 'A';
                 const slot = ((parseInt(linha) - 1) * 6) + parseInt(coluna);
 
+                if (_selectionMode && _selectionBase) {
+                    const clicked = _slotObj('{{ estante }}', secao, linha, coluna);
+                    const key = _slotKey(clicked);
+                    const exists = _selectedSlots.findIndex(function(s) { return _slotKey(s) === key; });
+                    if (exists >= 0) {
+                        _selectedSlots.splice(exists, 1);
+                    } else {
+                        _selectedSlots.push(clicked);
+                    }
+                    if (_selectedSlots.length === 0) {
+                        _selectedSlots = [_selectionBase];
+                    }
+                    highlightSelection();
+                    return;
+                }
+
                 $('#mSecao').val(secao);
                 $('#mLinha').val(linha);
                 $('#mColuna').val(coluna);
+                $('#mLinhaFim').val('');
+                $('#mSlotsJson').val('');
                 $('#mEndereco').text(`{{ estante }}-${quad}-${slot}`);
 
                 $('#rtSecao').val(secao);
@@ -418,13 +524,42 @@
                     $('#mPreview').hide();
                 }
 
-                $('#mColunaFim').val('');
                 $('#mCompartilhar').prop('checked', false);
+
+                clearRangeHighlight();
+
+                _selectionBase = _slotObj('{{ estante }}', secao, linha, coluna);
+                _selectedSlots = [_selectionBase];
+                syncSelectedSlotsToForm();
+                highlightSelection();
+
+                if ($('#floatingOkWrap').is(':visible')) {
+                    $('#floatingOkWrap').hide();
+                }
 
                 if (modal) {
                     modal.show();
                 }
             });
+
+            $('#btnSelecionarEspacos').on('click', function() {
+                if (!_selectionBase) {
+                    return;
+                }
+                enterSelectionMode();
+            });
+
+            $('#floatingOkBtn').on('click', function() {
+                exitSelectionMode(true);
+            });
+
+            if (modalEl) {
+                modalEl.addEventListener('hidden.bs.modal', function() {
+                    if (!_selectionMode) {
+                        clearRangeHighlight();
+                    }
+                });
+            }
 
             $('#btnRemoverLocal').on('click', function() {
                 const estoqueId = $('#mEstoqueId').val();
@@ -437,6 +572,35 @@
                 form.append($('<input type="hidden" name="estante">').val('{{ estante }}'));
                 $(document.body).append(form);
                 form.submit();
+            });
+
+            $('#btnRemoverTemp').on('click', function() {
+                const secao = ($('#rtSecao').val() || '').toString().trim();
+                const linha = ($('#rtLinha').val() || '').toString().trim();
+                const coluna = ($('#rtColuna').val() || '').toString().trim();
+                const estante = ($('#rtEstante').val() || '{{ estante }}').toString().trim();
+                if (!secao || !linha || !coluna) {
+                    return;
+                }
+                const form = $('<form method="POST"></form>');
+                form.attr('action', "{{ url_for('estoque_pecas.remover_slot_temporario_mapa') }}");
+                form.append($('<input type="hidden" name="estante">').val(estante));
+                form.append($('<input type="hidden" name="secao">').val(secao));
+                form.append($('<input type="hidden" name="linha">').val(linha));
+                form.append($('<input type="hidden" name="coluna">').val(coluna));
+                $(document.body).append(form);
+                form.submit();
+            });
+
+            $('#definirLocalForm').on('submit', function(ev) {
+                const estoqueId = ($('#mEstoqueId').val() || '').toString().trim();
+                const usarTemp = $('#mTemporario').is(':checked');
+                if (!estoqueId && !usarTemp) {
+                    ev.preventDefault();
+                    alert('Selecione um item do estoque ou marque Slot temporário.');
+                    return false;
+                }
+                return true;
             });
 
             function applyMapSearch() {
