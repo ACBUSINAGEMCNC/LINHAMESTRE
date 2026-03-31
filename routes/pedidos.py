@@ -350,12 +350,37 @@ def gerar_ordem_servico_multipla():
             return redirect(url_for('pedidos.listar_pedidos'))
 
         # ITEM SIMPLES: Recuperar número de OS existente
-        existing_num = pedidos_grupo[0].ordens_servico[0].ordem_servico.numero
-        # Atualizar numero_oc para todos pedidos do grupo
+        os_existente = pedidos_grupo[0].ordens_servico[0].ordem_servico
+        existing_num = os_existente.numero
+
+        # Garantir vínculo PedidoOrdemServico para pedidos novos deste grupo
+        vinculados = 0
+        ja_vinculados = 0
         for p in pedidos_grupo:
             p.numero_oc = existing_num
+
+            ja_associado = False
+            for assoc in (p.ordens_servico or []):
+                if assoc.ordem_servico_id == os_existente.id:
+                    ja_associado = True
+                    break
+            if ja_associado:
+                ja_vinculados += 1
+                continue
+
+            assoc_novo = PedidoOrdemServico(
+                pedido_id=p.id,
+                ordem_servico_id=os_existente.id,
+                quantidade_snapshot=p.quantidade,
+            )
+            db.session.add(assoc_novo)
+            vinculados += 1
+
         db.session.commit()
-        flash(f'Ordem de Serviço {existing_num} já existe para este item', 'warning')
+        if vinculados > 0:
+            flash(f'Pedido(s) adicionado(s) na OS {existing_num} com sucesso ({vinculados} novo(s)).', 'success')
+        else:
+            flash(f'Ordem de Serviço {existing_num} já existe para este item', 'warning')
         return redirect(url_for('pedidos.listar_pedidos'))
     # Verificar se o item é composto
     print(f"🔍 VERIFICANDO TIPO DE ITEM: {item_principal.codigo_acb}")
