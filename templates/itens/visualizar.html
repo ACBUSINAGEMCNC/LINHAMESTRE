@@ -70,6 +70,11 @@
                             <div class="col-md-6">
                                 <p><strong>Peso:</strong> {{ item.peso }} kg</p>
                             </div>
+                            {% if pode_ver_valores %}
+                            <div class="col-md-6">
+                                <p><strong>Valor do Item:</strong> R$ {{ '%.2f'|format(item.valor_item or 0) }}</p>
+                            </div>
+                            {% endif %}
                         </div>
                     </div>
                 </div>

@@ -5,6 +5,41 @@ from functools import wraps
 import time
 
 auth = Blueprint('auth', __name__)
+ADMIN_MASTER_EMAIL = 'admin@acbusinagem.com.br'
+
+
+def _is_master_admin(usuario):
+    return bool(usuario and (usuario.email or '').strip().lower() == ADMIN_MASTER_EMAIL and usuario.nivel_acesso == 'admin')
+
+
+def _refresh_user_session(usuario):
+    session['usuario_id'] = usuario.id
+    session['usuario_nome'] = usuario.nome
+    session['usuario_nivel'] = usuario.nivel_acesso
+    session['acesso_kanban'] = usuario.acesso_kanban
+    session['acesso_estoque'] = usuario.acesso_estoque
+    session['acesso_pedidos'] = usuario.acesso_pedidos
+    session['acesso_cadastros'] = usuario.acesso_cadastros
+    session['acesso_valores_itens'] = bool(getattr(usuario, 'acesso_valores_itens', False) or _is_master_admin(usuario))
+    session['usuario_admin_master'] = _is_master_admin(usuario)
+    session['pode_finalizar_os'] = usuario.pode_finalizar_os
+
+
+def _resolve_acesso_valores_itens(request_form, actor_usuario, current_usuario=None):
+    wants_access = 'acesso_valores_itens' in request_form
+    current_access = bool(getattr(current_usuario, 'acesso_valores_itens', False)) if current_usuario else False
+
+    if _is_master_admin(actor_usuario):
+        if wants_access != current_access:
+            senha_admin = request_form.get('senha_admin_master', '')
+            if not senha_admin or not check_password_hash(actor_usuario.senha_hash, senha_admin):
+                raise ValueError('Digite a senha do administrador principal para conceder ou remover acesso aos valores.')
+        return wants_access
+
+    if wants_access != current_access:
+        raise ValueError('Somente o administrador principal pode conceder ou remover acesso aos valores.')
+
+    return current_access
 
 # Decorator para verificar se o usuário está logado
 def login_required(f):
@@ -75,14 +110,7 @@ def login():
         db.session.commit()
         
         # Armazenar informações do usuário na sessão
-        session['usuario_id'] = usuario.id
-        session['usuario_nome'] = usuario.nome
-        session['usuario_nivel'] = usuario.nivel_acesso
-        session['acesso_kanban'] = usuario.acesso_kanban
-        session['acesso_estoque'] = usuario.acesso_estoque
-        session['acesso_pedidos'] = usuario.acesso_pedidos
-        session['acesso_cadastros'] = usuario.acesso_cadastros
-        session['pode_finalizar_os'] = usuario.pode_finalizar_os
+        _refresh_user_session(usuario)
 
         if not session.get('release_2_0_seen_at'):
             session['release_2_0_seen_at'] = int(time.time())
@@ -128,6 +156,7 @@ def novo_usuario():
         acesso_estoque = False
         acesso_pedidos = False
         acesso_cadastros = False
+        acesso_valores_itens = False
         pode_finalizar_os = False
         
         if nivel_acesso == 'admin':
@@ -142,6 +171,12 @@ def novo_usuario():
             acesso_pedidos = 'acesso_pedidos' in request.form
             acesso_cadastros = 'acesso_cadastros' in request.form
             pode_finalizar_os = 'pode_finalizar_os' in request.form
+
+        try:
+            acesso_valores_itens = _resolve_acesso_valores_itens(request.form, Usuario.query.get(session['usuario_id']))
+        except ValueError as e:
+            flash(str(e), 'danger')
+            return render_template('auth/novo_usuario.html')
         
         # Criar novo usuário
         novo_usuario = Usuario(
@@ -153,6 +188,7 @@ def novo_usuario():
             acesso_estoque=acesso_estoque,
             acesso_pedidos=acesso_pedidos,
             acesso_cadastros=acesso_cadastros,
+            acesso_valores_itens=acesso_valores_itens,
             pode_finalizar_os=pode_finalizar_os
         )
         
@@ -204,8 +240,17 @@ def editar_usuario(usuario_id):
             usuario.acesso_pedidos = 'acesso_pedidos' in request.form
             usuario.acesso_cadastros = 'acesso_cadastros' in request.form
             usuario.pode_finalizar_os = 'pode_finalizar_os' in request.form
+
+        try:
+            usuario.acesso_valores_itens = _resolve_acesso_valores_itens(request.form, Usuario.query.get(session['usuario_id']), current_usuario=usuario)
+        except ValueError as e:
+            flash(str(e), 'danger')
+            return render_template('auth/editar_usuario.html', usuario=usuario)
         
         db.session.commit()
+
+        if usuario.id == session.get('usuario_id'):
+            _refresh_user_session(usuario)
         
         flash('Usuário atualizado com sucesso!', 'success')
         return redirect(url_for('auth.listar_usuarios'))
@@ -262,7 +307,7 @@ def perfil():
         db.session.commit()
         
         # Atualizar informações da sessão
-        session['usuario_nome'] = usuario.nome
+        _refresh_user_session(usuario)
         
         flash('Perfil atualizado com sucesso!', 'success')
         return redirect(url_for('auth.perfil'))

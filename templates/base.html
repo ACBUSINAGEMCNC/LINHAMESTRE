@@ -61,18 +61,28 @@
                     </li>
                     {% endif %}
                     
-                    {% if acesso_cadastros or usuario_nivel == 'admin' %}
+                    {% if acesso_cadastros or acesso_valores_itens or usuario_admin_master or usuario_nivel == 'admin' %}
                     <li class="nav-item dropdown">
                         <a class="nav-link dropdown-toggle" href="#" id="cadastrosDropdown" role="button" data-bs-toggle="dropdown" aria-expanded="false">
                             <i class="fas fa-database"></i> Cadastros
                         </a>
                         <ul class="dropdown-menu" aria-labelledby="cadastrosDropdown">
+                            {% if acesso_cadastros or usuario_nivel == 'admin' %}
                             <li><a class="dropdown-item" href="/clientes">Clientes</a></li>
                             <li><a class="dropdown-item" href="/materiais">Materiais</a></li>
                             <li><a class="dropdown-item" href="/trabalhos">Trabalhos</a></li>
                             <li><a class="dropdown-item" href="/itens">Itens</a></li>
+                            {% endif %}
+                            {% if acesso_valores_itens or usuario_admin_master %}
+                            {% if acesso_cadastros or usuario_nivel == 'admin' %}
+                            <li><hr class="dropdown-divider"></li>
+                            {% endif %}
+                            <li><a class="dropdown-item" href="{{ url_for('itens.listar_valores_itens') }}">Valores dos Itens</a></li>
+                            {% endif %}
+                            {% if acesso_cadastros or usuario_nivel == 'admin' %}
                             <li><hr class="dropdown-divider"></li>
                             <li><a class="dropdown-item" href="/folhas-processo-novas"><i class="fas fa-file-alt text-success"></i> Folhas de Processo</a></li>
+                            {% endif %}
                         </ul>
                     </li>
                     {% endif %}

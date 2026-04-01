@@ -4,12 +4,50 @@ import os
 import json
 import io
 from datetime import datetime
+from decimal import Decimal, InvalidOperation
 from models import db, Item, Material, Trabalho, ItemMaterial, ItemTrabalho, Pedido, ArquivoCNC, ItemComposto
 from utils import validate_form_data, save_file, generate_next_code, parse_json_field
 from flask import current_app, g
 from sqlalchemy.orm import selectinload
+from openpyxl import Workbook, load_workbook
 
 itens = Blueprint('itens', __name__)
+ADMIN_MASTER_EMAIL = 'admin@acbusinagem.com.br'
+
+
+def _usuario_pode_ver_valores(usuario=None):
+    usuario = usuario or getattr(g, 'usuario', None)
+    if not usuario:
+        return False
+    if (getattr(usuario, 'email', '') or '').strip().lower() == ADMIN_MASTER_EMAIL and getattr(usuario, 'nivel_acesso', None) == 'admin':
+        return True
+    return bool(getattr(usuario, 'acesso_valores_itens', False))
+
+
+def _parse_valor_item(raw):
+    txt = str(raw or '').strip()
+    if not txt:
+        return 0.0
+    txt = txt.replace('R$', '').replace('.', '').replace(',', '.').strip()
+    try:
+        return float(Decimal(txt))
+    except (InvalidOperation, ValueError):
+        raise ValueError('Valor do item inválido')
+
+
+def _build_preview_valores_rows(rows):
+    return {
+        'preview_rows': rows,
+        'preview_ok_count': sum(1 for r in rows if r.get('ok')),
+        'preview_error_count': sum(1 for r in rows if not r.get('ok')),
+    }
+
+
+def _require_valores_access():
+    if not _usuario_pode_ver_valores():
+        flash('Você não tem permissão para acessar os valores dos itens.', 'danger')
+        return redirect(url_for('main.index'))
+    return None
 
 @itens.route('/itens')
 def listar_itens():
@@ -20,10 +58,153 @@ def listar_itens():
     ).all()
     return render_template('itens/listar.html', itens=itens)
 
+
+@itens.route('/itens/valores')
+def listar_valores_itens():
+    acesso_negado = _require_valores_access()
+    if acesso_negado:
+        return acesso_negado
+    itens_cadastrados = Item.query.order_by(Item.nome.asc()).all()
+    return render_template('itens/valores.html', itens=itens_cadastrados)
+
+
+@itens.route('/itens/valores/exportar')
+def exportar_planilha_valores_itens():
+    acesso_negado = _require_valores_access()
+    if acesso_negado:
+        return acesso_negado
+
+    wb = Workbook()
+    ws = wb.active
+    ws.title = 'Valores Itens'
+    ws.append(['codigo_acb', 'item', 'valor_item'])
+
+    for item in Item.query.order_by(Item.nome.asc()).all():
+        ws.append([item.codigo_acb, item.nome, float(item.valor_item or 0)])
+
+    output = io.BytesIO()
+    wb.save(output)
+    output.seek(0)
+    return send_file(
+        output,
+        as_attachment=True,
+        download_name='valores_itens.xlsx',
+        mimetype='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+    )
+
+
+@itens.route('/itens/valores/importar', methods=['GET', 'POST'])
+def importar_planilha_valores_itens():
+    acesso_negado = _require_valores_access()
+    if acesso_negado:
+        return acesso_negado
+
+    if request.method == 'GET':
+        session.pop('import_valores_itens_rows', None)
+        return render_template('itens/importar_valores.html')
+
+    arquivo = request.files.get('arquivo')
+    if not arquivo or not arquivo.filename:
+        flash('Selecione um arquivo XLSX para importar.', 'danger')
+        return redirect(url_for('itens.importar_planilha_valores_itens'))
+
+    try:
+        wb = load_workbook(arquivo, data_only=True)
+        ws = wb.active
+    except Exception as e:
+        flash(f'Erro ao ler XLSX: {e}', 'danger')
+        return redirect(url_for('itens.importar_planilha_valores_itens'))
+
+    header_row = None
+    for row in ws.iter_rows(min_row=1, max_row=1, values_only=True):
+        header_row = row
+        break
+    if not header_row:
+        flash('XLSX vazio ou sem cabeçalho.', 'danger')
+        return redirect(url_for('itens.importar_planilha_valores_itens'))
+
+    headers = [str(h or '').strip().lower() for h in header_row]
+    col_index = {h: i for i, h in enumerate(headers) if h}
+    if 'item' not in col_index or 'valor_item' not in col_index:
+        flash('A planilha precisa conter as colunas item e valor_item.', 'danger')
+        return redirect(url_for('itens.importar_planilha_valores_itens'))
+
+    preview_rows = []
+    ok_rows = []
+    for row_number, values in enumerate(ws.iter_rows(min_row=2, values_only=True), start=2):
+        nome = str(values[col_index['item']] or '').strip()
+        valor_raw = values[col_index['valor_item']]
+        if not any([nome, str(valor_raw or '').strip()]):
+            continue
+
+        errors = []
+        item = Item.query.filter(Item.nome == nome).first() if nome else None
+        if not nome:
+            errors.append('Item vazio')
+        if not item:
+            errors.append('Item não encontrado com nome exatamente igual')
+
+        try:
+            valor_item = _parse_valor_item(valor_raw)
+            if valor_item < 0:
+                errors.append('Valor do item não pode ser negativo')
+        except ValueError as e:
+            valor_item = None
+            errors.append(str(e))
+
+        ok = len(errors) == 0
+        row_data = {
+            'row_number': row_number,
+            'nome': nome,
+            'codigo_acb': item.codigo_acb if item else '',
+            'item_id': item.id if item else None,
+            'valor_item': valor_item,
+            'ok': ok,
+            'errors': errors,
+        }
+        preview_rows.append(row_data)
+        if ok:
+            ok_rows.append({
+                'row_number': row_number,
+                'nome': nome,
+                'item_id': item.id,
+                'valor_item': valor_item,
+            })
+
+    session['import_valores_itens_rows'] = ok_rows
+    return render_template('itens/importar_valores.html', **_build_preview_valores_rows(preview_rows))
+
+
+@itens.route('/itens/valores/importar/confirmar', methods=['POST'])
+def confirmar_importacao_valores_itens():
+    acesso_negado = _require_valores_access()
+    if acesso_negado:
+        return acesso_negado
+
+    ok_rows = session.get('import_valores_itens_rows') or []
+    if not ok_rows:
+        flash('Nenhuma importação pendente de valores.', 'warning')
+        return redirect(url_for('itens.importar_planilha_valores_itens'))
+
+    try:
+        for row in ok_rows:
+            item = Item.query.get(row['item_id'])
+            if not item:
+                continue
+            item.valor_item = float(row['valor_item'] or 0)
+        db.session.commit()
+        flash(f'Valores atualizados com sucesso! Itens atualizados: {len(ok_rows)}', 'success')
+        return redirect(url_for('itens.listar_valores_itens'))
+    except Exception as e:
+        db.session.rollback()
+        flash(f'Erro ao importar valores: {e}', 'danger')
+        return redirect(url_for('itens.importar_planilha_valores_itens'))
+
 @itens.route('/itens/novo', methods=['GET', 'POST'])
 def novo_item():
     """Rota para cadastrar um novo item"""
     if request.method == 'POST':
+        pode_ver_valores = _usuario_pode_ver_valores()
         # Validação de dados
         errors = validate_form_data(request.form, ['nome'])
         if errors:
@@ -31,7 +212,7 @@ def novo_item():
                 flash(error, 'danger')
             materiais = Material.query.all()
             trabalhos = Trabalho.query.all()
-            return render_template('itens/novo.html', materiais=materiais, trabalhos=trabalhos, item=None)
+            return render_template('itens/novo.html', materiais=materiais, trabalhos=trabalhos, item=None, pode_ver_valores=pode_ver_valores)
         
         nome = request.form['nome']
         
@@ -41,7 +222,7 @@ def novo_item():
             flash('Já existe um item com este nome!', 'danger')
             materiais = Material.query.all()
             trabalhos = Trabalho.query.all()
-            return render_template('itens/novo.html', materiais=materiais, trabalhos=trabalhos, item=None)
+            return render_template('itens/novo.html', materiais=materiais, trabalhos=trabalhos, item=None, pode_ver_valores=pode_ver_valores)
         
         # Gerar código ACB automaticamente
         novo_codigo = generate_next_code(Item, "ACB", "codigo_acb")
@@ -69,6 +250,15 @@ def novo_item():
             tipo_embalagem=request.form.get('tipo_embalagem', '')
         )
 
+        if pode_ver_valores:
+            try:
+                item.valor_item = _parse_valor_item(request.form.get('valor_item', '0'))
+            except ValueError as e:
+                flash(str(e), 'danger')
+                materiais = Material.query.all()
+                trabalhos = Trabalho.query.all()
+                return render_template('itens/novo.html', materiais=materiais, trabalhos=trabalhos, item=None, pode_ver_valores=pode_ver_valores)
+
         if item.tipo_item == 'montagem':
             item.eh_composto = False
         
@@ -80,7 +270,7 @@ def novo_item():
             flash('O peso deve ser um número válido', 'danger')
             materiais = Material.query.all()
             trabalhos = Trabalho.query.all()
-            return render_template('itens/novo.html', materiais=materiais, trabalhos=trabalhos, item=None)
+            return render_template('itens/novo.html', materiais=materiais, trabalhos=trabalhos, item=None, pode_ver_valores=pode_ver_valores)
         
         # Upload de arquivos
         if 'desenho_tecnico' in request.files:
@@ -153,7 +343,7 @@ def novo_item():
     tipo_item_default = (request.args.get('tipo_item') or 'producao').strip().lower()
     if tipo_item_default not in ('producao', 'montagem'):
         tipo_item_default = 'producao'
-    return render_template('itens/novo.html', materiais=materiais, trabalhos=trabalhos, item=None, tipo_item_default=tipo_item_default)
+    return render_template('itens/novo.html', materiais=materiais, trabalhos=trabalhos, item=None, tipo_item_default=tipo_item_default, pode_ver_valores=_usuario_pode_ver_valores())
 
 @itens.route('/itens/editar/<int:item_id>', methods=['GET', 'POST'])
 def editar_item(item_id):
@@ -161,6 +351,28 @@ def editar_item(item_id):
     item = Item.query.get_or_404(item_id)
     materiais = Material.query.all()
     trabalhos = Trabalho.query.all()
+    pode_ver_valores = _usuario_pode_ver_valores()
+
+    item_materiais = []
+    for im in item.materiais:
+        material = Material.query.get(im.material_id)
+        item_materiais.append({
+            'id': im.material_id,
+            'nome': material.nome,
+            'tipo': material.tipo,
+            'comprimento': im.comprimento,
+            'quantidade': im.quantidade
+        })
+
+    item_trabalhos = []
+    for it in item.trabalhos:
+        trabalho = Trabalho.query.get(it.trabalho_id)
+        item_trabalhos.append({
+            'id': it.trabalho_id,
+            'nome': trabalho.nome,
+            'tempo_setup': it.tempo_setup,
+            'tempo_peca': it.tempo_peca
+        })
     
     if request.method == 'POST':
         # Validação de dados
@@ -168,7 +380,7 @@ def editar_item(item_id):
         if errors:
             for error in errors:
                 flash(error, 'danger')
-            return render_template('itens/editar.html', item=item, materiais=materiais, trabalhos=trabalhos)
+            return render_template('itens/editar.html', item=item, materiais=materiais, trabalhos=trabalhos, pode_ver_valores=pode_ver_valores, item_materiais=item_materiais, item_trabalhos=item_trabalhos)
         
         nome = request.form['nome']
         
@@ -176,7 +388,7 @@ def editar_item(item_id):
         item_existente = Item.query.filter(Item.nome == nome, Item.id != item_id).first()
         if item_existente:
             flash('Já existe um item com este nome!', 'danger')
-            return render_template('itens/editar.html', item=item, materiais=materiais, trabalhos=trabalhos)
+            return render_template('itens/editar.html', item=item, materiais=materiais, trabalhos=trabalhos, pode_ver_valores=pode_ver_valores, item_materiais=item_materiais, item_trabalhos=item_trabalhos)
         
         tipo_item = (request.form.get('tipo_item', item.tipo_item or 'producao') or 'producao').strip().lower()
         categoria_montagem = (request.form.get('categoria_montagem') or '').strip() or None
@@ -197,6 +409,13 @@ def editar_item(item_id):
         item.zincagem = 'zincagem' in request.form
         item.tipo_zincagem = request.form.get('tipo_zincagem', '')
         item.tipo_embalagem = request.form.get('tipo_embalagem', '')
+
+        if pode_ver_valores:
+            try:
+                item.valor_item = _parse_valor_item(request.form.get('valor_item', item.valor_item or 0))
+            except ValueError as e:
+                flash(str(e), 'danger')
+                return render_template('itens/editar.html', item=item, materiais=materiais, trabalhos=trabalhos, pode_ver_valores=pode_ver_valores, item_materiais=item_materiais, item_trabalhos=item_trabalhos)
         
         # Validar e converter o peso
         try:
@@ -204,7 +423,7 @@ def editar_item(item_id):
             item.peso = float(peso) if peso else 0
         except ValueError:
             flash('O peso deve ser um número válido', 'danger')
-            return render_template('itens/editar.html', item=item, materiais=materiais, trabalhos=trabalhos)
+            return render_template('itens/editar.html', item=item, materiais=materiais, trabalhos=trabalhos, pode_ver_valores=pode_ver_valores, item_materiais=item_materiais, item_trabalhos=item_trabalhos)
         
         # Upload de arquivos
         if 'desenho_tecnico' in request.files and request.files['desenho_tecnico'].filename:
@@ -286,32 +505,11 @@ def editar_item(item_id):
         flash('Item atualizado com sucesso!', 'success')
         return redirect(url_for('itens.listar_itens'))
     
-    # Obter materiais e trabalhos do item para preencher o formulário
-    item_materiais = []
-    for im in item.materiais:
-        material = Material.query.get(im.material_id)
-        item_materiais.append({
-            'id': im.material_id,
-            'nome': material.nome,
-            'tipo': material.tipo,
-            'comprimento': im.comprimento,
-            'quantidade': im.quantidade
-        })
-    
-    item_trabalhos = []
-    for it in item.trabalhos:
-        trabalho = Trabalho.query.get(it.trabalho_id)
-        item_trabalhos.append({
-            'id': it.trabalho_id,
-            'nome': trabalho.nome,
-            'tempo_setup': it.tempo_setup,
-            'tempo_peca': it.tempo_peca
-        })
-    
     return render_template('itens/editar.html', 
                           item=item, 
                           materiais=materiais, 
                           trabalhos=trabalhos,
+                          pode_ver_valores=pode_ver_valores,
                           item_materiais=item_materiais,
                           item_trabalhos=item_trabalhos)
 
@@ -447,7 +645,7 @@ def excluir_item(item_id):
 def visualizar_item(item_id):
     """Rota para visualizar detalhes de um item"""
     item = Item.query.get_or_404(item_id)
-    return render_template('itens/visualizar.html', item=item)
+    return render_template('itens/visualizar.html', item=item, pode_ver_valores=_usuario_pode_ver_valores())
 
 
 def _build_supabase_public_url_from_file_path(file_path: str) -> str | None:

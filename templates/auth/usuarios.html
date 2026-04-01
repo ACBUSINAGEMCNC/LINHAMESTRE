@@ -72,6 +72,9 @@
                                         {% if usuario.acesso_cadastros %}
                                             <span class="badge bg-dark">Cadastros</span>
                                         {% endif %}
+                                        {% if usuario.acesso_valores_itens %}
+                                            <span class="badge bg-secondary">Valores Itens</span>
+                                        {% endif %}
                                         {% if usuario.pode_finalizar_os %}
                                             <span class="badge bg-danger">Finalizar OS</span>
                                         {% endif %}

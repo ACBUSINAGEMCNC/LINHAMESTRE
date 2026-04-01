@@ -53,6 +53,9 @@
                                 <th>Imagem</th>
                                 <th>Código ACB</th>
                                 <th>Nome</th>
+                                {% if acesso_valores_itens or usuario_admin_master %}
+                                <th>Valor</th>
+                                {% endif %}
                                 <th>Tipo</th>
                                 <th>Materiais/Componentes</th>
                                 <th>Trabalhos</th>
@@ -83,6 +86,9 @@
                                         {{ item.nome }}
                                     {% endif %}
                                 </td>
+                                {% if acesso_valores_itens or usuario_admin_master %}
+                                <td>R$ {{ '%.2f'|format(item.valor_item or 0) }}</td>
+                                {% endif %}
                                 <td>
                                     {% if item.eh_composto %}
                                         <span class="badge bg-primary">

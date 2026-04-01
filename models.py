@@ -311,6 +311,7 @@ class Item(db.Model):
     nome = db.Column(db.String(100), nullable=False, unique=True)
     codigo_acb = db.Column(db.String(20), unique=True)
     criado_via_importacao_estoque = db.Column(db.Boolean, default=False)
+    valor_item = db.Column(db.Float, default=0)
     desenho_tecnico = db.Column(db.String(255))
     desenho_aprovado_em = db.Column(db.DateTime, nullable=True)
     desenho_aprovado_por_id = db.Column(db.Integer, db.ForeignKey('usuario.id'), nullable=True)
@@ -720,6 +721,7 @@ class Usuario(db.Model):
     acesso_estoque = db.Column(db.Boolean, default=False)
     acesso_pedidos = db.Column(db.Boolean, default=False)
     acesso_cadastros = db.Column(db.Boolean, default=False)
+    acesso_valores_itens = db.Column(db.Boolean, default=False)
     pode_finalizar_os = db.Column(db.Boolean, default=False)
     codigo_operador = db.Column(db.String(4), unique=True, nullable=True)  # Código de 4 dígitos para apontamentos
     data_criacao = db.Column(db.DateTime, default=datetime.utcnow)

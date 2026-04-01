@@ -181,6 +181,26 @@ def verificar_inicializar_banco():
                 logger.warning("Supabase sem conexões disponíveis (Max client connections reached). Pulando migrações de estoque_pecas.")
                 return
             logger.warning(f"Erro ao migrar estoque_pecas (slots_json): {str(col_err)}")
+
+        try:
+            from migrations.add_item_importacao_estoque_flag import migrate_postgres as migrate_item_importacao_estoque_flag_pg
+            migrate_item_importacao_estoque_flag_pg()
+            logger.info("Campo criado_via_importacao_estoque do item verificado/adicionado (Supabase).")
+        except Exception as col_err:
+            if _is_max_connections_error(col_err):
+                logger.warning("Supabase sem conexões disponíveis (Max client connections reached). Pulando migrações de item.")
+                return
+            logger.warning(f"Erro ao migrar item (criado_via_importacao_estoque): {str(col_err)}")
+
+        try:
+            from migrations.add_item_valor_usuario_acesso_valores import migrate_postgres as migrate_item_valor_usuario_acesso_valores_pg
+            migrate_item_valor_usuario_acesso_valores_pg()
+            logger.info("Campos valor_item/acesso_valores_itens verificados/adicionados (Supabase).")
+        except Exception as col_err:
+            if _is_max_connections_error(col_err):
+                logger.warning("Supabase sem conexões disponíveis (Max client connections reached). Pulando migrações de valores.")
+                return
+            logger.warning(f"Erro ao migrar valores de itens/permissões: {str(col_err)}")
             
         # Executar migrações adicionais para PostgreSQL
         try:
@@ -517,6 +537,24 @@ def verificar_inicializar_banco():
                             logger.warning("Falha ao verificar/adicionar campos slots_json do Estoque de Peças.")
                     except Exception as e:
                         logger.warning(f"Erro ao verificar/migrar campos slots_json do Estoque de Peças: {str(e)}")
+
+                    try:
+                        from migrations.add_item_importacao_estoque_flag import migrate_sqlite as migrate_item_importacao_estoque_flag_sqlite
+                        if migrate_item_importacao_estoque_flag_sqlite():
+                            logger.info("Campo criado_via_importacao_estoque do item verificado/adicionado com sucesso.")
+                        else:
+                            logger.warning("Falha ao verificar/adicionar campo criado_via_importacao_estoque do item.")
+                    except Exception as e:
+                        logger.warning(f"Erro ao verificar/migrar campo criado_via_importacao_estoque do item: {str(e)}")
+
+                    try:
+                        from migrations.add_item_valor_usuario_acesso_valores import migrate_sqlite as migrate_item_valor_usuario_acesso_valores_sqlite
+                        if migrate_item_valor_usuario_acesso_valores_sqlite():
+                            logger.info("Campos valor_item/acesso_valores_itens verificados/adicionados com sucesso.")
+                        else:
+                            logger.warning("Falha ao verificar/adicionar campos valor_item/acesso_valores_itens.")
+                    except Exception as e:
+                        logger.warning(f"Erro ao verificar/migrar campos valor_item/acesso_valores_itens: {str(e)}")
                 except Exception as col_err:
                     logger.warning(f"Erro ao verificar/adicionar coluna tipo_bruto na tabela item: {str(col_err)}")
             except Exception as col_err:
@@ -983,6 +1021,16 @@ def create_app():
             'gabaritos_rosca',
             'novas_folhas_processo',
         ):
+            if endpoint in (
+                'itens.listar_valores_itens',
+                'itens.exportar_planilha_valores_itens',
+                'itens.importar_planilha_valores_itens',
+                'itens.confirmar_importacao_valores_itens',
+            ):
+                if not bool(getattr(usuario, 'acesso_valores_itens', False)) and not session.get('usuario_admin_master', False):
+                    flash('Você não tem permissão para acessar esta área', 'danger')
+                    return redirect(url_for('main.index'))
+                return
             if not usuario.acesso_cadastros:
                 flash('Você não tem permissão para acessar esta área', 'danger')
                 return redirect(url_for('main.index'))
@@ -1151,6 +1199,8 @@ def create_app():
             'acesso_kanban': session.get('acesso_kanban', False),
             'acesso_estoque': session.get('acesso_estoque', False),
             'acesso_cadastros': session.get('acesso_cadastros', False),
+            'acesso_valores_itens': session.get('acesso_valores_itens', False),
+            'usuario_admin_master': session.get('usuario_admin_master', False),
             'pode_finalizar_os': session.get('pode_finalizar_os', False),
             'acesso_finalizar_os': session.get('pode_finalizar_os', False),
             'get_file_url': get_file_url  # Adicionar função para templates

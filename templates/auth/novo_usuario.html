@@ -101,7 +101,25 @@
                                     </label>
                                 </div>
                             </div>
+                            <div class="col-md-4">
+                                <div class="form-check">
+                                    <input class="form-check-input" type="checkbox" id="acesso_valores_itens" name="acesso_valores_itens" {% if not usuario_admin_master %}disabled{% endif %}>
+                                    <label class="form-check-label" for="acesso_valores_itens">
+                                        Acesso aos Valores dos Itens
+                                    </label>
+                                </div>
+                                {% if not usuario_admin_master %}
+                                <div class="form-text">Somente o administrador principal pode conceder este acesso.</div>
+                                {% endif %}
+                            </div>
                         </div>
+                    </div>
+
+                    <div class="mb-3 p-3 border rounded" id="senha_admin_master_container" {% if not usuario_admin_master %}style="display: none;"{% endif %}>
+                        <label for="senha_admin_master" class="form-label">Senha do Administrador Principal</label>
+                        <input type="hidden" id="usuario_admin_master_flag" value="{% if usuario_admin_master %}1{% else %}0{% endif %}">
+                        <input type="password" class="form-control" id="senha_admin_master" name="senha_admin_master">
+                        <div class="form-text">Obrigatório para conceder ou remover o acesso aos valores dos itens.</div>
                     </div>
                     
                     <div class="d-grid gap-2 d-md-flex justify-content-md-end">
@@ -118,12 +136,21 @@
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
     <script>
         $(document).ready(function() {
+            const usuarioAdminMaster = $('#usuario_admin_master_flag').val() === '1';
             // Mostrar/ocultar permissões com base no nível de acesso
             $('#nivel_acesso').change(function() {
                 if ($(this).val() === 'admin') {
                     $('#permissoes_container').hide();
                 } else {
                     $('#permissoes_container').show();
+                }
+            });
+
+            $('#acesso_valores_itens').change(function() {
+                if ($(this).is(':checked') && usuarioAdminMaster) {
+                    $('#senha_admin_master_container').show();
+                } else {
+                    $('#senha_admin_master_container').hide();
                 }
             });
         });
