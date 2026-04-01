@@ -1,0 +1,173 @@
+{% extends 'base.html' %}
+
+{% block title %}Importar Estoque de Peças (Excel) - ACB Usinagem CNC{% endblock %}
+
+{% block content %}
+<div class="row mb-4">
+  <div class="col d-flex justify-content-between align-items-center">
+    <h1 class="mb-0"><i class="fas fa-file-excel me-2"></i>Importar Estoque de Peças (Excel)</h1>
+    <a href="{{ url_for('estoque_pecas.index') }}" class="btn btn-secondary"><i class="fas fa-arrow-left"></i> Voltar</a>
+  </div>
+</div>
+
+<div class="card mb-4">
+  <div class="card-body">
+    <form method="POST" action="{{ url_for('estoque_pecas.importar_estoque_excel') }}" enctype="multipart/form-data" class="row g-3">
+      <div class="col-md-8">
+        <label for="arquivo" class="form-label">Arquivo XLSX</label>
+        <input class="form-control" type="file" id="arquivo" name="arquivo" accept=".xlsx" required>
+        <div class="form-text">Colunas esperadas: item e quantidade. Também aceita nome no lugar de item.</div>
+      </div>
+      <div class="col-md-4 d-flex align-items-end">
+        <button type="submit" class="btn btn-primary w-100"><i class="fas fa-search"></i> Validar e Pré-visualizar</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+{% if preview_rows is defined and preview_rows %}
+<div class="card">
+  <div class="card-body">
+    <div class="d-flex flex-wrap gap-2 align-items-center mb-3">
+      <div class="fw-semibold">Pré-visualização</div>
+      <span class="badge bg-success">OK: {{ preview_ok_count }}</span>
+      <span class="badge bg-danger">Erros: {{ preview_error_count }}</span>
+      {% if preview_warning_count is defined %}
+      <span class="badge bg-warning text-dark">Avisos: {{ preview_warning_count }}</span>
+      {% endif %}
+    </div>
+
+    <form method="POST" action="{{ url_for('estoque_pecas.confirmar_importacao_estoque_excel') }}">
+    <div class="row g-3 align-items-end mb-3">
+      <div class="col-md-4">
+        <label for="acao_global" class="form-label">Ação rápida para todas as linhas</label>
+        <select class="form-select" id="acao_global" name="acao_global">
+          <option value="">Manter decisão sugerida</option>
+          <option value="usar_existente">Usar item já cadastrado</option>
+          <option value="criar_novo">Criar item novo</option>
+          <option value="pular">Pular linha</option>
+        </select>
+      </div>
+      <div class="col-md-8">
+        <div class="form-text">Você pode decidir por linha ou aplicar tudo de uma vez. Se escolher usar existente em uma linha sem item encontrado, a importação dessa confirmação será bloqueada.</div>
+      </div>
+    </div>
+
+    <div class="d-flex flex-wrap gap-2 mb-3">
+      <button type="button" class="btn btn-outline-secondary btn-sm" id="selecionarTodasLinhas">Selecionar todas</button>
+      <button type="button" class="btn btn-outline-secondary btn-sm" id="desmarcarTodasLinhas">Desmarcar todas</button>
+    </div>
+
+    <div class="table-responsive">
+      <table class="table table-striped table-sm align-middle">
+        <thead>
+          <tr>
+            <th>Selecionar</th>
+            <th>Linha</th>
+            <th>Item</th>
+            <th>Quantidade</th>
+            <th>Status</th>
+            <th>Código</th>
+            <th>Resultado</th>
+            <th>Decisão</th>
+            <th>Erros / Avisos</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for r in preview_rows %}
+          <tr class="{% if r.ok %}table-success{% else %}table-danger{% endif %}">
+            <td>
+              {% if r.ok %}
+              <input class="form-check-input linha-importacao-check" type="checkbox" name="selecionar_{{ loop.index0 }}" value="1" checked>
+              {% else %}
+              <input class="form-check-input" type="checkbox" disabled>
+              {% endif %}
+            </td>
+            <td>{{ r.row_number }}</td>
+            <td>{{ r.nome }}</td>
+            <td>{{ r.quantidade }}</td>
+            <td>
+              {% if r.ok %}
+                <span class="badge bg-success">OK</span>
+              {% else %}
+                <span class="badge bg-danger">Erro</span>
+              {% endif %}
+            </td>
+            <td>
+              {% if r.encontrado %}
+                <span class="badge bg-primary">{{ r.codigo_acb }}</span>
+              {% else %}
+                <span class="badge bg-warning text-dark">{{ r.codigo_previsto }}</span>
+              {% endif %}
+            </td>
+            <td>{{ r.status_importacao }}</td>
+            <td>
+              {% if r.ok %}
+              <select class="form-select form-select-sm" name="acao_{{ loop.index0 }}">
+                <option value="usar_existente" {% if r.acao_sugerida == 'usar_existente' %}selected{% endif %}>Usar existente</option>
+                <option value="criar_novo" {% if r.acao_sugerida == 'criar_novo' %}selected{% endif %}>Criar novo</option>
+                <option value="pular">Pular</option>
+              </select>
+              {% else %}
+              <span class="text-muted small">Indisponível por erro</span>
+              {% endif %}
+            </td>
+            <td>
+              {% if r.errors %}
+              <div class="small">
+                {% for e in r.errors %}
+                <div>{{ e }}</div>
+                {% endfor %}
+              </div>
+              {% elif r.warnings %}
+              <div class="small text-warning">
+                {% for w in r.warnings %}
+                <div>{{ w }}</div>
+                {% endfor %}
+              </div>
+              {% endif %}
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+
+    <div class="d-flex flex-wrap gap-2 mt-3">
+      <button type="submit" class="btn btn-success" {% if preview_error_count > 0 %}disabled{% endif %}>
+        <i class="fas fa-check"></i> Confirmar Importação
+      </button>
+      <a href="{{ url_for('estoque_pecas.imprimir_importacao_estoque_excel') }}" target="_blank" class="btn btn-outline-primary {% if preview_error_count > 0 %}disabled{% endif %}">
+        <i class="fas fa-print"></i> Imprimir Folha
+      </a>
+    </div>
+    </form>
+
+    {% if preview_error_count > 0 %}
+    <div class="form-text text-danger mt-2">Corrija os erros no Excel e faça upload novamente. A confirmação fica habilitada apenas quando não há erros.</div>
+    {% endif %}
+  </div>
+</div>
+{% endif %}
+
+<script>
+document.addEventListener('DOMContentLoaded', function () {
+  var btnSelecionar = document.getElementById('selecionarTodasLinhas');
+  var btnDesmarcar = document.getElementById('desmarcarTodasLinhas');
+
+  function setChecks(value) {
+    document.querySelectorAll('.linha-importacao-check').forEach(function (el) {
+      el.checked = value;
+    });
+  }
+
+  if (btnSelecionar) {
+    btnSelecionar.addEventListener('click', function () { setChecks(true); });
+  }
+
+  if (btnDesmarcar) {
+    btnDesmarcar.addEventListener('click', function () { setChecks(false); });
+  }
+});
+</script>
+{% endblock %}

@@ -62,7 +62,7 @@
                         </thead>
                         <tbody>
                             {% for item in itens %}
-                            <tr>
+                            <tr {% if item.criado_via_importacao_estoque %}class="table-danger"{% endif %}>
                                 <td>
                                     {% if item.imagem %}
                                         <img src="{{ item.imagem_path }}" alt="{{ item.nome }}" class="img-thumbnail" style="width: 44px; height: 44px; object-fit: cover;">
@@ -70,8 +70,19 @@
                                         <span class="text-muted">-</span>
                                     {% endif %}
                                 </td>
-                                <td>{{ item.codigo_acb }}</td>
-                                <td>{{ item.nome }}</td>
+                                <td>
+                                    {{ item.codigo_acb }}
+                                    {% if item.criado_via_importacao_estoque %}
+                                        <div><span class="badge bg-danger">Importado pelo estoque</span></div>
+                                    {% endif %}
+                                </td>
+                                <td>
+                                    {% if item.criado_via_importacao_estoque %}
+                                        <span class="text-danger fw-semibold">{{ item.nome }}</span>
+                                    {% else %}
+                                        {{ item.nome }}
+                                    {% endif %}
+                                </td>
                                 <td>
                                     {% if item.eh_composto %}
                                         <span class="badge bg-primary">

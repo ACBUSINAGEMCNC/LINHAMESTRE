@@ -1,13 +1,88 @@
 import json
+import re
+import unicodedata
 
-from flask import Blueprint, render_template, request, redirect, url_for, flash, jsonify, current_app
+from datetime import date, datetime
+
+from flask import Blueprint, render_template, request, redirect, url_for, flash, jsonify, current_app, session
 from sqlalchemy import or_
 from sqlalchemy.exc import ProgrammingError
+from openpyxl import load_workbook
+
 from models import db, EstoquePecas, Item, MovimentacaoEstoquePecas, EstoquePecasSlotTemp
-from utils import validate_form_data
-from datetime import datetime
+from utils import validate_form_data, generate_next_code
 
 estoque_pecas = Blueprint('estoque_pecas', __name__)
+
+
+def _parse_date_cell(value):
+    if value is None or value == '':
+        return None
+    if isinstance(value, datetime):
+        return value.date()
+    if isinstance(value, date):
+        return value
+    if isinstance(value, str):
+        v = value.strip()
+        if not v:
+            return None
+        for fmt in ('%Y-%m-%d', '%d/%m/%Y', '%d-%m-%Y'):
+            try:
+                return datetime.strptime(v, fmt).date()
+            except Exception:
+                pass
+    return None
+
+
+def _normalize_header(value):
+    if value is None:
+        return ''
+    s = str(value).strip().lower()
+    s = unicodedata.normalize('NFKD', s)
+    s = ''.join(ch for ch in s if not unicodedata.combining(ch))
+    s = re.sub(r'[^a-z0-9]+', '_', s)
+    s = re.sub(r'_+', '_', s).strip('_')
+    return s
+
+
+def _canonical_estoque_excel_column(header: str) -> str:
+    h = _normalize_header(header)
+    aliases = {
+        'nome': {'nome', 'item', 'nome_item', 'descricao', 'descricao_item', 'peca', 'nome_peca'},
+        'quantidade': {'quantidade', 'qtd', 'qtde', 'saldo', 'estoque'},
+        'observacao': {'observacao', 'obs', 'observacoes'},
+        'data_entrada': {'data_entrada', 'entrada', 'data'},
+    }
+    for canonical, opts in aliases.items():
+        if h in opts:
+            return canonical
+    return h
+
+
+def _get_pending_import_rows():
+    return session.get('import_estoque_excel_rows') or []
+
+
+def _build_import_print_context(rows):
+    existentes = [r for r in rows if not r.get('criar_item')]
+    novos = [r for r in rows if r.get('criar_item')]
+    return {
+        'rows': rows,
+        'existentes_count': len(existentes),
+        'novos_count': len(novos),
+        'total_count': len(rows),
+        'total_quantidade': sum(int(r.get('quantidade') or 0) for r in rows),
+        'now': datetime.now(),
+    }
+
+
+def _next_import_preview_code(counter):
+    base = generate_next_code(Item, 'ACB', 'codigo_acb')
+    try:
+        prefix, number = base.split('-', 1)
+        return f"{prefix}-{int(number) + counter:05d}"
+    except Exception:
+        return base
 
 
 def _normalize_slots(slots, estante_padrao=None):
@@ -71,6 +146,242 @@ def index():
         q = q.filter(EstoquePecas.quantidade > 0)
     estoque = q.order_by(EstoquePecas.estante, EstoquePecas.secao, EstoquePecas.linha, EstoquePecas.coluna).all()
     return render_template('estoque_pecas/index.html', estoque=estoque, show_zero=show_zero)
+
+
+@estoque_pecas.route('/estoque-pecas/importar-excel', methods=['GET', 'POST'])
+def importar_estoque_excel():
+    if request.method == 'GET':
+        session.pop('import_estoque_excel_rows', None)
+        return render_template('estoque_pecas/importar_excel.html')
+
+    arquivo = request.files.get('arquivo')
+    if not arquivo or not arquivo.filename:
+        flash('Selecione um arquivo XLSX para importar.', 'danger')
+        return redirect(url_for('estoque_pecas.importar_estoque_excel'))
+
+    try:
+        wb = load_workbook(arquivo, data_only=True)
+        ws = wb.active
+    except Exception as e:
+        flash(f'Erro ao ler XLSX: {e}', 'danger')
+        return redirect(url_for('estoque_pecas.importar_estoque_excel'))
+
+    header_row = None
+    for row in ws.iter_rows(min_row=1, max_row=1, values_only=True):
+        header_row = row
+        break
+    if not header_row:
+        flash('XLSX vazio ou sem cabeçalho.', 'danger')
+        return redirect(url_for('estoque_pecas.importar_estoque_excel'))
+
+    headers = [_canonical_estoque_excel_column(h) for h in header_row]
+    col_index = {}
+    for i, h in enumerate(headers):
+        if not h:
+            continue
+        col_index.setdefault(h, i)
+
+    if 'nome' not in col_index and 'item' in col_index:
+        col_index['nome'] = col_index['item']
+
+    required = ['nome', 'quantidade']
+    missing = [c for c in required if c not in col_index]
+    if missing:
+        encontrados = [h for h in headers if h]
+        flash('Colunas obrigatórias ausentes no Excel: ' + ', '.join(missing), 'danger')
+        flash('Cabeçalhos encontrados: ' + ', '.join(encontrados[:30]) + ('...' if len(encontrados) > 30 else ''), 'warning')
+        return redirect(url_for('estoque_pecas.importar_estoque_excel'))
+
+    preview_rows = []
+    ok_rows = []
+    ok_count = 0
+    err_count = 0
+    warn_count = 0
+    used_names = set()
+    novos_counter = 0
+
+    obs_col = col_index.get('observacao')
+    data_col = col_index.get('data_entrada')
+
+    for row_number, values in enumerate(ws.iter_rows(min_row=2, values_only=True), start=2):
+        nome_val = values[col_index['nome']] if col_index.get('nome') is not None else None
+        quantidade_val = values[col_index['quantidade']] if col_index.get('quantidade') is not None else None
+        observacao_val = values[obs_col] if obs_col is not None else None
+        data_val = values[data_col] if data_col is not None else None
+
+        errors = []
+        warnings = []
+        nome_s = str(nome_val or '').strip()
+        nome_key = nome_s.casefold()
+        observacao_s = str(observacao_val or '').strip()
+        data_entrada = _parse_date_cell(data_val)
+
+        if not any([nome_s, str(quantidade_val or '').strip(), observacao_s, data_val]):
+            continue
+
+        if not nome_s:
+            errors.append('Nome do item vazio')
+
+        try:
+            if isinstance(quantidade_val, float) and quantidade_val.is_integer():
+                quantidade_val = int(quantidade_val)
+            quantidade_int = int(str(quantidade_val).strip())
+            if quantidade_int <= 0:
+                errors.append('Quantidade deve ser > 0')
+        except Exception:
+            quantidade_int = None
+            errors.append('Quantidade inválida')
+
+        if nome_key and nome_key in used_names:
+            warnings.append('Nome repetido na planilha: as quantidades serão importadas em linhas separadas')
+        elif nome_key:
+            used_names.add(nome_key)
+
+        item = Item.query.filter(Item.nome == nome_s).first() if nome_s else None
+        codigo_previsto = item.codigo_acb if item else _next_import_preview_code(novos_counter)
+        if not item and len(errors) == 0:
+            novos_counter += 1
+
+        ok = len(errors) == 0
+        if ok:
+            ok_count += 1
+            if warnings:
+                warn_count += 1
+            ok_rows.append({
+                'row_number': row_number,
+                'nome': nome_s,
+                'quantidade': quantidade_int,
+                'observacao': observacao_s,
+                'data_entrada': data_entrada.isoformat() if data_entrada else None,
+                'item_id': item.id if item else None,
+                'codigo_acb': item.codigo_acb if item else None,
+                'codigo_previsto': codigo_previsto,
+                'criar_item': False if item else True,
+                'acao_sugerida': 'usar_existente' if item else 'criar_novo',
+                'selecionado': True,
+            })
+        else:
+            err_count += 1
+
+        preview_rows.append({
+            'row_number': row_number,
+            'nome': nome_s,
+            'quantidade': '' if quantidade_int is None else quantidade_int,
+            'observacao': observacao_s,
+            'data_entrada': data_entrada.strftime('%d/%m/%Y') if data_entrada else '',
+            'ok': ok,
+            'errors': errors,
+            'warnings': warnings,
+            'encontrado': bool(item),
+            'codigo_acb': item.codigo_acb if item else '',
+            'codigo_previsto': codigo_previsto,
+            'status_importacao': 'Cadastrar novo' if not item else 'Já cadastrado',
+            'acao_sugerida': 'usar_existente' if item else 'criar_novo',
+            'selecionado': True,
+        })
+
+    session['import_estoque_excel_rows'] = ok_rows
+    return render_template(
+        'estoque_pecas/importar_excel.html',
+        preview_rows=preview_rows,
+        preview_ok_count=ok_count,
+        preview_error_count=err_count,
+        preview_warning_count=warn_count,
+    )
+
+
+@estoque_pecas.route('/estoque-pecas/importar-excel/confirmar', methods=['POST'])
+def confirmar_importacao_estoque_excel():
+    ok_rows = _get_pending_import_rows()
+    if not ok_rows:
+        flash('Nenhuma importação pendente. Faça o upload do Excel novamente.', 'warning')
+        return redirect(url_for('estoque_pecas.importar_estoque_excel'))
+
+    try:
+        importados = 0
+        selecionados = []
+        for idx, r in enumerate(ok_rows):
+            marcado = request.form.get(f'selecionar_{idx}')
+            if not marcado:
+                continue
+            acao = (request.form.get(f'acao_{idx}') or request.form.get('acao_global') or r.get('acao_sugerida') or '').strip()
+            if acao == 'pular':
+                continue
+
+            r2 = dict(r)
+            r2['acao_confirmada'] = acao
+            selecionados.append(r2)
+
+        if not selecionados:
+            flash('Nenhuma linha foi selecionada para importação.', 'warning')
+            return redirect(url_for('estoque_pecas.importar_estoque_excel'))
+
+        for r in selecionados:
+            item = Item.query.get(r.get('item_id')) if r.get('item_id') else None
+            if r.get('acao_confirmada') == 'usar_existente' and not item:
+                flash(f"A linha {r.get('row_number')} não possui item cadastrado para usar.", 'danger')
+                return redirect(url_for('estoque_pecas.importar_estoque_excel'))
+
+            if not item:
+                item = Item(
+                    nome=r['nome'],
+                    codigo_acb=generate_next_code(Item, 'ACB', 'codigo_acb'),
+                    tipo_item='producao',
+                    criado_via_importacao_estoque=True,
+                )
+                db.session.add(item)
+                db.session.flush()
+
+            estoque_existente = EstoquePecas.query.filter_by(item_id=item.id).first()
+            data_entrada = None
+            if r.get('data_entrada'):
+                data_entrada = datetime.strptime(r['data_entrada'], '%Y-%m-%d').date()
+            if not data_entrada:
+                data_entrada = datetime.now().date()
+
+            if estoque_existente:
+                estoque_existente.quantidade += int(r['quantidade'])
+                if r.get('observacao'):
+                    estoque_existente.observacao = r['observacao']
+                estoque_row = estoque_existente
+            else:
+                estoque_row = EstoquePecas(
+                    item_id=item.id,
+                    quantidade=int(r['quantidade']),
+                    data_entrada=data_entrada,
+                    observacao=r.get('observacao') or None,
+                )
+                db.session.add(estoque_row)
+                db.session.flush()
+
+            movimentacao = MovimentacaoEstoquePecas(
+                estoque_pecas_id=estoque_row.id,
+                tipo='entrada',
+                quantidade=int(r['quantidade']),
+                data=data_entrada,
+                referencia='IMPORTACAO_EXCEL_ESTOQUE',
+                observacao=r.get('observacao') or 'Importação por Excel',
+            )
+            db.session.add(movimentacao)
+            importados += 1
+
+        session['import_estoque_excel_rows'] = selecionados
+        db.session.commit()
+        flash(f'Importação concluída com sucesso! Linhas importadas: {importados}', 'success')
+        return redirect(url_for('estoque_pecas.imprimir_importacao_estoque_excel'))
+    except Exception as e:
+        db.session.rollback()
+        flash(f'Erro ao importar estoque: {e}', 'danger')
+        return redirect(url_for('estoque_pecas.importar_estoque_excel'))
+
+
+@estoque_pecas.route('/estoque-pecas/importar-excel/imprimir')
+def imprimir_importacao_estoque_excel():
+    rows = _get_pending_import_rows()
+    if not rows:
+        flash('Nenhuma importação disponível para impressão.', 'warning')
+        return redirect(url_for('estoque_pecas.importar_estoque_excel'))
+    return render_template('estoque_pecas/importar_excel_imprimir.html', **_build_import_print_context(rows))
 
 @estoque_pecas.route('/estoque-pecas/entrada', methods=['GET', 'POST'])
 def entrada():

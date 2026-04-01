@@ -310,6 +310,7 @@ class Item(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     nome = db.Column(db.String(100), nullable=False, unique=True)
     codigo_acb = db.Column(db.String(20), unique=True)
+    criado_via_importacao_estoque = db.Column(db.Boolean, default=False)
     desenho_tecnico = db.Column(db.String(255))
     desenho_aprovado_em = db.Column(db.DateTime, nullable=True)
     desenho_aprovado_por_id = db.Column(db.Integer, db.ForeignKey('usuario.id'), nullable=True)

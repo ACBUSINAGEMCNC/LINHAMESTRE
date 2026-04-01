@@ -216,6 +216,9 @@ def editar_item(item_id):
         if 'instrucoes_trabalho' in request.files and request.files['instrucoes_trabalho'].filename:
             item.instrucoes_trabalho = save_file(request.files['instrucoes_trabalho'], 'instrucoes')
 
+        if getattr(item, 'criado_via_importacao_estoque', False):
+            item.criado_via_importacao_estoque = False
+
         if item.tipo_item == 'montagem':
             item.eh_composto = False
             ItemMaterial.query.filter_by(item_id=item.id).delete()
