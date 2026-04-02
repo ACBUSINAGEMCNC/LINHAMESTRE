@@ -123,6 +123,16 @@
                                 <div class="info-label">Data de Criação</div>
                                 <div class="info-value">{{ item.data_criacao.strftime('%d/%m/%Y') if item.data_criacao else 'N/A' }}</div>
                             </div>
+                            {% if pode_ver_valores %}
+                            <div class="info-item">
+                                <div class="info-label">Valor de Venda</div>
+                                <div class="info-value">R$ {{ '%.2f'|format(item.valor_item or 0) }}</div>
+                            </div>
+                            <div class="info-item">
+                                <div class="info-label">Sobra Líquida</div>
+                                <div class="info-value">R$ {{ '%.2f'|format(item.valor_sobra_liquida or 0) }}</div>
+                            </div>
+                            {% endif %}
                         </div>
                     </div>
                 </div>
@@ -378,6 +388,54 @@
                                 </strong>
                             </div>
                         </div>
+                        {% if pode_ver_valores %}
+                        <hr>
+                        <div class="mb-3">
+                            <div class="d-flex justify-content-between">
+                                <span>Venda:</span>
+                                <strong>R$ {{ '%.2f'|format(item.valor_item or 0) }}</strong>
+                            </div>
+                        </div>
+                        <div class="mb-3">
+                            <div class="d-flex justify-content-between">
+                                <span>Componentes:</span>
+                                <strong>R$ {{ '%.2f'|format(item.valor_componentes_composto or 0) }}</strong>
+                            </div>
+                        </div>
+                        <div class="mb-3">
+                            <div class="d-flex justify-content-between">
+                                <span>Material:</span>
+                                <strong>R$ {{ '%.2f'|format(item.valor_material or 0) }}</strong>
+                            </div>
+                        </div>
+                        <div class="mb-3">
+                            <div class="d-flex justify-content-between">
+                                <span>Outros Custos:</span>
+                                <strong>R$ {{ '%.2f'|format(item.outros_custos or 0) }}</strong>
+                            </div>
+                        </div>
+                        <div class="mb-3">
+                            <div class="d-flex justify-content-between">
+                                <span>Imposto:</span>
+                                <strong>{{ '%.2f'|format(item.imposto_percentual or 0) }}% / R$ {{ '%.2f'|format(item.valor_imposto_reais or 0) }}</strong>
+                            </div>
+                        </div>
+                        <div class="mb-3">
+                            <div class="d-flex justify-content-between">
+                                <span>Sobra Líquida:</span>
+                                <strong>R$ {{ '%.2f'|format(item.valor_sobra_liquida or 0) }}</strong>
+                            </div>
+                        </div>
+                        <div class="mb-3">
+                            <div class="d-flex justify-content-between">
+                                <span>Margem:</span>
+                                <strong>{{ '%.2f'|format(item.margem_liquida_percentual or 0) }}%</strong>
+                            </div>
+                        </div>
+                        <div>
+                            <canvas id="graficoMargemComposto" height="220"></canvas>
+                        </div>
+                        {% endif %}
                     </div>
                 </div>
             </div>
@@ -385,5 +443,39 @@
     </div>
 
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    {% if pode_ver_valores %}
+    <script id="grafico-margem-composto-data" type="application/json">{{ item.grafico_margem_payload | tojson | safe }}</script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script>
+        const ctxMargemComposto = document.getElementById('graficoMargemComposto');
+        if (ctxMargemComposto) {
+            const margemPayload = JSON.parse(document.getElementById('grafico-margem-composto-data').textContent);
+            new Chart(ctxMargemComposto, {
+                type: 'bar',
+                data: {
+                    labels: margemPayload.labels,
+                    datasets: [{
+                        label: 'R$ por faixa',
+                        data: margemPayload.values,
+                        backgroundColor: ['#0d6efd', '#20c997', '#fd7e14', '#dc3545', '#198754']
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    plugins: {
+                        legend: {
+                            display: false
+                        }
+                    },
+                    scales: {
+                        y: {
+                            beginAtZero: true
+                        }
+                    }
+                }
+            });
+        }
+    </script>
+    {% endif %}
 </body>
 </html>

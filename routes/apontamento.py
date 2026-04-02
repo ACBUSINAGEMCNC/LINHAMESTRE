@@ -2,6 +2,7 @@ from flask import Blueprint, render_template, request, jsonify, flash, redirect,
 from models import db, Usuario, ApontamentoProducao, StatusProducaoOS, OrdemServico, ItemTrabalho, PedidoOrdemServico, Pedido, Item, Trabalho, KanbanLista, CartaoFantasma
 from datetime import datetime, timezone, timedelta
 from sqlalchemy.orm import joinedload
+from sqlalchemy import func
 import logging
 import random
 import string
@@ -40,6 +41,37 @@ def to_brt_iso(dt):
         return dt.astimezone(LOCAL_TZ).isoformat()
     except Exception:
         return dt.isoformat()
+
+
+def _query_apontamento_aberto(os_id, item_id, trab_id, tipo_acao):
+    return (
+        ApontamentoProducao.query.filter(
+            ApontamentoProducao.ordem_servico_id == os_id,
+            ApontamentoProducao.item_id == item_id,
+            ApontamentoProducao.trabalho_id == trab_id,
+            ApontamentoProducao.tipo_acao == tipo_acao,
+            ApontamentoProducao.data_fim.is_(None)
+        )
+        .order_by(ApontamentoProducao.data_hora.desc())
+        .first()
+    )
+
+
+def _buscar_ultima_quantidade(os_id, item_id, trab_id):
+    ultimo_ap = (
+        ApontamentoProducao.query.with_entities(ApontamentoProducao.quantidade)
+        .filter(
+            ApontamentoProducao.ordem_servico_id == os_id,
+            ApontamentoProducao.item_id == item_id,
+            ApontamentoProducao.trabalho_id == trab_id,
+            ApontamentoProducao.quantidade.isnot(None)
+        )
+        .order_by(ApontamentoProducao.data_hora.desc())
+        .first()
+    )
+    if not ultimo_ap or ultimo_ap[0] is None:
+        return 0
+    return int(ultimo_ap[0])
 
 @apontamento_bp.route('/operadores')
 def listar_operadores():
@@ -1934,6 +1966,57 @@ def detalhes_ordem_servico(ordem_id):
         logger.exception(f"Falha ao buscar detalhes da OS {ordem_id}: {e}")
         return jsonify({'error': str(e)}), 500
 
+
+@apontamento_bp.route('/quantidades-por-trabalho/<int:ordem_id>', methods=['GET'])
+def quantidades_por_trabalho(ordem_id):
+    """Retorna apenas a última quantidade apontada por trabalho da OS."""
+    try:
+        subquery = (
+            db.session.query(
+                ApontamentoProducao.trabalho_id.label('trabalho_id'),
+                func.max(ApontamentoProducao.data_hora).label('max_data_hora')
+            )
+            .filter(
+                ApontamentoProducao.ordem_servico_id == ordem_id,
+                ApontamentoProducao.quantidade.isnot(None),
+                ApontamentoProducao.trabalho_id.isnot(None)
+            )
+            .group_by(ApontamentoProducao.trabalho_id)
+            .subquery()
+        )
+
+        rows = (
+            db.session.query(
+                ApontamentoProducao.trabalho_id,
+                Trabalho.nome.label('trabalho_nome'),
+                ApontamentoProducao.quantidade.label('ultima_quantidade')
+            )
+            .join(
+                subquery,
+                (ApontamentoProducao.trabalho_id == subquery.c.trabalho_id)
+                & (ApontamentoProducao.data_hora == subquery.c.max_data_hora)
+            )
+            .join(Trabalho, Trabalho.id == ApontamentoProducao.trabalho_id)
+            .filter(ApontamentoProducao.ordem_servico_id == ordem_id)
+            .order_by(Trabalho.nome.asc())
+            .all()
+        )
+
+        return jsonify({
+            'ordem_servico_id': ordem_id,
+            'trabalhos': [
+                {
+                    'trabalho_id': row.trabalho_id,
+                    'trabalho_nome': row.trabalho_nome,
+                    'ultima_quantidade': int(row.ultima_quantidade or 0)
+                }
+                for row in rows
+            ]
+        })
+    except Exception as e:
+        logger.exception(f"Falha ao buscar quantidades por trabalho da OS {ordem_id}: {e}")
+        return jsonify({'error': str(e)}), 500
+
 @apontamento_bp.route('/registrar', methods=['POST'])
 def registrar_apontamento():
     """Registra um novo apontamento de produção"""
@@ -1961,24 +2044,28 @@ def registrar_apontamento():
         if not usuario:
             return jsonify({'success': False, 'message': 'Código de operador inválido'})
 
+        ordem_servico_id = dados['ordem_servico_id']
+        item_id = dados['item_id']
+        trabalho_id = dados['trabalho_id']
+
         # Buscar status atual da OS para validar transições de estado
-        status_atual = StatusProducaoOS.query.filter_by(ordem_servico_id=dados['ordem_servico_id']).first()
+        status_atual = StatusProducaoOS.query.filter_by(ordem_servico_id=ordem_servico_id).first()
         tipo_acao = dados['tipo_acao']
 
-        # Validar transições de estado (permitindo paralelismo por item/trabalho)
-        # Consultas de apoio para verificar abertos por combinação
-        def existe_inicio_aberto(os_id, item_id, trab_id, tipo_inicio):
-            return ApontamentoProducao.query.filter(
-                ApontamentoProducao.ordem_servico_id == os_id,
-                ApontamentoProducao.item_id == item_id,
-                ApontamentoProducao.trabalho_id == trab_id,
-                ApontamentoProducao.tipo_acao == tipo_inicio,
-                ApontamentoProducao.data_fim == None
-            ).order_by(ApontamentoProducao.data_hora.desc()).first() is not None
+        ap_setup_aberto = None
+        ap_prod_aberto = None
+        ap_pausa_aberta = None
+
+        if tipo_acao in ['inicio_setup', 'fim_setup', 'inicio_producao', 'stop']:
+            ap_setup_aberto = _query_apontamento_aberto(ordem_servico_id, item_id, trabalho_id, 'inicio_setup')
+        if tipo_acao in ['inicio_producao', 'pausa', 'stop', 'fim_producao']:
+            ap_prod_aberto = _query_apontamento_aberto(ordem_servico_id, item_id, trabalho_id, 'inicio_producao')
+        if tipo_acao in ['inicio_producao', 'stop']:
+            ap_pausa_aberta = _query_apontamento_aberto(ordem_servico_id, item_id, trabalho_id, 'pausa')
 
         if tipo_acao == 'inicio_setup':
             # Bloquear somente se já houver um setup em andamento para MESMO item/trabalho
-            if existe_inicio_aberto(dados['ordem_servico_id'], dados['item_id'], dados['trabalho_id'], 'inicio_setup'):
+            if ap_setup_aberto is not None:
                 return jsonify({
                     'success': False,
                     'message': 'Já existe um setup em andamento para este item/trabalho nesta OS.'
@@ -1986,13 +2073,7 @@ def registrar_apontamento():
 
         if tipo_acao == 'fim_setup':
             # Deve existir um início de setup aberto para este item/trabalho
-            ap_setup = ApontamentoProducao.query.filter(
-                ApontamentoProducao.ordem_servico_id == dados['ordem_servico_id'],
-                ApontamentoProducao.item_id == dados['item_id'],
-                ApontamentoProducao.trabalho_id == dados['trabalho_id'],
-                ApontamentoProducao.tipo_acao == 'inicio_setup',
-                ApontamentoProducao.data_fim == None
-            ).order_by(ApontamentoProducao.data_hora.desc()).first()
+            ap_setup = ap_setup_aberto
             if not ap_setup:
                 return jsonify({
                     'success': False,
@@ -2008,19 +2089,13 @@ def registrar_apontamento():
 
         if tipo_acao == 'inicio_producao':
             # Não bloquear por existir outra produção em andamento na OS; bloquear apenas se mesma combinação já estiver ativa
-            if existe_inicio_aberto(dados['ordem_servico_id'], dados['item_id'], dados['trabalho_id'], 'inicio_producao'):
+            if ap_prod_aberto is not None:
                 return jsonify({
                     'success': False,
                     'message': 'Já existe produção em andamento para este item/trabalho nesta OS.'
                 })
             # Se houve início de setup para esta combinação e ainda não há fim_setup, exigir conclusão
-            ap_setup_iniciado = ApontamentoProducao.query.filter(
-                ApontamentoProducao.ordem_servico_id == dados['ordem_servico_id'],
-                ApontamentoProducao.item_id == dados['item_id'],
-                ApontamentoProducao.trabalho_id == dados['trabalho_id'],
-                ApontamentoProducao.tipo_acao == 'inicio_setup'
-            ).order_by(ApontamentoProducao.data_hora.desc()).first()
-            if ap_setup_iniciado and ap_setup_iniciado.data_fim is None:
+            if ap_setup_aberto and ap_setup_aberto.data_fim is None:
                 return jsonify({
                     'success': False,
                     'message': 'Conclua o setup deste item/trabalho antes de iniciar a produção.'
@@ -2028,13 +2103,7 @@ def registrar_apontamento():
 
         if tipo_acao == 'pausa':
             # Deve existir uma produção em andamento para esta combinação
-            ap_prod = ApontamentoProducao.query.filter(
-                ApontamentoProducao.ordem_servico_id == dados['ordem_servico_id'],
-                ApontamentoProducao.item_id == dados['item_id'],
-                ApontamentoProducao.trabalho_id == dados['trabalho_id'],
-                ApontamentoProducao.tipo_acao == 'inicio_producao',
-                ApontamentoProducao.data_fim == None
-            ).order_by(ApontamentoProducao.data_hora.desc()).first()
+            ap_prod = ap_prod_aberto
             if not ap_prod:
                 return jsonify({'success': False, 'message': 'Não é possível pausar: não há produção em andamento para este item/trabalho.'})
             if ap_prod.usuario_id != usuario.id:
@@ -2043,27 +2112,9 @@ def registrar_apontamento():
 
         if tipo_acao == 'stop':
             # Pode parar produção em andamento, pausa aberta, ou setup em andamento para este par
-            ap_prod = ApontamentoProducao.query.filter(
-                ApontamentoProducao.ordem_servico_id == dados['ordem_servico_id'],
-                ApontamentoProducao.item_id == dados['item_id'],
-                ApontamentoProducao.trabalho_id == dados['trabalho_id'],
-                ApontamentoProducao.tipo_acao == 'inicio_producao',
-                ApontamentoProducao.data_fim == None
-            ).order_by(ApontamentoProducao.data_hora.desc()).first()
-            ap_pausa = ApontamentoProducao.query.filter(
-                ApontamentoProducao.ordem_servico_id == dados['ordem_servico_id'],
-                ApontamentoProducao.item_id == dados['item_id'],
-                ApontamentoProducao.trabalho_id == dados['trabalho_id'],
-                ApontamentoProducao.tipo_acao == 'pausa',
-                ApontamentoProducao.data_fim == None
-            ).order_by(ApontamentoProducao.data_hora.desc()).first()
-            ap_setup = ApontamentoProducao.query.filter(
-                ApontamentoProducao.ordem_servico_id == dados['ordem_servico_id'],
-                ApontamentoProducao.item_id == dados['item_id'],
-                ApontamentoProducao.trabalho_id == dados['trabalho_id'],
-                ApontamentoProducao.tipo_acao == 'inicio_setup',
-                ApontamentoProducao.data_fim == None
-            ).order_by(ApontamentoProducao.data_hora.desc()).first()
+            ap_prod = ap_prod_aberto
+            ap_pausa = ap_pausa_aberta
+            ap_setup = ap_setup_aberto
 
             if not ap_prod and not ap_pausa and not ap_setup:
                 return jsonify({'success': False, 'message': 'Não é possível aplicar STOP: não há apontamento ativo (produção/pausa/setup) para este item/trabalho.'})
@@ -2076,13 +2127,7 @@ def registrar_apontamento():
 
         if tipo_acao == 'fim_producao':
             # Deve existir uma produção em andamento para esta combinação
-            ap_prod = ApontamentoProducao.query.filter(
-                ApontamentoProducao.ordem_servico_id == dados['ordem_servico_id'],
-                ApontamentoProducao.item_id == dados['item_id'],
-                ApontamentoProducao.trabalho_id == dados['trabalho_id'],
-                ApontamentoProducao.tipo_acao == 'inicio_producao',
-                ApontamentoProducao.data_fim == None
-            ).order_by(ApontamentoProducao.data_hora.desc()).first()
+            ap_prod = ap_prod_aberto
             if not ap_prod:
                 return jsonify({'success': False, 'message': 'Não é possível finalizar: não há produção em andamento para este item/trabalho.'})
             if ap_prod.usuario_id != usuario.id:
@@ -2090,24 +2135,24 @@ def registrar_apontamento():
                 return jsonify({'success': False, 'message': f'Apenas o operador que iniciou a produção ({op.nome}) pode finalizá-la.'})
         
         # Validar se a OS existe
-        ordem = OrdemServico.query.get(dados['ordem_servico_id'])
+        ordem = OrdemServico.query.get(ordem_servico_id)
         if not ordem:
             return jsonify({'success': False, 'message': 'Ordem de serviço não encontrada'})
         
         # Validar se o item existe
-        item = Item.query.get(dados['item_id'])
+        item = Item.query.get(item_id)
         if not item:
             return jsonify({'success': False, 'message': 'Item não encontrado'})
         
         # Validar se o tipo de trabalho existe
-        trabalho = Trabalho.query.get(dados['trabalho_id'])
+        trabalho = Trabalho.query.get(trabalho_id)
         if not trabalho:
             return jsonify({'success': False, 'message': 'Tipo de trabalho não encontrado'})
         
         # Validar se o tipo de trabalho está vinculado ao item
         item_trabalho = ItemTrabalho.query.filter_by(
-            item_id=dados['item_id'],
-            trabalho_id=dados['trabalho_id']
+            item_id=item_id,
+            trabalho_id=trabalho_id
         ).first()
         if not item_trabalho:
             return jsonify({
@@ -2118,14 +2163,7 @@ def registrar_apontamento():
         # Calcular última quantidade (independente por trabalho) para validação do input de quantidade
         ultima_quantidade = 0
         try:
-            ultimo_ap = ApontamentoProducao.query.filter(
-                ApontamentoProducao.ordem_servico_id == dados['ordem_servico_id'],
-                ApontamentoProducao.item_id == dados['item_id'],
-                ApontamentoProducao.trabalho_id == dados['trabalho_id'],
-                ApontamentoProducao.quantidade != None
-            ).order_by(ApontamentoProducao.data_hora.desc()).first()
-            if ultimo_ap and ultimo_ap.quantidade is not None:
-                ultima_quantidade = int(ultimo_ap.quantidade)
+            ultima_quantidade = _buscar_ultima_quantidade(ordem_servico_id, item_id, trabalho_id)
         except Exception as e_q:
             logger.exception("Falha ao obter última quantidade para validação")
 
@@ -2156,10 +2194,10 @@ def registrar_apontamento():
                 return jsonify({'success': False, 'message': 'Quantidade final é obrigatória'})
         
         # Buscar ou criar status da OS
-        status_os = StatusProducaoOS.query.filter_by(ordem_servico_id=dados['ordem_servico_id']).first()
+        status_os = status_atual or StatusProducaoOS.query.filter_by(ordem_servico_id=ordem_servico_id).first()
         if not status_os:
             status_os = StatusProducaoOS(
-                ordem_servico_id=dados['ordem_servico_id'],
+                ordem_servico_id=ordem_servico_id,
                 status_atual='Aguardando',
                 operador_atual_id=usuario.id
             )
@@ -2171,8 +2209,8 @@ def registrar_apontamento():
         if tipo_acao == 'inicio_setup':
             status_os.status_atual = 'Setup em andamento'
             status_os.operador_atual_id = usuario.id
-            status_os.item_atual_id = dados['item_id']
-            status_os.trabalho_atual_id = dados['trabalho_id']
+            status_os.item_atual_id = item_id
+            status_os.trabalho_atual_id = trabalho_id
             status_os.inicio_acao = agora
             
         elif tipo_acao == 'fim_setup':
@@ -2181,20 +2219,14 @@ def registrar_apontamento():
         elif tipo_acao == 'inicio_producao':
             status_os.status_atual = 'Produção em andamento'
             status_os.operador_atual_id = usuario.id
-            status_os.item_atual_id = dados['item_id']
-            status_os.trabalho_atual_id = dados['trabalho_id']
+            status_os.item_atual_id = item_id
+            status_os.trabalho_atual_id = trabalho_id
             status_os.inicio_acao = agora
             if dados.get('quantidade'):
                 status_os.quantidade_atual = int(dados['quantidade'])
             # Se houver pausa aberta para este par, encerrá-la
             try:
-                pausa_aberta = ApontamentoProducao.query.filter(
-                    ApontamentoProducao.ordem_servico_id == dados['ordem_servico_id'],
-                    ApontamentoProducao.item_id == dados['item_id'],
-                    ApontamentoProducao.trabalho_id == dados['trabalho_id'],
-                    ApontamentoProducao.tipo_acao == 'pausa',
-                    ApontamentoProducao.data_fim == None
-                ).order_by(ApontamentoProducao.data_hora.desc()).first()
+                pausa_aberta = ap_pausa_aberta or _query_apontamento_aberto(ordem_servico_id, item_id, trabalho_id, 'pausa')
                 if pausa_aberta:
                     delta_pausa = agora - pausa_aberta.data_hora
                     pausa_aberta.data_fim = agora
@@ -2205,8 +2237,8 @@ def registrar_apontamento():
         elif tipo_acao == 'pausa':
             status_os.status_atual = 'Pausado'
             status_os.operador_atual_id = usuario.id
-            status_os.item_atual_id = dados['item_id']
-            status_os.trabalho_atual_id = dados['trabalho_id']
+            status_os.item_atual_id = item_id
+            status_os.trabalho_atual_id = trabalho_id
             status_os.inicio_acao = agora
             status_os.motivo_parada = dados.get('motivo_parada')
             if dados.get('quantidade'):
@@ -2244,21 +2276,15 @@ def registrar_apontamento():
             
             # Buscar o último apontamento de início correspondente
             apontamento_inicio = ApontamentoProducao.query.filter(
-                ApontamentoProducao.ordem_servico_id == dados['ordem_servico_id'],
-                ApontamentoProducao.item_id == dados['item_id'],
-                ApontamentoProducao.trabalho_id == dados['trabalho_id'],
+                ApontamentoProducao.ordem_servico_id == ordem_servico_id,
+                ApontamentoProducao.item_id == item_id,
+                ApontamentoProducao.trabalho_id == trabalho_id,
                 ApontamentoProducao.tipo_acao == tipo_inicio,
-                ApontamentoProducao.data_fim == None
+                ApontamentoProducao.data_fim.is_(None)
             ).order_by(ApontamentoProducao.data_hora.desc()).first()
             # Se STOP e não encontrou produção aberta, tentar encerrar setup aberto
             if tipo_acao == 'stop' and not apontamento_inicio:
-                apontamento_inicio = ApontamentoProducao.query.filter(
-                    ApontamentoProducao.ordem_servico_id == dados['ordem_servico_id'],
-                    ApontamentoProducao.item_id == dados['item_id'],
-                    ApontamentoProducao.trabalho_id == dados['trabalho_id'],
-                    ApontamentoProducao.tipo_acao == 'inicio_setup',
-                    ApontamentoProducao.data_fim == None
-                ).order_by(ApontamentoProducao.data_hora.desc()).first()
+                apontamento_inicio = ap_setup_aberto or _query_apontamento_aberto(ordem_servico_id, item_id, trabalho_id, 'inicio_setup')
             
             # Se encontrou, calcular tempo decorrido
             if apontamento_inicio:
@@ -2273,24 +2299,12 @@ def registrar_apontamento():
             # Se for STOP, também encerrar pausa e setup abertos para o mesmo par
             if tipo_acao == 'stop':
                 try:
-                    pausa_aberta = ApontamentoProducao.query.filter(
-                        ApontamentoProducao.ordem_servico_id == dados['ordem_servico_id'],
-                        ApontamentoProducao.item_id == dados['item_id'],
-                        ApontamentoProducao.trabalho_id == dados['trabalho_id'],
-                        ApontamentoProducao.tipo_acao == 'pausa',
-                        ApontamentoProducao.data_fim == None
-                    ).order_by(ApontamentoProducao.data_hora.desc()).first()
+                    pausa_aberta = ap_pausa_aberta or _query_apontamento_aberto(ordem_servico_id, item_id, trabalho_id, 'pausa')
                     if pausa_aberta:
                         delta_pausa = agora - pausa_aberta.data_hora
                         pausa_aberta.data_fim = agora
                         pausa_aberta.tempo_decorrido = int(delta_pausa.total_seconds())
-                    setup_aberto = ApontamentoProducao.query.filter(
-                        ApontamentoProducao.ordem_servico_id == dados['ordem_servico_id'],
-                        ApontamentoProducao.item_id == dados['item_id'],
-                        ApontamentoProducao.trabalho_id == dados['trabalho_id'],
-                        ApontamentoProducao.tipo_acao == 'inicio_setup',
-                        ApontamentoProducao.data_fim == None
-                    ).order_by(ApontamentoProducao.data_hora.desc()).first()
+                    setup_aberto = ap_setup_aberto or _query_apontamento_aberto(ordem_servico_id, item_id, trabalho_id, 'inicio_setup')
                     if setup_aberto:
                         delta_setup = agora - setup_aberto.data_hora
                         setup_aberto.data_fim = agora
@@ -2305,13 +2319,7 @@ def registrar_apontamento():
         if tipo_acao == 'pausa':
             # Encerrar o início de produção vigente (se ainda não encerrado acima)
             try:
-                ap_inicio_prod = ApontamentoProducao.query.filter(
-                    ApontamentoProducao.ordem_servico_id == dados['ordem_servico_id'],
-                    ApontamentoProducao.item_id == dados['item_id'],
-                    ApontamentoProducao.trabalho_id == dados['trabalho_id'],
-                    ApontamentoProducao.tipo_acao == 'inicio_producao',
-                    ApontamentoProducao.data_fim == None
-                ).order_by(ApontamentoProducao.data_hora.desc()).first()
+                ap_inicio_prod = ap_prod_aberto or _query_apontamento_aberto(ordem_servico_id, item_id, trabalho_id, 'inicio_producao')
                 if ap_inicio_prod:
                     ap_inicio_prod.data_fim = agora
                     ap_inicio_prod.tempo_decorrido = int((agora - ap_inicio_prod.data_hora).total_seconds())
@@ -2326,11 +2334,11 @@ def registrar_apontamento():
                 criar_tempo = 0
 
         apontamento = ApontamentoProducao(
-            ordem_servico_id=dados['ordem_servico_id'],
+            ordem_servico_id=ordem_servico_id,
             usuario_id=usuario.id,
             operador_id=usuario.id,  # Salvar operador_id para facilitar consultas
-            item_id=dados['item_id'],
-            trabalho_id=dados['trabalho_id'],
+            item_id=item_id,
+            trabalho_id=trabalho_id,
             tipo_acao=tipo_acao,
             data_hora=agora,
             data_fim=criar_data_fim,  # Para pausa permanece aberto; para finais usa data_fim calculado

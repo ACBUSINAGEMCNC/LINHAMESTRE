@@ -35,6 +35,24 @@ def _parse_valor_item(raw):
         raise ValueError('Valor do item inválido')
 
 
+def _parse_percentual(raw):
+    txt = str(raw or '').strip()
+    if not txt:
+        return 0.0
+    txt = txt.replace('%', '').replace('.', '').replace(',', '.').strip()
+    try:
+        return float(Decimal(txt))
+    except (InvalidOperation, ValueError):
+        raise ValueError('Percentual de imposto inválido')
+
+
+def _apply_campos_financeiros(item, form_data):
+    item.valor_item = _parse_valor_item(form_data.get('valor_item', item.valor_item or 0))
+    item.valor_material = _parse_valor_item(form_data.get('valor_material', item.valor_material or 0))
+    item.outros_custos = _parse_valor_item(form_data.get('outros_custos', item.outros_custos or 0))
+    item.imposto_percentual = _parse_percentual(form_data.get('imposto_percentual', item.imposto_percentual or 0))
+
+
 def _build_preview_valores_rows(rows):
     return {
         'preview_rows': rows,
@@ -77,10 +95,17 @@ def exportar_planilha_valores_itens():
     wb = Workbook()
     ws = wb.active
     ws.title = 'Valores Itens'
-    ws.append(['codigo_acb', 'item', 'valor_item'])
+    ws.append(['codigo_acb', 'item', 'valor_item', 'valor_material', 'outros_custos', 'imposto_percentual'])
 
     for item in Item.query.order_by(Item.nome.asc()).all():
-        ws.append([item.codigo_acb, item.nome, float(item.valor_item or 0)])
+        ws.append([
+            item.codigo_acb,
+            item.nome,
+            float(item.valor_item or 0),
+            float(item.valor_material or 0),
+            float(item.outros_custos or 0),
+            float(item.imposto_percentual or 0),
+        ])
 
     output = io.BytesIO()
     wb.save(output)
@@ -125,8 +150,9 @@ def importar_planilha_valores_itens():
 
     headers = [str(h or '').strip().lower() for h in header_row]
     col_index = {h: i for i, h in enumerate(headers) if h}
-    if 'item' not in col_index or 'valor_item' not in col_index:
-        flash('A planilha precisa conter as colunas item e valor_item.', 'danger')
+    required_cols = ['item', 'valor_item', 'valor_material', 'outros_custos', 'imposto_percentual']
+    if any(col not in col_index for col in required_cols):
+        flash('A planilha precisa conter as colunas item, valor_item, valor_material, outros_custos e imposto_percentual.', 'danger')
         return redirect(url_for('itens.importar_planilha_valores_itens'))
 
     preview_rows = []
@@ -134,6 +160,9 @@ def importar_planilha_valores_itens():
     for row_number, values in enumerate(ws.iter_rows(min_row=2, values_only=True), start=2):
         nome = str(values[col_index['item']] or '').strip()
         valor_raw = values[col_index['valor_item']]
+        valor_material_raw = values[col_index['valor_material']]
+        outros_custos_raw = values[col_index['outros_custos']]
+        imposto_percentual_raw = values[col_index['imposto_percentual']]
         if not any([nome, str(valor_raw or '').strip()]):
             continue
 
@@ -152,6 +181,30 @@ def importar_planilha_valores_itens():
             valor_item = None
             errors.append(str(e))
 
+        try:
+            valor_material = _parse_valor_item(valor_material_raw)
+            if valor_material < 0:
+                errors.append('Valor material não pode ser negativo')
+        except ValueError as e:
+            valor_material = None
+            errors.append(str(e))
+
+        try:
+            outros_custos = _parse_valor_item(outros_custos_raw)
+            if outros_custos < 0:
+                errors.append('Outros custos não podem ser negativos')
+        except ValueError as e:
+            outros_custos = None
+            errors.append(str(e))
+
+        try:
+            imposto_percentual = _parse_percentual(imposto_percentual_raw)
+            if imposto_percentual < 0:
+                errors.append('Percentual de imposto não pode ser negativo')
+        except ValueError as e:
+            imposto_percentual = None
+            errors.append(str(e))
+
         ok = len(errors) == 0
         row_data = {
             'row_number': row_number,
@@ -159,6 +212,9 @@ def importar_planilha_valores_itens():
             'codigo_acb': item.codigo_acb if item else '',
             'item_id': item.id if item else None,
             'valor_item': valor_item,
+            'valor_material': valor_material,
+            'outros_custos': outros_custos,
+            'imposto_percentual': imposto_percentual,
             'ok': ok,
             'errors': errors,
         }
@@ -169,6 +225,9 @@ def importar_planilha_valores_itens():
                 'nome': nome,
                 'item_id': item.id,
                 'valor_item': valor_item,
+                'valor_material': valor_material,
+                'outros_custos': outros_custos,
+                'imposto_percentual': imposto_percentual,
             })
 
     session['import_valores_itens_rows'] = ok_rows
@@ -192,6 +251,9 @@ def confirmar_importacao_valores_itens():
             if not item:
                 continue
             item.valor_item = float(row['valor_item'] or 0)
+            item.valor_material = float(row.get('valor_material') or 0)
+            item.outros_custos = float(row.get('outros_custos') or 0)
+            item.imposto_percentual = float(row.get('imposto_percentual') or 0)
         db.session.commit()
         flash(f'Valores atualizados com sucesso! Itens atualizados: {len(ok_rows)}', 'success')
         return redirect(url_for('itens.listar_valores_itens'))
@@ -252,7 +314,7 @@ def novo_item():
 
         if pode_ver_valores:
             try:
-                item.valor_item = _parse_valor_item(request.form.get('valor_item', '0'))
+                _apply_campos_financeiros(item, request.form)
             except ValueError as e:
                 flash(str(e), 'danger')
                 materiais = Material.query.all()
@@ -412,7 +474,7 @@ def editar_item(item_id):
 
         if pode_ver_valores:
             try:
-                item.valor_item = _parse_valor_item(request.form.get('valor_item', item.valor_item or 0))
+                _apply_campos_financeiros(item, request.form)
             except ValueError as e:
                 flash(str(e), 'danger')
                 return render_template('itens/editar.html', item=item, materiais=materiais, trabalhos=trabalhos, pode_ver_valores=pode_ver_valores, item_materiais=item_materiais, item_trabalhos=item_trabalhos)
@@ -862,13 +924,14 @@ def api_item(item_id):
 def novo_item_composto():
     """Rota para cadastrar um novo item composto"""
     if request.method == 'POST':
+        pode_ver_valores = _usuario_pode_ver_valores()
         # Validação de dados
         errors = validate_form_data(request.form, ['nome'])
         if errors:
             for error in errors:
                 flash(error, 'danger')
             itens_disponiveis = Item.query.filter_by(eh_composto=False).all()
-            return render_template('itens/composto_novo.html', itens_disponiveis=itens_disponiveis)
+            return render_template('itens/composto_novo.html', itens_disponiveis=itens_disponiveis, pode_ver_valores=pode_ver_valores)
         
         nome = request.form['nome']
         
@@ -877,7 +940,7 @@ def novo_item_composto():
         if item_existente:
             flash('Já existe um item com este nome!', 'danger')
             itens_disponiveis = Item.query.filter_by(eh_composto=False).all()
-            return render_template('itens/composto_novo.html', itens_disponiveis=itens_disponiveis)
+            return render_template('itens/composto_novo.html', itens_disponiveis=itens_disponiveis, pode_ver_valores=pode_ver_valores)
         
         # Gerar código ACB automaticamente
         novo_codigo = generate_next_code(Item, "ACB", "codigo_acb")
@@ -900,6 +963,14 @@ def novo_item_composto():
             zincagem='zincagem' in request.form,
             tipo_zincagem=request.form.get('tipo_zincagem', '')
         )
+
+        if pode_ver_valores:
+            try:
+                _apply_campos_financeiros(item, request.form)
+            except ValueError as e:
+                flash(str(e), 'danger')
+                itens_disponiveis = Item.query.filter_by(eh_composto=False).all()
+                return render_template('itens/composto_novo.html', itens_disponiveis=itens_disponiveis, pode_ver_valores=pode_ver_valores)
         
         # Upload de arquivos
         if 'desenho_tecnico' in request.files:
@@ -985,12 +1056,13 @@ def novo_item_composto():
     
     # GET - mostrar formulário
     itens_disponiveis = Item.query.filter_by(eh_composto=False).all()
-    return render_template('itens/composto_novo.html', itens_disponiveis=itens_disponiveis)
+    return render_template('itens/composto_novo.html', itens_disponiveis=itens_disponiveis, pode_ver_valores=_usuario_pode_ver_valores())
 
 @itens.route('/itens/composto/editar/<int:item_id>', methods=['GET', 'POST'])
 def editar_item_composto(item_id):
     """Rota para editar um item composto existente"""
     item = Item.query.get_or_404(item_id)
+    pode_ver_valores = _usuario_pode_ver_valores()
     
     if not item.eh_composto:
         flash('Este item não é um item composto!', 'danger')
@@ -1003,7 +1075,7 @@ def editar_item_composto(item_id):
             for error in errors:
                 flash(error, 'danger')
             itens_disponiveis = Item.query.filter_by(eh_composto=False).all()
-            return render_template('itens/composto_editar.html', item=item, itens_disponiveis=itens_disponiveis)
+            return render_template('itens/composto_editar.html', item=item, itens_disponiveis=itens_disponiveis, pode_ver_valores=pode_ver_valores)
         
         nome = request.form['nome']
         
@@ -1012,7 +1084,7 @@ def editar_item_composto(item_id):
         if item_existente:
             flash('Já existe um item com este nome!', 'danger')
             itens_disponiveis = Item.query.filter_by(eh_composto=False).all()
-            return render_template('itens/composto_editar.html', item=item, itens_disponiveis=itens_disponiveis)
+            return render_template('itens/composto_editar.html', item=item, itens_disponiveis=itens_disponiveis, pode_ver_valores=pode_ver_valores)
         
         # Atualizar dados do item
         item.nome = nome
@@ -1028,6 +1100,14 @@ def editar_item_composto(item_id):
         item.oleo_protetivo = 'oleo_protetivo' in request.form
         item.zincagem = 'zincagem' in request.form
         item.tipo_zincagem = request.form.get('tipo_zincagem', '')
+
+        if pode_ver_valores:
+            try:
+                _apply_campos_financeiros(item, request.form)
+            except ValueError as e:
+                flash(str(e), 'danger')
+                itens_disponiveis = Item.query.filter_by(eh_composto=False).all()
+                return render_template('itens/composto_editar.html', item=item, itens_disponiveis=itens_disponiveis, pode_ver_valores=pode_ver_valores)
         
         # Upload de arquivos
         if 'desenho_tecnico' in request.files and request.files['desenho_tecnico'].filename:
@@ -1131,7 +1211,8 @@ def editar_item_composto(item_id):
     return render_template('itens/composto_editar.html', 
                           item=item, 
                           itens_disponiveis=itens_disponiveis,
-                          item_componentes=item_componentes)
+                          item_componentes=item_componentes,
+                          pode_ver_valores=pode_ver_valores)
 
 @itens.route('/itens/composto/visualizar/<int:item_id>')
 def visualizar_item_composto(item_id):
@@ -1142,7 +1223,7 @@ def visualizar_item_composto(item_id):
         flash('Este item não é um item composto!', 'danger')
         return redirect(url_for('itens.listar_itens'))
     
-    return render_template('itens/composto_visualizar.html', item=item)
+    return render_template('itens/composto_visualizar.html', item=item, pode_ver_valores=_usuario_pode_ver_valores())
 
 
 @itens.route('/itens/composto/imprimir/<int:item_id>')

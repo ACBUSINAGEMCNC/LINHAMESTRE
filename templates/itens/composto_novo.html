@@ -94,6 +94,37 @@
                                 </div>
                             </div>
 
+                            {% if pode_ver_valores %}
+                            <div class="card border-success mb-4">
+                                <div class="card-header bg-success text-white">
+                                    <strong>Valores do Item</strong>
+                                </div>
+                                <div class="card-body">
+                                    <div class="row g-3 mb-0">
+                                        <div class="col-md-4">
+                                            <label for="valor_item" class="form-label">Valor do Item</label>
+                                            <input type="text" class="form-control form-control-lg border-success" id="valor_item" name="valor_item" placeholder="0,00">
+                                        </div>
+                                        <div class="col-md-4">
+                                            <label for="valor_material" class="form-label">Valor Material</label>
+                                            <input type="text" class="form-control border-success" id="valor_material" name="valor_material" placeholder="0,00">
+                                        </div>
+                                        <div class="col-md-4">
+                                            <label for="outros_custos" class="form-label">Outros Custos</label>
+                                            <input type="text" class="form-control border-success" id="outros_custos" name="outros_custos" placeholder="0,00">
+                                        </div>
+                                        <div class="col-md-4">
+                                            <label for="imposto_percentual" class="form-label">Imposto (%)</label>
+                                            <input type="text" class="form-control border-success" id="imposto_percentual" name="imposto_percentual" placeholder="0,00">
+                                        </div>
+                                        <div class="col-md-8 d-flex align-items-end">
+                                            <div class="text-success fw-semibold">Campo sensível liberado somente para usuários autorizados.</div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                            {% endif %}
+
                             </div>
 
                             <!-- Arquivos -->

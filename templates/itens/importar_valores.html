@@ -16,7 +16,7 @@
       <div class="col-md-8">
         <label for="arquivo" class="form-label">Arquivo XLSX</label>
         <input class="form-control" type="file" id="arquivo" name="arquivo" accept=".xlsx" required>
-        <div class="form-text">A planilha deve conter as colunas `item` e `valor_item`.</div>
+        <div class="form-text">A planilha deve conter as colunas `item`, `valor_item`, `valor_material`, `outros_custos` e `imposto_percentual`.</div>
       </div>
       <div class="col-md-4 d-flex align-items-end">
         <button type="submit" class="btn btn-primary w-100"><i class="fas fa-search"></i> Validar e Pré-visualizar</button>
@@ -42,6 +42,9 @@
             <th>Item</th>
             <th>Código</th>
             <th>Valor</th>
+            <th>Material</th>
+            <th>Outros</th>
+            <th>Imposto %</th>
             <th>Status</th>
             <th>Erros</th>
           </tr>
@@ -53,6 +56,9 @@
             <td>{{ r.nome }}</td>
             <td>{{ r.codigo_acb }}</td>
             <td>{% if r.valor_item is not none %}R$ {{ '%.2f'|format(r.valor_item or 0) }}{% endif %}</td>
+            <td>{% if r.valor_material is not none %}R$ {{ '%.2f'|format(r.valor_material or 0) }}{% endif %}</td>
+            <td>{% if r.outros_custos is not none %}R$ {{ '%.2f'|format(r.outros_custos or 0) }}{% endif %}</td>
+            <td>{% if r.imposto_percentual is not none %}{{ '%.2f'|format(r.imposto_percentual or 0) }}%{% endif %}</td>
             <td>
               {% if r.ok %}
                 <span class="badge bg-success">OK</span>

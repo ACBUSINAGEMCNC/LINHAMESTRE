@@ -36,6 +36,9 @@ def migrate_postgres() -> bool:
     engine = create_engine(database_url)
     stmts = [
         "ALTER TABLE item ADD COLUMN IF NOT EXISTS valor_item DOUBLE PRECISION DEFAULT 0",
+        "ALTER TABLE item ADD COLUMN IF NOT EXISTS valor_material DOUBLE PRECISION DEFAULT 0",
+        "ALTER TABLE item ADD COLUMN IF NOT EXISTS outros_custos DOUBLE PRECISION DEFAULT 0",
+        "ALTER TABLE item ADD COLUMN IF NOT EXISTS imposto_percentual DOUBLE PRECISION DEFAULT 0",
         "ALTER TABLE usuario ADD COLUMN IF NOT EXISTS acesso_valores_itens BOOLEAN DEFAULT FALSE",
         f"UPDATE usuario SET acesso_valores_itens = TRUE WHERE lower(email) = lower('{ADMIN_EMAIL}')",
     ]
@@ -71,6 +74,18 @@ def migrate_sqlite(db_path: str = None) -> bool:
 
     if _table_exists(cur, 'item') and not _has_column('item', 'valor_item'):
         cur.execute("ALTER TABLE item ADD COLUMN valor_item REAL DEFAULT 0")
+        changed = True
+
+    if _table_exists(cur, 'item') and not _has_column('item', 'valor_material'):
+        cur.execute("ALTER TABLE item ADD COLUMN valor_material REAL DEFAULT 0")
+        changed = True
+
+    if _table_exists(cur, 'item') and not _has_column('item', 'outros_custos'):
+        cur.execute("ALTER TABLE item ADD COLUMN outros_custos REAL DEFAULT 0")
+        changed = True
+
+    if _table_exists(cur, 'item') and not _has_column('item', 'imposto_percentual'):
+        cur.execute("ALTER TABLE item ADD COLUMN imposto_percentual REAL DEFAULT 0")
         changed = True
 
     if _table_exists(cur, 'usuario') and not _has_column('usuario', 'acesso_valores_itens'):

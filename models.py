@@ -312,6 +312,9 @@ class Item(db.Model):
     codigo_acb = db.Column(db.String(20), unique=True)
     criado_via_importacao_estoque = db.Column(db.Boolean, default=False)
     valor_item = db.Column(db.Float, default=0)
+    valor_material = db.Column(db.Float, default=0)
+    outros_custos = db.Column(db.Float, default=0)
+    imposto_percentual = db.Column(db.Float, default=0)
     desenho_tecnico = db.Column(db.String(255))
     desenho_aprovado_em = db.Column(db.DateTime, nullable=True)
     desenho_aprovado_por_id = db.Column(db.Integer, db.ForeignKey('usuario.id'), nullable=True)
@@ -401,6 +404,56 @@ class Item(db.Model):
             peso_total += peso_componente * componente.quantidade
         
         return peso_total
+
+    @property
+    def valor_componentes_composto(self):
+        if not self.eh_composto:
+            return 0.0
+        total = 0.0
+        for componente in self.componentes:
+            valor_componente = float(getattr(componente.item_componente, 'valor_item', 0) or 0)
+            quantidade = float(componente.quantidade or 0)
+            total += valor_componente * quantidade
+        return total
+
+    @property
+    def custo_material_total(self):
+        return float(self.valor_material or 0) + float(self.valor_componentes_composto or 0)
+
+    @property
+    def valor_imposto_reais(self):
+        valor_venda = float(self.valor_item or 0)
+        imposto_percentual = float(self.imposto_percentual or 0)
+        if valor_venda <= 0 or imposto_percentual <= 0:
+            return 0.0
+        return valor_venda * (imposto_percentual / 100.0)
+
+    @property
+    def custo_total_financeiro(self):
+        return self.custo_material_total + float(self.outros_custos or 0) + self.valor_imposto_reais
+
+    @property
+    def valor_sobra_liquida(self):
+        return float(self.valor_item or 0) - self.custo_total_financeiro
+
+    @property
+    def margem_liquida_percentual(self):
+        valor_venda = float(self.valor_item or 0)
+        if valor_venda <= 0:
+            return 0.0
+        return (self.valor_sobra_liquida / valor_venda) * 100.0
+
+    @property
+    def grafico_margem_payload(self):
+        componentes = float(self.valor_componentes_composto or 0)
+        material_direto = float(self.valor_material or 0)
+        outros = float(self.outros_custos or 0)
+        imposto = float(self.valor_imposto_reais or 0)
+        margem = float(self.valor_sobra_liquida or 0)
+        return {
+            'labels': ['Componentes', 'Material', 'Outros custos', 'Imposto', 'Margem'],
+            'values': [componentes, material_direto, outros, imposto, margem],
+        }
 
 # Modelo para relacionamento entre item pai e seus componentes
 class ItemComposto(db.Model):

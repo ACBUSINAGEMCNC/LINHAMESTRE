@@ -96,10 +96,22 @@
                             <strong>Valores do Item</strong>
                         </div>
                         <div class="card-body">
-                            <div class="row mb-0">
+                            <div class="row g-3 mb-0">
                                 <div class="col-md-4">
                                     <label for="valor_item" class="form-label">Valor do Item</label>
                                     <input type="text" class="form-control form-control-lg border-success" id="valor_item" name="valor_item" value="{{ '%.2f'|format(item.valor_item or 0) }}">
+                                </div>
+                                <div class="col-md-4">
+                                    <label for="valor_material" class="form-label">Valor Material</label>
+                                    <input type="text" class="form-control border-success" id="valor_material" name="valor_material" value="{{ '%.2f'|format(item.valor_material or 0) }}">
+                                </div>
+                                <div class="col-md-4">
+                                    <label for="outros_custos" class="form-label">Outros Custos</label>
+                                    <input type="text" class="form-control border-success" id="outros_custos" name="outros_custos" value="{{ '%.2f'|format(item.outros_custos or 0) }}">
+                                </div>
+                                <div class="col-md-4">
+                                    <label for="imposto_percentual" class="form-label">Imposto (%)</label>
+                                    <input type="text" class="form-control border-success" id="imposto_percentual" name="imposto_percentual" value="{{ '%.2f'|format(item.imposto_percentual or 0) }}">
                                 </div>
                                 <div class="col-md-8 d-flex align-items-end">
                                     <div class="text-success fw-semibold">Campo sensível liberado somente para usuários autorizados.</div>

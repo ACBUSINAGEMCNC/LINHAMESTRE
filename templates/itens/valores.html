@@ -44,6 +44,10 @@
                                 <th>Código ACB</th>
                                 <th>Item</th>
                                 <th>Valor do Item</th>
+                                <th>Material</th>
+                                <th>Outros Custos</th>
+                                <th>Imposto</th>
+                                <th>Sobra Líquida</th>
                                 <th>Ações</th>
                             </tr>
                         </thead>
@@ -53,13 +57,26 @@
                                 <td>{{ item.codigo_acb }}</td>
                                 <td>{{ item.nome }}</td>
                                 <td>R$ {{ '%.2f'|format(item.valor_item or 0) }}</td>
+                                <td>R$ {{ '%.2f'|format(item.valor_material or 0) }}</td>
+                                <td>R$ {{ '%.2f'|format(item.outros_custos or 0) }}</td>
+                                <td>{{ '%.2f'|format(item.imposto_percentual or 0) }}% / R$ {{ '%.2f'|format(item.valor_imposto_reais or 0) }}</td>
+                                <td>R$ {{ '%.2f'|format(item.valor_sobra_liquida or 0) }} ({{ '%.2f'|format(item.margem_liquida_percentual or 0) }}%)</td>
                                 <td>
+                                    {% if item.eh_composto %}
+                                    <a href="{{ url_for('itens.visualizar_item_composto', item_id=item.id) }}" class="btn btn-sm btn-info">
+                                        <i class="fas fa-eye"></i>
+                                    </a>
+                                    <a href="{{ url_for('itens.editar_item_composto', item_id=item.id) }}" class="btn btn-sm btn-primary">
+                                        <i class="fas fa-edit"></i>
+                                    </a>
+                                    {% else %}
                                     <a href="{{ url_for('itens.visualizar_item', item_id=item.id) }}" class="btn btn-sm btn-info">
                                         <i class="fas fa-eye"></i>
                                     </a>
                                     <a href="{{ url_for('itens.editar_item', item_id=item.id) }}" class="btn btn-sm btn-primary">
                                         <i class="fas fa-edit"></i>
                                     </a>
+                                    {% endif %}
                                 </td>
                             </tr>
                             {% endfor %}

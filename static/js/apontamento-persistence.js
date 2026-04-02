@@ -1092,7 +1092,7 @@ function atualizarQuantidadesPorTrabalho(ordemId, ativosLista) {
         const hasAny = current && current.items && Object.keys(current.items).length > 0;
         if (!hasAny && !window.__qptFetching[ordemId]) {
             window.__qptFetching[ordemId] = true;
-            fetch(`/apontamento/detalhes/${ordemId}`)
+            fetch(`/apontamento/quantidades-por-trabalho/${ordemId}`)
                 .then(r => r.ok ? r.json() : Promise.reject(new Error(`HTTP ${r.status}`)))
                 .then(det => {
                     try {
