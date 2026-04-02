@@ -5,11 +5,15 @@ import json
 import io
 from datetime import datetime
 from decimal import Decimal, InvalidOperation
+import requests
 from models import db, Item, Material, Trabalho, ItemMaterial, ItemTrabalho, Pedido, ArquivoCNC, ItemComposto
 from utils import validate_form_data, save_file, generate_next_code, parse_json_field
 from flask import current_app, g
 from sqlalchemy.orm import selectinload
 from openpyxl import Workbook, load_workbook
+from openpyxl.styles import Font, PatternFill, Alignment
+from openpyxl.utils import get_column_letter
+from openpyxl.drawing.image import Image as OpenpyxlImage
 
 itens = Blueprint('itens', __name__)
 ADMIN_MASTER_EMAIL = 'admin@acbusinagem.com.br'
@@ -46,6 +50,12 @@ def _parse_percentual(raw):
         raise ValueError('Percentual de imposto inválido')
 
 
+def _valor_planilha_preenchido(raw):
+    if raw is None:
+        return False
+    return str(raw).strip() != ''
+
+
 def _apply_campos_financeiros(item, form_data):
     item.valor_item = _parse_valor_item(form_data.get('valor_item', item.valor_item or 0))
     item.valor_material = _parse_valor_item(form_data.get('valor_material', item.valor_material or 0))
@@ -59,6 +69,44 @@ def _build_preview_valores_rows(rows):
         'preview_ok_count': sum(1 for r in rows if r.get('ok')),
         'preview_error_count': sum(1 for r in rows if not r.get('ok')),
     }
+
+
+def _get_item_imagem_bytes(item):
+    file_path = getattr(item, 'imagem', None)
+    if not file_path:
+        return None, None
+
+    try:
+        if file_path.startswith('http://') or file_path.startswith('https://'):
+            resp = requests.get(file_path, timeout=30)
+            if resp.status_code != 200:
+                return None, None
+            return resp.content, file_path
+
+        if file_path.startswith('supabase://') or file_path.startswith('supabase:/'):
+            public_url = _build_supabase_public_url_from_file_path(file_path)
+            if not public_url:
+                return None, None
+            resp = requests.get(public_url, timeout=30)
+            if resp.status_code != 200:
+                return None, public_url
+            return resp.content, public_url
+
+        normalized = file_path.replace('\\', '/').lstrip('/')
+        if normalized.startswith('uploads/'):
+            normalized = normalized[len('uploads/'):]
+
+        if normalized.startswith('imagens/'):
+            filename = normalized.split('/', 1)[1]
+            local_path = os.path.join(current_app.config['UPLOAD_FOLDER_IMAGENS'], filename)
+            if not os.path.exists(local_path):
+                return None, None
+            with open(local_path, 'rb') as f:
+                return f.read(), getattr(item, 'imagem_path', None)
+    except Exception:
+        return None, getattr(item, 'imagem_path', None)
+
+    return None, getattr(item, 'imagem_path', None)
 
 
 def _require_valores_access():
@@ -95,17 +143,83 @@ def exportar_planilha_valores_itens():
     wb = Workbook()
     ws = wb.active
     ws.title = 'Valores Itens'
-    ws.append(['codigo_acb', 'item', 'valor_item', 'valor_material', 'outros_custos', 'imposto_percentual'])
+    headers = ['imagem', 'codigo_acb', 'item', 'tipo', 'valor_item', 'valor_material', 'outros_custos', 'imposto_percentual', 'link_imagem']
+    ws.append(headers)
+
+    header_fill = PatternFill(fill_type='solid', fgColor='1F4E78')
+    header_font = Font(color='FFFFFF', bold=True)
+    currency_fmt = 'R$ #,##0.00'
+    percent_fmt = '0.00'
+
+    for idx, header in enumerate(headers, start=1):
+        cell = ws.cell(row=1, column=idx)
+        cell.fill = header_fill
+        cell.font = header_font
+        cell.alignment = Alignment(horizontal='center', vertical='center')
+
+    ws.freeze_panes = 'C2'
+    ws.auto_filter.ref = f"A1:{get_column_letter(len(headers))}1"
 
     for item in Item.query.order_by(Item.nome.asc()).all():
+        tipo_item = 'Composto' if item.eh_composto else ('Montagem' if (item.tipo_item or '') == 'montagem' else 'Produção')
+        imagem_url = getattr(item, 'imagem_path', None)
         ws.append([
+            'Imagem' if imagem_url else 'Sem imagem',
             item.codigo_acb,
             item.nome,
+            tipo_item,
             float(item.valor_item or 0),
             float(item.valor_material or 0),
             float(item.outros_custos or 0),
             float(item.imposto_percentual or 0),
+            imagem_url or '',
         ])
+
+        current_row = ws.max_row
+        ws.row_dimensions[current_row].height = 72
+        ws.cell(row=current_row, column=1).alignment = Alignment(horizontal='center', vertical='center')
+        ws.cell(row=current_row, column=2).alignment = Alignment(horizontal='center', vertical='center')
+        ws.cell(row=current_row, column=3).alignment = Alignment(vertical='center')
+        ws.cell(row=current_row, column=4).alignment = Alignment(horizontal='center', vertical='center')
+
+        for col in [5, 6, 7]:
+            ws.cell(row=current_row, column=col).number_format = currency_fmt
+            ws.cell(row=current_row, column=col).alignment = Alignment(horizontal='right', vertical='center')
+
+        ws.cell(row=current_row, column=8).number_format = percent_fmt
+        ws.cell(row=current_row, column=8).alignment = Alignment(horizontal='right', vertical='center')
+
+        link_cell = ws.cell(row=current_row, column=9)
+        if imagem_url:
+            link_cell.hyperlink = imagem_url
+            link_cell.style = 'Hyperlink'
+            link_cell.value = 'Abrir imagem'
+
+        image_bytes, _ = _get_item_imagem_bytes(item)
+        if image_bytes:
+            try:
+                image_stream = io.BytesIO(image_bytes)
+                excel_image = OpenpyxlImage(image_stream)
+                excel_image.width = 72
+                excel_image.height = 72
+                ws.add_image(excel_image, f'A{current_row}')
+                ws.cell(row=current_row, column=1).value = None
+            except Exception:
+                pass
+
+    column_widths = {
+        'A': 14,
+        'B': 16,
+        'C': 38,
+        'D': 14,
+        'E': 14,
+        'F': 16,
+        'G': 16,
+        'H': 16,
+        'I': 22,
+    }
+    for column, width in column_widths.items():
+        ws.column_dimensions[column].width = width
 
     output = io.BytesIO()
     wb.save(output)
@@ -163,7 +277,18 @@ def importar_planilha_valores_itens():
         valor_material_raw = values[col_index['valor_material']]
         outros_custos_raw = values[col_index['outros_custos']]
         imposto_percentual_raw = values[col_index['imposto_percentual']]
-        if not any([nome, str(valor_raw or '').strip()]):
+        valor_item_informado = _valor_planilha_preenchido(valor_raw)
+        valor_material_informado = _valor_planilha_preenchido(valor_material_raw)
+        outros_custos_informado = _valor_planilha_preenchido(outros_custos_raw)
+        imposto_percentual_informado = _valor_planilha_preenchido(imposto_percentual_raw)
+        algum_campo_informado = any([
+            valor_item_informado,
+            valor_material_informado,
+            outros_custos_informado,
+            imposto_percentual_informado,
+        ])
+
+        if not nome and not algum_campo_informado:
             continue
 
         errors = []
@@ -172,38 +297,48 @@ def importar_planilha_valores_itens():
             errors.append('Item vazio')
         if not item:
             errors.append('Item não encontrado com nome exatamente igual')
+        if nome and not algum_campo_informado:
+            errors.append('Preencha pelo menos um valor para atualizar')
 
-        try:
-            valor_item = _parse_valor_item(valor_raw)
-            if valor_item < 0:
-                errors.append('Valor do item não pode ser negativo')
-        except ValueError as e:
-            valor_item = None
-            errors.append(str(e))
+        valor_item = None
+        if valor_item_informado:
+            try:
+                valor_item = _parse_valor_item(valor_raw)
+                if valor_item < 0:
+                    errors.append('Valor do item não pode ser negativo')
+            except ValueError as e:
+                valor_item = None
+                errors.append(str(e))
 
-        try:
-            valor_material = _parse_valor_item(valor_material_raw)
-            if valor_material < 0:
-                errors.append('Valor material não pode ser negativo')
-        except ValueError as e:
-            valor_material = None
-            errors.append(str(e))
+        valor_material = None
+        if valor_material_informado:
+            try:
+                valor_material = _parse_valor_item(valor_material_raw)
+                if valor_material < 0:
+                    errors.append('Valor material não pode ser negativo')
+            except ValueError as e:
+                valor_material = None
+                errors.append(str(e))
 
-        try:
-            outros_custos = _parse_valor_item(outros_custos_raw)
-            if outros_custos < 0:
-                errors.append('Outros custos não podem ser negativos')
-        except ValueError as e:
-            outros_custos = None
-            errors.append(str(e))
+        outros_custos = None
+        if outros_custos_informado:
+            try:
+                outros_custos = _parse_valor_item(outros_custos_raw)
+                if outros_custos < 0:
+                    errors.append('Outros custos não podem ser negativos')
+            except ValueError as e:
+                outros_custos = None
+                errors.append(str(e))
 
-        try:
-            imposto_percentual = _parse_percentual(imposto_percentual_raw)
-            if imposto_percentual < 0:
-                errors.append('Percentual de imposto não pode ser negativo')
-        except ValueError as e:
-            imposto_percentual = None
-            errors.append(str(e))
+        imposto_percentual = None
+        if imposto_percentual_informado:
+            try:
+                imposto_percentual = _parse_percentual(imposto_percentual_raw)
+                if imposto_percentual < 0:
+                    errors.append('Percentual de imposto não pode ser negativo')
+            except ValueError as e:
+                imposto_percentual = None
+                errors.append(str(e))
 
         ok = len(errors) == 0
         row_data = {
@@ -215,6 +350,10 @@ def importar_planilha_valores_itens():
             'valor_material': valor_material,
             'outros_custos': outros_custos,
             'imposto_percentual': imposto_percentual,
+            'valor_item_informado': valor_item_informado,
+            'valor_material_informado': valor_material_informado,
+            'outros_custos_informado': outros_custos_informado,
+            'imposto_percentual_informado': imposto_percentual_informado,
             'ok': ok,
             'errors': errors,
         }
@@ -228,6 +367,10 @@ def importar_planilha_valores_itens():
                 'valor_material': valor_material,
                 'outros_custos': outros_custos,
                 'imposto_percentual': imposto_percentual,
+                'valor_item_informado': valor_item_informado,
+                'valor_material_informado': valor_material_informado,
+                'outros_custos_informado': outros_custos_informado,
+                'imposto_percentual_informado': imposto_percentual_informado,
             })
 
     session['import_valores_itens_rows'] = ok_rows
@@ -250,10 +393,14 @@ def confirmar_importacao_valores_itens():
             item = Item.query.get(row['item_id'])
             if not item:
                 continue
-            item.valor_item = float(row['valor_item'] or 0)
-            item.valor_material = float(row.get('valor_material') or 0)
-            item.outros_custos = float(row.get('outros_custos') or 0)
-            item.imposto_percentual = float(row.get('imposto_percentual') or 0)
+            if row.get('valor_item_informado'):
+                item.valor_item = float(row['valor_item'] or 0)
+            if row.get('valor_material_informado'):
+                item.valor_material = float(row.get('valor_material') or 0)
+            if row.get('outros_custos_informado'):
+                item.outros_custos = float(row.get('outros_custos') or 0)
+            if row.get('imposto_percentual_informado'):
+                item.imposto_percentual = float(row.get('imposto_percentual') or 0)
         db.session.commit()
         flash(f'Valores atualizados com sucesso! Itens atualizados: {len(ok_rows)}', 'success')
         return redirect(url_for('itens.listar_valores_itens'))

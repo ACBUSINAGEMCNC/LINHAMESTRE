@@ -12,11 +12,14 @@
 
 <div class="card mb-4">
   <div class="card-body">
+    <div class="alert alert-info">
+      <strong>Como funciona:</strong> baixe a planilha com todos os itens, altere apenas os campos que quiser e importe novamente. Campos vazios não apagam valores já cadastrados no sistema.
+    </div>
     <form method="POST" action="{{ url_for('itens.importar_planilha_valores_itens') }}" enctype="multipart/form-data" class="row g-3">
       <div class="col-md-8">
         <label for="arquivo" class="form-label">Arquivo XLSX</label>
         <input class="form-control" type="file" id="arquivo" name="arquivo" accept=".xlsx" required>
-        <div class="form-text">A planilha deve conter as colunas `item`, `valor_item`, `valor_material`, `outros_custos` e `imposto_percentual`.</div>
+        <div class="form-text">A planilha deve conter as colunas `item`, `valor_item`, `valor_material`, `outros_custos` e `imposto_percentual`. Os campos de valores são opcionais: somente os preenchidos serão atualizados.</div>
       </div>
       <div class="col-md-4 d-flex align-items-end">
         <button type="submit" class="btn btn-primary w-100"><i class="fas fa-search"></i> Validar e Pré-visualizar</button>
@@ -55,10 +58,10 @@
             <td>{{ r.row_number }}</td>
             <td>{{ r.nome }}</td>
             <td>{{ r.codigo_acb }}</td>
-            <td>{% if r.valor_item is not none %}R$ {{ '%.2f'|format(r.valor_item or 0) }}{% endif %}</td>
-            <td>{% if r.valor_material is not none %}R$ {{ '%.2f'|format(r.valor_material or 0) }}{% endif %}</td>
-            <td>{% if r.outros_custos is not none %}R$ {{ '%.2f'|format(r.outros_custos or 0) }}{% endif %}</td>
-            <td>{% if r.imposto_percentual is not none %}{{ '%.2f'|format(r.imposto_percentual or 0) }}%{% endif %}</td>
+            <td>{% if r.valor_item_informado %}R$ {{ '%.2f'|format(r.valor_item or 0) }}{% else %}<span class="text-muted">Sem alteração</span>{% endif %}</td>
+            <td>{% if r.valor_material_informado %}R$ {{ '%.2f'|format(r.valor_material or 0) }}{% else %}<span class="text-muted">Sem alteração</span>{% endif %}</td>
+            <td>{% if r.outros_custos_informado %}R$ {{ '%.2f'|format(r.outros_custos or 0) }}{% else %}<span class="text-muted">Sem alteração</span>{% endif %}</td>
+            <td>{% if r.imposto_percentual_informado %}{{ '%.2f'|format(r.imposto_percentual or 0) }}%{% else %}<span class="text-muted">Sem alteração</span>{% endif %}</td>
             <td>
               {% if r.ok %}
                 <span class="badge bg-success">OK</span>
