@@ -72,12 +72,14 @@
                             <li><a class="dropdown-item" href="/materiais">Materiais</a></li>
                             <li><a class="dropdown-item" href="/trabalhos">Trabalhos</a></li>
                             <li><a class="dropdown-item" href="/itens">Itens</a></li>
+                            {% if acesso_valores_itens or usuario_admin_master or usuario_nivel == 'admin' %}
+                            <li><a class="dropdown-item ps-4" href="{{ url_for('itens.listar_valores_itens') }}">Valores dos Itens</a></li>
+                            {% endif %}
                             {% endif %}
                             {% if acesso_valores_itens or usuario_admin_master %}
-                            {% if acesso_cadastros or usuario_nivel == 'admin' %}
-                            <li><hr class="dropdown-divider"></li>
+                            {% if not (acesso_cadastros or usuario_nivel == 'admin') %}
+                            <li><a class="dropdown-item" href="{{ url_for('itens.listar_valores_itens') }}">Itens - Valores</a></li>
                             {% endif %}
-                            <li><a class="dropdown-item" href="{{ url_for('itens.listar_valores_itens') }}">Valores dos Itens</a></li>
                             {% endif %}
                             {% if acesso_cadastros or usuario_nivel == 'admin' %}
                             <li><hr class="dropdown-divider"></li>
@@ -95,6 +97,7 @@
                         <ul class="dropdown-menu" aria-labelledby="adminDropdown">
                             <li><a class="dropdown-item" href="{{ url_for('auth.listar_usuarios') }}">Gerenciar Usuários</a></li>
                             <li><a class="dropdown-item" href="{{ url_for('backup.listar_backups') }}">Gerenciar Backups</a></li>
+                            <li><hr class="dropdown-divider"></li>
                             <li><a class="dropdown-item" href="{{ url_for('auditoria.listar_auditoria') }}">Auditoria do Sistema</a></li>
                         </ul>
                     </li>
