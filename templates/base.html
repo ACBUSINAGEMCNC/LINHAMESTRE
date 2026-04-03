@@ -74,11 +74,13 @@
                             <li><a class="dropdown-item" href="/itens">Itens</a></li>
                             {% if acesso_valores_itens or usuario_admin_master or usuario_nivel == 'admin' %}
                             <li><a class="dropdown-item ps-4" href="{{ url_for('itens.listar_valores_itens') }}">Valores dos Itens</a></li>
+                            <li><a class="dropdown-item ps-4" href="{{ url_for('itens.exportar_planilha_valores_itens') }}">Exportar Valores dos Itens</a></li>
                             {% endif %}
                             {% endif %}
                             {% if acesso_valores_itens or usuario_admin_master %}
                             {% if not (acesso_cadastros or usuario_nivel == 'admin') %}
-                            <li><a class="dropdown-item" href="{{ url_for('itens.listar_valores_itens') }}">Itens - Valores</a></li>
+                            <li><a class="dropdown-item" href="{{ url_for('itens.listar_valores_itens') }}">Valores dos Itens</a></li>
+                            <li><a class="dropdown-item" href="{{ url_for('itens.exportar_planilha_valores_itens') }}">Exportar Valores dos Itens</a></li>
                             {% endif %}
                             {% endif %}
                             {% if acesso_cadastros or usuario_nivel == 'admin' %}
@@ -149,6 +151,18 @@
                     {% endfor %}
                 {% endif %}
             {% endwith %}
+            {% if request.blueprint in ('itens', 'materiais', 'trabalhos', 'clientes', 'pedidos') %}
+            <div class="mb-4">
+                <div class="border border-warning-subtle rounded px-3 py-2 d-flex justify-content-between align-items-center gap-3 small text-warning-emphasis" style="background-color: rgba(255, 193, 7, 0.12);">
+                    <div>
+                        <i class="fas fa-shield-alt me-2"></i>Alterações e lançamentos nesta área podem ser rastreados para controle interno e monitoramento.
+                    </div>
+                    {% if usuario_nivel == 'admin' %}
+                    <a class="btn btn-sm btn-outline-warning flex-shrink-0" href="{{ url_for('auditoria.listar_auditoria') }}">Auditoria</a>
+                    {% endif %}
+                </div>
+            </div>
+            {% endif %}
             {% block content %}{% endblock %}
         </div>
     </main>
@@ -160,57 +174,6 @@
             <div class="text-muted small">{{ app_version }}</div>
             {% endif %}
         </div>
-
-        {% if usuario_nivel == 'admin' and audit_footer_logs is defined %}
-        <div class="container mt-3">
-            <div class="card">
-                <div class="card-header d-flex justify-content-between align-items-center">
-                    <div class="fw-semibold">{{ audit_footer_title or 'Últimas mudanças' }}</div>
-                    <a class="btn btn-sm btn-outline-primary" href="{{ url_for('auditoria.listar_auditoria') }}">
-                        <i class="fas fa-clipboard-check"></i> Ver auditoria
-                    </a>
-                </div>
-                <div class="card-body py-2">
-                    {% if audit_footer_logs %}
-                        <div class="table-responsive">
-                            <table class="table table-sm mb-0">
-                                <thead>
-                                    <tr>
-                                        <th style="width: 150px;">Data/Hora</th>
-                                        <th style="width: 140px;">Usuário</th>
-                                        <th style="width: 80px;">Ação</th>
-                                        <th style="width: 220px;">Entidade</th>
-                                        <th>Resumo</th>
-                                    </tr>
-                                </thead>
-                                <tbody>
-                                    {% for log in audit_footer_logs %}
-                                    <tr>
-                                        <td><small>{{ log.data_criacao.strftime('%d/%m/%Y %H:%M:%S') if log.data_criacao else '' }}</small></td>
-                                        <td><small>{{ log.usuario_nome or ('ID ' ~ log.usuario_id) or 'N/A' }}</small></td>
-                                        <td>
-                                            <span class="badge {% if log.acao == 'create' %}bg-success{% elif log.acao == 'update' %}bg-primary{% else %}bg-danger{% endif %}">
-                                                {{ log.acao }}
-                                            </span>
-                                        </td>
-                                        <td>
-                                            <a href="{{ url_for('auditoria.auditoria_entidade', entidade_tipo=log.entidade_tipo, entidade_id=log.entidade_id or '') }}">
-                                                <small>{{ log.entidade_tipo }} #{{ log.entidade_id }}</small>
-                                            </a>
-                                        </td>
-                                        <td><small class="text-muted">{{ (log.endpoint or '') }}</small></td>
-                                    </tr>
-                                    {% endfor %}
-                                </tbody>
-                            </table>
-                        </div>
-                    {% else %}
-                        <div class="text-muted small">Nenhuma mudança recente encontrada.</div>
-                    {% endif %}
-                </div>
-            </div>
-        </div>
-        {% endif %}
     </footer>
 
     <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>

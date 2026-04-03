@@ -26,6 +26,23 @@ def _get_database_url_from_env() -> str:
     return url
 
 
+def _pg_column_exists(conn, table_name: str, column_name: str) -> bool:
+    from sqlalchemy import text
+
+    result = conn.execute(text("""
+        SELECT 1
+        FROM information_schema.columns
+        WHERE table_schema = 'public'
+          AND table_name = :table_name
+          AND column_name = :column_name
+        LIMIT 1
+    """), {
+        'table_name': table_name,
+        'column_name': column_name,
+    }).scalar()
+    return bool(result)
+
+
 def migrate_postgres() -> bool:
     from sqlalchemy import create_engine, text
 
@@ -34,18 +51,18 @@ def migrate_postgres() -> bool:
         return False
 
     engine = create_engine(database_url)
-    stmts = [
-        "ALTER TABLE item ADD COLUMN IF NOT EXISTS valor_item DOUBLE PRECISION DEFAULT 0",
-        "ALTER TABLE item ADD COLUMN IF NOT EXISTS valor_material DOUBLE PRECISION DEFAULT 0",
-        "ALTER TABLE item ADD COLUMN IF NOT EXISTS outros_custos DOUBLE PRECISION DEFAULT 0",
-        "ALTER TABLE item ADD COLUMN IF NOT EXISTS imposto_percentual DOUBLE PRECISION DEFAULT 0",
-        "ALTER TABLE usuario ADD COLUMN IF NOT EXISTS acesso_valores_itens BOOLEAN DEFAULT FALSE",
-        f"UPDATE usuario SET acesso_valores_itens = TRUE WHERE lower(email) = lower('{ADMIN_EMAIL}')",
-    ]
-
     with engine.begin() as conn:
-        for stmt in stmts:
-            conn.execute(text(stmt))
+        if not _pg_column_exists(conn, 'item', 'valor_item'):
+            conn.execute(text("ALTER TABLE item ADD COLUMN valor_item DOUBLE PRECISION DEFAULT 0"))
+        if not _pg_column_exists(conn, 'item', 'valor_material'):
+            conn.execute(text("ALTER TABLE item ADD COLUMN valor_material DOUBLE PRECISION DEFAULT 0"))
+        if not _pg_column_exists(conn, 'item', 'outros_custos'):
+            conn.execute(text("ALTER TABLE item ADD COLUMN outros_custos DOUBLE PRECISION DEFAULT 0"))
+        if not _pg_column_exists(conn, 'item', 'imposto_percentual'):
+            conn.execute(text("ALTER TABLE item ADD COLUMN imposto_percentual DOUBLE PRECISION DEFAULT 0"))
+        if not _pg_column_exists(conn, 'usuario', 'acesso_valores_itens'):
+            conn.execute(text("ALTER TABLE usuario ADD COLUMN acesso_valores_itens BOOLEAN DEFAULT FALSE"))
+        conn.execute(text(f"UPDATE usuario SET acesso_valores_itens = TRUE WHERE lower(email) = lower('{ADMIN_EMAIL}')"))
     return True
 
 

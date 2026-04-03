@@ -197,6 +197,7 @@ def importar_estoque_excel():
     ok_count = 0
     err_count = 0
     warn_count = 0
+    skipped_empty_name_count = 0
     used_names = set()
     novos_counter = 0
 
@@ -220,7 +221,8 @@ def importar_estoque_excel():
             continue
 
         if not nome_s:
-            errors.append('Nome do item vazio')
+            skipped_empty_name_count += 1
+            continue
 
         try:
             if isinstance(quantidade_val, float) and quantidade_val.is_integer():
@@ -281,6 +283,8 @@ def importar_estoque_excel():
         })
 
     session['import_estoque_excel_rows'] = ok_rows
+    if skipped_empty_name_count:
+        flash(f'{skipped_empty_name_count} linha(s) sem nome foram ignoradas automaticamente na importação.', 'warning')
     return render_template(
         'estoque_pecas/importar_excel.html',
         preview_rows=preview_rows,

@@ -134,17 +134,16 @@
     </div>
 
     <div class="d-flex flex-wrap gap-2 mt-3">
-      <button type="submit" class="btn btn-success" {% if preview_error_count > 0 %}disabled{% endif %}>
+      <button type="submit" class="btn btn-success">
         <i class="fas fa-check"></i> Confirmar Importação
       </button>
-      <a href="{{ url_for('estoque_pecas.imprimir_importacao_estoque_excel') }}" target="_blank" class="btn btn-outline-primary {% if preview_error_count > 0 %}disabled{% endif %}">
+      <a href="{{ url_for('estoque_pecas.imprimir_importacao_estoque_excel') }}" target="_blank" class="btn btn-outline-primary {% if preview_ok_count == 0 %}disabled{% endif %}">
         <i class="fas fa-print"></i> Imprimir Folha
       </a>
     </div>
-    </form>
 
     {% if preview_error_count > 0 %}
-    <div class="form-text text-danger mt-2">Corrija os erros no Excel e faça upload novamente. A confirmação fica habilitada apenas quando não há erros.</div>
+    <div class="form-text text-warning mt-2">As linhas com erro não serão importadas. Você pode confirmar para importar apenas as linhas válidas.</div>
     {% endif %}
   </div>
 </div>

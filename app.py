@@ -5,6 +5,7 @@ import subprocess
 import sqlite3
 import logging
 import json
+from types import SimpleNamespace
 from flask import Flask, render_template, redirect, url_for, flash, request, session, send_file, g, has_request_context
 from flask_sqlalchemy import SQLAlchemy
 from sqlalchemy import event, inspect
@@ -638,7 +639,7 @@ def create_app():
         # Desativar prepared statements evita esse erro.
         if database_url.lower().startswith('postgresql+psycopg://'):
             engine_options['connect_args'] = {
-                'prepare_threshold': 0,
+                'prepare_threshold': None,
             }
         app.config['SQLALCHEMY_ENGINE_OPTIONS'] = engine_options
     app.config['UPLOAD_FOLDER_DESENHOS'] = os.path.join(basedir, 'uploads/desenhos')
@@ -973,23 +974,25 @@ def create_app():
             flash('Por favor, faça login para acessar esta página', 'warning')
             return redirect(url_for('auth.login', next=request.url))
 
-        # Carregar usuário e validar sessão
-        from models import Usuario
-        try:
-            usuario = Usuario.query.get(session.get('usuario_id'))
-        except OperationalError as e:
-            # Evitar 500 quando o Supabase estiver com limite de conexões estourado.
-            if _is_max_connections_error(e):
-                return (
-                    "Banco de dados temporariamente ocupado (limite de conexões). Tente novamente em alguns segundos.",
-                    503,
-                )
-            raise
-        if not usuario:
+        usuario_id = session.get('usuario_id')
+        usuario_nivel = session.get('usuario_nivel')
+        if not usuario_id or not usuario_nivel:
             session.clear()
             flash('Sessão inválida. Faça login novamente.', 'warning')
             return redirect(url_for('auth.login'))
 
+        usuario = SimpleNamespace(
+            id=usuario_id,
+            nome=session.get('usuario_nome'),
+            nivel_acesso=usuario_nivel,
+            acesso_pedidos=bool(session.get('acesso_pedidos', False)),
+            acesso_kanban=bool(session.get('acesso_kanban', False)),
+            acesso_estoque=bool(session.get('acesso_estoque', False)),
+            acesso_cadastros=bool(session.get('acesso_cadastros', False)),
+            acesso_valores_itens=bool(session.get('acesso_valores_itens', False)),
+            pode_finalizar_os=bool(session.get('pode_finalizar_os', False)),
+            email=session.get('usuario_email'),
+        )
         g.usuario = usuario
 
         # Admin possui acesso total
@@ -1050,66 +1053,7 @@ def create_app():
             if not has_request_context():
                 return {}
 
-            from models import AuditLog
-
-            blueprint = request.blueprint
-            view_args = request.view_args or {}
-
-            blueprint_to_entity = {
-                'itens': 'Item',
-                'pedidos': 'Pedido',
-                'ordens': 'OrdemServico',
-                'novas_folhas_processo': 'NovaFolhaProcesso',
-                'clientes': 'Cliente',
-                'materiais': 'Material',
-                'trabalhos': 'Trabalho',
-                'pedidos_material': 'PedidoMaterial',
-                'estoque': 'Estoque',
-                'estoque_pecas': 'EstoquePeca',
-                'kanban': 'OrdemServico',
-                'apontamento': 'OrdemServico',
-            }
-
-            entity_type = blueprint_to_entity.get(blueprint)
-            entity_id = None
-
-            viewarg_to_entity = {
-                'item_id': 'Item',
-                'pedido_id': 'Pedido',
-                'ordem_id': 'OrdemServico',
-                'ordem_servico_id': 'OrdemServico',
-                'os_id': 'OrdemServico',
-                'folha_id': 'NovaFolhaProcesso',
-                'cliente_id': 'Cliente',
-                'material_id': 'Material',
-                'trabalho_id': 'Trabalho',
-                'pedido_material_id': 'PedidoMaterial',
-                'id': None,
-            }
-
-            for arg_name, et in viewarg_to_entity.items():
-                if arg_name in view_args and view_args.get(arg_name) is not None:
-                    val = view_args.get(arg_name)
-                    if et:
-                        entity_type = et
-                    entity_id = str(val)
-                    break
-
-            q = AuditLog.query
-            if entity_type and entity_id:
-                q = q.filter(AuditLog.entidade_tipo == entity_type, AuditLog.entidade_id == entity_id)
-                titulo = f"Últimas mudanças: {entity_type} #{entity_id}"
-            elif entity_type:
-                q = q.filter(AuditLog.entidade_tipo == entity_type)
-                titulo = f"Últimas mudanças: {entity_type}"
-            else:
-                titulo = "Últimas mudanças (Sistema)"
-
-            logs = q.order_by(AuditLog.data_criacao.desc()).limit(8).all()
-            return {
-                'audit_footer_logs': logs,
-                'audit_footer_title': titulo,
-            }
+            return {}
         except Exception:
             return {}
     

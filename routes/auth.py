@@ -15,6 +15,7 @@ def _is_master_admin(usuario):
 def _refresh_user_session(usuario):
     session['usuario_id'] = usuario.id
     session['usuario_nome'] = usuario.nome
+    session['usuario_email'] = usuario.email
     session['usuario_nivel'] = usuario.nivel_acesso
     session['acesso_kanban'] = usuario.acesso_kanban
     session['acesso_estoque'] = usuario.acesso_estoque

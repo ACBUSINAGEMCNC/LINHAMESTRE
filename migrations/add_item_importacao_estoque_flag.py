@@ -26,6 +26,23 @@ def _get_database_url_from_env() -> str:
     return url
 
 
+def _pg_column_exists(conn, table_name: str, column_name: str) -> bool:
+    from sqlalchemy import text
+
+    result = conn.execute(text("""
+        SELECT 1
+        FROM information_schema.columns
+        WHERE table_schema = 'public'
+          AND table_name = :table_name
+          AND column_name = :column_name
+        LIMIT 1
+    """), {
+        'table_name': table_name,
+        'column_name': column_name,
+    }).scalar()
+    return bool(result)
+
+
 def migrate_postgres() -> bool:
     from sqlalchemy import create_engine, text
 
@@ -34,13 +51,9 @@ def migrate_postgres() -> bool:
         return False
 
     engine = create_engine(database_url)
-    stmts = [
-        "ALTER TABLE item ADD COLUMN IF NOT EXISTS criado_via_importacao_estoque BOOLEAN DEFAULT FALSE",
-    ]
-
     with engine.begin() as conn:
-        for stmt in stmts:
-            conn.execute(text(stmt))
+        if not _pg_column_exists(conn, 'item', 'criado_via_importacao_estoque'):
+            conn.execute(text("ALTER TABLE item ADD COLUMN criado_via_importacao_estoque BOOLEAN DEFAULT FALSE"))
 
     return True
 
