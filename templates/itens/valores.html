@@ -9,12 +9,25 @@
                 <a href="{{ url_for('itens.listar_itens') }}" class="btn btn-outline-secondary">
                     <i class="fas fa-boxes"></i> Ir para Itens
                 </a>
-                <a href="{{ url_for('itens.exportar_planilha_valores_itens') }}" class="btn btn-outline-success">
+                <button type="button" id="btnExportarPlanilha" class="btn btn-outline-success">
                     <i class="fas fa-file-export"></i> Exportar Planilha
-                </a>
+                </button>
                 <a href="{{ url_for('itens.importar_planilha_valores_itens') }}" class="btn btn-primary">
                     <i class="fas fa-file-import"></i> Importar Planilha
                 </a>
+            </div>
+        </div>
+
+        <div id="exportacaoStatusCard" class="card border-success mb-3 d-none">
+            <div class="card-body">
+                <div class="d-flex justify-content-between align-items-center mb-2">
+                    <strong>Exportação da planilha</strong>
+                    <span id="exportacaoStatusPercentual" class="text-success">0%</span>
+                </div>
+                <div class="progress" role="progressbar" aria-label="Progresso da exportação">
+                    <div id="exportacaoStatusBarra" class="progress-bar progress-bar-striped progress-bar-animated bg-success" style="width: 0%">0%</div>
+                </div>
+                <div id="exportacaoStatusMensagem" class="small text-muted mt-2">Preparando exportação...</div>
             </div>
         </div>
 
@@ -76,6 +89,96 @@
             $('#valoresItensTable').DataTable({
                 language: {
                     url: '//cdn.datatables.net/plug-ins/1.11.5/i18n/pt-BR.json'
+                }
+            });
+
+            const btnExportar = document.getElementById('btnExportarPlanilha');
+            const statusCard = document.getElementById('exportacaoStatusCard');
+            const statusBarra = document.getElementById('exportacaoStatusBarra');
+            const statusPercentual = document.getElementById('exportacaoStatusPercentual');
+            const statusMensagem = document.getElementById('exportacaoStatusMensagem');
+            let pollingHandle = null;
+
+            function atualizarStatus(percentual, mensagem, emErro) {
+                const percentualSeguro = Math.max(0, Math.min(100, Number(percentual || 0)));
+                statusCard.classList.remove('d-none');
+                statusBarra.style.width = percentualSeguro + '%';
+                statusBarra.textContent = percentualSeguro + '%';
+                statusPercentual.textContent = percentualSeguro + '%';
+                statusMensagem.textContent = mensagem || '';
+                statusBarra.classList.toggle('bg-danger', !!emErro);
+                statusBarra.classList.toggle('bg-success', !emErro);
+                statusBarra.classList.toggle('progress-bar-animated', !emErro && percentualSeguro < 100);
+                statusBarra.classList.toggle('progress-bar-striped', !emErro && percentualSeguro < 100);
+            }
+
+            async function acompanharExportacao(statusUrl, downloadUrl) {
+                if (pollingHandle) {
+                    clearInterval(pollingHandle);
+                }
+
+                const consultar = async function() {
+                    const response = await fetch(statusUrl, {
+                        headers: {
+                            'X-Requested-With': 'XMLHttpRequest'
+                        }
+                    });
+                    const data = await response.json();
+
+                    if (!data.ok) {
+                        throw new Error(data.mensagem || 'Falha ao consultar exportação.');
+                    }
+
+                    atualizarStatus(data.percentual, data.mensagem, data.erro);
+
+                    if (data.erro) {
+                        clearInterval(pollingHandle);
+                        pollingHandle = null;
+                        btnExportar.disabled = false;
+                        return;
+                    }
+
+                    if (data.pronto) {
+                        clearInterval(pollingHandle);
+                        pollingHandle = null;
+                        btnExportar.disabled = false;
+                        window.location.href = downloadUrl;
+                    }
+                };
+
+                await consultar();
+                pollingHandle = setInterval(async function() {
+                    try {
+                        await consultar();
+                    } catch (error) {
+                        clearInterval(pollingHandle);
+                        pollingHandle = null;
+                        btnExportar.disabled = false;
+                        atualizarStatus(0, error.message || 'Falha ao acompanhar exportação.', true);
+                    }
+                }, 1000);
+            }
+
+            btnExportar.addEventListener('click', async function() {
+                btnExportar.disabled = true;
+                atualizarStatus(0, 'Iniciando exportação...', false);
+
+                try {
+                    const response = await fetch("{{ url_for('itens.exportar_planilha_valores_itens') }}", {
+                        headers: {
+                            'X-Requested-With': 'XMLHttpRequest'
+                        }
+                    });
+                    const data = await response.json();
+
+                    if (!data.ok) {
+                        throw new Error(data.mensagem || 'Falha ao iniciar exportação.');
+                    }
+
+                    await acompanharExportacao(data.status_url, data.download_url);
+                } catch (error) {
+                    btnExportar.disabled = false;
+                    atualizarStatus(0, error.message || 'Falha ao iniciar exportação.', true);
                 }
             });
         });

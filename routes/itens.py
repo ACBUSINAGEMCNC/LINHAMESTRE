@@ -3,20 +3,30 @@ from werkzeug.utils import secure_filename
 import os
 import json
 import io
+import threading
+import uuid
 from datetime import datetime
 from decimal import Decimal, InvalidOperation
 import requests
-from models import db, Item, Material, Trabalho, ItemMaterial, ItemTrabalho, Pedido, ArquivoCNC, ItemComposto
+from models import db, Item, Material, Trabalho, ItemMaterial, ItemTrabalho, Pedido, ArquivoCNC, ItemComposto, EstoquePecas
 from utils import validate_form_data, save_file, generate_next_code, parse_json_field
 from flask import current_app, g
+from sqlalchemy import func
 from sqlalchemy.orm import selectinload
 from openpyxl import Workbook, load_workbook
 from openpyxl.styles import Font, PatternFill, Alignment
 from openpyxl.utils import get_column_letter
 from openpyxl.drawing.image import Image as OpenpyxlImage
 
+try:
+    from PIL import Image
+except Exception:
+    Image = None
+
 itens = Blueprint('itens', __name__)
 ADMIN_MASTER_EMAIL = 'admin@acbusinagem.com.br'
+_EXPORTACOES_VALORES_ITENS = {}
+_EXPORTACOES_VALORES_ITENS_LOCK = threading.Lock()
 
 
 def _usuario_pode_ver_valores(usuario=None):
@@ -29,31 +39,69 @@ def _usuario_pode_ver_valores(usuario=None):
 
 
 def _parse_valor_item(raw):
+    # Se já for número, retorna diretamente
+    if isinstance(raw, (int, float)):
+        return float(raw)
+    
     txt = str(raw or '').strip()
     if not txt:
         return 0.0
     txt = txt.replace('R$', '').replace('.', '').replace(',', '.').strip()
     try:
         return float(Decimal(txt))
-    except (InvalidOperation, ValueError):
-        raise ValueError('Valor do item inválido')
+    except (InvalidOperation, ValueError) as e:
+        raise ValueError(f'Valor do item inválido: "{raw}" -> "{txt}"')
 
 
 def _parse_percentual(raw):
+    # Se já for número, retorna diretamente
+    if isinstance(raw, (int, float)):
+        return float(raw)
+    
     txt = str(raw or '').strip()
     if not txt:
         return 0.0
     txt = txt.replace('%', '').replace('.', '').replace(',', '.').strip()
     try:
         return float(Decimal(txt))
-    except (InvalidOperation, ValueError):
-        raise ValueError('Percentual de imposto inválido')
+    except (InvalidOperation, ValueError) as e:
+        raise ValueError(f'Percentual de imposto inválido: "{raw}" -> "{txt}"')
 
 
 def _valor_planilha_preenchido(raw):
     if raw is None:
         return False
+    # Se for número, verificar se é diferente de 0
+    if isinstance(raw, (int, float)):
+        return raw != 0
+    # Se for string, verificar se não está vazia após strip
     return str(raw).strip() != ''
+
+
+def _valor_realmente_alterado(raw, valor_atual):
+    """Verifica se o valor da planilha é realmente diferente do valor atual"""
+    if raw is None:
+        return False
+    
+    # Converter para número para comparação
+    try:
+        if isinstance(raw, (int, float)):
+            valor_planilha = float(raw)
+        else:
+            # Se for string, fazer parsing
+            txt = str(raw or '').strip()
+            if not txt:
+                return False
+            txt = txt.replace('R$', '').replace('.', '').replace(',', '.').strip()
+            valor_planilha = float(Decimal(txt))
+        
+        # Comparar com valor atual (considerando None como 0)
+        valor_atual_num = float(valor_atual or 0)
+        
+        return abs(valor_planilha - valor_atual_num) > 0.001  # Tolerância para diferenças pequenas
+        
+    except (InvalidOperation, ValueError):
+        return False
 
 
 def _apply_campos_financeiros(item, form_data):
@@ -78,7 +126,7 @@ def _get_item_imagem_bytes(item):
 
     try:
         if file_path.startswith('http://') or file_path.startswith('https://'):
-            resp = requests.get(file_path, timeout=30)
+            resp = requests.get(file_path, timeout=(3, 5))
             if resp.status_code != 200:
                 return None, None
             return resp.content, file_path
@@ -87,7 +135,7 @@ def _get_item_imagem_bytes(item):
             public_url = _build_supabase_public_url_from_file_path(file_path)
             if not public_url:
                 return None, None
-            resp = requests.get(public_url, timeout=30)
+            resp = requests.get(public_url, timeout=(3, 5))
             if resp.status_code != 200:
                 return None, public_url
             return resp.content, public_url
@@ -107,6 +155,157 @@ def _get_item_imagem_bytes(item):
         return None, getattr(item, 'imagem_path', None)
 
     return None, getattr(item, 'imagem_path', None)
+
+
+def _build_excel_safe_image_stream(image_bytes):
+    if not image_bytes:
+        return None
+
+    if Image is None:
+        return io.BytesIO(image_bytes)
+
+    try:
+        source_stream = io.BytesIO(image_bytes)
+        with Image.open(source_stream) as img:
+            normalized = img.convert('RGB') if img.mode not in ('RGB', 'L') else img.copy()
+            output = io.BytesIO()
+            normalized.save(output, format='PNG')
+            output.seek(0)
+            return output
+    except Exception:
+        return None
+
+
+def _set_exportacao_valores_status(export_id, **kwargs):
+    with _EXPORTACOES_VALORES_ITENS_LOCK:
+        exportacao = _EXPORTACOES_VALORES_ITENS.get(export_id)
+        if not exportacao:
+            return
+        exportacao.update(kwargs)
+
+
+def _carregar_quantidades_estoque_por_item():
+    rows = (
+        db.session.query(
+            EstoquePecas.item_id,
+            func.coalesce(func.sum(EstoquePecas.quantidade), 0)
+        )
+        .group_by(EstoquePecas.item_id)
+        .all()
+    )
+    return {item_id: int(quantidade or 0) for item_id, quantidade in rows}
+
+
+def _gerar_planilha_valores_itens(progress_callback=None):
+    wb = Workbook()
+    ws = wb.active
+    ws.title = 'Valores Itens'
+    headers = ['item', 'codigo_acb', 'tipo', 'quantidade_estoque', 'valor_item', 'valor_material', 'outros_custos', 'imposto_percentual']
+    ws.append(headers)
+
+    header_fill = PatternFill(fill_type='solid', fgColor='1F4E78')
+    header_font = Font(color='FFFFFF', bold=True)
+    currency_fmt = 'R$ #,##0.00'
+    percent_fmt = '0.00'
+
+    for idx, header in enumerate(headers, start=1):
+        cell = ws.cell(row=1, column=idx)
+        cell.fill = header_fill
+        cell.font = header_font
+        cell.alignment = Alignment(horizontal='center', vertical='center')
+
+    ws.freeze_panes = 'B2'
+    ws.auto_filter.ref = f"A1:{get_column_letter(len(headers))}1"
+
+    itens_cadastrados = Item.query.order_by(Item.nome.asc()).all()
+    quantidades_estoque = _carregar_quantidades_estoque_por_item()
+    total_itens = max(len(itens_cadastrados), 1)
+
+    if progress_callback:
+        progress_callback(percentual=5, mensagem='Preparando planilha...')
+
+    for index, item in enumerate(itens_cadastrados, start=1):
+        tipo_item = 'Composto' if item.eh_composto else ('Montagem' if (item.tipo_item or '') == 'montagem' else 'Produção')
+        quantidade_estoque = quantidades_estoque.get(item.id, 0)
+        ws.append([
+            (item.nome or '').strip().replace('\n', '').replace('\r', ''),
+            item.codigo_acb,
+            tipo_item,
+            quantidade_estoque,
+            float(item.valor_item or 0),
+            float(item.valor_material or 0),
+            float(item.outros_custos or 0),
+            float(item.imposto_percentual or 0),
+        ])
+
+        current_row = ws.max_row
+        ws.cell(row=current_row, column=1).alignment = Alignment(horizontal='left', vertical='center')
+        ws.cell(row=current_row, column=2).alignment = Alignment(horizontal='center', vertical='center')
+        ws.cell(row=current_row, column=3).alignment = Alignment(horizontal='center', vertical='center')
+        ws.cell(row=current_row, column=4).alignment = Alignment(horizontal='center', vertical='center')
+
+        for col in [5, 6, 7]:
+            ws.cell(row=current_row, column=col).number_format = currency_fmt
+            ws.cell(row=current_row, column=col).alignment = Alignment(horizontal='right', vertical='center')
+
+        ws.cell(row=current_row, column=8).number_format = percent_fmt
+        ws.cell(row=current_row, column=8).alignment = Alignment(horizontal='right', vertical='center')
+
+        if progress_callback:
+            percentual_item = 5 + int((index / total_itens) * 85)
+            progress_callback(percentual=min(percentual_item, 95), mensagem=f'Processando item {index} de {total_itens}...')
+
+    column_widths = {
+        'A': 38,
+        'B': 14,
+        'C': 16,
+        'D': 18,
+        'E': 14,
+        'F': 16,
+        'G': 16,
+        'H': 14,
+    }
+    for column, width in column_widths.items():
+        ws.column_dimensions[column].width = width
+
+    if progress_callback:
+        progress_callback(percentual=97, mensagem='Finalizando arquivo...')
+
+    output = io.BytesIO()
+    wb.save(output)
+    output.seek(0)
+
+    if progress_callback:
+        progress_callback(percentual=100, mensagem='Planilha pronta para download.')
+
+    return output
+
+
+def _executar_exportacao_valores_job(app, export_id):
+    with app.app_context():
+        try:
+            output = _gerar_planilha_valores_itens(
+                progress_callback=lambda percentual, mensagem: _set_exportacao_valores_status(
+                    export_id,
+                    status='processando',
+                    percentual=percentual,
+                    mensagem=mensagem,
+                )
+            )
+            _set_exportacao_valores_status(
+                export_id,
+                status='pronto',
+                percentual=100,
+                mensagem='Planilha pronta para download.',
+                arquivo=output.getvalue(),
+                nome_arquivo='valores_itens.xlsx',
+            )
+        except Exception as exc:
+            _set_exportacao_valores_status(
+                export_id,
+                status='erro',
+                mensagem=f'Falha ao gerar planilha: {exc}',
+            )
 
 
 def _require_valores_access():
@@ -140,94 +339,79 @@ def exportar_planilha_valores_itens():
     if acesso_negado:
         return acesso_negado
 
-    wb = Workbook()
-    ws = wb.active
-    ws.title = 'Valores Itens'
-    headers = ['imagem', 'codigo_acb', 'item', 'tipo', 'valor_item', 'valor_material', 'outros_custos', 'imposto_percentual', 'link_imagem']
-    ws.append(headers)
+    if request.headers.get('X-Requested-With') != 'XMLHttpRequest':
+        return redirect(url_for('itens.listar_valores_itens'))
 
-    header_fill = PatternFill(fill_type='solid', fgColor='1F4E78')
-    header_font = Font(color='FFFFFF', bold=True)
-    currency_fmt = 'R$ #,##0.00'
-    percent_fmt = '0.00'
+    export_id = uuid.uuid4().hex
+    with _EXPORTACOES_VALORES_ITENS_LOCK:
+        _EXPORTACOES_VALORES_ITENS[export_id] = {
+            'status': 'processando',
+            'percentual': 0,
+            'mensagem': 'Iniciando exportação...',
+            'arquivo': None,
+            'nome_arquivo': 'valores_itens.xlsx',
+        }
 
-    for idx, header in enumerate(headers, start=1):
-        cell = ws.cell(row=1, column=idx)
-        cell.fill = header_fill
-        cell.font = header_font
-        cell.alignment = Alignment(horizontal='center', vertical='center')
+    worker = threading.Thread(
+        target=_executar_exportacao_valores_job,
+        args=(current_app._get_current_object(), export_id),
+        daemon=True,
+    )
+    worker.start()
 
-    ws.freeze_panes = 'C2'
-    ws.auto_filter.ref = f"A1:{get_column_letter(len(headers))}1"
+    return jsonify({
+        'ok': True,
+        'export_id': export_id,
+        'status_url': url_for('itens.status_exportacao_planilha_valores_itens', export_id=export_id),
+        'download_url': url_for('itens.download_exportacao_planilha_valores_itens', export_id=export_id),
+    })
 
-    for item in Item.query.order_by(Item.nome.asc()).all():
-        tipo_item = 'Composto' if item.eh_composto else ('Montagem' if (item.tipo_item or '') == 'montagem' else 'Produção')
-        imagem_url = getattr(item, 'imagem_path', None)
-        ws.append([
-            'Imagem' if imagem_url else 'Sem imagem',
-            item.codigo_acb,
-            item.nome,
-            tipo_item,
-            float(item.valor_item or 0),
-            float(item.valor_material or 0),
-            float(item.outros_custos or 0),
-            float(item.imposto_percentual or 0),
-            imagem_url or '',
-        ])
 
-        current_row = ws.max_row
-        ws.row_dimensions[current_row].height = 72
-        ws.cell(row=current_row, column=1).alignment = Alignment(horizontal='center', vertical='center')
-        ws.cell(row=current_row, column=2).alignment = Alignment(horizontal='center', vertical='center')
-        ws.cell(row=current_row, column=3).alignment = Alignment(vertical='center')
-        ws.cell(row=current_row, column=4).alignment = Alignment(horizontal='center', vertical='center')
+@itens.route('/itens/valores/exportar/status/<export_id>')
+def status_exportacao_planilha_valores_itens(export_id):
+    acesso_negado = _require_valores_access()
+    if acesso_negado:
+        return acesso_negado
 
-        for col in [5, 6, 7]:
-            ws.cell(row=current_row, column=col).number_format = currency_fmt
-            ws.cell(row=current_row, column=col).alignment = Alignment(horizontal='right', vertical='center')
+    with _EXPORTACOES_VALORES_ITENS_LOCK:
+        exportacao = _EXPORTACOES_VALORES_ITENS.get(export_id)
 
-        ws.cell(row=current_row, column=8).number_format = percent_fmt
-        ws.cell(row=current_row, column=8).alignment = Alignment(horizontal='right', vertical='center')
+    if not exportacao:
+        return jsonify({'ok': False, 'mensagem': 'Exportação não encontrada.'}), 404
 
-        link_cell = ws.cell(row=current_row, column=9)
-        if imagem_url:
-            link_cell.hyperlink = imagem_url
-            link_cell.style = 'Hyperlink'
-            link_cell.value = 'Abrir imagem'
+    return jsonify({
+        'ok': True,
+        'status': exportacao.get('status'),
+        'percentual': exportacao.get('percentual', 0),
+        'mensagem': exportacao.get('mensagem', ''),
+        'pronto': exportacao.get('status') == 'pronto',
+        'erro': exportacao.get('status') == 'erro',
+    })
 
-        image_bytes, _ = _get_item_imagem_bytes(item)
-        if image_bytes:
-            try:
-                image_stream = io.BytesIO(image_bytes)
-                excel_image = OpenpyxlImage(image_stream)
-                excel_image.width = 72
-                excel_image.height = 72
-                ws.add_image(excel_image, f'A{current_row}')
-                ws.cell(row=current_row, column=1).value = None
-            except Exception:
-                pass
 
-    column_widths = {
-        'A': 14,
-        'B': 16,
-        'C': 38,
-        'D': 14,
-        'E': 14,
-        'F': 16,
-        'G': 16,
-        'H': 16,
-        'I': 22,
-    }
-    for column, width in column_widths.items():
-        ws.column_dimensions[column].width = width
+@itens.route('/itens/valores/exportar/download/<export_id>')
+def download_exportacao_planilha_valores_itens(export_id):
+    acesso_negado = _require_valores_access()
+    if acesso_negado:
+        return acesso_negado
 
-    output = io.BytesIO()
-    wb.save(output)
+    with _EXPORTACOES_VALORES_ITENS_LOCK:
+        exportacao = _EXPORTACOES_VALORES_ITENS.get(export_id)
+
+    if not exportacao:
+        flash('Exportação não encontrada.', 'danger')
+        return redirect(url_for('itens.listar_valores_itens'))
+
+    if exportacao.get('status') != 'pronto' or not exportacao.get('arquivo'):
+        flash('A planilha ainda não está pronta para download.', 'warning')
+        return redirect(url_for('itens.listar_valores_itens'))
+
+    output = io.BytesIO(exportacao['arquivo'])
     output.seek(0)
     return send_file(
         output,
         as_attachment=True,
-        download_name='valores_itens.xlsx',
+        download_name=exportacao.get('nome_arquivo', 'valores_itens.xlsx'),
         mimetype='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
     )
 
@@ -264,23 +448,38 @@ def importar_planilha_valores_itens():
 
     headers = [str(h or '').strip().lower() for h in header_row]
     col_index = {h: i for i, h in enumerate(headers) if h}
-    required_cols = ['item', 'valor_item', 'valor_material', 'outros_custos', 'imposto_percentual']
+    required_cols = ['codigo_acb', 'item', 'valor_item', 'valor_material', 'outros_custos', 'imposto_percentual']
     if any(col not in col_index for col in required_cols):
-        flash('A planilha precisa conter as colunas item, valor_item, valor_material, outros_custos e imposto_percentual.', 'danger')
+        flash('A planilha precisa conter as colunas codigo_acb, item, valor_item, valor_material, outros_custos e imposto_percentual.', 'danger')
         return redirect(url_for('itens.importar_planilha_valores_itens'))
 
     preview_rows = []
     ok_rows = []
     for row_number, values in enumerate(ws.iter_rows(min_row=2, values_only=True), start=2):
-        nome = str(values[col_index['item']] or '').strip()
+        codigo_acb = str(values[col_index['codigo_acb']] or '').strip().replace('\n', '').replace('\r', '')
+        nome = str(values[col_index['item']] or '').strip().replace('\n', '').replace('\r', '')
         valor_raw = values[col_index['valor_item']]
         valor_material_raw = values[col_index['valor_material']]
         outros_custos_raw = values[col_index['outros_custos']]
         imposto_percentual_raw = values[col_index['imposto_percentual']]
-        valor_item_informado = _valor_planilha_preenchido(valor_raw)
-        valor_material_informado = _valor_planilha_preenchido(valor_material_raw)
-        outros_custos_informado = _valor_planilha_preenchido(outros_custos_raw)
-        imposto_percentual_informado = _valor_planilha_preenchido(imposto_percentual_raw)
+        
+        # Debug: mostrar valores brutos da planilha
+        print(f"DEBUG - Linha {row_number}: valor_raw={valor_raw}, valor_material_raw={valor_material_raw}")
+        
+        # Buscar item primeiro para poder comparar valores
+        item = Item.query.filter(Item.codigo_acb == codigo_acb).first() if codigo_acb else None
+        
+        # Verificar se os valores foram realmente alterados
+        valor_item_alterado = _valor_realmente_alterado(valor_raw, item.valor_item if item else 0)
+        valor_material_alterado = _valor_realmente_alterado(valor_material_raw, item.valor_material if item else 0)
+        outros_custos_alterado = _valor_realmente_alterado(outros_custos_raw, item.outros_custos if item else 0)
+        imposto_percentual_alterado = _valor_realmente_alterado(imposto_percentual_raw, item.imposto_percentual if item else 0)
+        
+        # Considerar como "informado" apenas se foi realmente alterado
+        valor_item_informado = valor_item_alterado
+        valor_material_informado = valor_material_alterado
+        outros_custos_informado = outros_custos_alterado
+        imposto_percentual_informado = imposto_percentual_alterado
         algum_campo_informado = any([
             valor_item_informado,
             valor_material_informado,
@@ -288,17 +487,18 @@ def importar_planilha_valores_itens():
             imposto_percentual_informado,
         ])
 
-        if not nome and not algum_campo_informado:
+        # Sempre incluir itens válidos na preview, mesmo que não tenham alterações
+        if not codigo_acb or not item:
             continue
 
         errors = []
-        item = Item.query.filter(Item.nome == nome).first() if nome else None
-        if not nome:
-            errors.append('Item vazio')
+        if not codigo_acb:
+            errors.append('Código ACB vazio')
         if not item:
-            errors.append('Item não encontrado com nome exatamente igual')
-        if nome and not algum_campo_informado:
-            errors.append('Preencha pelo menos um valor para atualizar')
+            errors.append(f'Item não encontrado com código ACB: {codigo_acb}')
+        if not nome:
+            errors.append('Nome do item vazio')
+        # Removida a validação que exigia algum campo alterado
 
         valor_item = None
         if valor_item_informado:
@@ -343,13 +543,17 @@ def importar_planilha_valores_itens():
         ok = len(errors) == 0
         row_data = {
             'row_number': row_number,
+            'codigo_acb': codigo_acb,
             'nome': nome,
-            'codigo_acb': item.codigo_acb if item else '',
             'item_id': item.id if item else None,
             'valor_item': valor_item,
             'valor_material': valor_material,
             'outros_custos': outros_custos,
             'imposto_percentual': imposto_percentual,
+            'valor_item_atual': item.valor_item if item else 0,
+            'valor_material_atual': item.valor_material if item else 0,
+            'outros_custos_atual': item.outros_custos if item else 0,
+            'imposto_percentual_atual': item.imposto_percentual if item else 0,
             'valor_item_informado': valor_item_informado,
             'valor_material_informado': valor_material_informado,
             'outros_custos_informado': outros_custos_informado,
@@ -359,8 +563,10 @@ def importar_planilha_valores_itens():
         }
         preview_rows.append(row_data)
         if ok:
+            print(f"OK Row - Item: {nome}, valor_item: {valor_item}, valor_material: {valor_material}, valor_item_informado: {valor_item_informado}")
             ok_rows.append({
                 'row_number': row_number,
+                'codigo_acb': codigo_acb,
                 'nome': nome,
                 'item_id': item.id,
                 'valor_item': valor_item,
@@ -389,20 +595,62 @@ def confirmar_importacao_valores_itens():
         return redirect(url_for('itens.importar_planilha_valores_itens'))
 
     try:
+        atualizados = 0
+        detalhes_atualizacoes = []
         for row in ok_rows:
             item = Item.query.get(row['item_id'])
             if not item:
+                flash(f'Item não encontrado: {row.get("nome", "desconhecido")}', 'warning')
                 continue
-            if row.get('valor_item_informado'):
-                item.valor_item = float(row['valor_item'] or 0)
-            if row.get('valor_material_informado'):
-                item.valor_material = float(row.get('valor_material') or 0)
-            if row.get('outros_custos_informado'):
-                item.outros_custos = float(row.get('outros_custos') or 0)
-            if row.get('imposto_percentual_informado'):
-                item.imposto_percentual = float(row.get('imposto_percentual') or 0)
+            try:
+                # Debug: mostrar valores antes e depois
+                print(f"Item {row.get('nome', 'desconhecido')} - Antes: valor_item={item.valor_item}, valor_material={item.valor_material}")
+                
+                alteracoes = []
+                if row.get('valor_item_informado'):
+                    valor_antigo = item.valor_item or 0
+                    valor_novo = float(row['valor_item'] or 0)
+                    if valor_antigo != valor_novo:
+                        item.valor_item = valor_novo
+                        alteracoes.append(f'Valor Item: R$ {valor_antigo:.2f} → R$ {valor_novo:.2f}')
+                
+                if row.get('valor_material_informado'):
+                    valor_antigo = item.valor_material or 0
+                    valor_novo = float(row.get('valor_material') or 0)
+                    if valor_antigo != valor_novo:
+                        item.valor_material = valor_novo
+                        alteracoes.append(f'Valor Material: R$ {valor_antigo:.2f} → R$ {valor_novo:.2f}')
+                
+                if row.get('outros_custos_informado'):
+                    valor_antigo = item.outros_custos or 0
+                    valor_novo = float(row.get('outros_custos') or 0)
+                    if valor_antigo != valor_novo:
+                        item.outros_custos = valor_novo
+                        alteracoes.append(f'Outros Custos: R$ {valor_antigo:.2f} → R$ {valor_novo:.2f}')
+                
+                if row.get('imposto_percentual_informado'):
+                    valor_antigo = item.imposto_percentual or 0
+                    valor_novo = float(row.get('imposto_percentual') or 0)
+                    if valor_antigo != valor_novo:
+                        item.imposto_percentual = valor_novo
+                        alteracoes.append(f'Imposto: {valor_antigo:.2f}% → {valor_novo:.2f}%')
+                
+                if alteracoes:
+                    detalhes_atualizacoes.append(f'{row.get("nome", "desconhecido")}: {", ".join(alteracoes)}')
+                    flash(f'✅ {row.get("nome", "desconhecido")}: {", ".join(alteracoes)}', 'success')
+                    atualizados += 1
+                else:
+                    flash(f'ℹ️ {row.get("nome", "desconhecido")}: Nenhum valor foi alterado', 'info')
+                
+                print(f"Item {row.get('nome', 'desconhecido')} - Depois: valor_item={item.valor_item}, valor_material={item.valor_material}")
+                
+            except Exception as e:
+                flash(f'❌ Erro ao atualizar item "{row.get("nome", "desconhecido")}": {e}', 'danger')
+                continue
         db.session.commit()
-        flash(f'Valores atualizados com sucesso! Itens atualizados: {len(ok_rows)}', 'success')
+        flash(f'🎉 Importação concluída! {atualizados} itens atualizados com sucesso!', 'success')
+        if atualizados == 0:
+            flash('ℹ️ Nenhum valor foi alterado. Todos os valores da planilha já eram iguais aos do sistema.', 'info')
         return redirect(url_for('itens.listar_valores_itens'))
     except Exception as e:
         db.session.rollback()

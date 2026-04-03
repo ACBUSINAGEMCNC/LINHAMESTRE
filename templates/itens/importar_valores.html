@@ -19,7 +19,7 @@
       <div class="col-md-8">
         <label for="arquivo" class="form-label">Arquivo XLSX</label>
         <input class="form-control" type="file" id="arquivo" name="arquivo" accept=".xlsx" required>
-        <div class="form-text">A planilha deve conter as colunas `item`, `valor_item`, `valor_material`, `outros_custos` e `imposto_percentual`. Os campos de valores são opcionais: somente os preenchidos serão atualizados.</div>
+        <div class="form-text">A planilha deve conter as colunas `codigo_acb`, `item`, `valor_item`, `valor_material`, `outros_custos` e `imposto_percentual`. Os campos de valores são opcionais: somente os preenchidos serão atualizados. A busca será feita pelo código ACB.</div>
       </div>
       <div class="col-md-4 d-flex align-items-end">
         <button type="submit" class="btn btn-primary w-100"><i class="fas fa-search"></i> Validar e Pré-visualizar</button>
@@ -35,6 +35,15 @@
       <div class="fw-semibold">Pré-visualização</div>
       <span class="badge bg-success">OK: {{ preview_ok_count }}</span>
       <span class="badge bg-danger">Erros: {{ preview_error_count }}</span>
+      <div class="ms-auto small text-muted">
+        <div class="border border-danger rounded p-1 bg-danger bg-opacity-10 d-inline-block mb-1">
+          <span class="text-decoration-line-through">R$ 0,00</span> → <span class="badge bg-warning text-dark">R$ 148,00</span>
+        </div>
+        <span class="ms-2">valor mudou (com destaque vermelho)</span>
+        <br>
+        <span class="text-decoration-line-through">R$ 100,00</span> → <span class="badge bg-warning text-dark">R$ 100,00</span>
+        <span class="ms-2">valor igual (sem destaque)</span>
+      </div>
     </div>
 
     <div class="table-responsive">
@@ -42,12 +51,12 @@
         <thead>
           <tr>
             <th>Linha</th>
+            <th>Código ACB</th>
             <th>Item</th>
-            <th>Código</th>
-            <th>Valor</th>
-            <th>Material</th>
-            <th>Outros</th>
-            <th>Imposto %</th>
+            <th>Valor (atual → novo)</th>
+            <th>Material (atual → novo)</th>
+            <th>Outros (atual → novo)</th>
+            <th>Imposto % (atual → novo)</th>
             <th>Status</th>
             <th>Erros</th>
           </tr>
@@ -56,12 +65,92 @@
           {% for r in preview_rows %}
           <tr class="{% if r.ok %}table-success{% else %}table-danger{% endif %}">
             <td>{{ r.row_number }}</td>
+            <td><code>{{ r.codigo_acb }}</code></td>
             <td>{{ r.nome }}</td>
-            <td>{{ r.codigo_acb }}</td>
-            <td>{% if r.valor_item_informado %}R$ {{ '%.2f'|format(r.valor_item or 0) }}{% else %}<span class="text-muted">Sem alteração</span>{% endif %}</td>
-            <td>{% if r.valor_material_informado %}R$ {{ '%.2f'|format(r.valor_material or 0) }}{% else %}<span class="text-muted">Sem alteração</span>{% endif %}</td>
-            <td>{% if r.outros_custos_informado %}R$ {{ '%.2f'|format(r.outros_custos or 0) }}{% else %}<span class="text-muted">Sem alteração</span>{% endif %}</td>
-            <td>{% if r.imposto_percentual_informado %}{{ '%.2f'|format(r.imposto_percentual or 0) }}%{% else %}<span class="text-muted">Sem alteração</span>{% endif %}</td>
+            <td>
+              {% if r.valor_item_informado %}
+                {% if r.valor_item != r.valor_item_atual %}
+                  <div class="border border-danger rounded p-1 bg-danger bg-opacity-10">
+                    <div class="d-flex align-items-center gap-1">
+                      <span class="small text-decoration-line-through">R$ {{ '%.2f'|format(r.valor_item_atual or 0) }}</span>
+                      <span>→</span>
+                      <span class="badge bg-warning text-dark">R$ {{ '%.2f'|format(r.valor_item or 0) }}</span>
+                    </div>
+                  </div>
+                {% else %}
+                  <div class="d-flex align-items-center gap-1">
+                    <span class="small text-decoration-line-through">R$ {{ '%.2f'|format(r.valor_item_atual or 0) }}</span>
+                    <span>→</span>
+                    <span class="badge bg-warning text-dark">R$ {{ '%.2f'|format(r.valor_item or 0) }}</span>
+                  </div>
+                {% endif %}
+              {% else %}
+                <span>R$ {{ '%.2f'|format(r.valor_item_atual or 0) }}</span>
+              {% endif %}
+            </td>
+            <td>
+              {% if r.valor_material_informado %}
+                {% if r.valor_material != r.valor_material_atual %}
+                  <div class="border border-danger rounded p-1 bg-danger bg-opacity-10">
+                    <div class="d-flex align-items-center gap-1">
+                      <span class="small text-decoration-line-through">R$ {{ '%.2f'|format(r.valor_material_atual or 0) }}</span>
+                      <span>→</span>
+                      <span class="badge bg-warning text-dark">R$ {{ '%.2f'|format(r.valor_material or 0) }}</span>
+                    </div>
+                  </div>
+                {% else %}
+                  <div class="d-flex align-items-center gap-1">
+                    <span class="small text-decoration-line-through">R$ {{ '%.2f'|format(r.valor_material_atual or 0) }}</span>
+                    <span>→</span>
+                    <span class="badge bg-warning text-dark">R$ {{ '%.2f'|format(r.valor_material or 0) }}</span>
+                  </div>
+                {% endif %}
+              {% else %}
+                <span>R$ {{ '%.2f'|format(r.valor_material_atual or 0) }}</span>
+              {% endif %}
+            </td>
+            <td>
+              {% if r.outros_custos_informado %}
+                {% if r.outros_custos != r.outros_custos_atual %}
+                  <div class="border border-danger rounded p-1 bg-danger bg-opacity-10">
+                    <div class="d-flex align-items-center gap-1">
+                      <span class="small text-decoration-line-through">R$ {{ '%.2f'|format(r.outros_custos_atual or 0) }}</span>
+                      <span>→</span>
+                      <span class="badge bg-warning text-dark">R$ {{ '%.2f'|format(r.outros_custos or 0) }}</span>
+                    </div>
+                  </div>
+                {% else %}
+                  <div class="d-flex align-items-center gap-1">
+                    <span class="small text-decoration-line-through">R$ {{ '%.2f'|format(r.outros_custos_atual or 0) }}</span>
+                    <span>→</span>
+                    <span class="badge bg-warning text-dark">R$ {{ '%.2f'|format(r.outros_custos or 0) }}</span>
+                  </div>
+                {% endif %}
+              {% else %}
+                <span>R$ {{ '%.2f'|format(r.outros_custos_atual or 0) }}</span>
+              {% endif %}
+            </td>
+            <td>
+              {% if r.imposto_percentual_informado %}
+                {% if r.imposto_percentual != r.imposto_percentual_atual %}
+                  <div class="border border-danger rounded p-1 bg-danger bg-opacity-10">
+                    <div class="d-flex align-items-center gap-1">
+                      <span class="small text-decoration-line-through">{{ '%.2f'|format(r.imposto_percentual_atual or 0) }}%</span>
+                      <span>→</span>
+                      <span class="badge bg-warning text-dark">{{ '%.2f'|format(r.imposto_percentual or 0) }}%</span>
+                    </div>
+                  </div>
+                {% else %}
+                  <div class="d-flex align-items-center gap-1">
+                    <span class="small text-decoration-line-through">{{ '%.2f'|format(r.imposto_percentual_atual or 0) }}%</span>
+                    <span>→</span>
+                    <span class="badge bg-warning text-dark">{{ '%.2f'|format(r.imposto_percentual or 0) }}%</span>
+                  </div>
+                {% endif %}
+              {% else %}
+                <span>{{ '%.2f'|format(r.imposto_percentual_atual or 0) }}%</span>
+              {% endif %}
+            </td>
             <td>
               {% if r.ok %}
                 <span class="badge bg-success">OK</span>
@@ -85,11 +174,13 @@
     </div>
 
     <form method="POST" action="{{ url_for('itens.confirmar_importacao_valores_itens') }}" class="mt-3">
-      <button type="submit" class="btn btn-success" {% if preview_error_count > 0 %}disabled{% endif %}>
+      <button type="submit" class="btn btn-success">
         <i class="fas fa-check"></i> Confirmar Atualização dos Valores
       </button>
       {% if preview_error_count > 0 %}
-      <div class="form-text text-danger mt-2">Corrija os erros da planilha antes de confirmar.</div>
+      <div class="form-text text-danger mt-2">Alguns itens têm erros e não serão importados. Apenas itens sem erros serão atualizados.</div>
+      {% else %}
+      <div class="form-text text-muted mt-2">Apenas os valores destacados em vermelho serão atualizados. Valores iguais aos atuais serão ignorados.</div>
       {% endif %}
     </form>
   </div>
