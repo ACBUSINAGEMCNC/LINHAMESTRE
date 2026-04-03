@@ -173,7 +173,7 @@
       </table>
     </div>
 
-    <form method="POST" action="{{ url_for('itens.confirmar_importacao_valores_itens') }}" class="mt-3">
+    <form method="POST" action="{{ url_for('itens.confirmar_importacao_valores_itens', import_id=import_id) }}" class="mt-3">
       <button type="submit" class="btn btn-success">
         <i class="fas fa-check"></i> Confirmar Atualização dos Valores
       </button>

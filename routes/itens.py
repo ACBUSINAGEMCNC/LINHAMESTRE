@@ -463,23 +463,14 @@ def importar_planilha_valores_itens():
         outros_custos_raw = values[col_index['outros_custos']]
         imposto_percentual_raw = values[col_index['imposto_percentual']]
         
-        # Debug: mostrar valores brutos da planilha
-        print(f"DEBUG - Linha {row_number}: valor_raw={valor_raw}, valor_material_raw={valor_material_raw}")
-        
         # Buscar item primeiro para poder comparar valores
         item = Item.query.filter(Item.codigo_acb == codigo_acb).first() if codigo_acb else None
         
-        # Verificar se os valores foram realmente alterados
-        valor_item_alterado = _valor_realmente_alterado(valor_raw, item.valor_item if item else 0)
-        valor_material_alterado = _valor_realmente_alterado(valor_material_raw, item.valor_material if item else 0)
-        outros_custos_alterado = _valor_realmente_alterado(outros_custos_raw, item.outros_custos if item else 0)
-        imposto_percentual_alterado = _valor_realmente_alterado(imposto_percentual_raw, item.imposto_percentual if item else 0)
-        
-        # Considerar como "informado" apenas se foi realmente alterado
-        valor_item_informado = valor_item_alterado
-        valor_material_informado = valor_material_alterado
-        outros_custos_informado = outros_custos_alterado
-        imposto_percentual_informado = imposto_percentual_alterado
+        # Verificar se os valores foram preenchidos na planilha (simplificado)
+        valor_item_informado = _valor_planilha_preenchido(valor_raw)
+        valor_material_informado = _valor_planilha_preenchido(valor_material_raw)
+        outros_custos_informado = _valor_planilha_preenchido(outros_custos_raw)
+        imposto_percentual_informado = _valor_planilha_preenchido(imposto_percentual_raw)
         algum_campo_informado = any([
             valor_item_informado,
             valor_material_informado,
@@ -563,7 +554,6 @@ def importar_planilha_valores_itens():
         }
         preview_rows.append(row_data)
         if ok:
-            print(f"OK Row - Item: {nome}, valor_item: {valor_item}, valor_material: {valor_material}, valor_item_informado: {valor_item_informado}")
             ok_rows.append({
                 'row_number': row_number,
                 'codigo_acb': codigo_acb,
@@ -579,20 +569,72 @@ def importar_planilha_valores_itens():
                 'imposto_percentual_informado': imposto_percentual_informado,
             })
 
-    session['import_valores_itens_rows'] = ok_rows
-    return render_template('itens/importar_valores.html', **_build_preview_valores_rows(preview_rows))
+    # Gerar ID único para esta importação
+    import uuid
+    import_id = str(uuid.uuid4())
+    
+    # Salvar dados no banco em vez da sessão
+    from models import db
+    import json
+    from sqlalchemy import text
+    
+    # Criar tabela temporária se não existir
+    try:
+        db.session.execute(text("""
+        CREATE TABLE IF NOT EXISTS import_valores_temp (
+            id VARCHAR(36) PRIMARY KEY,
+            dados JSONB NOT NULL,
+            criado_em TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )
+        """))
+        db.session.commit()
+    except:
+        pass
+    
+    # Salvar dados no banco
+    db.session.execute(
+        text("INSERT INTO import_valores_temp (id, dados) VALUES (:id, :dados)"),
+        {"id": import_id, "dados": json.dumps(ok_rows)}
+    )
+    db.session.commit()
+    
+    # Renderizar preview com import_id
+    return render_template('itens/importar_valores.html', import_id=import_id, **_build_preview_valores_rows(preview_rows))
 
 
-@itens.route('/itens/valores/importar/confirmar', methods=['POST'])
-def confirmar_importacao_valores_itens():
+@itens.route('/itens/valores/importar/confirmar/<import_id>', methods=['POST'])
+def confirmar_importacao_valores_itens(import_id):
     acesso_negado = _require_valores_access()
     if acesso_negado:
         return acesso_negado
 
-    ok_rows = session.get('import_valores_itens_rows') or []
-    if not ok_rows:
-        flash('Nenhuma importação pendente de valores.', 'warning')
+    # Buscar dados do banco temporário
+    try:
+        from sqlalchemy import text
+        result = db.session.execute(
+            text("SELECT dados FROM import_valores_temp WHERE id = :id"),
+            {"id": import_id}
+        )
+        row = result.fetchone()
+        if not row:
+            flash('Importação não encontrada ou expirou.', 'warning')
+            return redirect(url_for('itens.importar_planilha_valores_itens'))
+        
+        import json
+        ok_rows = json.loads(row[0])
+        
+        # Limpar dados temporários
+        db.session.execute(
+            text("DELETE FROM import_valores_temp WHERE id = :id"),
+            {"id": import_id}
+        )
+        db.session.commit()
+        
+    except Exception as e:
+        flash(f'Erro ao carregar dados da importação: {e}', 'danger')
         return redirect(url_for('itens.importar_planilha_valores_itens'))
+    
+    flash(f'DEBUG: Encontrados {len(ok_rows)} itens para processar', 'info')
 
     try:
         atualizados = 0
@@ -603,46 +645,36 @@ def confirmar_importacao_valores_itens():
                 flash(f'Item não encontrado: {row.get("nome", "desconhecido")}', 'warning')
                 continue
             try:
-                # Debug: mostrar valores antes e depois
-                print(f"Item {row.get('nome', 'desconhecido')} - Antes: valor_item={item.valor_item}, valor_material={item.valor_material}")
-                
+                # Atualizar valores diretamente
                 alteracoes = []
                 if row.get('valor_item_informado'):
                     valor_antigo = item.valor_item or 0
                     valor_novo = float(row['valor_item'] or 0)
-                    if valor_antigo != valor_novo:
-                        item.valor_item = valor_novo
-                        alteracoes.append(f'Valor Item: R$ {valor_antigo:.2f} → R$ {valor_novo:.2f}')
+                    item.valor_item = valor_novo
+                    alteracoes.append(f'Valor Item: R$ {valor_antigo:.2f} → R$ {valor_novo:.2f}')
                 
                 if row.get('valor_material_informado'):
                     valor_antigo = item.valor_material or 0
                     valor_novo = float(row.get('valor_material') or 0)
-                    if valor_antigo != valor_novo:
-                        item.valor_material = valor_novo
-                        alteracoes.append(f'Valor Material: R$ {valor_antigo:.2f} → R$ {valor_novo:.2f}')
+                    item.valor_material = valor_novo
+                    alteracoes.append(f'Valor Material: R$ {valor_antigo:.2f} → R$ {valor_novo:.2f}')
                 
                 if row.get('outros_custos_informado'):
                     valor_antigo = item.outros_custos or 0
                     valor_novo = float(row.get('outros_custos') or 0)
-                    if valor_antigo != valor_novo:
-                        item.outros_custos = valor_novo
-                        alteracoes.append(f'Outros Custos: R$ {valor_antigo:.2f} → R$ {valor_novo:.2f}')
+                    item.outros_custos = valor_novo
+                    alteracoes.append(f'Outros Custos: R$ {valor_antigo:.2f} → R$ {valor_novo:.2f}')
                 
                 if row.get('imposto_percentual_informado'):
                     valor_antigo = item.imposto_percentual or 0
                     valor_novo = float(row.get('imposto_percentual') or 0)
-                    if valor_antigo != valor_novo:
-                        item.imposto_percentual = valor_novo
-                        alteracoes.append(f'Imposto: {valor_antigo:.2f}% → {valor_novo:.2f}%')
+                    item.imposto_percentual = valor_novo
+                    alteracoes.append(f'Imposto: {valor_antigo:.2f}% → {valor_novo:.2f}%')
                 
                 if alteracoes:
                     detalhes_atualizacoes.append(f'{row.get("nome", "desconhecido")}: {", ".join(alteracoes)}')
                     flash(f'✅ {row.get("nome", "desconhecido")}: {", ".join(alteracoes)}', 'success')
                     atualizados += 1
-                else:
-                    flash(f'ℹ️ {row.get("nome", "desconhecido")}: Nenhum valor foi alterado', 'info')
-                
-                print(f"Item {row.get('nome', 'desconhecido')} - Depois: valor_item={item.valor_item}, valor_material={item.valor_material}")
                 
             except Exception as e:
                 flash(f'❌ Erro ao atualizar item "{row.get("nome", "desconhecido")}": {e}', 'danger')
@@ -651,6 +683,10 @@ def confirmar_importacao_valores_itens():
         flash(f'🎉 Importação concluída! {atualizados} itens atualizados com sucesso!', 'success')
         if atualizados == 0:
             flash('ℹ️ Nenhum valor foi alterado. Todos os valores da planilha já eram iguais aos do sistema.', 'info')
+        
+        # Limpar sessão para evitar problema de cookie grande
+        session.pop('import_valores_itens_rows', None)
+        
         return redirect(url_for('itens.listar_valores_itens'))
     except Exception as e:
         db.session.rollback()
