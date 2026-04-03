@@ -71,9 +71,9 @@ def _parse_percentual(raw):
 def _valor_planilha_preenchido(raw):
     if raw is None:
         return False
-    # Se for número, verificar se é diferente de 0
+    # Se for número, considerar como preenchido inclusive quando for 0
     if isinstance(raw, (int, float)):
-        return raw != 0
+        return True
     # Se for string, verificar se não está vazia após strip
     return str(raw).strip() != ''
 
@@ -622,67 +622,69 @@ def confirmar_importacao_valores_itens(import_id):
         
         import json
         ok_rows = json.loads(row[0])
-        
-        # Limpar dados temporários
+
+    except Exception as e:
+        flash(f'Erro ao carregar dados da importação: {e}', 'danger')
+        return redirect(url_for('itens.importar_planilha_valores_itens'))
+
+    try:
+        atualizados = 0
+        itens_com_erro = []
+        for row in ok_rows:
+            item = db.session.get(Item, row['item_id'])
+            if not item:
+                itens_com_erro.append(f'Item não encontrado: {row.get("nome", "desconhecido")}')
+                continue
+            try:
+                houve_alteracao = False
+                if row.get('valor_item_informado'):
+                    valor_novo = float(row['valor_item'] or 0)
+                    if abs(float(item.valor_item or 0) - valor_novo) > 0.001:
+                        item.valor_item = valor_novo
+                        houve_alteracao = True
+                
+                if row.get('valor_material_informado'):
+                    valor_novo = float(row.get('valor_material') or 0)
+                    if abs(float(item.valor_material or 0) - valor_novo) > 0.001:
+                        item.valor_material = valor_novo
+                        houve_alteracao = True
+                
+                if row.get('outros_custos_informado'):
+                    valor_novo = float(row.get('outros_custos') or 0)
+                    if abs(float(item.outros_custos or 0) - valor_novo) > 0.001:
+                        item.outros_custos = valor_novo
+                        houve_alteracao = True
+                
+                if row.get('imposto_percentual_informado'):
+                    valor_novo = float(row.get('imposto_percentual') or 0)
+                    if abs(float(item.imposto_percentual or 0) - valor_novo) > 0.001:
+                        item.imposto_percentual = valor_novo
+                        houve_alteracao = True
+                
+                if houve_alteracao:
+                    atualizados += 1
+                
+            except Exception as e:
+                itens_com_erro.append(f'{row.get("nome", "desconhecido")}: {e}')
+                continue
+
+        db.session.commit()
+
         db.session.execute(
             text("DELETE FROM import_valores_temp WHERE id = :id"),
             {"id": import_id}
         )
         db.session.commit()
-        
-    except Exception as e:
-        flash(f'Erro ao carregar dados da importação: {e}', 'danger')
-        return redirect(url_for('itens.importar_planilha_valores_itens'))
-    
-    flash(f'DEBUG: Encontrados {len(ok_rows)} itens para processar', 'info')
 
-    try:
-        atualizados = 0
-        detalhes_atualizacoes = []
-        for row in ok_rows:
-            item = Item.query.get(row['item_id'])
-            if not item:
-                flash(f'Item não encontrado: {row.get("nome", "desconhecido")}', 'warning')
-                continue
-            try:
-                # Atualizar valores diretamente
-                alteracoes = []
-                if row.get('valor_item_informado'):
-                    valor_antigo = item.valor_item or 0
-                    valor_novo = float(row['valor_item'] or 0)
-                    item.valor_item = valor_novo
-                    alteracoes.append(f'Valor Item: R$ {valor_antigo:.2f} → R$ {valor_novo:.2f}')
-                
-                if row.get('valor_material_informado'):
-                    valor_antigo = item.valor_material or 0
-                    valor_novo = float(row.get('valor_material') or 0)
-                    item.valor_material = valor_novo
-                    alteracoes.append(f'Valor Material: R$ {valor_antigo:.2f} → R$ {valor_novo:.2f}')
-                
-                if row.get('outros_custos_informado'):
-                    valor_antigo = item.outros_custos or 0
-                    valor_novo = float(row.get('outros_custos') or 0)
-                    item.outros_custos = valor_novo
-                    alteracoes.append(f'Outros Custos: R$ {valor_antigo:.2f} → R$ {valor_novo:.2f}')
-                
-                if row.get('imposto_percentual_informado'):
-                    valor_antigo = item.imposto_percentual or 0
-                    valor_novo = float(row.get('imposto_percentual') or 0)
-                    item.imposto_percentual = valor_novo
-                    alteracoes.append(f'Imposto: {valor_antigo:.2f}% → {valor_novo:.2f}%')
-                
-                if alteracoes:
-                    detalhes_atualizacoes.append(f'{row.get("nome", "desconhecido")}: {", ".join(alteracoes)}')
-                    flash(f'✅ {row.get("nome", "desconhecido")}: {", ".join(alteracoes)}', 'success')
-                    atualizados += 1
-                
-            except Exception as e:
-                flash(f'❌ Erro ao atualizar item "{row.get("nome", "desconhecido")}": {e}', 'danger')
-                continue
-        db.session.commit()
         flash(f'🎉 Importação concluída! {atualizados} itens atualizados com sucesso!', 'success')
         if atualizados == 0:
             flash('ℹ️ Nenhum valor foi alterado. Todos os valores da planilha já eram iguais aos do sistema.', 'info')
+        if itens_com_erro:
+            total_erros = len(itens_com_erro)
+            preview_erros = '; '.join(itens_com_erro[:5])
+            if total_erros > 5:
+                preview_erros += f'; e mais {total_erros - 5} erro(s)'
+            flash(f'⚠️ Alguns itens não puderam ser atualizados: {preview_erros}', 'warning')
         
         # Limpar sessão para evitar problema de cookie grande
         session.pop('import_valores_itens_rows', None)
