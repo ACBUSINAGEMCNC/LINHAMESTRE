@@ -621,7 +621,13 @@ def confirmar_importacao_valores_itens(import_id):
             return redirect(url_for('itens.importar_planilha_valores_itens'))
         
         import json
-        ok_rows = json.loads(row[0])
+        dados = row[0]
+        # Se já for uma lista (PostgreSQL/JSONB), usar diretamente
+        # Se for string (SQLite), fazer parse
+        if isinstance(dados, list):
+            ok_rows = dados
+        else:
+            ok_rows = json.loads(dados)
 
     except Exception as e:
         flash(f'Erro ao carregar dados da importação: {e}', 'danger')

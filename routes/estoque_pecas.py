@@ -9,10 +9,36 @@ from sqlalchemy import or_
 from sqlalchemy.exc import ProgrammingError
 from openpyxl import load_workbook
 
-from models import db, EstoquePecas, Item, MovimentacaoEstoquePecas, EstoquePecasSlotTemp
-from utils import validate_form_data, generate_next_code
+from models import db, EstoquePecas, Item, MovimentacaoEstoquePecas, EstoquePecasSlotTemp, Usuario
+from utils import validate_form_data, generate_next_code, get_file_url
 
 estoque_pecas = Blueprint('estoque_pecas', __name__)
+
+# Constantes para verificação de admin master
+ADMIN_MASTER_EMAIL = 'admin@acbusinagem.com.br'
+
+
+def _require_acesso_valores():
+    """Verifica se o usuário tem acesso a valores de itens"""
+    if 'usuario_id' not in session:
+        flash('Por favor, faça login para acessar esta página.', 'warning')
+        return redirect(url_for('auth.login'))
+    
+    usuario = Usuario.query.get(session['usuario_id'])
+    if not usuario:
+        flash('Usuário não encontrado.', 'danger')
+        return redirect(url_for('auth.login'))
+    
+    # Admin master sempre tem acesso
+    if (getattr(usuario, 'email', '') or '').strip().lower() == ADMIN_MASTER_EMAIL and getattr(usuario, 'nivel_acesso', None) == 'admin':
+        return None
+    
+    # Verificar acesso explícito aos valores
+    if not bool(getattr(usuario, 'acesso_valores_itens', False)):
+        flash('Você não tem permissão para acessar valores de itens.', 'danger')
+        return redirect(url_for('index.index'))
+    
+    return None
 
 
 def _parse_date_cell(value):
@@ -1110,3 +1136,95 @@ def movimentacao_rapida(estoque_id, tipo):
         flash(f'Movimentação de {quantidade} item(ns) registrada com sucesso!', 'success')
     
     return redirect(url_for('estoque_pecas.index'))
+
+
+@estoque_pecas.route('/estoque/valores')
+def valores_estoque():
+    """Página de estoque com valores - requer permissão especial"""
+    acesso_negado = _require_acesso_valores()
+    if acesso_negado:
+        return acesso_negado
+    
+    # Buscar todos os itens em estoque com suas quantidades
+    # Usando sintaxe compatível com PostgreSQL
+    from sqlalchemy import func, case, text
+    
+    query = db.session.query(
+        Item.id,
+        Item.codigo_acb,
+        Item.nome,
+        Item.imagem,
+        Item.valor_item,
+        func.coalesce(func.sum(EstoquePecas.quantidade), 0).label('quantidade_total')
+    ).outerjoin(
+        EstoquePecas, Item.id == EstoquePecas.item_id
+    ).group_by(
+        Item.id, Item.codigo_acb, Item.nome, Item.imagem, Item.valor_item
+    ).having(
+        func.sum(EstoquePecas.quantidade) > 0
+    ).order_by(
+        Item.codigo_acb
+    ).all()
+    
+    # Buscar localizações separadamente para evitar problemas com group_concat
+    item_ids = [item.id for item in query]
+    locais_map = {}
+    
+    if item_ids:
+        locais_query = db.session.query(
+            EstoquePecas.item_id,
+            func.concat(
+                'E', EstoquePecas.estante, 
+                'S', EstoquePecas.secao, 
+                'L', EstoquePecas.linha, 
+                'C', EstoquePecas.coluna
+            ).label('local')
+        ).filter(
+            EstoquePecas.item_id.in_(item_ids),
+            EstoquePecas.estante.isnot(None)
+        ).distinct().all()
+        
+        for loc in locais_query:
+            if loc.item_id not in locais_map:
+                locais_map[loc.item_id] = []
+            locais_map[loc.item_id].append(loc.local)
+    
+    # Calcular totais
+    total_pecas = 0
+    total_valor = 0.0
+    
+    itens_estoque = []
+    for item in query:
+        quantidade = int(item.quantidade_total)
+        valor_unitario = float(item.valor_item or 0)
+        valor_total = quantidade * valor_unitario
+        
+        total_pecas += quantidade
+        total_valor += valor_total
+        
+        # Formatar localização usando o mapa de locais
+        locais_lista = locais_map.get(item.id, [])
+        if locais_lista:
+            # Remover duplicados e ordenar
+            locais_unicos = sorted(set(locais_lista))
+            locais = ', '.join(locais_unicos[:3])  # Mostrar até 3 locais
+            if len(locais_unicos) > 3:
+                locais += f' (+{len(locais_unicos) - 3})'
+        else:
+            locais = ''
+        
+        itens_estoque.append({
+            'id': item.id,
+            'codigo_acb': item.codigo_acb,
+            'nome': item.nome,
+            'imagem_url': get_file_url(item.imagem) if item.imagem else None,
+            'quantidade': quantidade,
+            'locais': locais,
+            'valor_unitario': valor_unitario,
+            'valor_total': valor_total
+        })
+    
+    return render_template('estoque_pecas/valores.html', 
+                         itens=itens_estoque,
+                         total_pecas=total_pecas,
+                         total_valor=total_valor)

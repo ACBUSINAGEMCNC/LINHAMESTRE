@@ -54,6 +54,9 @@
                         <ul class="dropdown-menu" aria-labelledby="estoqueDropdown">
                             <li><a class="dropdown-item" href="/estoque">Estoque de Materiais</a></li>
                             <li><a class="dropdown-item" href="/estoque-pecas">Estoque de Peças</a></li>
+                            {% if acesso_valores_itens or usuario_admin_master %}
+                            <li><a class="dropdown-item" href="/estoque/valores"><i class="fas fa-dollar-sign text-success"></i> Estoque com Valores</a></li>
+                            {% endif %}
                             <li><hr class="dropdown-divider"></li>
                             <li><a class="dropdown-item" href="/pedidos-material">Pedidos de Material</a></li>
                             <li><a class="dropdown-item" href="/pedidos-montagem">Pedidos de Montagem</a></li>

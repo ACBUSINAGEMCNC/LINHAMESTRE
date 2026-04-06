@@ -71,50 +71,67 @@ def _table_exists(cur, name: str) -> bool:
     return cur.fetchone() is not None
 
 
+def _resolve_sqlite_db_path(db_path: str = None) -> str:
+    if db_path:
+        return os.path.abspath(db_path)
+
+    env_db_dir = os.getenv('DB_DIR', '').strip()
+    if env_db_dir:
+        return os.path.abspath(os.path.join(env_db_dir, 'database.db'))
+
+    database_url = _get_database_url_from_env()
+    if database_url.lower().startswith('sqlite:///'):
+        raw_path = database_url[len('sqlite:///'):]
+        if raw_path:
+            return os.path.abspath(raw_path)
+
+    repo_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    return os.path.abspath(os.path.join(repo_root, 'database.db'))
+
+
 def migrate_sqlite(db_path: str = None) -> bool:
-    if not db_path:
-        db_dir = os.getenv('DB_DIR', os.path.dirname(os.path.abspath(__file__)))
-        db_path = os.path.join(db_dir, '..', 'database.db')
-        db_path = os.path.abspath(db_path)
+    db_path = _resolve_sqlite_db_path(db_path)
     if not os.path.exists(db_path):
         return False
 
     conn = sqlite3.connect(db_path)
-    cur = conn.cursor()
+    try:
+        cur = conn.cursor()
 
-    def _has_column(table: str, column: str) -> bool:
-        cur.execute(f"PRAGMA table_info({table})")
-        cols = [row[1] for row in cur.fetchall()]
-        return column in cols
+        def _has_column(table: str, column: str) -> bool:
+            cur.execute(f"PRAGMA table_info({table})")
+            cols = [row[1] for row in cur.fetchall()]
+            return column in cols
 
-    changed = False
+        changed = False
 
-    if _table_exists(cur, 'item') and not _has_column('item', 'valor_item'):
-        cur.execute("ALTER TABLE item ADD COLUMN valor_item REAL DEFAULT 0")
-        changed = True
+        if _table_exists(cur, 'item') and not _has_column('item', 'valor_item'):
+            cur.execute("ALTER TABLE item ADD COLUMN valor_item REAL DEFAULT 0")
+            changed = True
 
-    if _table_exists(cur, 'item') and not _has_column('item', 'valor_material'):
-        cur.execute("ALTER TABLE item ADD COLUMN valor_material REAL DEFAULT 0")
-        changed = True
+        if _table_exists(cur, 'item') and not _has_column('item', 'valor_material'):
+            cur.execute("ALTER TABLE item ADD COLUMN valor_material REAL DEFAULT 0")
+            changed = True
 
-    if _table_exists(cur, 'item') and not _has_column('item', 'outros_custos'):
-        cur.execute("ALTER TABLE item ADD COLUMN outros_custos REAL DEFAULT 0")
-        changed = True
+        if _table_exists(cur, 'item') and not _has_column('item', 'outros_custos'):
+            cur.execute("ALTER TABLE item ADD COLUMN outros_custos REAL DEFAULT 0")
+            changed = True
 
-    if _table_exists(cur, 'item') and not _has_column('item', 'imposto_percentual'):
-        cur.execute("ALTER TABLE item ADD COLUMN imposto_percentual REAL DEFAULT 0")
-        changed = True
+        if _table_exists(cur, 'item') and not _has_column('item', 'imposto_percentual'):
+            cur.execute("ALTER TABLE item ADD COLUMN imposto_percentual REAL DEFAULT 0")
+            changed = True
 
-    if _table_exists(cur, 'usuario') and not _has_column('usuario', 'acesso_valores_itens'):
-        cur.execute("ALTER TABLE usuario ADD COLUMN acesso_valores_itens BOOLEAN DEFAULT 0")
-        changed = True
+        if _table_exists(cur, 'usuario') and not _has_column('usuario', 'acesso_valores_itens'):
+            cur.execute("ALTER TABLE usuario ADD COLUMN acesso_valores_itens BOOLEAN DEFAULT 0")
+            changed = True
 
-    if _table_exists(cur, 'usuario'):
-        cur.execute("UPDATE usuario SET acesso_valores_itens = 1 WHERE lower(email) = lower(?)", (ADMIN_EMAIL,))
+        if _table_exists(cur, 'usuario') and _has_column('usuario', 'acesso_valores_itens'):
+            cur.execute("UPDATE usuario SET acesso_valores_itens = 1 WHERE lower(email) = lower(?)", (ADMIN_EMAIL,))
 
-    conn.commit()
-    conn.close()
-    return changed
+        conn.commit()
+        return changed
+    finally:
+        conn.close()
 
 
 if __name__ == '__main__':

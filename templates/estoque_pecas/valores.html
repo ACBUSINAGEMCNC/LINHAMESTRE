@@ -1,0 +1,186 @@
+{% extends "base.html" %}
+
+{% block title %}Estoque com Valores - ACB Usinagem CNC{% endblock %}
+
+{% block extra_css %}
+<style>
+.imagem-miniatura {
+    width: 50px;
+    height: 50px;
+    object-fit: cover;
+    border-radius: 4px;
+    border: 1px solid #dee2e6;
+}
+
+.table-valores th {
+    background-color: #f8f9fa;
+    position: sticky;
+    top: 0;
+    z-index: 10;
+}
+
+.valor-monetario {
+    text-align: right;
+    font-family: 'Courier New', monospace;
+}
+
+.total-geral {
+    background-color: #e7f3ff;
+    font-weight: bold;
+}
+
+@media print {
+    .no-print {
+        display: none !important;
+    }
+    
+    .table-valores {
+        font-size: 12px;
+    }
+    
+    .imagem-miniatura {
+        width: 40px;
+        height: 40px;
+    }
+    
+    .total-geral {
+        background-color: #f0f0f0 !important;
+        -webkit-print-color-adjust: exact !important;
+        print-color-adjust: exact !important;
+    }
+}
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="container-fluid py-4">
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <div>
+            <h1><i class="fas fa-dollar-sign"></i> Estoque com Valores</h1>
+            <p class="text-muted mb-0">Visualização do estoque de peças com valores unitários e totais</p>
+        </div>
+        <div class="no-print">
+            <button onclick="window.print()" class="btn btn-primary">
+                <i class="fas fa-print"></i> Imprimir
+            </button>
+            <a href="{{ url_for('estoque_pecas.index') }}" class="btn btn-secondary">
+                <i class="fas fa-arrow-left"></i> Voltar
+            </a>
+        </div>
+    </div>
+
+    <!-- Resumo Geral -->
+    <div class="row mb-4">
+        <div class="col-md-6">
+            <div class="card border-primary">
+                <div class="card-body text-center">
+                    <h5 class="card-title text-primary">Total de Peças</h5>
+                    <h2 class="mb-0">{{ "{:,}".format(total_pecas).replace(',', '.') }}</h2>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-6">
+            <div class="card border-success">
+                <div class="card-body text-center">
+                    <h5 class="card-title text-success">Valor Total do Estoque</h5>
+                    <h2 class="mb-0">R$ {{ "{:,.2f}".format(total_valor).replace(',', 'X').replace('.', ',').replace('X', '.') }}</h2>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Tabela de Estoque com Valores -->
+    <div class="card">
+        <div class="card-header">
+            <h5 class="mb-0"><i class="fas fa-list"></i> Relação de Peças em Estoque</h5>
+        </div>
+        <div class="card-body p-0">
+            <div class="table-responsive">
+                <table class="table table-striped table-hover table-valores mb-0">
+                    <thead>
+                        <tr>
+                            <th width="60">Imagem</th>
+                            <th>Código</th>
+                            <th>Nome do Item</th>
+                            <th class="text-center" width="100">Qtd. Estoque</th>
+                            <th width="150">Localização</th>
+                            <th class="valor-monetario" width="120">Valor Unit.</th>
+                            <th class="valor-monetario" width="140">Valor Total</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for item in itens %}
+                        <tr>
+                            <td class="text-center">
+                                {% if item.imagem_url %}
+                                <img src="{{ item.imagem_url }}" alt="{{ item.nome }}" class="imagem-miniatura" 
+                                     onerror="this.src='/static/images/no-image.png'">
+                                {% else %}
+                                <div class="imagem-miniatura d-flex align-items-center justify-content-center bg-light">
+                                    <i class="fas fa-image text-muted"></i>
+                                </div>
+                                {% endif %}
+                            </td>
+                            <td><strong>{{ item.codigo_acb }}</strong></td>
+                            <td>{{ item.nome }}</td>
+                            <td class="text-center">
+                                <span class="badge bg-info">{{ "{:,}".format(item.quantidade).replace(',', '.') }}</span>
+                            </td>
+                            <td>
+                                {% if item.locais %}
+                                <small class="text-muted">{{ item.locais }}</small>
+                                {% else %}
+                                <span class="text-muted">-</span>
+                                {% endif %}
+                            </td>
+                            <td class="valor-monetario">
+                                {% if item.valor_unitario > 0 %}
+                                R$ {{ "{:,.2f}".format(item.valor_unitario).replace(',', 'X').replace('.', ',').replace('X', '.') }}
+                                {% else %}
+                                <span class="text-muted">-</span>
+                                {% endif %}
+                            </td>
+                            <td class="valor-monetario">
+                                {% if item.valor_total > 0 %}
+                                <strong>R$ {{ "{:,.2f}".format(item.valor_total).replace(',', 'X').replace('.', ',').replace('X', '.') }}</strong>
+                                {% else %}
+                                <span class="text-muted">-</span>
+                                {% endif %}
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                    <tfoot>
+                        <tr class="total-geral">
+                            <th colspan="3" class="text-end">TOTAL GERAL:</th>
+                            <th class="text-center">{{ "{:,}".format(total_pecas).replace(',', '.') }}</th>
+                            <th></th>
+                            <th></th>
+                            <th class="valor-monetario">
+                                <strong>R$ {{ "{:,.2f}".format(total_valor).replace(',', 'X').replace('.', ',').replace('X', '.') }}</strong>
+                            </th>
+                        </tr>
+                    </tfoot>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <!-- Informações de Rodapé -->
+    <div class="mt-4 text-center text-muted no-print">
+        <small>
+            <i class="fas fa-info-circle"></i> 
+            Valores calculados com base no preço unitário de cada item multiplicado pela quantidade em estoque.
+            <br>
+            Localização: E=Estante, S=Seção, L=Linha, C=Coluna
+        </small>
+    </div>
+</div>
+
+<script>
+// Auto-refresh a cada 5 minutos (opcional)
+// setTimeout(() => {
+//     window.location.reload();
+// }, 300000);
+</script>
+{% endblock %}
