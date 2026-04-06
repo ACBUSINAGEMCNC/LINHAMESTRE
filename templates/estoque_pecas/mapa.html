@@ -11,18 +11,19 @@
     <style>
         .grid {
             display: grid;
-            grid-template-columns: repeat(6, minmax(0, 1fr));
-            gap: 6px;
+            grid-template-columns: repeat(12, minmax(0, 1fr));
+            gap: 4px;
             justify-content: stretch;
         }
         .cell {
             border: 1px solid #dee2e6;
-            border-radius: 10px;
-            padding: 6px;
+            border-radius: 8px;
+            padding: 4px;
             background: #fff;
-            min-height: 66px;
+            min-height: 55px;
             cursor: pointer;
             transition: transform .08s ease, box-shadow .08s ease;
+            font-size: 9px;
         }
         .cell:hover {
             transform: translateY(-1px);
@@ -32,30 +33,31 @@
             background: #f8f9fa;
         }
         .cell .code {
-            font-size: 11px;
+            font-size: 9px;
             font-weight: 700;
-            line-height: 1.1;
+            line-height: 1.0;
         }
         .cell .name {
-            font-size: 10px;
+            font-size: 8px;
             color: #6c757d;
-            line-height: 1.1;
-            margin-top: 2px;
-            max-height: 24px;
+            line-height: 1.0;
+            margin-top: 1px;
+            max-height: 18px;
             overflow: hidden;
         }
         .thumb {
             width: 100%;
-            height: 28px;
+            height: 20px;
             object-fit: cover;
-            border-radius: 8px;
+            border-radius: 4px;
             border: 1px solid #e9ecef;
-            margin-bottom: 4px;
+            margin-bottom: 2px;
             background: #fff;
         }
         .secao-title {
             font-weight: 800;
             margin-bottom: 8px;
+            font-size: 14px;
         }
         .cell.highlight {
             outline: 3px solid rgba(13,110,253,.35);
@@ -64,6 +66,32 @@
         .cell.dim {
             opacity: .25;
         }
+        .cell.back-half {
+            background: linear-gradient(135deg, #f8f9fa 0%, #e9ecef 100%);
+            border-left: 2px solid #dee2e6;
+        }
+        .cell.back-half .cell-label {
+            position: absolute;
+            top: 1px;
+            right: 1px;
+            font-size: 6px;
+            color: #6c757d;
+            font-weight: 600;
+            background: rgba(248, 249, 250, 0.8);
+            padding: 1px 3px;
+            border-radius: 2px;
+        }
+        .cell:not(.back-half) .cell-label {
+            position: absolute;
+            top: 1px;
+            right: 1px;
+            font-size: 6px;
+            color: #6c757d;
+            font-weight: 600;
+            background: rgba(255, 255, 255, 0.8);
+            padding: 1px 3px;
+            border-radius: 2px;
+        }
 
         .floating-ok {
             position: fixed;
@@ -71,6 +99,34 @@
             bottom: 18px;
             z-index: 2000;
             display: none;
+        }
+        .linha-label {
+            font-size: 10px;
+            color: #6c757d;
+            margin-bottom: 4px;
+            font-weight: 600;
+        }
+        .grid-container {
+            position: relative;
+        }
+        .grid-divider {
+            position: absolute;
+            left: 50%;
+            top: 0;
+            bottom: 0;
+            width: 2px;
+            background: #dee2e6;
+            z-index: 1;
+            transform: translateX(-50%);
+        }
+        .grid-labels {
+            display: grid;
+            grid-template-columns: repeat(12, minmax(0, 1fr));
+            gap: 4px;
+            margin-bottom: 4px;
+            font-size: 8px;
+            color: #adb5bd;
+            text-align: center;
         }
     </style>
 </head>
@@ -135,6 +191,18 @@
                         Digite para destacar no mapa. Limpe o campo para voltar ao normal.
                     </div>
                 </div>
+                <div class="mt-3 p-2 bg-light rounded">
+                    <div class="row g-2 text-center">
+                        <div class="col-12 col-md-6">
+                            <div class="fw-semibold">Linha 1:</div>
+                            <div class="small">Slots 1-6 (frente) | Slots 7-12 (trás)</div>
+                        </div>
+                        <div class="col-12 col-md-6">
+                            <div class="fw-semibold">Linha 2:</div>
+                            <div class="small">Slots 13-18 (frente) | Slots 19-24 (trás)</div>
+                        </div>
+                    </div>
+                </div>
                 <div id="mapSearchResults" class="mt-3" style="display:none;">
                     <div class="fw-semibold mb-2">Resultados (todas as estantes)</div>
                     <div class="list-group" id="mapSearchList"></div>
@@ -150,48 +218,69 @@
                         <div class="secao-title">Seção {{ sec }}</div>
 
                         {% for lin in range(1, 3) %}
-                        <div class="mb-2">
-                            <div class="text-muted small mb-1">Linha {{ lin }}</div>
-                            <div class="grid">
-                                {% for col in range(1, 7) %}
-                                    {% set key = (sec, lin, col) %}
-                                    {% set items = ocupados_map.get(key) %}
-                                    {% set t = temp_map.get(key) if temp_map is defined else None %}
-                                    {% set e = items[0] if items else None %}
-                                    <div class="cell {% if not e and not t %}empty{% endif %}"
-                                         id="cell-{{ sec }}-{{ lin }}-{{ col }}"
-                                         data-secao="{{ sec }}"
-                                         data-linha="{{ lin }}"
-                                         data-coluna="{{ col }}"
-                                         data-estoque-id="{{ e.id if e else '' }}"
-                                         data-count="{{ items|length if items else 0 }}"
-                                         data-temp-id="{{ t.id if t else '' }}"
-                                         data-temp-nome="{{ t.nome if t and t.nome else '' }}"
-                                         data-codigo="{{ e.item.codigo_acb if e and e.item and e.item.codigo_acb else '' }}"
-                                         data-nome="{{ e.item.nome if e and e.item and e.item.nome else '' }}"
-                                         data-imagem="{{ e.item.imagem_path if e and e.item and e.item.imagem_path else '' }}"
-                                         data-pdf="{{ url_for('itens.desenho_pdf_item', item_id=e.item.id) if e and e.item and e.item.desenho_tecnico else '' }}">
-                                        {% if e %}
-                                            {% if e.item and e.item.imagem_path %}
-                                            <img class="thumb" src="{{ e.item.imagem_path }}" alt="Imagem" onerror="this.style.display='none';">
-                                            {% endif %}
-                                            <div class="code">{{ e.item.codigo_acb if e.item else '---' }}</div>
-                                            <div class="name">{{ e.item.nome if e.item else '' }}</div>
-                                            {% if items and (items|length) > 1 %}
-                                                <div class="mt-1"><span class="badge bg-primary">+{{ (items|length) - 1 }}</span></div>
-                                            {% endif %}
-                                        {% else %}
-                                            {% if t %}
-                                                <div class="fw-semibold" style="font-size: 11px;">TEMP</div>
-                                                <div class="text-muted" style="font-size: 10px;">{{ t.nome if t and t.nome else 'Temporário' }}</div>
-                                                <div class="mt-1"><span class="badge bg-warning text-dark">{{ estante }}-{{ ['A','B','C','D'][sec-1] }}-{{ (lin-1)*6 + col }}</span></div>
+                        <div class="mb-3">
+                            <div class="linha-label">Linha {{ lin }}</div>
+                            {% if lin == 1 %}
+                            <div class="grid-labels">
+                                <div>1</div><div>2</div><div>3</div><div>4</div><div>5</div><div>6</div>
+                                <div>7</div><div>8</div><div>9</div><div>10</div><div>11</div><div>12</div>
+                            </div>
+                            {% else %}
+                            <div class="grid-labels">
+                                <div>13</div><div>14</div><div>15</div><div>16</div><div>17</div><div>18</div>
+                                <div>19</div><div>20</div><div>21</div><div>22</div><div>23</div><div>24</div>
+                            </div>
+                            {% endif %}
+                            <div class="grid-container">
+                                <div class="grid-divider"></div>
+                                <div class="grid">
+                                    {% for col in range(1, 13) %}
+                                        {% set key = (sec, lin, col) %}
+                                        {% set items = ocupados_map.get(key) %}
+                                        {% set t = temp_map.get(key) if temp_map is defined else None %}
+                                        {% set e = items[0] if items else None %}
+                                        {% set is_back = col > 6 %}
+                                        {% set slot_num = (lin-1)*12 + col %}
+                                        <div class="cell {% if not e and not t %}empty{% endif %} {% if is_back %}back-half{% endif %}"
+                                             id="cell-{{ sec }}-{{ lin }}-{{ col }}"
+                                             data-secao="{{ sec }}"
+                                             data-linha="{{ lin }}"
+                                             data-coluna="{{ col }}"
+                                             data-estoque-id="{{ e.id if e else '' }}"
+                                             data-count="{{ items|length if items else 0 }}"
+                                             data-temp-id="{{ t.id if t else '' }}"
+                                             data-temp-nome="{{ t.nome if t and t.nome else '' }}"
+                                             data-codigo="{{ e.item.codigo_acb if e and e.item and e.item.codigo_acb else '' }}"
+                                             data-nome="{{ e.item.nome if e and e.item and e.item.nome else '' }}"
+                                             data-imagem="{{ e.item.imagem_path if e and e.item and e.item.imagem_path else '' }}"
+                                             data-pdf="{{ url_for('itens.desenho_pdf_item', item_id=e.item.id) if e and e.item and e.item.desenho_tecnico else '' }}">
+                                            {% if is_back %}
+                                            <div class="cell-label">TRÁS</div>
                                             {% else %}
-                                                <div class="text-muted small">Vazio</div>
-                                                <div class="text-muted" style="font-size: 10px;">{{ estante }}-{{ ['A','B','C','D'][sec-1] }}-{{ (lin-1)*6 + col }}</div>
+                                            <div class="cell-label">FRENTE</div>
                                             {% endif %}
-                                        {% endif %}
-                                    </div>
-                                {% endfor %}
+                                            {% if e %}
+                                                {% if e.item and e.item.imagem_path %}
+                                                <img class="thumb" src="{{ e.item.imagem_path }}" alt="Imagem" onerror="this.style.display='none';">
+                                                {% endif %}
+                                                <div class="code">{{ e.item.codigo_acb if e.item else '---' }}</div>
+                                                <div class="name">{{ e.item.nome if e.item else '' }}</div>
+                                                {% if items and (items|length) > 1 %}
+                                                    <div class="mt-1"><span class="badge bg-primary" style="font-size: 7px;">+{{ (items|length) - 1 }}</span></div>
+                                                {% endif %}
+                                            {% else %}
+                                                {% if t %}
+                                                    <div class="fw-semibold" style="font-size: 8px;">TEMP</div>
+                                                    <div class="text-muted" style="font-size: 7px;">{{ t.nome if t and t.nome else 'Temporário' }}</div>
+                                                    <div class="mt-1"><span class="badge bg-warning text-dark" style="font-size: 7px;">{{ estante }}-{{ ['A','B','C','D'][sec-1] }}-{{ slot_num }}</span></div>
+                                                {% else %}
+                                                    <div class="text-muted small" style="font-size: 7px;">Vazio</div>
+                                                    <div class="text-muted" style="font-size: 6px;">{{ estante }}-{{ ['A','B','C','D'][sec-1] }}-{{ slot_num }}</div>
+                                                {% endif %}
+                                            {% endif %}
+                                        </div>
+                                    {% endfor %}
+                                </div>
                             </div>
                         </div>
                         {% endfor %}

@@ -1011,9 +1011,8 @@ def atualizar_localizacao(estoque_id):
     if request.method == 'POST':
         estante = request.form.get('estante')
         secao = request.form.get('secao')
-        linha = request.form.get('linha')
-        coluna = request.form.get('coluna')
-        coluna_fim = request.form.get('coluna_fim')
+        slot = request.form.get('slot')
+        slot_fim = request.form.get('slot_fim')
         permitir_compartilhado = (request.form.get('permitir_compartilhado') or '').strip().lower() in ('1', 'true', 'yes', 'sim', 'on')
 
         def _to_int(v):
@@ -1029,61 +1028,138 @@ def atualizar_localizacao(estoque_id):
 
         estante_i = _to_int(estante)
         secao_i = _to_int(secao)
-        linha_i = _to_int(linha)
-        coluna_i = _to_int(coluna)
-        coluna_fim_i = _to_int(coluna_fim)
+        slot_i = _to_int(slot)
+        slot_fim_i = _to_int(slot_fim)
+
+        # Converter slot para linha e coluna
+        if slot_i:
+            if slot_i < 1 or slot_i > 24:
+                flash('Slot inválido (use 1 a 24).', 'warning')
+                return redirect(url_for('estoque_pecas.index'))
+            
+            # Calcular linha e coluna a partir do slot
+            if slot_i <= 12:
+                linha_i = 1
+                coluna_i = slot_i
+            else:
+                linha_i = 2
+                coluna_i = slot_i - 12
+        else:
+            linha_i = None
+            coluna_i = None
+
+        # Converter slot_fim para linha_fim e coluna_fim
+        if slot_fim_i:
+            if slot_fim_i < 1 or slot_fim_i > 24:
+                flash('Slot final inválido (use 1 a 24).', 'warning')
+                return redirect(url_for('estoque_pecas.index'))
+            
+            if slot_fim_i <= 12:
+                linha_fim_i = 1
+                coluna_fim_i = slot_fim_i
+            else:
+                linha_fim_i = 2
+                coluna_fim_i = slot_fim_i - 12
+        else:
+            linha_fim_i = None
+            coluna_fim_i = None
 
         if estante_i and secao_i and linha_i and coluna_i:
-            if coluna_i < 1 or coluna_i > 6:
-                flash('Coluna inválida para o mapa (use 1 a 6).', 'warning')
-                return redirect(url_for('estoque_pecas.index'))
-
+            # Validação de coluna já foi feita acima
             if coluna_fim_i is not None:
                 if coluna_fim_i < coluna_i:
                     coluna_fim_i = coluna_i
-                if coluna_fim_i < 1 or coluna_fim_i > 6:
-                    flash('Coluna final inválida para o mapa (use 1 a 6).', 'warning')
+                if coluna_fim_i < 1 or coluna_fim_i > 12:
+                    flash('Coluna final inválida para o mapa (use 1 a 12).', 'warning')
                     return redirect(url_for('estoque_pecas.index'))
 
-            col_fim_check = coluna_fim_i if coluna_fim_i is not None else coluna_i
-            col_ini_check = coluna_i
-            ocupacoes = (
-                EstoquePecas.query
-                .filter(
-                    EstoquePecas.estante == estante_i,
-                    EstoquePecas.secao == secao_i,
-                    EstoquePecas.linha == linha_i,
-                    EstoquePecas.id != estoque_item.id,
+            # Para múltiplas linhas, verificar cada linha separadamente
+            if linha_fim_i and linha_fim_i != linha_i:
+                # Verificar conflitos em todas as linhas entre linha_i e linha_fim_i
+                for check_linha in range(min(linha_i, linha_fim_i), max(linha_i, linha_fim_i) + 1):
+                    col_ini_check = coluna_i if check_linha == linha_i else 1
+                    col_fim_check = coluna_fim_i if check_linha == linha_fim_i else 12
+                    
+                    ocupacoes_linha = (
+                        EstoquePecas.query
+                        .filter(
+                            EstoquePecas.estante == estante_i,
+                            EstoquePecas.secao == secao_i,
+                            EstoquePecas.linha == check_linha,
+                            EstoquePecas.id != estoque_item.id
+                        )
+                        .all()
+                    )
+
+                    def _ranges_overlap(a1, a2, b1, b2):
+                        return max(a1, b1) <= min(a2, b2)
+
+                    conflita = []
+                    for o in ocupacoes_linha:
+                        o_ini = int(o.coluna) if o.coluna else None
+                        if not o_ini:
+                            continue
+                        o_fim = int(o.coluna_fim) if getattr(o, 'coluna_fim', None) else o_ini
+                        o_fim = max(o_ini, min(o_fim, 12))
+                        if _ranges_overlap(col_ini_check, col_fim_check, o_ini, o_fim):
+                            conflita.append(o)
+
+                    if conflita:
+                        if not permitir_compartilhado:
+                            flash('Esta posição já está ocupada por outro item. Marque "Permitir compartilhado" para permitir mais de um item no mesmo slot.', 'warning')
+                            return redirect(url_for('estoque_pecas.index'))
+                        if any(not getattr(o, 'permitir_compartilhado', False) for o in conflita):
+                            flash('Esta posição já tem item(s) que não permitem compartilhamento. Ajuste o(s) item(ns) existente(s) para permitir compartilhamento antes.', 'warning')
+                            return redirect(url_for('estoque_pecas.index'))
+            else:
+                # Verificação normal para mesma linha
+                col_fim_check = coluna_fim_i if coluna_fim_i is not None else coluna_i
+                col_ini_check = coluna_i
+                ocupacoes = (
+                    EstoquePecas.query
+                    .filter(
+                        EstoquePecas.estante == estante_i,
+                        EstoquePecas.secao == secao_i,
+                        EstoquePecas.linha == linha_i,
+                        EstoquePecas.id != estoque_item.id
+                    )
+                    .all()
                 )
-                .all()
-            )
 
-            def _ranges_overlap(a1, a2, b1, b2):
-                return max(a1, b1) <= min(a2, b2)
+                def _ranges_overlap(a1, a2, b1, b2):
+                    return max(a1, b1) <= min(a2, b2)
 
-            conflita = []
-            for o in ocupacoes:
-                o_ini = int(o.coluna) if o.coluna else None
-                if not o_ini:
-                    continue
-                o_fim = int(o.coluna_fim) if getattr(o, 'coluna_fim', None) else o_ini
-                o_fim = max(o_ini, min(o_fim, 6))
-                if _ranges_overlap(col_ini_check, col_fim_check, o_ini, o_fim):
-                    conflita.append(o)
+                conflita = []
+                for o in ocupacoes:
+                    o_ini = int(o.coluna) if o.coluna else None
+                    if not o_ini:
+                        continue
+                    o_fim = int(o.coluna_fim) if getattr(o, 'coluna_fim', None) else o_ini
+                    o_fim = max(o_ini, min(o_fim, 12))
+                    if _ranges_overlap(col_ini_check, col_fim_check, o_ini, o_fim):
+                        conflita.append(o)
 
-            if conflita:
-                if not permitir_compartilhado:
-                    flash('Esta posição já está ocupada por outro item. Marque "Permitir compartilhado" para permitir mais de um item no mesmo slot.', 'warning')
-                    return redirect(url_for('estoque_pecas.index'))
-                if any(not getattr(o, 'permitir_compartilhado', False) for o in conflita):
-                    flash('Esta posição já tem item(s) que não permitem compartilhamento. Ajuste o(s) item(ns) existente(s) para permitir compartilhamento antes.', 'warning')
-                    return redirect(url_for('estoque_pecas.index'))
+                if conflita:
+                    if not permitir_compartilhado:
+                        flash('Esta posição já está ocupada por outro item. Marque "Permitir compartilhado" para permitir mais de um item no mesmo slot.', 'warning')
+                        return redirect(url_for('estoque_pecas.index'))
+                    if any(not getattr(o, 'permitir_compartilhado', False) for o in conflita):
+                        flash('Esta posição já tem item(s) que não permitem compartilhamento. Ajuste o(s) item(ns) existente(s) para permitir compartilhamento antes.', 'warning')
+                        return redirect(url_for('estoque_pecas.index'))
 
         estoque_item.estante = estante_i
         estoque_item.secao = secao_i
         estoque_item.linha = linha_i
         estoque_item.coluna = coluna_i
+        estoque_item.linha_fim = linha_fim_i
         estoque_item.coluna_fim = coluna_fim_i
+        # Posição é determinada automaticamente pela coluna (1-6=frente, 7-12=trás)
+        if coluna_i and coluna_i <= 6:
+            estoque_item.posicao = 'frente'
+        elif coluna_i and coluna_i > 6:
+            estoque_item.posicao = 'tras'
+        else:
+            estoque_item.posicao = None
         estoque_item.permitir_compartilhado = permitir_compartilhado
         
         db.session.commit()
