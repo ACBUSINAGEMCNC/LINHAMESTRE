@@ -114,9 +114,10 @@
                                     {% for item in pedido.itens %}
                                         <tr>
                                             <td>
-                                                <div class="fw-bold">{{ item.material.nome }}</div>
+                                                <div class="fw-bold">{{ item.descricao_exibicao_material }}</div>
                                                 <div class="pm-item-col" style="margin-top: 6px;">
-                                                    {% set itens_rel = material_item_map.get(item.material_id) if material_item_map is defined else None %}
+                                                    {% set item_map_key = item.material_id if item.material_id else item.id %}
+                                                    {% set itens_rel = material_item_map.get(item_map_key) if material_item_map is defined else None %}
                                                     {% if itens_rel %}
                                                         {% for it in itens_rel %}
                                                             <div class="d-flex align-items-center gap-2 mb-1">
@@ -134,7 +135,7 @@
                                                     {% endif %}
                                                 </div>
                                                 <div class="text-muted" style="font-size: 12px;">
-                                                    {% if item.material.especifico %}
+                                                    {% if item.usa_quantidade %}
                                                         Qtd: {{ item.quantidade or 0 }}
                                                     {% else %}
                                                         Metros: {{ ((item.comprimento or 0)/1000.0) | round(2) }}
@@ -174,7 +175,7 @@
                                                             <input type="number" step="1" min="0" class="form-control {% if melhor_pagamento %}border-warning{% endif %}" name="pagamento_{{ c.id }}_{{ item.id }}" value="{{ ci.prazo_pagamento_dias if ci else '' }}">
                                                         </div>
 
-                                                        {% if item.material.especifico %}
+                                                        {% if item.usa_quantidade %}
                                                             <div class="col-12">
                                                                 <label class="form-label mb-0" style="font-size: 12px;">Rateio (qtd escolhida)</label>
                                                                 <input type="number" step="1" min="0" class="form-control" name="qtd_escolhida_{{ c.id }}_{{ item.id }}" value="{{ ci.quantidade_escolhida if ci else '' }}">

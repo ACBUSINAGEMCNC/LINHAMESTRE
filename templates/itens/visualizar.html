@@ -319,7 +319,28 @@
                         </div>
                         {% endif %}
 
-                        {% if not item.desenho_tecnico and not item.imagem and not item.instrucoes_trabalho %}
+                        {% if item.blank_laser %}
+                        <div class="mb-3">
+                            <h6><i class="fas fa-file-code"></i> Blank de Laser</h6>
+                            <div class="alert alert-info small">
+                                <strong>Tipo de Bruto:</strong> {{ item.tipo_bruto }}<br>
+                                <strong>Material:</strong> {{ item.material_laser or '-' }}<br>
+                                <strong>Espessura:</strong> {{ item.espessura_laser or '-' }}<br>
+                                <strong>Arquivo DXF:</strong> Blank para corte a laser
+                            </div>
+                            <a href="{{ item.blank_laser_path }}" class="btn btn-sm btn-outline-success" target="_blank" download>
+                                <i class="fas fa-download"></i> Download DXF
+                            </a>
+                            {% if usuario_nivel == 'admin' %}
+                            <a href="/itens/remover-blank-laser/{{ item.id }}" class="btn btn-sm btn-outline-danger" 
+                               onclick="return confirm('Tem certeza que deseja remover o arquivo DXF?')">
+                                <i class="fas fa-trash"></i> Remover
+                            </a>
+                            {% endif %}
+                        </div>
+                        {% endif %}
+
+                        {% if not item.desenho_tecnico and not item.imagem and not item.instrucoes_trabalho and not item.blank_laser %}
                         <p class="text-muted">Nenhum arquivo cadastrado para este item.</p>
                         {% endif %}
                     </div>

@@ -276,6 +276,42 @@ def verificar_inicializar_banco():
                 logger.warning("Supabase sem conexões disponíveis (Max client connections reached). Pulando demais migrações de startup.")
                 return
             logger.warning(f"Erro ao migrar coluna tipo_bruto: {str(col_err)}")
+
+        try:
+            from migrations.add_blank_laser_item import migrate_postgres as migrate_blank_laser_postgres
+            if migrate_blank_laser_postgres():
+                logger.info("Coluna blank_laser verificada/adicionada com sucesso.")
+            else:
+                logger.warning("Falha ao verificar/adicionar coluna blank_laser.")
+        except Exception as col_err:
+            if _is_max_connections_error(col_err):
+                logger.warning("Supabase sem conexões disponíveis (Max client connections reached). Pulando demais migrações de startup.")
+                return
+            logger.warning(f"Erro ao migrar coluna blank_laser: {str(col_err)}")
+
+        try:
+            from migrations.add_laser_material_fields_item import migrate_postgres as migrate_laser_material_fields_postgres
+            if migrate_laser_material_fields_postgres():
+                logger.info("Colunas material_laser/espessura_laser verificadas/adicionadas com sucesso.")
+            else:
+                logger.warning("Falha ao verificar/adicionar colunas material_laser/espessura_laser.")
+        except Exception as col_err:
+            if _is_max_connections_error(col_err):
+                logger.warning("Supabase sem conexões disponíveis (Max client connections reached). Pulando demais migrações de startup.")
+                return
+            logger.warning(f"Erro ao migrar colunas material_laser/espessura_laser: {str(col_err)}")
+
+        try:
+            from migrations.add_laser_fields_item_pedido_material import migrate_postgres as migrate_item_pedido_material_laser_postgres
+            if migrate_item_pedido_material_laser_postgres():
+                logger.info("Estrutura de item_pedido_material para laser verificada/adicionada com sucesso.")
+            else:
+                logger.warning("Falha ao verificar/adicionar estrutura de item_pedido_material para laser.")
+        except Exception as col_err:
+            if _is_max_connections_error(col_err):
+                logger.warning("Supabase sem conexões disponíveis (Max client connections reached). Pulando demais migrações de startup.")
+                return
+            logger.warning(f"Erro ao migrar estrutura de item_pedido_material para laser: {str(col_err)}")
             
         # Executar migração para adicionar coluna tamanho_peca em Item
         try:
@@ -450,6 +486,32 @@ def verificar_inicializar_banco():
                             logger.info("Coluna tipo_bruto adicionada com sucesso à tabela item.")
                         else:
                             logger.warning("Falha ao adicionar coluna tipo_bruto à tabela item.")
+                    if 'blank_laser' not in item_columns:
+                        logger.info("Coluna blank_laser não encontrada na tabela item. Executando migração...")
+                        from migrations.add_blank_laser_item import migrate_sqlite as migrate_blank_laser_sqlite
+                        if migrate_blank_laser_sqlite():
+                            logger.info("Coluna blank_laser adicionada com sucesso à tabela item.")
+                        else:
+                            logger.warning("Falha ao adicionar coluna blank_laser à tabela item.")
+                    if 'material_laser' not in item_columns or 'espessura_laser' not in item_columns:
+                        logger.info("Colunas material_laser/espessura_laser não encontradas na tabela item. Executando migração...")
+                        from migrations.add_laser_material_fields_item import migrate_sqlite as migrate_laser_material_fields_sqlite
+                        if migrate_laser_material_fields_sqlite():
+                            logger.info("Colunas material_laser/espessura_laser adicionadas com sucesso à tabela item.")
+                        else:
+                            logger.warning("Falha ao adicionar colunas material_laser/espessura_laser à tabela item.")
+
+                    cursor.execute("PRAGMA table_info(item_pedido_material)")
+                    item_pedido_material_columns = [column[1] for column in cursor.fetchall()]
+                    item_pedido_material_material_col = next((column for column in cursor.execute("PRAGMA table_info(item_pedido_material)").fetchall() if column[1] == 'material_id'), None)
+                    item_pedido_material_material_notnull = bool(item_pedido_material_material_col and item_pedido_material_material_col[3] == 1)
+                    if 'descricao_material' not in item_pedido_material_columns or 'item_origem_id' not in item_pedido_material_columns or item_pedido_material_material_notnull:
+                        logger.info("Estrutura de item_pedido_material para laser não encontrada/completa. Executando migração...")
+                        from migrations.add_laser_fields_item_pedido_material import migrate_sqlite as migrate_item_pedido_material_laser_sqlite
+                        if migrate_item_pedido_material_laser_sqlite():
+                            logger.info("Estrutura de item_pedido_material para laser ajustada com sucesso.")
+                        else:
+                            logger.warning("Falha ao ajustar estrutura de item_pedido_material para laser.")
                     if 'tamanho_peca' not in item_columns:
                         logger.info("Coluna tamanho_peca não encontrada na tabela item. Executando migração...")
                         from migrations.add_tamanho_peca_item import migrate_sqlite as migrate_tamanho_peca_sqlite
@@ -1080,7 +1142,7 @@ def create_app():
             # Detectar se o caminho já inclui o bucket como primeiro segmento.
             # Mantém compatibilidade com caminhos antigos: 'imagens/arquivo.jpg'
             # e novos: '<bucket>/imagens/arquivo.jpg'
-            KNOWN_FOLDERS = {'imagens', 'desenhos', 'instrucoes', 'cnc_files', 'maquinas', 'castanhas', 'gabaritos', 'folhas_processo'}
+            KNOWN_FOLDERS = {'imagens', 'desenhos', 'instrucoes', 'cnc_files', 'maquinas', 'castanhas', 'gabaritos', 'folhas_processo', 'blank_laser'}
             parts = path_clean.split('/', 1)
             if len(parts) > 1 and parts[0] not in KNOWN_FOLDERS:
                 bucket = parts[0]

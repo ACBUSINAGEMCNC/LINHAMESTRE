@@ -85,7 +85,37 @@
                                 <option value="CORTAR POR PEÇA">
                                 <option value="MATERIAL FUNDIDO PINTADO">
                                 <option value="MATERIAL FUNDIDO">
+                                <option value="LASER">
                             </datalist>
+                        </div>
+                    </div>
+
+                    <!-- Campo para Blank de Laser (aparece quando tipo_bruto = LASER) -->
+                    <div class="row mb-3" id="blank_laser_container" style="display: none;">
+                        <div class="col-md-8">
+                            <label for="material_laser" class="form-label">
+                                <i class="fas fa-layer-group"></i> Material do Corte Laser
+                            </label>
+                            <input type="text" class="form-control" id="material_laser" name="material_laser"
+                                   placeholder="Ex.: Chapa de aço 1045">
+                        </div>
+                        <div class="col-md-4">
+                            <label for="espessura_laser" class="form-label">
+                                <i class="fas fa-ruler-combined"></i> Espessura
+                            </label>
+                            <input type="text" class="form-control" id="espessura_laser" name="espessura_laser"
+                                   placeholder="Ex.: 8mm">
+                        </div>
+                        <div class="col-md-12">
+                            <label for="blank_laser" class="form-label">
+                                <i class="fas fa-file-code"></i> Blank de Laser (Arquivo DXF)
+                            </label>
+                            <input type="file" class="form-control" id="blank_laser" name="blank_laser" 
+                                   accept=".dxf,.DXF" onchange="validateDXFFile(this)">
+                            <div class="form-text">
+                                Envie o arquivo DXF do blank para corte a laser. Formato aceito: .DXF
+                            </div>
+                            <div id="blank_laser_preview" class="mt-2"></div>
                         </div>
                     </div>
 
@@ -897,6 +927,49 @@
                     $('#tipo_zincagem').val('');
                 }
             });
+
+            // Controle do campo Blank de Laser
+            $('#tipo_bruto').on('input change', function() {
+                const tipoBruto = $(this).val().toUpperCase();
+                const blankLaserContainer = $('#blank_laser_container');
+                
+                if (tipoBruto === 'LASER') {
+                    blankLaserContainer.show();
+                    $('#blank_laser').prop('required', true);
+                } else {
+                    blankLaserContainer.hide();
+                    $('#blank_laser').prop('required', false);
+                    $('#blank_laser').val('');
+                    $('#blank_laser_preview').html('');
+                }
+            });
+
+            // Validação do arquivo DXF
+            window.validateDXFFile = function(input) {
+                const file = input.files[0];
+                const preview = document.getElementById('blank_laser_preview');
+                
+                if (file) {
+                    // Verificar extensão
+                    const fileName = file.name.toLowerCase();
+                    if (!fileName.endsWith('.dxf')) {
+                        preview.innerHTML = '<div class="alert alert-danger">Por favor, selecione um arquivo DXF válido.</div>';
+                        input.value = '';
+                        return;
+                    }
+                    
+                    // Verificar tamanho (máximo 10MB)
+                    if (file.size > 10 * 1024 * 1024) {
+                        preview.innerHTML = '<div class="alert alert-danger">Arquivo muito grande. Tamanho máximo: 10MB.</div>';
+                        input.value = '';
+                        return;
+                    }
+                    
+                    preview.innerHTML = '<div class="alert alert-success"><i class="fas fa-check-circle"></i> Arquivo "' + file.name + '" carregado com sucesso (' + (file.size / 1024).toFixed(2) + ' KB)</div>';
+                } else {
+                    preview.innerHTML = '';
+                }
+            };
         });
     </script>
 </body>

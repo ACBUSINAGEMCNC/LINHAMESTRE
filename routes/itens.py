@@ -738,6 +738,8 @@ def novo_item():
             tipo_item=tipo_item,
             categoria_montagem=categoria_montagem,
             tipo_bruto=request.form.get('tipo_bruto', ''),
+            material_laser=request.form.get('material_laser', ''),
+            espessura_laser=request.form.get('espessura_laser', ''),
             tamanho_peca=request.form.get('tamanho_peca', ''),
             tempera='tempera' in request.form,
             tipo_tempera=request.form.get('tipo_tempera', ''),
@@ -782,6 +784,18 @@ def novo_item():
         
         if 'instrucoes_trabalho' in request.files:
             item.instrucoes_trabalho = save_file(request.files['instrucoes_trabalho'], 'instrucoes')
+        
+        # Upload do blank de laser (se for tipo LASER)
+        if 'blank_laser' in request.files and request.files['blank_laser'].filename:
+            blank_laser_file = request.files['blank_laser']
+            # Validar extensão DXF
+            if blank_laser_file.filename.lower().endswith('.dxf'):
+                item.blank_laser = save_file(blank_laser_file, 'blank_laser')
+            else:
+                flash('O arquivo de blank de laser deve estar no formato DXF', 'danger')
+                materiais = Material.query.all()
+                trabalhos = Trabalho.query.all()
+                return render_template('itens/novo.html', materiais=materiais, trabalhos=trabalhos, item=None, pode_ver_valores=pode_ver_valores)
         
         db.session.add(item)
         db.session.commit()
@@ -899,6 +913,8 @@ def editar_item(item_id):
         item.tipo_item = tipo_item
         item.categoria_montagem = categoria_montagem
         item.tipo_bruto = request.form.get('tipo_bruto', '')
+        item.material_laser = request.form.get('material_laser', '')
+        item.espessura_laser = request.form.get('espessura_laser', '')
         item.tamanho_peca = request.form.get('tamanho_peca', '')
         item.tempera = 'tempera' in request.form
         item.tipo_tempera = request.form.get('tipo_tempera', '')
@@ -935,6 +951,16 @@ def editar_item(item_id):
         
         if 'instrucoes_trabalho' in request.files and request.files['instrucoes_trabalho'].filename:
             item.instrucoes_trabalho = save_file(request.files['instrucoes_trabalho'], 'instrucoes')
+        
+        # Upload do blank de laser (se for tipo LASER)
+        if 'blank_laser' in request.files and request.files['blank_laser'].filename:
+            blank_laser_file = request.files['blank_laser']
+            # Validar extensão DXF
+            if blank_laser_file.filename.lower().endswith('.dxf'):
+                item.blank_laser = save_file(blank_laser_file, 'blank_laser')
+            else:
+                flash('O arquivo de blank de laser deve estar no formato DXF', 'danger')
+                return render_template('itens/editar.html', item=item, materiais=materiais, trabalhos=trabalhos, pode_ver_valores=pode_ver_valores, item_materiais=item_materiais, item_trabalhos=item_trabalhos)
 
         if getattr(item, 'criado_via_importacao_estoque', False):
             item.criado_via_importacao_estoque = False
@@ -1165,7 +1191,7 @@ def _build_supabase_public_url_from_file_path(file_path: str) -> str | None:
         return None
 
     file_name = file_path.replace('supabase://', '').replace('supabase:/', '').lstrip('/')
-    KNOWN_FOLDERS = {'imagens', 'desenhos', 'instrucoes', 'cnc_files', 'maquinas', 'castanhas', 'gabaritos', 'folhas_processo'}
+    KNOWN_FOLDERS = {'imagens', 'desenhos', 'instrucoes', 'cnc_files', 'maquinas', 'castanhas', 'gabaritos', 'folhas_processo', 'blank_laser'}
     parts = file_name.split('/', 1)
     if len(parts) > 1 and parts[0] not in KNOWN_FOLDERS:
         bucket = parts[0]
@@ -1421,6 +1447,18 @@ def novo_item_composto():
         if 'instrucoes_trabalho' in request.files:
             item.instrucoes_trabalho = save_file(request.files['instrucoes_trabalho'], 'instrucoes')
         
+        # Upload do blank de laser (se for tipo LASER)
+        if 'blank_laser' in request.files and request.files['blank_laser'].filename:
+            blank_laser_file = request.files['blank_laser']
+            # Validar extensão DXF
+            if blank_laser_file.filename.lower().endswith('.dxf'):
+                item.blank_laser = save_file(blank_laser_file, 'blank_laser')
+            else:
+                flash('O arquivo de blank de laser deve estar no formato DXF', 'danger')
+                materiais = Material.query.all()
+                trabalhos = Trabalho.query.all()
+                return render_template('itens/novo.html', materiais=materiais, trabalhos=trabalhos, item=None, pode_ver_valores=pode_ver_valores)
+        
         db.session.add(item)
         db.session.commit()
         
@@ -1558,6 +1596,16 @@ def editar_item_composto(item_id):
         if 'instrucoes_trabalho' in request.files and request.files['instrucoes_trabalho'].filename:
             item.instrucoes_trabalho = save_file(request.files['instrucoes_trabalho'], 'instrucoes')
         
+        # Upload do blank de laser (se for tipo LASER)
+        if 'blank_laser' in request.files and request.files['blank_laser'].filename:
+            blank_laser_file = request.files['blank_laser']
+            # Validar extensão DXF
+            if blank_laser_file.filename.lower().endswith('.dxf'):
+                item.blank_laser = save_file(blank_laser_file, 'blank_laser')
+            else:
+                flash('O arquivo de blank de laser deve estar no formato DXF', 'danger')
+                return render_template('itens/editar.html', item=item, materiais=materiais, trabalhos=trabalhos, pode_ver_valores=pode_ver_valores, item_materiais=item_materiais, item_trabalhos=item_trabalhos)
+        
         # Remover componentes existentes
         ItemComposto.query.filter_by(item_pai_id=item.id).delete()
         
@@ -1686,3 +1734,28 @@ def api_itens_nao_compostos():
         'codigo_acb': item.codigo_acb,
         'peso': item.peso or 0
     } for item in itens])
+
+@itens.route('/itens/remover-blank-laser/<int:item_id>', methods=['POST'])
+def remover_blank_laser(item_id):
+    """Rota para remover o arquivo DXF de blank de laser"""
+    if current_user.nivel != 'admin':
+        flash('Apenas administradores podem remover arquivos', 'danger')
+        return redirect(url_for('itens.visualizar', item_id=item_id))
+    
+    item = Item.query.get_or_404(item_id)
+    
+    if item.blank_laser:
+        # Opcional: remover arquivo físico do servidor
+        try:
+            from utils import delete_file
+            delete_file(item.blank_laser)
+        except:
+            pass  # Continuar mesmo se não conseguir remover arquivo físico
+        
+        item.blank_laser = None
+        db.session.commit()
+        flash('Arquivo DXF removido com sucesso', 'success')
+    else:
+        flash('Nenhum arquivo DXF para remover', 'warning')
+    
+    return redirect(url_for('itens.visualizar', item_id=item_id))

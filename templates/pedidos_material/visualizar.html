@@ -116,6 +116,9 @@
                                 <tr>
                                     <th style="width: 160px;">Quantidade</th>
                                     <th>Material</th>
+                                    <th style="width: 120px;">Espessura</th>
+                                    <th>Arquivo DXF</th>
+                                    <th style="width: 120px;">Download</th>
                                     <th class="pm-item-col">Item</th>
                                 </tr>
                             </thead>
@@ -126,9 +129,21 @@
                                         <td>
                                             <input type="number" class="form-control" min="0" step="1" name="qtd_{{ item.id }}" value="{{ item.quantidade or 0 }}">
                                         </td>
-                                        <td>{{ item.material.nome }}</td>
+                                        <td>{{ item.material_laser_exibicao if item.eh_item_laser else item.descricao_exibicao_material }}</td>
+                                        <td>{{ item.espessura_laser_exibicao if item.eh_item_laser else '-' }}</td>
+                                        <td>{{ item.dxf_laser_nome_arquivo if item.eh_item_laser and item.dxf_laser_nome_arquivo else '-' }}</td>
+                                        <td>
+                                            {% if item.eh_item_laser and item.dxf_laser_url %}
+                                                <a href="{{ item.dxf_laser_url }}" class="btn btn-sm btn-outline-success" target="_blank" download>
+                                                    <i class="fas fa-download"></i>
+                                                </a>
+                                            {% else %}
+                                                <span class="text-muted">-</span>
+                                            {% endif %}
+                                        </td>
                                         <td class="pm-item-col">
-                                            {% set itens_rel = material_item_map.get(item.material_id) if material_item_map is defined else None %}
+                                            {% set item_map_key = item.material_id if item.material_id else item.id %}
+                                            {% set itens_rel = material_item_map.get(item_map_key) if material_item_map is defined else None %}
                                             {% if itens_rel %}
                                                 {% for it in itens_rel %}
                                                     <div class="d-flex align-items-center gap-2 mb-1">
@@ -149,7 +164,7 @@
                                     {% endfor %}
                                 {% else %}
                                     <tr>
-                                        <td colspan="3" class="text-muted">Nenhum material específico.</td>
+                                        <td colspan="6" class="text-muted">Nenhum material específico.</td>
                                     </tr>
                                 {% endif %}
                             </tbody>
@@ -174,10 +189,11 @@
                                         <td>
                                             <input type="number" class="form-control" min="0" step="0.01" name="m_{{ item.id }}" value="{{ ((item.comprimento or 0) / 1000.0) | round(2) }}">
                                         </td>
-                                        <td>{{ item.material.nome }}</td>
-                                        <td>{{ item.material.tipo }}</td>
+                                        <td>{{ item.descricao_exibicao_material }}</td>
+                                        <td>{{ item.tipo_exibicao_material }}</td>
                                         <td class="pm-item-col">
-                                            {% set itens_rel = material_item_map.get(item.material_id) if material_item_map is defined else None %}
+                                            {% set item_map_key = item.material_id if item.material_id else item.id %}
+                                            {% set itens_rel = material_item_map.get(item_map_key) if material_item_map is defined else None %}
                                             {% if itens_rel %}
                                                 {% for it in itens_rel %}
                                                     <div class="d-flex align-items-center gap-2 mb-1">

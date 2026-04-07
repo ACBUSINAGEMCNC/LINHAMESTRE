@@ -4,8 +4,21 @@ from utils import validate_form_data, generate_next_code, parse_json_field
 from datetime import datetime
 from sqlalchemy.exc import IntegrityError
 from flask import g
+import logging
 
 pedidos_material = Blueprint('pedidos_material', __name__)
+logger = logging.getLogger(__name__)
+
+
+def _ensure_item_pedido_material_laser_schema():
+    try:
+        from migrations.add_laser_fields_item_pedido_material import migrate_postgres, migrate_sqlite
+        if db.engine.url.drivername.startswith('postgresql'):
+            return migrate_postgres()
+        return migrate_sqlite()
+    except Exception as e:
+        logger.warning(f"Erro ao garantir schema de item_pedido_material para laser: {str(e)}")
+        return False
 
 
 def _build_material_item_map(pedido_material):
@@ -18,53 +31,62 @@ def _build_material_item_map(pedido_material):
         if getattr(p, 'item_id', None):
             item_ids.append(p.item_id)
 
-    if not item_ids:
-        return {}
-
-    itens = Item.query.filter(Item.id.in_(list(set(item_ids)))).all()
-    itens_expandidos = []
-    for it in itens:
-        if it and getattr(it, 'eh_composto', False):
-            for comp_rel in getattr(it, 'componentes', []) or []:
-                comp_item = getattr(comp_rel, 'item_componente', None)
-                if comp_item:
-                    itens_expandidos.append(comp_item)
-        else:
-            itens_expandidos.append(it)
-
-    vistos = set()
-    itens_expandidos_unicos = []
-    for it in itens_expandidos:
-        if it and it.id not in vistos:
-            vistos.add(it.id)
-            itens_expandidos_unicos.append(it)
-
-    itemmaterial = ItemMaterial.query.filter(ItemMaterial.item_id.in_([i.id for i in itens_expandidos_unicos])).all()
-    material_to_item_ids = {}
-    for im in itemmaterial:
-        material_to_item_ids.setdefault(im.material_id, set()).add(im.item_id)
-
-    item_by_id = {i.id: i for i in itens_expandidos_unicos}
-
     out = {}
-    for material_id, ids in material_to_item_ids.items():
-        items_payload = []
-        for iid in sorted(list(ids)):
-            it = item_by_id.get(iid)
-            if not it:
-                continue
-            items_payload.append({
+    if item_ids:
+        itens = Item.query.filter(Item.id.in_(list(set(item_ids)))).all()
+        itens_expandidos = []
+        for it in itens:
+            if it and getattr(it, 'eh_composto', False):
+                for comp_rel in getattr(it, 'componentes', []) or []:
+                    comp_item = getattr(comp_rel, 'item_componente', None)
+                    if comp_item:
+                        itens_expandidos.append(comp_item)
+            else:
+                itens_expandidos.append(it)
+
+        vistos = set()
+        itens_expandidos_unicos = []
+        for it in itens_expandidos:
+            if it and it.id not in vistos:
+                vistos.add(it.id)
+                itens_expandidos_unicos.append(it)
+
+        itemmaterial = ItemMaterial.query.filter(ItemMaterial.item_id.in_([i.id for i in itens_expandidos_unicos])).all()
+        material_to_item_ids = {}
+        for im in itemmaterial:
+            material_to_item_ids.setdefault(im.material_id, set()).add(im.item_id)
+
+        item_by_id = {i.id: i for i in itens_expandidos_unicos}
+
+        for material_id, ids in material_to_item_ids.items():
+            items_payload = []
+            for iid in sorted(list(ids)):
+                it = item_by_id.get(iid)
+                if not it:
+                    continue
+                items_payload.append({
+                    'id': it.id,
+                    'codigo_acb': it.codigo_acb,
+                    'nome': it.nome,
+                    'imagem_url': it.imagem_path,
+                })
+            out[material_id] = items_payload
+
+    for pedido_item in getattr(pedido_material, 'itens', []) or []:
+        if getattr(pedido_item, 'item_origem', None):
+            it = pedido_item.item_origem
+            out[pedido_item.id] = [{
                 'id': it.id,
                 'codigo_acb': it.codigo_acb,
                 'nome': it.nome,
                 'imagem_url': it.imagem_path,
-            })
-        out[material_id] = items_payload
+            }]
     return out
 
 @pedidos_material.route('/pedidos-material')
 def listar_pedidos_material():
     """Rota para listar todos os pedidos de material"""
+    _ensure_item_pedido_material_laser_schema()
     pedidos = PedidoMaterial.query.all()
     return render_template('pedidos_material/listar.html', pedidos=pedidos)
 
@@ -78,11 +100,12 @@ def novo_pedido_material():
 @pedidos_material.route('/pedidos-material/visualizar/<int:pedido_id>')
 def visualizar_pedido_material(pedido_id):
     """Rota para visualizar um pedido de material"""
+    _ensure_item_pedido_material_laser_schema()
     pedido = PedidoMaterial.query.get_or_404(pedido_id)
     itens_especificos = []
     itens_barra = []
     for item in pedido.itens:
-        if item.material and item.material.especifico:
+        if item.usa_quantidade:
             itens_especificos.append(item)
         else:
             itens_barra.append(item)
@@ -102,12 +125,13 @@ def visualizar_pedido_material_por_numero(numero):
 @pedidos_material.route('/pedidos-material/atualizar/<int:pedido_id>', methods=['POST'])
 def atualizar_pedido_material(pedido_id):
     """Atualiza manualmente as quantidades/comprimentos dos itens de um pedido de material"""
+    _ensure_item_pedido_material_laser_schema()
     pedido = PedidoMaterial.query.get_or_404(pedido_id)
 
     itens = ItemPedidoMaterial.query.filter_by(pedido_material_id=pedido.id).all()
     for item in itens:
         material = item.material
-        if material and material.especifico:
+        if item.usa_quantidade:
             campo = f"qtd_{item.id}"
             if campo in request.form:
                 try:
@@ -131,6 +155,7 @@ def atualizar_pedido_material(pedido_id):
 @pedidos_material.route('/pedidos-material/imprimir/<int:pedido_id>')
 def imprimir_pedido_material(pedido_id):
     """Rota para imprimir um pedido de material"""
+    _ensure_item_pedido_material_laser_schema()
     pedido = PedidoMaterial.query.get_or_404(pedido_id)
     material_item_map = _build_material_item_map(pedido)
     return render_template('pedidos_material/imprimir.html', pedido=pedido, Material=Material, material_item_map=material_item_map)
@@ -170,6 +195,7 @@ def desaprovar_pedido_material(pedido_id):
 
 @pedidos_material.route('/pedidos-material/comparativo/<int:pedido_id>')
 def comparar_fornecedores(pedido_id):
+    _ensure_item_pedido_material_laser_schema()
     pedido = PedidoMaterial.query.get_or_404(pedido_id)
     cotacoes = CotacaoPedidoMaterial.query.filter_by(pedido_material_id=pedido.id).all()
 
@@ -261,6 +287,7 @@ def adicionar_fornecedor_comparativo(pedido_id):
 
 @pedidos_material.route('/pedidos-material/comparativo/<int:pedido_id>/salvar', methods=['POST'])
 def salvar_comparativo(pedido_id):
+    _ensure_item_pedido_material_laser_schema()
     pedido = PedidoMaterial.query.get_or_404(pedido_id)
     cotacoes = CotacaoPedidoMaterial.query.filter_by(pedido_material_id=pedido.id).all()
 
@@ -314,6 +341,7 @@ def salvar_comparativo(pedido_id):
 
 @pedidos_material.route('/pedidos-material/comparativo/<int:pedido_id>/sugerir-rateio', methods=['POST'])
 def sugerir_rateio(pedido_id):
+    _ensure_item_pedido_material_laser_schema()
     pedido = PedidoMaterial.query.get_or_404(pedido_id)
     cotacoes = CotacaoPedidoMaterial.query.filter_by(pedido_material_id=pedido.id).all()
     if not cotacoes:
@@ -351,7 +379,7 @@ def sugerir_rateio(pedido_id):
             ci.metros_escolhidos = 0
 
         if melhor_ci:
-            if item.material and item.material.especifico:
+            if item.usa_quantidade:
                 melhor_ci.quantidade_escolhida = int(item.quantidade or 0)
                 melhor_ci.metros_escolhidos = 0
             else:
@@ -365,6 +393,7 @@ def sugerir_rateio(pedido_id):
 
 @pedidos_material.route('/pedidos-material/comparativo/<int:pedido_id>/sugerir-rateio-entrega', methods=['POST'])
 def sugerir_rateio_entrega(pedido_id):
+    _ensure_item_pedido_material_laser_schema()
     pedido = PedidoMaterial.query.get_or_404(pedido_id)
     cotacoes = CotacaoPedidoMaterial.query.filter_by(pedido_material_id=pedido.id).all()
     if not cotacoes:
@@ -393,7 +422,7 @@ def sugerir_rateio_entrega(pedido_id):
             ci.metros_escolhidos = 0
 
         if melhor_ci:
-            if item.material and item.material.especifico:
+            if item.usa_quantidade:
                 melhor_ci.quantidade_escolhida = int(item.quantidade or 0)
                 melhor_ci.metros_escolhidos = 0
             else:
@@ -407,6 +436,7 @@ def sugerir_rateio_entrega(pedido_id):
 
 @pedidos_material.route('/pedidos-material/comparativo/<int:pedido_id>/sugerir-rateio-pagamento', methods=['POST'])
 def sugerir_rateio_pagamento(pedido_id):
+    _ensure_item_pedido_material_laser_schema()
     pedido = PedidoMaterial.query.get_or_404(pedido_id)
     cotacoes = CotacaoPedidoMaterial.query.filter_by(pedido_material_id=pedido.id).all()
     if not cotacoes:
@@ -436,7 +466,7 @@ def sugerir_rateio_pagamento(pedido_id):
             ci.metros_escolhidos = 0
 
         if melhor_ci:
-            if item.material and item.material.especifico:
+            if item.usa_quantidade:
                 melhor_ci.quantidade_escolhida = int(item.quantidade or 0)
                 melhor_ci.metros_escolhidos = 0
             else:

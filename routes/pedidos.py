@@ -14,6 +14,17 @@ pedidos = Blueprint('pedidos', __name__)
 logger = logging.getLogger(__name__)
 
 
+def _ensure_item_pedido_material_laser_schema():
+    try:
+        from migrations.add_laser_fields_item_pedido_material import migrate_postgres, migrate_sqlite
+        if db.engine.url.drivername.startswith('postgresql'):
+            return migrate_postgres()
+        return migrate_sqlite()
+    except Exception as e:
+        logger.warning(f"Erro ao garantir schema de item_pedido_material para laser: {str(e)}")
+        return False
+
+
 def _parse_date_cell(value):
     if value is None or value == '':
         return None
@@ -282,9 +293,6 @@ def confirmar_importacao_pedidos_excel():
         return redirect(url_for('pedidos.listar_pedidos'))
     except Exception as e:
         db.session.rollback()
-        flash(f'Erro ao importar pedidos: {e}', 'danger')
-        return redirect(url_for('pedidos.importar_pedidos_excel'))
-
 @pedidos.route('/pedidos/gerar-os-multipla', methods=['POST'])
 def gerar_ordem_servico_multipla():
     """Rota para gerar ordens de serviço para vários pedidos selecionados"""
@@ -788,6 +796,7 @@ def recriar_pedidos_virtuais_os_componente(os_componente, pedidos_grupo, item_co
 @pedidos.route('/pedidos/gerar-pedido-material-multiplo', methods=['POST'])
 def gerar_pedido_material_multiplo():
     """Rota para gerar pedido de material a partir de pedidos selecionados"""
+    _ensure_item_pedido_material_laser_schema()
     try:
         logger.info("Iniciando geração de pedido de material múltiplo")
         current_app.logger.info("Rota pedidos/gerar-pedido-material-multiplo recebida")
@@ -873,6 +882,7 @@ def gerar_pedido_material_multiplo():
     # e separar itens de montagem em um Pedido de Montagem
     materiais_agrupados = {}
     materiais_agrupados_qtd = {}
+    materiais_laser_agrupados = {}
     itens_montagem_agrupados = {}
     for pedido in pedidos_para_processar:
         item = Item.query.get(pedido.item_id)
@@ -889,6 +899,14 @@ def gerar_pedido_material_multiplo():
                 
                 # Buscar materiais do componente
                 item_materiais = ItemMaterial.query.filter_by(item_id=item_componente.id).all()
+                if not item_materiais and (item_componente.tipo_bruto or '').strip().upper() == 'LASER':
+                    descricao_laser = ' '.join(filter(None, [
+                        (item_componente.material_laser or '').strip(),
+                        (item_componente.espessura_laser or '').strip()
+                    ])).strip() or f"Item laser {item_componente.nome}"
+                    chave_laser = (item_componente.id, descricao_laser)
+                    materiais_laser_agrupados[chave_laser] = materiais_laser_agrupados.get(chave_laser, 0) + quantidade_componente
+                    continue
                 for item_material in item_materiais:
                     material = Material.query.get(item_material.material_id)
                     if material and material.especifico:
@@ -909,6 +927,14 @@ def gerar_pedido_material_multiplo():
                 itens_montagem_agrupados[item.id] = itens_montagem_agrupados.get(item.id, 0) + (pedido.quantidade or 0)
                 continue
             item_materiais = ItemMaterial.query.filter_by(item_id=pedido.item_id).all()
+            if item and not item_materiais and (item.tipo_bruto or '').strip().upper() == 'LASER':
+                descricao_laser = ' '.join(filter(None, [
+                    (item.material_laser or '').strip(),
+                    (item.espessura_laser or '').strip()
+                ])).strip() or f"Item laser {item.nome}"
+                chave_laser = (item.id, descricao_laser)
+                materiais_laser_agrupados[chave_laser] = materiais_laser_agrupados.get(chave_laser, 0) + (pedido.quantidade or 0)
+                continue
             for item_material in item_materiais:
                 material = Material.query.get(item_material.material_id)
                 if material and material.especifico:
@@ -924,12 +950,12 @@ def gerar_pedido_material_multiplo():
                     else:
                         materiais_agrupados[item_material.material_id] = comprimento_necessario
     
-    if not materiais_agrupados and not materiais_agrupados_qtd and not itens_montagem_agrupados:
+    if not materiais_agrupados and not materiais_agrupados_qtd and not materiais_laser_agrupados and not itens_montagem_agrupados:
         flash('Nenhum material ou item de montagem associado aos itens dos pedidos selecionados', 'warning')
         return redirect(url_for('pedidos.listar_pedidos'))
     
     codigo_pm = None
-    if materiais_agrupados or materiais_agrupados_qtd:
+    if materiais_agrupados or materiais_agrupados_qtd or materiais_laser_agrupados:
         # Gerar um único código de pedido de material
         codigo_pm = generate_next_code(PedidoMaterial, 'PM', 'numero', padding=5)
         logger.info("Gerando Pedido de Material %s", codigo_pm)
@@ -957,6 +983,17 @@ def gerar_pedido_material_multiplo():
                 pedido_material_id=pm.id,
                 material_id=material_id,
                 quantidade=qtd_total
+            )
+            db.session.add(assoc)
+
+        for (item_origem_id, descricao_material), qtd_total in materiais_laser_agrupados.items():
+            assoc = ItemPedidoMaterial(
+                pedido_material_id=pm.id,
+                material_id=None,
+                quantidade=int(qtd_total or 0),
+                descricao_material=descricao_material,
+                item_origem_id=item_origem_id,
+                sufixo='LASER'
             )
             db.session.add(assoc)
 

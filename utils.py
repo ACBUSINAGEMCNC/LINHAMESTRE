@@ -237,7 +237,7 @@ def get_file_url(file_path):
         file_name = file_path.replace('supabase://', '').replace('supabase:/', '').lstrip('/')
         
         # Se caminho não inclui bucket (legado), prefixar SUPABASE_BUCKET
-        KNOWN_FOLDERS = {'imagens', 'desenhos', 'instrucoes', 'cnc_files', 'maquinas', 'castanhas', 'gabaritos', 'folhas_processo'}
+        KNOWN_FOLDERS = {'imagens', 'desenhos', 'instrucoes', 'cnc_files', 'maquinas', 'castanhas', 'gabaritos', 'folhas_processo', 'blank_laser'}
         parts = file_name.split('/', 1)
         
         # Verificar se precisa adicionar bucket para caminhos legados

@@ -334,6 +334,9 @@ class Item(db.Model):
     zincagem = db.Column(db.Boolean, default=False)
     tipo_zincagem = db.Column(db.String(50))
     tipo_bruto = db.Column(db.String(50))
+    material_laser = db.Column(db.String(100))
+    espessura_laser = db.Column(db.String(50))
+    blank_laser = db.Column(db.String(255))  # Arquivo DXF para blank de laser
     tipo_embalagem = db.Column(db.String(50))
     peso = db.Column(db.Float)
     # Novo campo para identificar se é item composto
@@ -363,6 +366,20 @@ class Item(db.Model):
             from utils import get_file_url
             return get_file_url(self.imagem)
         return None
+    
+    @property
+    def blank_laser_path(self):
+        if self.blank_laser:
+            from utils import get_file_url
+            return get_file_url(self.blank_laser)
+        return None
+
+    @property
+    def blank_laser_nome_arquivo(self):
+        if not self.blank_laser:
+            return ''
+        caminho = str(self.blank_laser).replace('\\', '/')
+        return caminho.split('/')[-1]
     
     @property
     def instrucoes_trabalho_path(self):
@@ -619,14 +636,67 @@ class PedidoMaterial(db.Model):
 class ItemPedidoMaterial(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     pedido_material_id = db.Column(db.Integer, db.ForeignKey('pedido_material.id'), nullable=False)
-    material_id = db.Column(db.Integer, db.ForeignKey('material.id'), nullable=False)
+    material_id = db.Column(db.Integer, db.ForeignKey('material.id'), nullable=True)
     comprimento = db.Column(db.Float)
     quantidade = db.Column(db.Integer)
     sufixo = db.Column(db.String(10), default='')
+    descricao_material = db.Column(db.String(255))
+    item_origem_id = db.Column(db.Integer, db.ForeignKey('item.id'), nullable=True)
     material = relationship('Material', backref='pedidos_material', lazy=True)
+    item_origem = relationship('Item', foreign_keys=[item_origem_id], lazy=True)
     
     def __repr__(self):
         return f'<ItemPedidoMaterial {self.id}>'
+
+    @property
+    def descricao_exibicao_material(self):
+        if self.material:
+            return self.material.nome
+        return self.descricao_material or ''
+
+    @property
+    def material_laser_exibicao(self):
+        if self.item_origem and getattr(self.item_origem, 'material_laser', None):
+            return self.item_origem.material_laser
+        if self.descricao_material:
+            return self.descricao_material
+        return ''
+
+    @property
+    def espessura_laser_exibicao(self):
+        if self.item_origem and getattr(self.item_origem, 'espessura_laser', None):
+            return self.item_origem.espessura_laser
+        return ''
+
+    @property
+    def dxf_laser_url(self):
+        if self.item_origem and getattr(self.item_origem, 'blank_laser_path', None):
+            return self.item_origem.blank_laser_path
+        return None
+
+    @property
+    def dxf_laser_nome_arquivo(self):
+        if self.item_origem and getattr(self.item_origem, 'blank_laser_nome_arquivo', None):
+            return self.item_origem.blank_laser_nome_arquivo
+        return ''
+
+    @property
+    def eh_item_laser(self):
+        return bool(self.descricao_material and self.item_origem_id)
+
+    @property
+    def tipo_exibicao_material(self):
+        if self.material:
+            return self.material.tipo or ''
+        if self.descricao_material:
+            return 'LASER'
+        return ''
+
+    @property
+    def usa_quantidade(self):
+        if self.material:
+            return bool(self.material.especifico)
+        return bool(self.descricao_material)
     
     @property
     def comprimento_em_metros(self):
