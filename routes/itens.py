@@ -46,7 +46,14 @@ def _parse_valor_item(raw):
     txt = str(raw or '').strip()
     if not txt:
         return 0.0
-    txt = txt.replace('R$', '').replace('.', '').replace(',', '.').strip()
+    txt = txt.replace('R$', '').replace(' ', '').strip()
+    if ',' in txt and '.' in txt:
+        if txt.rfind(',') > txt.rfind('.'):
+            txt = txt.replace('.', '').replace(',', '.')
+        else:
+            txt = txt.replace(',', '')
+    elif ',' in txt:
+        txt = txt.replace('.', '').replace(',', '.')
     try:
         return float(Decimal(txt))
     except (InvalidOperation, ValueError) as e:
@@ -61,7 +68,14 @@ def _parse_percentual(raw):
     txt = str(raw or '').strip()
     if not txt:
         return 0.0
-    txt = txt.replace('%', '').replace('.', '').replace(',', '.').strip()
+    txt = txt.replace('%', '').replace(' ', '').strip()
+    if ',' in txt and '.' in txt:
+        if txt.rfind(',') > txt.rfind('.'):
+            txt = txt.replace('.', '').replace(',', '.')
+        else:
+            txt = txt.replace(',', '')
+    elif ',' in txt:
+        txt = txt.replace('.', '').replace(',', '.')
     try:
         return float(Decimal(txt))
     except (InvalidOperation, ValueError) as e:
@@ -92,7 +106,14 @@ def _valor_realmente_alterado(raw, valor_atual):
             txt = str(raw or '').strip()
             if not txt:
                 return False
-            txt = txt.replace('R$', '').replace('.', '').replace(',', '.').strip()
+            txt = txt.replace('R$', '').replace(' ', '').strip()
+            if ',' in txt and '.' in txt:
+                if txt.rfind(',') > txt.rfind('.'):
+                    txt = txt.replace('.', '').replace(',', '.')
+                else:
+                    txt = txt.replace(',', '')
+            elif ',' in txt:
+                txt = txt.replace('.', '').replace(',', '.')
             valor_planilha = float(Decimal(txt))
         
         # Comparar com valor atual (considerando None como 0)
