@@ -501,10 +501,10 @@
                     var numSistemaCol = (data[4] || '').toLowerCase();
                     var itemCol = (data[5] || '').toLowerCase();
                     var dataEntradaCol = parseDate(data[7]);
-                    var previsaoEntregaCol = parseDate(data[10]);
+                    var previsaoEntregaCol = parseDate(data[11]);
 
                     var statusCol = '';
-                    var statusBadge = table.cell(dataIndex, 11).nodes().to$().find('.status-badge');
+                    var statusBadge = table.cell(dataIndex, 12).nodes().to$().find('.status-badge');
                     if (statusBadge.length > 0) {
                         statusCol = statusBadge.text().trim().toLowerCase();
                     }
