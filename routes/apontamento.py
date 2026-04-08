@@ -73,6 +73,20 @@ def _buscar_ultima_quantidade(os_id, item_id, trab_id):
         return 0
     return int(ultimo_ap[0])
 
+
+def _buscar_apontamento_aberto_operador(usuario_id, ordem_servico_id=None):
+    query = (
+        ApontamentoProducao.query.filter(
+            ApontamentoProducao.usuario_id == usuario_id,
+            ApontamentoProducao.data_fim.is_(None),
+            ApontamentoProducao.tipo_acao.in_(['inicio_setup', 'inicio_producao', 'pausa'])
+        )
+        .order_by(ApontamentoProducao.data_hora.desc())
+    )
+    if ordem_servico_id is not None:
+        query = query.filter(ApontamentoProducao.ordem_servico_id != ordem_servico_id)
+    return query.first()
+
 @apontamento_bp.route('/operadores')
 def listar_operadores():
     """Lista todos os operadores e seus códigos"""
@@ -2055,6 +2069,7 @@ def registrar_apontamento():
         ap_setup_aberto = None
         ap_prod_aberto = None
         ap_pausa_aberta = None
+        ap_outro_operador_aberto = None
 
         if tipo_acao in ['inicio_setup', 'fim_setup', 'inicio_producao', 'stop']:
             ap_setup_aberto = _query_apontamento_aberto(ordem_servico_id, item_id, trabalho_id, 'inicio_setup')
@@ -2062,6 +2077,25 @@ def registrar_apontamento():
             ap_prod_aberto = _query_apontamento_aberto(ordem_servico_id, item_id, trabalho_id, 'inicio_producao')
         if tipo_acao in ['inicio_producao', 'stop']:
             ap_pausa_aberta = _query_apontamento_aberto(ordem_servico_id, item_id, trabalho_id, 'pausa')
+        if tipo_acao in ['inicio_setup', 'inicio_producao']:
+            ap_outro_operador_aberto = _buscar_apontamento_aberto_operador(usuario.id, ordem_servico_id)
+
+        if ap_outro_operador_aberto is not None:
+            ordem_aberta = OrdemServico.query.get(ap_outro_operador_aberto.ordem_servico_id)
+            item_aberto = Item.query.get(ap_outro_operador_aberto.item_id) if ap_outro_operador_aberto.item_id else None
+            trabalho_aberto = Trabalho.query.get(ap_outro_operador_aberto.trabalho_id) if ap_outro_operador_aberto.trabalho_id else None
+            os_nome = getattr(ordem_aberta, 'numero', None) or getattr(ordem_aberta, 'codigo', None) or f"OS-{ap_outro_operador_aberto.ordem_servico_id}"
+            item_nome = getattr(item_aberto, 'codigo_acb', None) or f"Item {ap_outro_operador_aberto.item_id}"
+            trabalho_nome = getattr(trabalho_aberto, 'nome', None) or f"Trabalho {ap_outro_operador_aberto.trabalho_id}"
+            tipo_aberto = {
+                'inicio_setup': 'setup em andamento',
+                'inicio_producao': 'produção em andamento',
+                'pausa': 'pausa em aberto'
+            }.get(ap_outro_operador_aberto.tipo_acao, 'apontamento em aberto')
+            return jsonify({
+                'success': False,
+                'message': f'Este operador já possui {tipo_aberto} na {os_nome} ({item_nome} / {trabalho_nome}). Finalize ou aplique STOP antes de iniciar outra OS.'
+            })
 
         if tipo_acao == 'inicio_setup':
             # Bloquear somente se já houver um setup em andamento para MESMO item/trabalho

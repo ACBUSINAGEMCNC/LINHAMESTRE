@@ -1719,7 +1719,7 @@
                 </div>
                 <div class="modal-footer">
                     <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
-                    <button type="button" class="btn btn-primary" onclick="salvarApontamento()">Confirmar</button>
+                    <button type="button" class="btn btn-primary" id="btnConfirmarApontamento" onclick="salvarApontamento()">Confirmar</button>
                 </div>
             </div>
         </div>
@@ -1787,6 +1787,7 @@
     <script>
     let ordemAtualId = null;
     let tipoAcaoAtual = null;
+    let salvandoApontamento = false;
     
     function abrirModalApontamento(tipoAcao, ordemId) {
         // Removido o bloqueio por apontamento ativo em outra OS.
@@ -2128,16 +2129,28 @@
     }
     
     async function salvarApontamento() {
+        if (salvandoApontamento) {
+            return;
+        }
         const form = document.getElementById('formApontamento');
         if (!form.checkValidity()) {
             form.reportValidity();
             return;
+        }
+        const btnConfirmar = document.getElementById('btnConfirmarApontamento');
+        salvandoApontamento = true;
+        if (btnConfirmar) {
+            btnConfirmar.disabled = true;
         }
         
         // Validar se item foi selecionado
         const itemId = document.getElementById('itemSelecao').value;
         if (!itemId) {
             mostrarAlerta('Por favor, selecione um item antes de continuar', 'error');
+            salvandoApontamento = false;
+            if (btnConfirmar) {
+                btnConfirmar.disabled = false;
+            }
             return;
         }
         
@@ -2340,6 +2353,12 @@
         .catch(error => {
             console.error('Erro:', error);
             mostrarAlerta('Erro ao registrar apontamento', 'error');
+        })
+        .finally(() => {
+            salvandoApontamento = false;
+            if (btnConfirmar) {
+                btnConfirmar.disabled = false;
+            }
         });
     }
     
