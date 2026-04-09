@@ -87,6 +87,57 @@ def _buscar_apontamento_aberto_operador(usuario_id, ordem_servico_id=None):
         query = query.filter(ApontamentoProducao.ordem_servico_id != ordem_servico_id)
     return query.first()
 
+
+def _obter_estado_real_os(ordem_servico_id):
+    apontamentos_abertos = (
+        ApontamentoProducao.query.filter(
+            ApontamentoProducao.ordem_servico_id == ordem_servico_id,
+            ApontamentoProducao.data_fim.is_(None),
+            ApontamentoProducao.tipo_acao.in_(['inicio_setup', 'inicio_producao', 'pausa'])
+        )
+        .order_by(ApontamentoProducao.data_hora.desc())
+        .all()
+    )
+
+    inicio_setup = next((ap for ap in apontamentos_abertos if ap.tipo_acao == 'inicio_setup'), None)
+    inicio_producao = next((ap for ap in apontamentos_abertos if ap.tipo_acao == 'inicio_producao'), None)
+    pausa = next((ap for ap in apontamentos_abertos if ap.tipo_acao == 'pausa'), None)
+
+    apontamento_base = pausa or inicio_producao or inicio_setup
+    status_real = 'Aguardando'
+    if pausa:
+        status_real = 'Pausado'
+    elif inicio_producao:
+        status_real = 'Produção em andamento'
+    elif inicio_setup:
+        status_real = 'Setup em andamento'
+
+    return {
+        'status_atual': status_real,
+        'apontamento_base': apontamento_base,
+        'setup_aberto': inicio_setup,
+        'producao_aberta': inicio_producao,
+        'pausa_aberta': pausa,
+        'item_id': getattr(apontamento_base, 'item_id', None),
+        'trabalho_id': getattr(apontamento_base, 'trabalho_id', None),
+        'usuario_id': getattr(apontamento_base, 'usuario_id', None),
+        'inicio_acao': getattr(apontamento_base, 'data_hora', None)
+    }
+
+
+def _aplicar_estado_real_status(status, estado_real):
+    if not status or not estado_real:
+        return status
+
+    status.status_atual = estado_real['status_atual']
+    status.operador_atual_id = estado_real['usuario_id']
+    status.item_atual_id = estado_real['item_id']
+    status.trabalho_atual_id = estado_real['trabalho_id']
+    status.inicio_acao = estado_real['inicio_acao']
+    if estado_real['status_atual'] != 'Pausado':
+        status.motivo_pausa = None
+    return status
+
 @apontamento_bp.route('/operadores')
 def listar_operadores():
     """Lista todos os operadores e seus códigos"""
@@ -109,7 +160,7 @@ def dashboard():
     """Dashboard de apontamentos (ORM)"""
     try:
         # Status ativos (exclui finalizados), com relações carregadas
-        status_list = (
+        status_list_raw = (
             StatusProducaoOS.query.options(
                 joinedload(StatusProducaoOS.ordem_servico),
                 joinedload(StatusProducaoOS.operador_atual),
@@ -120,6 +171,13 @@ def dashboard():
             .order_by(StatusProducaoOS.inicio_acao.desc())
             .all()
         )
+
+        status_list = []
+        for status in status_list_raw:
+            estado_real = _obter_estado_real_os(status.ordem_servico_id)
+            _aplicar_estado_real_status(status, estado_real)
+            if estado_real['status_atual'] in ['Setup em andamento', 'Produção em andamento', 'Pausado']:
+                status_list.append(status)
 
         # Últimos apontamentos com OS e operador
         ultimos_apontamentos = (
@@ -514,6 +572,10 @@ def status_ativos():
         
         status_ativos = []
         for status in status_ativos_raw:
+            estado_real = _obter_estado_real_os(status.ordem_servico_id)
+            _aplicar_estado_real_status(status, estado_real)
+            if estado_real['status_atual'] not in ['Setup em andamento', 'Produção em andamento', 'Pausado']:
+                continue
             os = status.ordem_servico
             if excluir_entregues and os and os.pedidos:
                 tem_pedido_entregue = False
@@ -2058,27 +2120,66 @@ def registrar_apontamento():
         if not usuario:
             return jsonify({'success': False, 'message': 'Código de operador inválido'})
 
-        ordem_servico_id = dados['ordem_servico_id']
-        item_id = dados['item_id']
-        trabalho_id = dados['trabalho_id']
+        try:
+            ordem_servico_id = int(dados['ordem_servico_id'])
+            item_id = int(dados['item_id'])
+            trabalho_id = int(dados['trabalho_id'])
+        except (TypeError, ValueError):
+            return jsonify({'success': False, 'message': 'OS, item e trabalho devem ser identificadores numéricos válidos'})
 
         # Buscar status atual da OS para validar transições de estado
         status_atual = StatusProducaoOS.query.filter_by(ordem_servico_id=ordem_servico_id).first()
+        estado_real = _obter_estado_real_os(ordem_servico_id)
+        if status_atual:
+            _aplicar_estado_real_status(status_atual, estado_real)
         tipo_acao = dados['tipo_acao']
 
-        ap_setup_aberto = None
-        ap_prod_aberto = None
-        ap_pausa_aberta = None
+        item_id_status = int(estado_real['item_id']) if estado_real and estado_real.get('item_id') else None
+        trabalho_id_status = int(estado_real['trabalho_id']) if estado_real and estado_real.get('trabalho_id') else None
+
+        ap_setup_aberto = estado_real['setup_aberto']
+        ap_prod_aberto = estado_real['producao_aberta']
+        ap_pausa_aberta = estado_real['pausa_aberta']
         ap_outro_operador_aberto = None
 
-        if tipo_acao in ['inicio_setup', 'fim_setup', 'inicio_producao', 'stop']:
+        if tipo_acao in ['inicio_setup', 'inicio_producao']:
             ap_setup_aberto = _query_apontamento_aberto(ordem_servico_id, item_id, trabalho_id, 'inicio_setup')
-        if tipo_acao in ['inicio_producao', 'pausa', 'stop', 'fim_producao']:
+        if tipo_acao == 'inicio_producao':
             ap_prod_aberto = _query_apontamento_aberto(ordem_servico_id, item_id, trabalho_id, 'inicio_producao')
-        if tipo_acao in ['inicio_producao', 'stop']:
+        if tipo_acao == 'inicio_producao':
             ap_pausa_aberta = _query_apontamento_aberto(ordem_servico_id, item_id, trabalho_id, 'pausa')
         if tipo_acao in ['inicio_setup', 'inicio_producao']:
             ap_outro_operador_aberto = _buscar_apontamento_aberto_operador(usuario.id, ordem_servico_id)
+
+        usar_par_status = (
+            tipo_acao in ['fim_setup', 'pausa', 'stop', 'fim_producao']
+            and item_id_status is not None
+            and trabalho_id_status is not None
+            and (item_id_status != item_id or trabalho_id_status != trabalho_id)
+        )
+        if usar_par_status:
+            ap_setup_status = estado_real['setup_aberto']
+            ap_prod_status = estado_real['producao_aberta']
+            ap_pausa_status = estado_real['pausa_aberta']
+
+            if tipo_acao == 'fim_setup' and ap_setup_status:
+                item_id = item_id_status
+                trabalho_id = trabalho_id_status
+                ap_setup_aberto = ap_setup_status
+            elif tipo_acao == 'pausa' and ap_prod_status:
+                item_id = item_id_status
+                trabalho_id = trabalho_id_status
+                ap_prod_aberto = ap_prod_status
+            elif tipo_acao == 'fim_producao' and ap_prod_status:
+                item_id = item_id_status
+                trabalho_id = trabalho_id_status
+                ap_prod_aberto = ap_prod_status
+            elif tipo_acao == 'stop' and (ap_prod_status or ap_pausa_status or ap_setup_status):
+                item_id = item_id_status
+                trabalho_id = trabalho_id_status
+                ap_setup_aberto = ap_setup_status
+                ap_prod_aberto = ap_prod_status
+                ap_pausa_aberta = ap_pausa_status
 
         if ap_outro_operador_aberto is not None:
             ordem_aberta = OrdemServico.query.get(ap_outro_operador_aberto.ordem_servico_id)
@@ -2410,6 +2511,67 @@ def registrar_apontamento():
             'success': False,
             'message': f'Erro ao registrar apontamento: {str(e)}'
         })
+
+@apontamento_bp.route('/os/<int:ordem_id>/reset', methods=['POST'])
+def reset_apontamentos_os(ordem_id):
+    if 'usuario_id' not in session:
+        return jsonify({'success': False, 'message': 'Não autenticado'}), 401
+
+    usuario_atual = Usuario.query.get(session['usuario_id'])
+    if not usuario_atual or (usuario_atual.nivel_acesso not in ['admin'] and not usuario_atual.acesso_cadastros):
+        return jsonify({'success': False, 'message': 'Acesso negado'}), 403
+
+    try:
+        ordem = OrdemServico.query.get(ordem_id)
+        if not ordem:
+            return jsonify({'success': False, 'message': 'Ordem de serviço não encontrada'}), 404
+
+        agora = datetime.now(LOCAL_TZ).replace(tzinfo=None)
+        apontamentos_abertos = (
+            ApontamentoProducao.query.filter(
+                ApontamentoProducao.ordem_servico_id == ordem_id,
+                ApontamentoProducao.data_fim.is_(None)
+            )
+            .order_by(ApontamentoProducao.data_hora.asc())
+            .all()
+        )
+
+        resetados = []
+        for apontamento in apontamentos_abertos:
+            data_base = apontamento.data_hora or agora
+            tempo_decorrido = int(max((agora - data_base).total_seconds(), 0))
+            apontamento.data_fim = agora
+            apontamento.tempo_decorrido = tempo_decorrido
+            resetados.append({
+                'id': apontamento.id,
+                'tipo_acao': apontamento.tipo_acao,
+                'item_id': apontamento.item_id,
+                'trabalho_id': apontamento.trabalho_id,
+                'usuario_id': apontamento.usuario_id
+            })
+
+        status_os = StatusProducaoOS.query.filter_by(ordem_servico_id=ordem_id).first()
+        if status_os:
+            status_os.status_atual = 'Aguardando'
+            status_os.operador_atual_id = None
+            status_os.item_atual_id = None
+            status_os.trabalho_atual_id = None
+            status_os.inicio_acao = None
+            status_os.motivo_pausa = None
+
+        db.session.commit()
+
+        return jsonify({
+            'success': True,
+            'message': f'Reset da OS {ordem_id} concluído com sucesso',
+            'ordem_servico_id': ordem_id,
+            'apontamentos_fechados': len(resetados),
+            'apontamentos': resetados,
+            'status_resetado': bool(status_os)
+        })
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({'success': False, 'message': f'Erro ao resetar OS: {str(e)}'}), 500
 
 @apontamento_bp.route('/os/<int:os_id>/logs/view')
 def logs_ordem_servico(os_id):
