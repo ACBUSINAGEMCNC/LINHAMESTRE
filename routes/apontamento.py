@@ -88,6 +88,22 @@ def _buscar_apontamento_aberto_operador(usuario_id, ordem_servico_id=None):
     return query.first()
 
 
+def _buscar_apontamento_ativo_operador_na_os(usuario_id, ordem_servico_id):
+    return (
+        ApontamentoProducao.query.filter(
+            ApontamentoProducao.usuario_id == usuario_id,
+            ApontamentoProducao.ordem_servico_id == ordem_servico_id,
+            ApontamentoProducao.data_fim.is_(None),
+            ApontamentoProducao.tipo_acao.in_(['inicio_setup', 'inicio_producao', 'pausa'])
+        )
+        .order_by(
+            ApontamentoProducao.data_hora.desc(),
+            ApontamentoProducao.id.desc()
+        )
+        .first()
+    )
+
+
 def _obter_estado_real_os(ordem_servico_id):
     apontamentos_abertos = (
         ApontamentoProducao.query.filter(
@@ -2250,6 +2266,21 @@ def registrar_apontamento():
             ap_prod = ap_prod_aberto
             ap_pausa = ap_pausa_aberta
             ap_setup = ap_setup_aberto
+
+            if not ap_prod and not ap_pausa and not ap_setup:
+                ap_operador_os = _buscar_apontamento_ativo_operador_na_os(usuario.id, ordem_servico_id)
+                if ap_operador_os:
+                    item_id = ap_operador_os.item_id
+                    trabalho_id = ap_operador_os.trabalho_id
+                    if ap_operador_os.tipo_acao == 'inicio_producao':
+                        ap_prod = ap_operador_os
+                        ap_prod_aberto = ap_operador_os
+                    elif ap_operador_os.tipo_acao == 'pausa':
+                        ap_pausa = ap_operador_os
+                        ap_pausa_aberta = ap_operador_os
+                    elif ap_operador_os.tipo_acao == 'inicio_setup':
+                        ap_setup = ap_operador_os
+                        ap_setup_aberto = ap_operador_os
 
             if not ap_prod and not ap_pausa and not ap_setup:
                 return jsonify({'success': False, 'message': 'Não é possível aplicar STOP: não há apontamento ativo (produção/pausa/setup) para este item/trabalho.'})
