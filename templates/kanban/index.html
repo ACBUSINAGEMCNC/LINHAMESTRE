@@ -1788,6 +1788,61 @@
     let ordemAtualId = null;
     let tipoAcaoAtual = null;
     let salvandoApontamento = false;
+    let modalLoadToken = 0;
+    const cacheItensOS = new Map();
+    const cacheTiposTrabalhoPorItem = new Map();
+    const cacheQuantidadesPorOS = new Map();
+
+    function limparEstadoModalApontamento(ordemId, tipoAcao) {
+        const form = document.getElementById('formApontamento');
+        const selectItem = document.getElementById('itemSelecao');
+        const selectTipo = document.getElementById('tipoTrabalho');
+        const quantidade = document.getElementById('quantidade');
+        const motivoParada = document.getElementById('motivoParada');
+        const info = document.getElementById('ultimaQuantidadeInfo');
+        const operadorInfo = document.getElementById('operadorInfo');
+
+        form.reset();
+        document.getElementById('ordemServicoId').value = ordemId;
+        document.getElementById('tipoAcao').value = tipoAcao;
+
+        selectItem.innerHTML = '<option value="">Carregando item...</option>';
+        selectTipo.innerHTML = '<option value="">Selecione o tipo de trabalho</option>';
+
+        quantidade.value = '';
+        quantidade.min = 0;
+        motivoParada.value = '';
+        if (info) info.textContent = '';
+        if (operadorInfo) operadorInfo.innerHTML = '';
+    }
+
+    async function obterQuantidadesPorTrabalhoOS(ordemId) {
+        if (!ordemId) {
+            return new Map();
+        }
+
+        const chave = String(ordemId);
+        if (cacheQuantidadesPorOS.has(chave)) {
+            return cacheQuantidadesPorOS.get(chave);
+        }
+
+        const resp = await fetch(`/apontamento/quantidades-por-trabalho/${ordemId}`);
+        if (!resp.ok) {
+            throw new Error(`HTTP ${resp.status}`);
+        }
+
+        const data = await resp.json();
+        const mapa = new Map();
+        const trabalhos = Array.isArray(data.trabalhos) ? data.trabalhos : [];
+        trabalhos.forEach(trabalho => {
+            if (trabalho && trabalho.trabalho_id != null) {
+                mapa.set(String(trabalho.trabalho_id), parseInt(trabalho.ultima_quantidade || 0, 10));
+            }
+        });
+
+        cacheQuantidadesPorOS.set(chave, mapa);
+        return mapa;
+    }
     
     function abrirModalApontamento(tipoAcao, ordemId) {
         // Removido o bloqueio por apontamento ativo em outra OS.
@@ -1829,18 +1884,17 @@
     function prosseguirAbrirModal(tipoAcao, ordemId) {
         ordemAtualId = ordemId;
         tipoAcaoAtual = tipoAcao;
+        modalLoadToken += 1;
+        const requestToken = modalLoadToken;
         
         // Configurar o modal baseado no tipo de ação
         configurarModalPorTipo(tipoAcao);
         
-        // Limpar formulário
-        document.getElementById('formApontamento').reset();
-        document.getElementById('ordemServicoId').value = ordemId;
-        document.getElementById('tipoAcao').value = tipoAcao;
-        document.getElementById('operadorInfo').innerHTML = '';
+        // Limpar formulário e qualquer estado da OS anterior
+        limparEstadoModalApontamento(ordemId, tipoAcao);
         
         // Carregar itens da OS primeiro
-        carregarItensOS(ordemId);
+        carregarItensOS(ordemId, requestToken);
         
         // Abrir modal
         new bootstrap.Modal(document.getElementById('modalApontamento')).show();
@@ -1899,10 +1953,21 @@
         }
     }
     
-    function carregarItensOS(ordemId) {
-        fetch(`/apontamento/os/${ordemId}/itens`)
-            .then(response => response.json())
+    function carregarItensOS(ordemId, requestToken = modalLoadToken) {
+        const carregar = cacheItensOS.has(String(ordemId))
+            ? Promise.resolve(cacheItensOS.get(String(ordemId)))
+            : fetch(`/apontamento/os/${ordemId}/itens`)
+                .then(response => response.json())
+                .then(data => {
+                    cacheItensOS.set(String(ordemId), data);
+                    return data;
+                });
+
+        carregar
             .then(data => {
+                if (requestToken !== modalLoadToken || String(ordemId) !== String(ordemAtualId)) {
+                    return;
+                }
                 const selectItem = document.getElementById('itemSelecao');
                 const selectTipo = document.getElementById('tipoTrabalho');
                 
@@ -1921,7 +1986,7 @@
                     // Se há apenas um item, selecionar automaticamente
                     if (data.itens.length === 1) {
                         selectItem.value = data.itens[0].id;
-                        carregarTiposTrabalhoItem(data.itens[0].id);
+                        carregarTiposTrabalhoItem(data.itens[0].id, { requestToken, autoSelectFirst: true });
                     }
                 } else {
                     mostrarAlerta('Erro: Nenhum item encontrado para esta OS', 'error');
@@ -1933,16 +1998,28 @@
             });
     }
     
-    function carregarTiposTrabalhoItem(itemId) {
+    function carregarTiposTrabalhoItem(itemId, options = {}) {
+        const { requestToken = modalLoadToken, autoSelectFirst = false } = options;
         if (!itemId) {
             const select = document.getElementById('tipoTrabalho');
             select.innerHTML = '<option value="">Selecione o tipo de trabalho</option>';
             return;
         }
         
-        fetch(`/apontamento/item/${itemId}/tipos-trabalho`)
-            .then(response => response.json())
+        const carregar = cacheTiposTrabalhoPorItem.has(String(itemId))
+            ? Promise.resolve(cacheTiposTrabalhoPorItem.get(String(itemId)))
+            : fetch(`/apontamento/item/${itemId}/tipos-trabalho`)
+                .then(response => response.json())
+                .then(data => {
+                    cacheTiposTrabalhoPorItem.set(String(itemId), data);
+                    return data;
+                });
+
+        carregar
             .then(data => {
+                if (requestToken !== modalLoadToken || String(document.getElementById('itemSelecao').value) !== String(itemId)) {
+                    return;
+                }
                 const select = document.getElementById('tipoTrabalho');
                 select.innerHTML = '<option value="">Selecione o tipo de trabalho</option>';
                 
@@ -1956,6 +2033,11 @@
                         }
                         select.appendChild(option);
                     });
+
+                    if (autoSelectFirst && data.tipos_trabalho.length === 1) {
+                        select.value = data.tipos_trabalho[0].id;
+                        atualizarUltimaQuantidadeCampo(requestToken);
+                    }
                 } else {
                     mostrarAlerta('Erro: ' + data.message, 'warning');
                 }
@@ -1969,7 +2051,12 @@
     // Event listener para quando o item for selecionado
     document.getElementById('itemSelecao').addEventListener('change', function(e) {
         const itemId = e.target.value;
-        carregarTiposTrabalhoItem(itemId);
+        const selectTipo = document.getElementById('tipoTrabalho');
+        const quantidade = document.getElementById('quantidade');
+        selectTipo.innerHTML = '<option value="">Carregando tipo de trabalho...</option>';
+        quantidade.value = '';
+        quantidade.min = 0;
+        carregarTiposTrabalhoItem(itemId, { requestToken: modalLoadToken, autoSelectFirst: true });
         // Limpar informação de última quantidade até que o tipo de trabalho seja selecionado
         const info = document.getElementById('ultimaQuantidadeInfo');
         if (info) info.textContent = '';
@@ -1977,7 +2064,7 @@
 
     // Quando o tipo de trabalho for selecionado, calcular/mostrar última quantidade
     document.getElementById('tipoTrabalho').addEventListener('change', function(e) {
-        atualizarUltimaQuantidadeCampo();
+        atualizarUltimaQuantidadeCampo(modalLoadToken);
     });
 
     // Cache simples em memória para última quantidade por OS/Item/Trabalho
@@ -1993,47 +2080,22 @@
             return cacheUltimaQuantidade.get(chave);
         }
 
-        // 1) Tentar via /apontamento/status-ativos (se houver status para esta OS)
         try {
-            const resp = await fetch('/apontamento/status-ativos');
-            if (resp.ok) {
-                const data = await resp.json();
-                if (data.status_ativos && Array.isArray(data.status_ativos)) {
-                    const st = data.status_ativos.find(s => s.ordem_servico_id === ordemId && s.item_id === itemId && s.trabalho_id === trabalhoId);
-                    if (st && typeof st.ultima_quantidade !== 'undefined' && st.ultima_quantidade !== null) {
-                        cacheUltimaQuantidade.set(chave, parseInt(st.ultima_quantidade, 10));
-                        return cacheUltimaQuantidade.get(chave);
-                    }
-                }
+            const quantidadesOS = await obterQuantidadesPorTrabalhoOS(ordemId);
+            if (quantidadesOS.has(String(trabalhoId))) {
+                const quantidade = quantidadesOS.get(String(trabalhoId));
+                cacheUltimaQuantidade.set(chave, quantidade);
+                return quantidade;
             }
         } catch (e) {
-            console.warn('Falha ao consultar status-ativos para última quantidade:', e);
+            console.warn('Falha ao consultar quantidades por trabalho para última quantidade:', e);
         }
 
-        // 2) Consultar logs da OS e pegar a última quantidade para o item/trabalho
-        try {
-            const resp2 = await fetch(`/apontamento/os/${ordemId}/logs`);
-            if (resp2.ok) {
-                const data2 = await resp2.json();
-                if (data2.logs && Array.isArray(data2.logs)) {
-                    // logs já vêm ordenados desc por data_hora
-                    const log = data2.logs.find(l => l.item_id === itemId && l.trabalho_id === trabalhoId && l.quantidade !== null && typeof l.quantidade !== 'undefined');
-                    if (log) {
-                        cacheUltimaQuantidade.set(chave, parseInt(log.quantidade, 10));
-                        return cacheUltimaQuantidade.get(chave);
-                    }
-                }
-            }
-        } catch (e) {
-            console.warn('Falha ao consultar logs para última quantidade:', e);
-        }
-
-        // 3) Fallback: 0
         cacheUltimaQuantidade.set(chave, 0);
         return 0;
     }
 
-    async function atualizarUltimaQuantidadeCampo() {
+    async function atualizarUltimaQuantidadeCampo(requestToken = modalLoadToken) {
         const ordemId = parseInt(document.getElementById('ordemServicoId').value, 10);
         const itemId = parseInt(document.getElementById('itemSelecao').value, 10);
         const trabalhoId = parseInt(document.getElementById('tipoTrabalho').value, 10);
@@ -2044,47 +2106,27 @@
             return;
         }
         try {
-            // Primeiro, tentar buscar do QPT atualizado no DOM
-            let ultimaQ = null;
-            
-            // Buscar o cartão da OS no DOM
-            const cartoes = document.querySelectorAll('.kanban-card');
-            for (const cartao of cartoes) {
-                const osIdElement = cartao.querySelector('[data-ordem-id]');
-                if (osIdElement && parseInt(osIdElement.getAttribute('data-ordem-id')) === ordemId) {
-                    // Encontrou o cartão da OS, agora buscar o QPT do trabalho específico
-                    const qptItems = cartao.querySelectorAll('.qpt-item');
-                    for (const qptItem of qptItems) {
-                        const trabalhoNome = qptItem.getAttribute('data-trab-nome');
-                        const qptQty = qptItem.querySelector('.qpt-qty');
-                        
-                        // Verificar se é o trabalho correto comparando com o select
-                        const trabalhoSelect = document.getElementById('tipoTrabalho');
-                        const trabalhoSelecionado = trabalhoSelect.options[trabalhoSelect.selectedIndex];
-                        
-                        if (trabalhoSelecionado && trabalhoSelecionado.text === trabalhoNome && qptQty) {
-                            ultimaQ = parseInt(qptQty.textContent.trim());
-                            console.log(`QPT encontrado no DOM: ${ultimaQ} para trabalho ${trabalhoNome}`);
-                            break;
-                        }
-                    }
-                    if (ultimaQ !== null) break;
-                }
+            const ordemAtualModal = parseInt(document.getElementById('ordemServicoId').value, 10);
+            const itemAtualModal = parseInt(document.getElementById('itemSelecao').value, 10);
+            const trabalhoAtualModal = parseInt(document.getElementById('tipoTrabalho').value, 10);
+            const ultimaQ = await obterUltimaQuantidade(ordemId, itemId, trabalhoId);
+
+            if (
+                requestToken !== modalLoadToken
+                || ordemAtualModal !== ordemId
+                || itemAtualModal !== itemId
+                || trabalhoAtualModal !== trabalhoId
+            ) {
+                return;
             }
-            
-            // Se não encontrou no QPT, buscar via backend
-            if (ultimaQ === null) {
-                ultimaQ = await obterUltimaQuantidade(ordemId, itemId, trabalhoId);
-            } else {
-                // Atualizar o cache com o valor do QPT
-                const chave = chaveUltimaQuantidade(ordemId, itemId, trabalhoId);
-                cacheUltimaQuantidade.set(chave, ultimaQ);
-            }
-            
+
             if (info) info.textContent = `Última quantidade apontada para este item/trabalho: ${ultimaQ}`;
             if (qtdInput) {
                 qtdInput.min = Math.max(0, ultimaQ);
-                if (!qtdInput.placeholder || qtdInput.placeholder === '0' || qtdInput.placeholder === 'Quantidade final produzida' || qtdInput.placeholder === 'Quantidade atual de peças') {
+                if (
+                    !qtdInput.value
+                    && (!qtdInput.placeholder || qtdInput.placeholder === '0' || qtdInput.placeholder === 'Quantidade final produzida' || qtdInput.placeholder === 'Quantidade atual de peças' || qtdInput.placeholder === 'Quantidade inicial (opcional)' || qtdInput.placeholder === 'Quantidade final no turno (opcional)')
+                ) {
                     qtdInput.placeholder = `>= ${ultimaQ}`;
                 }
             }
@@ -2196,6 +2238,17 @@
         .then(response => response.json())
         .then(data => {
             if (data.success) {
+                try {
+                    const osIdCache = String(ordemAtualId);
+                    cacheQuantidadesPorOS.delete(osIdCache);
+                    for (const chaveCache of Array.from(cacheUltimaQuantidade.keys())) {
+                        if (chaveCache.startsWith(`${osIdCache}-`)) {
+                            cacheUltimaQuantidade.delete(chaveCache);
+                        }
+                    }
+                } catch (eCache) {
+                    console.warn('Falha ao invalidar cache local do modal:', eCache);
+                }
                 mostrarAlerta(data.message, 'success');
                 bootstrap.Modal.getInstance(document.getElementById('modalApontamento')).hide();
                 // Atualizar visual conforme a ação

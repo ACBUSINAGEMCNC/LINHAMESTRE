@@ -18,6 +18,56 @@ estoque_pecas = Blueprint('estoque_pecas', __name__)
 ADMIN_MASTER_EMAIL = 'admin@acbusinagem.com.br'
 
 
+def _usuario_pode_ver_valores():
+    if 'usuario_id' not in session:
+        return False
+    usuario = Usuario.query.get(session['usuario_id'])
+    if not usuario:
+        return False
+    return bool(
+        ((getattr(usuario, 'email', '') or '').strip().lower() == ADMIN_MASTER_EMAIL and getattr(usuario, 'nivel_acesso', None) == 'admin')
+        or getattr(usuario, 'acesso_valores_itens', False)
+    )
+
+
+def _get_lista_retirada_salva():
+    lista = session.get('lista_retirada_pecas') or {}
+    if not isinstance(lista, dict):
+        lista = {}
+    lista.setdefault('referencia', '')
+    lista.setdefault('responsavel', '')
+    lista.setdefault('observacao', '')
+    lista.setdefault('gerado_em', '')
+    lista.setdefault('baixado_em', '')
+    lista.setdefault('status', 'rascunho')
+    lista.setdefault('itens', [])
+    return lista
+
+
+def _salvar_lista_retirada(lista):
+    session['lista_retirada_pecas'] = lista
+    session.modified = True
+
+
+def _localizacao_estoque_item(estoque_item):
+    if estoque_item.estante and estoque_item.secao and estoque_item.linha and estoque_item.coluna:
+        return f"{estoque_item.estante}-{['A','B','C','D'][estoque_item.secao-1]}-{(estoque_item.linha-1)*12 + estoque_item.coluna}"
+    return ''
+
+
+def _resumo_lista_retirada(lista, pode_ver_valores):
+    itens = lista.get('itens', []) or []
+    total_quantidade = sum(int(item.get('quantidade_solicitada') or 0) for item in itens)
+    total_valor = 0.0
+    if pode_ver_valores:
+        total_valor = sum(float(item.get('valor_total') or 0) for item in itens)
+    return {
+        'total_itens': len(itens),
+        'total_quantidade': total_quantidade,
+        'total_valor': total_valor,
+    }
+
+
 def _require_acesso_valores():
     """Verifica se o usuário tem acesso a valores de itens"""
     if 'usuario_id' not in session:
@@ -171,7 +221,216 @@ def index():
     if not show_zero:
         q = q.filter(EstoquePecas.quantidade > 0)
     estoque = q.order_by(EstoquePecas.estante, EstoquePecas.secao, EstoquePecas.linha, EstoquePecas.coluna).all()
-    return render_template('estoque_pecas/index.html', estoque=estoque, show_zero=show_zero)
+    return render_template(
+        'estoque_pecas/index.html',
+        estoque=estoque,
+        show_zero=show_zero,
+        pode_ver_valores=_usuario_pode_ver_valores()
+    )
+
+
+@estoque_pecas.route('/estoque-pecas/lista-retirada', methods=['GET', 'POST'])
+def lista_retirada():
+    """Exibe a lista de retirada salva em sessão"""
+    pode_ver_valores = _usuario_pode_ver_valores()
+    lista_salva = _get_lista_retirada_salva()
+    resumo = _resumo_lista_retirada(lista_salva, pode_ver_valores)
+    estoque_lista = (
+        EstoquePecas.query.filter(EstoquePecas.quantidade > 0)
+        .order_by(EstoquePecas.estante, EstoquePecas.secao, EstoquePecas.linha, EstoquePecas.coluna)
+        .all()
+    )
+    return render_template(
+        'estoque_pecas/lista_retirada.html',
+        estoque_lista=estoque_lista,
+        itens_lista=lista_salva.get('itens', []),
+        referencia=lista_salva.get('referencia', ''),
+        responsavel=lista_salva.get('responsavel', ''),
+        observacao=lista_salva.get('observacao', ''),
+        pode_ver_valores=pode_ver_valores,
+        gerado_em=lista_salva.get('gerado_em'),
+        baixado_em=lista_salva.get('baixado_em'),
+        status_lista=lista_salva.get('status', 'rascunho'),
+        total_quantidade=resumo['total_quantidade'],
+        total_valor=resumo['total_valor'],
+        total_itens=resumo['total_itens']
+    )
+
+
+@estoque_pecas.route('/estoque-pecas/lista-retirada/nova', methods=['POST'])
+def nova_lista_retirada():
+    lista = {
+        'referencia': '',
+        'responsavel': '',
+        'observacao': '',
+        'gerado_em': datetime.now().strftime('%d/%m/%Y %H:%M'),
+        'baixado_em': '',
+        'status': 'rascunho',
+        'itens': [],
+    }
+    _salvar_lista_retirada(lista)
+    flash('Nova lista de retirada iniciada.', 'success')
+    return redirect(url_for('estoque_pecas.lista_retirada'))
+
+
+@estoque_pecas.route('/estoque-pecas/lista-retirada/adicionar', methods=['POST'])
+def adicionar_item_lista_retirada():
+    pode_ver_valores = _usuario_pode_ver_valores()
+    lista = _get_lista_retirada_salva()
+
+    estoque_id = (request.form.get('estoque_id') or '').strip()
+    quantidade_raw = (request.form.get('quantidade') or '').strip()
+    if not estoque_id or not quantidade_raw:
+        flash('Selecione a peça e informe a quantidade para adicionar na lista.', 'warning')
+        return redirect(url_for('estoque_pecas.lista_retirada'))
+
+    try:
+        quantidade = int(quantidade_raw)
+    except ValueError:
+        flash('Quantidade inválida para a lista de retirada.', 'danger')
+        return redirect(url_for('estoque_pecas.lista_retirada'))
+
+    if quantidade <= 0:
+        flash('A quantidade deve ser maior que zero.', 'warning')
+        return redirect(url_for('estoque_pecas.lista_retirada'))
+
+    estoque_item = EstoquePecas.query.get(estoque_id)
+    if not estoque_item or int(estoque_item.quantidade or 0) <= 0:
+        flash('Item de estoque não encontrado ou sem saldo disponível.', 'danger')
+        return redirect(url_for('estoque_pecas.lista_retirada'))
+
+    itens = lista.get('itens', [])
+    quantidade_existente = 0
+    item_existente = None
+    for item in itens:
+        if str(item.get('estoque_id')) == str(estoque_item.id):
+            item_existente = item
+            quantidade_existente = int(item.get('quantidade_solicitada') or 0)
+            break
+
+    nova_quantidade = quantidade_existente + quantidade
+    if nova_quantidade > int(estoque_item.quantidade or 0):
+        flash(f'Quantidade total da lista para {estoque_item.item.codigo_acb} maior que o disponível em estoque.', 'danger')
+        return redirect(url_for('estoque_pecas.lista_retirada'))
+
+    valor_unitario = float(getattr(estoque_item.item, 'valor_item', 0) or 0)
+    valor_total = nova_quantidade * valor_unitario
+    observacao_item = (request.form.get('observacao_item') or '').strip()
+    imagem_path = getattr(estoque_item.item, 'imagem_path', '') or ''
+
+    if item_existente:
+        item_existente['quantidade_solicitada'] = nova_quantidade
+        item_existente['quantidade_disponivel'] = int(estoque_item.quantidade or 0)
+        item_existente['localizacao'] = _localizacao_estoque_item(estoque_item)
+        item_existente['imagem_path'] = imagem_path
+        if observacao_item:
+            item_existente['observacao_item'] = observacao_item
+        if pode_ver_valores:
+            item_existente['valor_unitario'] = valor_unitario
+            item_existente['valor_total'] = valor_total
+    else:
+        linha = {
+            'estoque_id': estoque_item.id,
+            'item_id': estoque_item.item_id,
+            'codigo_acb': estoque_item.item.codigo_acb,
+            'nome': estoque_item.item.nome,
+            'imagem_path': imagem_path,
+            'quantidade_solicitada': nova_quantidade,
+            'quantidade_disponivel': int(estoque_item.quantidade or 0),
+            'localizacao': _localizacao_estoque_item(estoque_item),
+            'observacao_item': observacao_item,
+        }
+        if pode_ver_valores:
+            linha['valor_unitario'] = valor_unitario
+            linha['valor_total'] = valor_total
+        itens.append(linha)
+
+    lista['referencia'] = (request.form.get('referencia') or lista.get('referencia') or '').strip()
+    lista['responsavel'] = (request.form.get('responsavel') or lista.get('responsavel') or '').strip()
+    lista['observacao'] = (request.form.get('observacao') or lista.get('observacao') or '').strip()
+    lista['gerado_em'] = lista.get('gerado_em') or datetime.now().strftime('%d/%m/%Y %H:%M')
+    lista['status'] = 'rascunho'
+    lista['baixado_em'] = ''
+    lista['itens'] = itens
+    _salvar_lista_retirada(lista)
+
+    flash(f'Item {estoque_item.item.codigo_acb} adicionado à lista.', 'success')
+    return redirect(url_for('estoque_pecas.lista_retirada'))
+
+
+@estoque_pecas.route('/estoque-pecas/lista-retirada/remover/<int:estoque_id>', methods=['POST'])
+def remover_item_lista_retirada(estoque_id):
+    lista = _get_lista_retirada_salva()
+    itens = [item for item in lista.get('itens', []) if str(item.get('estoque_id')) != str(estoque_id)]
+    lista['itens'] = itens
+    if not itens:
+        lista['status'] = 'rascunho'
+        lista['baixado_em'] = ''
+    _salvar_lista_retirada(lista)
+    flash('Item removido da lista de retirada.', 'success')
+    return redirect(url_for('estoque_pecas.lista_retirada'))
+
+
+@estoque_pecas.route('/estoque-pecas/lista-retirada/atualizar', methods=['POST'])
+def atualizar_dados_lista_retirada():
+    lista = _get_lista_retirada_salva()
+    lista['referencia'] = (request.form.get('referencia') or '').strip()
+    lista['responsavel'] = (request.form.get('responsavel') or '').strip()
+    lista['observacao'] = (request.form.get('observacao') or '').strip()
+    if lista.get('itens'):
+        lista['gerado_em'] = lista.get('gerado_em') or datetime.now().strftime('%d/%m/%Y %H:%M')
+    _salvar_lista_retirada(lista)
+    flash('Dados da lista atualizados.', 'success')
+    return redirect(url_for('estoque_pecas.lista_retirada'))
+
+
+@estoque_pecas.route('/estoque-pecas/lista-retirada/baixar', methods=['POST'])
+def baixar_lista_retirada():
+    lista = _get_lista_retirada_salva()
+    itens = lista.get('itens', []) or []
+    if not itens:
+        flash('A lista de retirada está vazia.', 'warning')
+        return redirect(url_for('estoque_pecas.lista_retirada'))
+
+    referencia = (lista.get('referencia') or '').strip() or 'LISTA_RETIRADA'
+    observacao_lista = (lista.get('observacao') or '').strip()
+
+    try:
+        for item_lista in itens:
+            estoque_item = EstoquePecas.query.get(item_lista.get('estoque_id'))
+            quantidade = int(item_lista.get('quantidade_solicitada') or 0)
+            if not estoque_item:
+                raise ValueError(f"Item {item_lista.get('codigo_acb') or item_lista.get('nome') or ''} não encontrado no estoque.")
+            if quantidade <= 0:
+                raise ValueError(f"Quantidade inválida para {item_lista.get('codigo_acb') or item_lista.get('nome') or ''}.")
+            if int(estoque_item.quantidade or 0) < quantidade:
+                raise ValueError(f"Saldo insuficiente para {item_lista.get('codigo_acb') or item_lista.get('nome') or ''}.")
+
+        for item_lista in itens:
+            estoque_item = EstoquePecas.query.get(item_lista.get('estoque_id'))
+            quantidade = int(item_lista.get('quantidade_solicitada') or 0)
+            estoque_item.quantidade -= quantidade
+            movimentacao = MovimentacaoEstoquePecas(
+                estoque_pecas_id=estoque_item.id,
+                tipo='saida',
+                quantidade=quantidade,
+                data=datetime.now().date(),
+                referencia=referencia,
+                observacao=(item_lista.get('observacao_item') or observacao_lista or 'Baixa via lista de retirada')
+            )
+            db.session.add(movimentacao)
+
+        db.session.commit()
+    except Exception as e:
+        db.session.rollback()
+        flash(str(e), 'danger')
+        return redirect(url_for('estoque_pecas.lista_retirada'))
+
+    lista['status'] = 'baixada'
+    lista['baixado_em'] = datetime.now().strftime('%d/%m/%Y %H:%M')
+    _salvar_lista_retirada(lista)
+    flash('Lista baixada no estoque com sucesso.', 'success')
+    return redirect(url_for('estoque_pecas.lista_retirada'))
 
 
 @estoque_pecas.route('/estoque-pecas/importar-excel', methods=['GET', 'POST'])
@@ -544,14 +803,17 @@ def entrada():
 @estoque_pecas.route('/estoque-pecas/saida', methods=['GET', 'POST'])
 def saida():
     """Rota para registrar saída de peças do estoque"""
+    lista_retirada = session.get('lista_retirada_pecas') or {}
     if request.method == 'POST':
         # Validação de dados
-        errors = validate_form_data(request.form, ['estoque_id', 'quantidade'])
+        required_fields = ['estoque_id', 'quantidade']
+        errors = validate_form_data(request.form, required_fields)
+        
         if errors:
             for error in errors:
                 flash(error, 'danger')
             estoque = EstoquePecas.query.order_by(EstoquePecas.estante, EstoquePecas.secao, EstoquePecas.linha, EstoquePecas.coluna).all()
-            return render_template('estoque_pecas/saida.html', estoque=estoque)
+            return render_template('estoque_pecas/saida.html', estoque=estoque, lista_retirada=lista_retirada)
         
         estoque_id = request.form['estoque_id']
         
@@ -561,23 +823,23 @@ def saida():
             if quantidade <= 0:
                 flash('A quantidade deve ser maior que zero', 'danger')
                 estoque = EstoquePecas.query.order_by(EstoquePecas.estante, EstoquePecas.secao, EstoquePecas.linha, EstoquePecas.coluna).all()
-                return render_template('estoque_pecas/saida.html', estoque=estoque)
+                return render_template('estoque_pecas/saida.html', estoque=estoque, lista_retirada=lista_retirada)
         except ValueError:
             flash('A quantidade deve ser um número inteiro', 'danger')
             estoque = EstoquePecas.query.order_by(EstoquePecas.estante, EstoquePecas.secao, EstoquePecas.linha, EstoquePecas.coluna).all()
-            return render_template('estoque_pecas/saida.html', estoque=estoque)
+            return render_template('estoque_pecas/saida.html', estoque=estoque, lista_retirada=lista_retirada)
         
         referencia = request.form.get('referencia', '')
         observacao = request.form.get('observacao', '')
         
-        # Buscar registro de estoque
+        # Verificar se o item existe no estoque
         estoque_item = EstoquePecas.query.get_or_404(estoque_id)
         
-        # Verificar se há quantidade suficiente
+        # Verificar quantidade disponível
         if estoque_item.quantidade < quantidade:
             flash('Quantidade insuficiente em estoque!', 'danger')
             estoque = EstoquePecas.query.order_by(EstoquePecas.estante, EstoquePecas.secao, EstoquePecas.linha, EstoquePecas.coluna).all()
-            return render_template('estoque_pecas/saida.html', estoque=estoque)
+            return render_template('estoque_pecas/saida.html', estoque=estoque, lista_retirada=lista_retirada)
         
         # Atualizar estoque
         estoque_item.quantidade -= quantidade
@@ -599,7 +861,7 @@ def saida():
         return redirect(url_for('estoque_pecas.index'))
     
     estoque = EstoquePecas.query.order_by(EstoquePecas.estante, EstoquePecas.secao, EstoquePecas.linha, EstoquePecas.coluna).all()
-    return render_template('estoque_pecas/saida.html', estoque=estoque)
+    return render_template('estoque_pecas/saida.html', estoque=estoque, lista_retirada=lista_retirada)
 
 @estoque_pecas.route('/estoque-pecas/historico/<int:estoque_id>')
 def historico(estoque_id):

@@ -301,10 +301,7 @@ function carregarEstadoApontamentos() {
                     if (status.operador_nome) {
                         adicionarIndicadorOperador(ordemId, status.operador_nome, status.operador_codigo);
                     }
-                    
-                    // Carregar logs para este card
-                    carregarLogsParaCard(ordemId);
-                    
+
                     // Verificar se o operador atual é o mesmo que está logado
                     if (status.operador_id) {
                         const usuarioAtualId = document.body.getAttribute('data-usuario-id');
@@ -352,33 +349,51 @@ function carregarEstadoApontamentos() {
 // Gerenciamento de timers por trabalho (independentes)
 const timersTrabalho = {}; // chave: `${ordemId}:${itemId}:${trabalhoId}` => intervalId
 
-function keyTrabalho(ordemId, itemId, trabalhoId) {
-    return `${ordemId}:${itemId}:${trabalhoId}`;
+function obterCardRealDaOS(ordemId) {
+    const cards = document.querySelectorAll(`[data-ordem-id="${ordemId}"]`);
+    for (const card of cards) {
+        if (!card.classList.contains('fantasma')) {
+            return card;
+        }
+    }
+    return null;
+}
+
+function cardProximoDaViewport(ordemId) {
+    const card = obterCardRealDaOS(ordemId);
+    if (!card) {
+        return false;
+    }
+
+    const rect = card.getBoundingClientRect();
+    const viewportHeight = window.innerHeight || document.documentElement.clientHeight || 0;
+    const margem = 400;
+
+    return rect.bottom >= -margem && rect.top <= (viewportHeight + margem);
 }
 
 function parseStartTimestamp(startTimeStr) {
-    // Aceitar timestamp numérico (ms)
-    if (typeof startTimeStr === 'number' && Number.isFinite(startTimeStr)) {
-        return startTimeStr;
-    }
-    if (typeof startTimeStr === 'string') {
-        const raw = startTimeStr.trim();
-        if (raw && /^\d{13}$/.test(raw)) {
-            const n = Number(raw);
-            if (Number.isFinite(n)) return n;
-        }
+    if (!startTimeStr) return Date.now();
 
-        // ISO sem timezone (ex: 2026-02-18T18:20:00) pode ser interpretado como UTC em alguns browsers.
-        // Se não houver offset/Z, assumir BRT (-03:00) para evitar pular horas.
-        let iso = raw;
-        const hasTz = /([zZ]|[+-]\d{2}:?\d{2})$/.test(iso);
-        if (!hasTz && /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}/.test(iso)) {
-            iso = `${iso}-03:00`;
-        }
-
-        const ts = new Date(iso).getTime();
-        if (Number.isFinite(ts)) return ts;
+    if (typeof startTimeStr === 'number') {
+        return Number.isFinite(startTimeStr) ? startTimeStr : Date.now();
     }
+
+    const raw = String(startTimeStr).trim();
+    if (!raw) return Date.now();
+
+    const n = Number(raw);
+    if (Number.isFinite(n)) return n;
+
+    let iso = raw;
+    const hasTz = /([zZ]|[+-]\d{2}:?\d{2})$/.test(iso);
+    if (!hasTz && /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}/.test(iso)) {
+        iso = `${iso}-03:00`;
+    }
+
+    const ts = new Date(iso).getTime();
+    if (Number.isFinite(ts)) return ts;
+
     return Date.now();
 }
 
@@ -1090,7 +1105,8 @@ function atualizarQuantidadesPorTrabalho(ordemId, ativosLista) {
     // quando não houver ativos e não houver cache para esta OS.
     try {
         const hasAny = current && current.items && Object.keys(current.items).length > 0;
-        if (!hasAny && !window.__qptFetching[ordemId]) {
+        const proximoDaViewport = cardProximoDaViewport(ordemId);
+        if (!hasAny && proximoDaViewport && !window.__qptFetching[ordemId]) {
             window.__qptFetching[ordemId] = true;
             fetch(`/apontamento/quantidades-por-trabalho/${ordemId}`)
                 .then(r => r.ok ? r.json() : Promise.reject(new Error(`HTTP ${r.status}`)))
@@ -1153,12 +1169,9 @@ function atualizarQuantidadesPorTrabalho(ordemId, ativosLista) {
                         try {
                             let cont = document.getElementById(`qtd-por-trabalho-${ordemId}`);
                             if (!cont) {
-                                const cards = document.querySelectorAll(`[data-ordem-id="${ordemId}"]`);
-                                for (const c of cards) {
-                                    if (!c.classList.contains('fantasma')) {
-                                        const scoped = c.querySelector(`#qtd-por-trabalho-${ordemId}`);
-                                        if (scoped) { cont = scoped; break; }
-                                    }
+                                const card = obterCardRealDaOS(ordemId);
+                                if (card) {
+                                    cont = card.querySelector(`#qtd-por-trabalho-${ordemId}`);
                                 }
                             }
                             if (cont && cont.dataset) delete cont.dataset.qptSig;
@@ -1437,6 +1450,10 @@ function atualizarStatusCartaoCompleto(ordemId, statusAtual) {
 
 // Função para carregar logs para um card específico
 function carregarLogsParaCard(ordemId) {
+    if (!ordemId) {
+        return Promise.resolve();
+    }
+
     fetch(`/apontamento/os/${ordemId}/logs`)
         .then(response => response.json())
         .then(data => {

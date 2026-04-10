@@ -281,24 +281,3 @@ function getBadgeClass(tipoAcao) {
             return 'bg-info';
     }
 }
-
-// Carregar logs para todos os cards visíveis ao inicializar
-document.addEventListener('DOMContentLoaded', function() {
-    // Pequeno atraso para garantir que os cards já foram carregados
-    setTimeout(() => {
-        const cards = document.querySelectorAll('.kanban-card');
-        cards.forEach(card => {
-            const ordemId = card.getAttribute('data-ordem-id');
-            if (ordemId) {
-                fetch(`/apontamento/os/${ordemId}/logs`)
-                    .then(response => response.json())
-                    .then(data => {
-                        if (data.logs && data.logs.length > 0) {
-                            adicionarLogsAoCard(ordemId, data.logs);
-                        }
-                    })
-                    .catch(error => console.error('Erro ao carregar logs para card:', error));
-            }
-        });
-    }, 1000);
-});

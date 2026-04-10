@@ -48,6 +48,14 @@
                 <a href="{{ url_for('estoque_pecas.importar_estoque_excel') }}" class="btn btn-outline-success me-2">
                     <i class="fas fa-file-excel"></i> Importar Excel
                 </a>
+                <a href="{{ url_for('estoque_pecas.lista_retirada') }}" class="btn btn-outline-dark me-2">
+                    <i class="fas fa-list-check"></i> Lista de Retirada
+                </a>
+                {% if pode_ver_valores %}
+                <a href="{{ url_for('estoque_pecas.valores_estoque') }}" class="btn btn-outline-info me-2">
+                    <i class="fas fa-dollar-sign"></i> Ver Valores
+                </a>
+                {% endif %}
                 <a href="/estoque-pecas/saida" class="btn btn-warning">
                     <i class="fas fa-minus"></i> Saída
                 </a>
