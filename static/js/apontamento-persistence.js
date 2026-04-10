@@ -19,15 +19,7 @@ try {
         window.__qptInitOnce = true;
         document.addEventListener('DOMContentLoaded', function() {
             try {
-                const cards = document.querySelectorAll('.kanban-card[data-ordem-id]:not(.fantasma)');
-                cards.forEach(card => {
-                    const idStr = card.getAttribute('data-ordem-id');
-                    const osId = parseInt(idStr, 10);
-                    if (!Number.isNaN(osId) && typeof window.atualizarQuantidadesPorTrabalho === 'function') {
-                        // Não limpa conteúdo; apenas tenta preencher via cache
-                        window.atualizarQuantidadesPorTrabalho(osId, []);
-                    }
-                });
+                window.__qptBootstrapDoneAt = Date.now();
             } catch (e) { console.warn('Falha ao inicializar QPT via cache no load:', e); }
         }, { once: true });
     }
@@ -316,24 +308,6 @@ function carregarEstadoApontamentos() {
                 console.log('Estado dos apontamentos restaurado com sucesso!');
             } else {
                 console.log('Nenhum apontamento ativo encontrado.');
-            }
-
-            // Garante QPT visível para OS sem ativo (renderiza via cache/LS)
-            try {
-                const cards = document.querySelectorAll('.kanban-card[data-ordem-id]:not(.fantasma)');
-                cards.forEach(card => {
-                    const idStr = card.getAttribute('data-ordem-id');
-                    if (!ativosIds.has(String(idStr))) {
-                        const osId = parseInt(idStr, 10);
-                        if (!Number.isNaN(osId)) {
-                            if (!(typeof shouldSkipQpt === 'function' && shouldSkipQpt(osId))) {
-                                atualizarQuantidadesPorTrabalho(osId, []);
-                            }
-                        }
-                    }
-                });
-            } catch (eAll) {
-                console.warn('Falha ao garantir QPT para OS sem ativo:', eAll);
             }
         })
         .catch(error => {
