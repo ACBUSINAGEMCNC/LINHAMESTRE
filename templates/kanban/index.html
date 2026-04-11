@@ -153,14 +153,199 @@
             font-size: 0.75rem;
         }
         .column-stats {
-            font-size: 0.75rem;
-            color: #6c757d;
-            margin-top: 5px;
+            position: relative;
+            margin-top: 6px;
         }
         .column-time {
             background-color: #17a2b8;
             color: white;
             padding: 2px 5px;
+        }
+        .column-stats-toggle {
+            width: 100%;
+            border: 0;
+            background: #f4f7fb;
+            border-radius: 10px;
+            padding: 8px 10px;
+            display: flex;
+            flex-direction: column;
+            align-items: stretch;
+            gap: 6px;
+            text-align: left;
+            box-shadow: inset 0 0 0 1px rgba(13, 110, 253, 0.08);
+        }
+        .column-stats-toggle:focus {
+            outline: 2px solid rgba(13, 110, 253, 0.25);
+            outline-offset: 1px;
+        }
+        .column-stats-topline {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 6px;
+        }
+        .column-stats-chips {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 5px;
+        }
+        .column-stats-chip {
+            display: inline-flex;
+            align-items: center;
+            gap: 4px;
+            border-radius: 999px;
+            padding: 3px 7px;
+            font-size: 0.68rem;
+            font-weight: 600;
+            line-height: 1;
+            white-space: nowrap;
+        }
+        .column-stats-chip.primary {
+            background: #0d6efd;
+            color: #fff;
+        }
+        .column-stats-chip.info {
+            background: #17a2b8;
+            color: #fff;
+        }
+        .column-stats-chip.success {
+            background: #198754;
+            color: #fff;
+        }
+        .column-stats-chip.warning {
+            background: #fff3cd;
+            color: #7a5b00;
+        }
+        .column-stats-subline {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 8px;
+            font-size: 0.68rem;
+            color: #5c6670;
+        }
+        .column-stats-summary {
+            display: flex;
+            gap: 10px;
+            flex-wrap: wrap;
+        }
+        .column-stats-summary span {
+            display: inline-flex;
+            align-items: center;
+            gap: 4px;
+        }
+        .column-stats-popover {
+            position: absolute;
+            top: calc(100% + 8px);
+            left: 0;
+            right: 0;
+            z-index: 30;
+            background: #fff;
+            border: 1px solid rgba(0,0,0,0.08);
+            border-radius: 12px;
+            box-shadow: 0 16px 40px rgba(0,0,0,0.14);
+            padding: 12px;
+            display: none;
+        }
+        .column-stats.open .column-stats-popover,
+        .column-stats:hover .column-stats-popover,
+        .column-stats:focus-within .column-stats-popover {
+            display: block;
+        }
+        .column-stats-popover-grid {
+            display: grid;
+            grid-template-columns: repeat(2, minmax(0, 1fr));
+            gap: 8px;
+            margin-bottom: 10px;
+        }
+        .column-metric-card {
+            background: #f8f9fa;
+            border-radius: 10px;
+            padding: 8px 10px;
+        }
+        .column-metric-card small {
+            display: block;
+            color: #6c757d;
+            font-size: 0.68rem;
+        }
+        .column-metric-card strong {
+            display: block;
+            color: #212529;
+            font-size: 0.86rem;
+            margin-top: 2px;
+        }
+        .column-popover-section-title {
+            font-size: 0.7rem;
+            font-weight: 700;
+            color: #6c757d;
+            text-transform: uppercase;
+            letter-spacing: 0.04em;
+            margin-bottom: 6px;
+        }
+        .column-service-list,
+        .column-top-cards-list {
+            display: flex;
+            flex-direction: column;
+            gap: 6px;
+            max-height: 180px;
+            overflow-y: auto;
+        }
+        .column-service-item,
+        .column-top-card-item {
+            border: 1px solid rgba(0,0,0,0.06);
+            border-radius: 10px;
+            padding: 7px 9px;
+            background: #fff;
+        }
+        .column-service-item.disabled {
+            opacity: 0.5;
+        }
+        .column-service-toggle {
+            display: flex;
+            align-items: flex-start;
+            gap: 8px;
+            width: 100%;
+            cursor: pointer;
+        }
+        .column-service-toggle input {
+            margin-top: 2px;
+        }
+        .column-service-main,
+        .column-top-card-main {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 8px;
+        }
+        .column-service-name,
+        .column-top-card-name {
+            font-size: 0.75rem;
+            font-weight: 600;
+            color: #212529;
+        }
+        .column-service-meta,
+        .column-top-card-meta {
+            display: flex;
+            gap: 8px;
+            flex-wrap: wrap;
+            font-size: 0.68rem;
+            color: #6c757d;
+            margin-top: 3px;
+        }
+        .column-popover-hint {
+            margin-top: 8px;
+            font-size: 0.67rem;
+            color: #6c757d;
+            text-align: right;
+        }
+        @media (max-width: 768px) {
+            .column-stats-popover-grid {
+                grid-template-columns: 1fr;
+            }
+            .column-stats-popover {
+                right: auto;
+                width: min(320px, calc(100vw - 34px));
+            }
         }
         
         /* Estilos para o timer de apontamento */
@@ -595,22 +780,83 @@
         <div class="kanban-container">
             {% for lista in listas %}
             <div class="kanban-column" id="column-{{ lista|lower|replace(' ', '-') }}">
+                {% set metricas_lista = metricas_listas.get(lista, {}) %}
                 <div class="kanban-column-header">
                     <span>{{ lista }}</span>
                     <span class="column-counter">{{ ordens[lista]|length }}</span>
                 </div>
-                <div class="column-stats">
-                    {% set horas = (tempos_listas[lista] // 3600) %}
-                    {% set minutos = ((tempos_listas[lista] % 3600) // 60) %}
-                    {% set segundos = (tempos_listas[lista] % 60) %}
-                    <span class="column-time"><i class="fas fa-clock"></i> 
-                        {% if horas > 0 %}
-                            {{ horas }}h {{ "%02d"|format(minutos) }}:{{ "%02d"|format(segundos) }}
-                        {% else %}
-                            {{ "%02d"|format(minutos) }}:{{ "%02d"|format(segundos) }}
+                <div class="column-stats" data-column-metrics="{{ lista }}">
+                    <button type="button" class="column-stats-toggle" data-column-stats-trigger aria-expanded="false">
+                        <div class="column-stats-topline">
+                            <div class="column-stats-chips">
+                                <span class="column-stats-chip info"><i class="fas fa-hourglass-half"></i> <span data-metric-restante>{{ metricas_lista.get('tempo_restante_label', '0m') }}</span></span>
+                                <span class="column-stats-chip success"><i class="fas fa-cubes"></i> <span data-metric-quantidade>{{ metricas_lista.get('quantidade_total', 0) }}</span></span>
+                                <span class="column-stats-chip warning"><i class="fas fa-layer-group"></i> <span data-metric-cards>{{ metricas_lista.get('cards_total', 0) }}</span></span>
+                            </div>
+                            <span class="column-stats-chip primary"><i class="fas fa-flag-checkered"></i> <span data-metric-turnos>{{ metricas_lista.get('turnos_primeiro_card_label', '0.0') }}</span> T</span>
+                        </div>
+                        <div class="column-stats-subline">
+                            <div class="column-stats-summary">
+                                <span><i class="fas fa-clock"></i> Apontado <strong data-metric-apontado>{{ metricas_lista.get('tempo_apontado_label', '0m') }}</strong></span>
+                                <span><i class="fas fa-stopwatch"></i> Total <strong data-metric-estimado>{{ metricas_lista.get('tempo_estimado_label', '0m') }}</strong></span>
+                            </div>
+                            <span><i class="fas fa-hand-pointer"></i> Detalhes</span>
+                        </div>
+                    </button>
+                    <div class="column-stats-popover" data-column-stats-popover>
+                        <div class="column-stats-popover-grid">
+                            <div class="column-metric-card">
+                                <small>Tempo já apontado</small>
+                                <strong data-detail-apontado>{{ metricas_lista.get('tempo_apontado_label', '0m') }}</strong>
+                            </div>
+                            <div class="column-metric-card">
+                                <small>Tempo restante</small>
+                                <strong data-detail-restante>{{ metricas_lista.get('tempo_restante_label', '0m') }}</strong>
+                            </div>
+                            <div class="column-metric-card">
+                                <small>Tempo total estimado</small>
+                                <strong data-detail-estimado>{{ metricas_lista.get('tempo_estimado_label', '0m') }}</strong>
+                            </div>
+                            <div class="column-metric-card">
+                                <small>Quantidade de peças</small>
+                                <strong data-detail-quantidade>{{ metricas_lista.get('quantidade_total', 0) }}</strong>
+                            </div>
+                        </div>
+                        {% if metricas_lista.get('primeiro_card') %}
+                        <div class="column-popover-section-title">Primeiro Card</div>
+                        <div class="column-top-card-item">
+                            <div class="column-top-card-main">
+                                <span class="column-top-card-name">{{ metricas_lista.primeiro_card.ordem_numero }}: {{ metricas_lista.primeiro_card.titulo }}</span>
+                            </div>
+                            <div class="column-top-card-meta">
+                                <span><i class="fas fa-hourglass-half"></i> {{ metricas_lista.primeiro_card.tempo_restante_label }}</span>
+                                <span><i class="fas fa-cubes"></i> {{ metricas_lista.primeiro_card.quantidade_total }}</span>
+                                <span><i class="fas fa-flag-checkered"></i> {{ metricas_lista.turnos_primeiro_card_label }} T</span>
+                            </div>
+                        </div>
                         {% endif %}
-                    </span>
-                    <span class="column-quantity"><i class="fas fa-cubes"></i> {{ quantidades_listas[lista] }}</span>
+                        <div class="column-popover-section-title">Serviços (incluir no cálculo)</div>
+                        <div class="column-service-list">
+                            {% for serv in metricas_lista.get('servicos', []) %}
+                            <label class="column-service-item {% if serv.id not in metricas_lista.get('servicos_ids', []) %}disabled{% endif %}">
+                                <div class="column-service-toggle">
+                                    <input type="checkbox" checked data-service-id="{{ serv.id }}" data-service-toggle>
+                                    <div style="flex: 1">
+                                        <div class="column-service-main">
+                                            <span class="column-service-name">{{ serv.nome }}</span>
+                                        </div>
+                                        <div class="column-service-meta">
+                                            <span><i class="fas fa-stopwatch"></i> {{ serv.tempo_estimado_label }}</span>
+                                            <span><i class="fas fa-clock"></i> {{ serv.tempo_apontado_label }}</span>
+                                            <span><i class="fas fa-hourglass-half"></i> {{ serv.tempo_restante_label }}</span>
+                                        </div>
+                                    </div>
+                                </div>
+                            </label>
+                            {% endfor %}
+                        </div>
+                        <div class="column-popover-hint">Marque/desmarque para recalcular</div>
+                    </div>
                 </div>
                 <div class="kanban-column-body" data-lista="{{ lista }}">
                     <!-- Cartões normais -->
@@ -3779,8 +4025,138 @@
             }
         }, 600);
     }
-    
+
+    // Métricas de colunas do Kanban - interações e recálculo client-side
+    (function initColumnMetrics() {
+        const SEGUNDOS_POR_TURNO = 28800; // 8 horas em segundos
+        const HORAS_POR_TURNO = 8;
+
+        function formatarTempoLabel(segundos) {
+            if (!segundos || segundos <= 0) return '0m';
+            const h = Math.floor(segundos / 3600);
+            const m = Math.floor((segundos % 3600) / 60);
+            const s = segundos % 60;
+            if (h > 0) return `${h}h ${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`;
+            return `${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`;
+        }
+
+        function recalcularMetricasLista(listaNome) {
+            const container = document.querySelector(`[data-column-metrics="${listaNome}"]`);
+            if (!container) return;
+
+            const metricasJsonStr = document.querySelector('[data-metricas-json]')?.textContent || '{}';
+            let metricasListas;
+            try {
+                metricasListas = JSON.parse(metricasJsonStr);
+            } catch (e) {
+                console.error('Erro ao parsear métricas JSON:', e);
+                return;
+            }
+
+            const metricasBase = metricasListas[listaNome] || {};
+            const servicosIdsAtivos = [];
+            container.querySelectorAll('[data-service-toggle]:checked').forEach(cb => {
+                servicosIdsAtivos.push(parseInt(cb.dataset.serviceId));
+            });
+
+            let tempoEstimadoTotal = 0;
+            let tempoApontadoTotal = 0;
+            let quantidadeTotal = 0;
+            const servicosAtivos = [];
+
+            for (const serv of (metricasBase.servicos || [])) {
+                if (servicosIdsAtivos.includes(serv.id)) {
+                    tempoEstimadoTotal += serv.tempo_estimado_total || 0;
+                    tempoApontadoTotal += serv.tempo_apontado_total || 0;
+                    quantidadeTotal += serv.quantidade_total || 0;
+                    servicosAtivos.push(serv);
+                }
+            }
+
+            const tempoRestanteTotal = Math.max(0, tempoEstimadoTotal - tempoApontadoTotal);
+            const cardsTotal = metricasBase.cards_total || 0;
+
+            let turnosPrimeiro = 0;
+            if (metricasBase.primeiro_card) {
+                const primeiroCard = metricasBase.primeiro_card;
+                let cardEstimado = 0;
+                let cardApontado = 0;
+                for (const serv of (primeiroCard.servicos || [])) {
+                    if (servicosIdsAtivos.includes(serv.id)) {
+                        cardEstimado += serv.tempo_estimado || 0;
+                        cardApontado += serv.tempo_apontado || 0;
+                    }
+                }
+                const cardRestante = Math.max(0, cardEstimado - cardApontado);
+                turnosPrimeiro = SEGUNDOS_POR_TURNO ? (cardRestante / SEGUNDOS_POR_TURNO) : 0;
+            }
+
+            const atualizarLabel = (sel, valor) => {
+                const el = container.querySelector(sel);
+                if (el) el.textContent = valor;
+            };
+
+            atualizarLabel('[data-metric-restante]', formatarTempoLabel(tempoRestanteTotal));
+            atualizarLabel('[data-metric-quantidade]', quantidadeTotal);
+            atualizarLabel('[data-metric-cards]', cardsTotal);
+            atualizarLabel('[data-metric-apontado]', formatarTempoLabel(tempoApontadoTotal));
+            atualizarLabel('[data-metric-estimado]', formatarTempoLabel(tempoEstimadoTotal));
+            atualizarLabel('[data-metric-turnos]', turnosPrimeiro.toFixed(1));
+            atualizarLabel('[data-detail-apontado]', formatarTempoLabel(tempoApontadoTotal));
+            atualizarLabel('[data-detail-restante]', formatarTempoLabel(tempoRestanteTotal));
+            atualizarLabel('[data-detail-estimado]', formatarTempoLabel(tempoEstimadoTotal));
+            atualizarLabel('[data-detail-quantidade]', quantidadeTotal);
+        }
+
+        document.addEventListener('DOMContentLoaded', function() {
+            // Injetar JSON de métricas global
+            const metricasJsonScript = document.createElement('script');
+            metricasJsonScript.type = 'application/json';
+            metricasJsonScript.dataset.metricasJson = '';
+            metricasJsonScript.textContent = document.querySelector('script[type="application/json"]')?.textContent || '{}';
+            metricasJsonScript.id = 'metricas-listas-json';
+            if (!document.getElementById('metricas-listas-json')) {
+                document.body.appendChild(metricasJsonScript);
+            }
+
+            // Toggle do popover por clique
+            document.querySelectorAll('[data-column-stats-trigger]').forEach(btn => {
+                btn.addEventListener('click', function(e) {
+                    e.stopPropagation();
+                    const container = this.closest('.column-stats');
+                    container.classList.toggle('open');
+                    const expanded = container.classList.contains('open');
+                    this.setAttribute('aria-expanded', expanded);
+                });
+            });
+
+            // Fechar popover ao clicar fora
+            document.addEventListener('click', function(e) {
+                document.querySelectorAll('.column-stats.open').forEach(container => {
+                    if (!container.contains(e.target)) {
+                        container.classList.remove('open');
+                        const trigger = container.querySelector('[data-column-stats-trigger]');
+                        if (trigger) trigger.setAttribute('aria-expanded', 'false');
+                    }
+                });
+            });
+
+            // Toggle de serviços para recalcular
+            document.querySelectorAll('[data-service-toggle]').forEach(checkbox => {
+                checkbox.addEventListener('change', function() {
+                    const container = this.closest('.column-stats');
+                    const listaNome = container?.dataset.columnMetrics;
+                    if (listaNome) {
+                        recalcularMetricasLista(listaNome);
+                    }
+                });
+            });
+        });
+    })();
+
 </script>
+
+<script type="application/json" data-metricas-json>{{ metricas_listas_json|safe }}</script>
 
 </body>
 </html>

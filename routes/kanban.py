@@ -1,7 +1,9 @@
 from flask import Blueprint, render_template, request, redirect, url_for, flash, jsonify, session, current_app, make_response, abort
-from models import db, Usuario, OrdemServico, Pedido, PedidoOrdemServico, Item, Trabalho, ItemTrabalho, RegistroMensal, KanbanLista, CartaoFantasma
+from models import db, Usuario, OrdemServico, Pedido, PedidoOrdemServico, Item, Trabalho, ItemTrabalho, RegistroMensal, KanbanLista, CartaoFantasma, ApontamentoProducao
 from utils import validate_form_data, get_kanban_lists, get_kanban_categories, format_seconds_to_time
 from datetime import datetime
+from collections import defaultdict
+import json
 import re
 
 kanban = Blueprint('kanban', __name__)
@@ -40,7 +42,67 @@ def index():
     cartoes_fantasma = {}
     tempos_listas = {}
     quantidades_listas = {}
-    
+    metricas_listas = {}
+
+    turnos_por_dia = 3
+    horas_por_turno = 8
+    segundos_por_turno = horas_por_turno * 3600
+
+    def _to_int(value, default=0):
+        try:
+            if value is None:
+                return default
+            return int(value)
+        except Exception:
+            return default
+
+    def _tempo_label(segundos):
+        total = max(0, _to_int(segundos, 0))
+        horas = total // 3600
+        minutos = (total % 3600) // 60
+        if horas > 0:
+            return f"{horas}h {minutos:02d}m"
+        return f"{minutos}m"
+
+    def _badge_label(nome):
+        base = (nome or '').strip()
+        if not base:
+            return 'Serviço'
+        return base if len(base) <= 18 else f"{base[:18].rstrip()}…"
+
+    def _card_title(ordem):
+        pedido_os = (getattr(ordem, 'pedidos', None) or [None])[0]
+        pedido = getattr(pedido_os, 'pedido', None)
+        item = getattr(pedido, 'item', None)
+        item_nome = ''
+        if item and getattr(item, 'nome', None):
+            item_nome = item.nome
+        elif pedido and getattr(pedido, 'nome_item', None):
+            item_nome = pedido.nome_item
+        return (item_nome or ordem.numero or f"OS {ordem.id}").strip()
+
+    def _card_qty(ordem):
+        total = 0
+        for pedido_os in getattr(ordem, 'pedidos', []) or []:
+            pedido = getattr(pedido_os, 'pedido', None)
+            total += _to_int(getattr(pedido, 'quantidade', 0), 0)
+        return total
+
+    apontado_rows = (
+        db.session.query(
+            ApontamentoProducao.ordem_servico_id,
+            ApontamentoProducao.trabalho_id,
+            db.func.coalesce(db.func.sum(ApontamentoProducao.tempo_decorrido), 0)
+        )
+        .group_by(ApontamentoProducao.ordem_servico_id, ApontamentoProducao.trabalho_id)
+        .all()
+    )
+    apontado_por_os_trabalho = defaultdict(dict)
+    for ordem_id, trabalho_id, tempo_total in apontado_rows:
+        if ordem_id is None or trabalho_id is None:
+            continue
+        apontado_por_os_trabalho[int(ordem_id)][int(trabalho_id)] = _to_int(tempo_total, 0)
+
     for lista in listas:
         # Buscar ordens normais
         ordens[lista] = OrdemServico.query.filter_by(status=lista)\
@@ -55,24 +117,94 @@ def index():
         # Calcular tempos e quantidades para cada lista
         tempo_total = 0
         quantidade_total = 0
+        tempo_apontado_total = 0
+        tempo_restante_total = 0
+        servicos_lista = {}
+        cards_metricas = []
+        categorias_da_lista = [categoria for categoria, listas_categoria in categorias.items() if lista in listas_categoria]
+        categorias_norm = {str(cat).strip().lower() for cat in categorias_da_lista if cat}
         
         # Contar ordens normais
         for ordem in ordens[lista]:
+            card_estimado = 0
+            card_apontado = 0
+            card_qtd = 0
+            card_servicos = []
             for pedido_os in ordem.pedidos:
                 pedido = pedido_os.pedido
                 if pedido.item_id:
                     quantidade_total += pedido.quantidade
+                    card_qtd += _to_int(pedido.quantidade, 0)
                     
                     # Calcular tempo total para os trabalhos da categoria correspondente
                     for item_trabalho in ItemTrabalho.query.filter_by(item_id=pedido.item_id).all():
                         trabalho = Trabalho.query.get(item_trabalho.trabalho_id)
+                        if not trabalho:
+                            continue
+                        trabalho_categoria = (trabalho.categoria or '').strip().lower()
+                        incluir = False
                         
                         # Verificar se o trabalho pertence à categoria da lista atual
                         for categoria, listas_categoria in categorias.items():
-                            if lista in listas_categoria and (trabalho.categoria == categoria or not trabalho.categoria):
-                                # Usar tempo real se disponível, senão usar tempo estimado
-                                tempo_peca = item_trabalho.tempo_real or item_trabalho.tempo_peca
-                                tempo_total += (tempo_peca * pedido.quantidade) + item_trabalho.tempo_setup
+                            categoria_norm = (categoria or '').strip().lower()
+                            if lista in listas_categoria and (trabalho_categoria == categoria_norm or not trabalho.categoria):
+                                incluir = True
+                                break
+                        if not incluir:
+                            continue
+
+                        tempo_peca = _to_int(item_trabalho.tempo_real or item_trabalho.tempo_peca, 0)
+                        tempo_setup = _to_int(item_trabalho.tempo_setup, 0)
+                        qtd_pedido = _to_int(pedido.quantidade, 0)
+                        tempo_estimado_servico = (tempo_peca * qtd_pedido) + tempo_setup
+                        tempo_apontado_servico = apontado_por_os_trabalho.get(ordem.id, {}).get(item_trabalho.trabalho_id, 0)
+                        tempo_restante_servico = max(0, tempo_estimado_servico - tempo_apontado_servico)
+
+                        tempo_total += tempo_estimado_servico
+                        card_estimado += tempo_estimado_servico
+                        card_apontado += tempo_apontado_servico
+
+                        chave_servico = str(item_trabalho.trabalho_id)
+                        if chave_servico not in servicos_lista:
+                            servicos_lista[chave_servico] = {
+                                'id': item_trabalho.trabalho_id,
+                                'nome': trabalho.nome,
+                                'nome_curto': _badge_label(trabalho.nome),
+                                'categoria': trabalho.categoria or '',
+                                'tempo_estimado_total': 0,
+                                'tempo_apontado_total': 0,
+                                'quantidade_total': 0,
+                                'cards_count': 0
+                            }
+                        servicos_lista[chave_servico]['tempo_estimado_total'] += tempo_estimado_servico
+                        servicos_lista[chave_servico]['tempo_apontado_total'] += tempo_apontado_servico
+                        servicos_lista[chave_servico]['quantidade_total'] += qtd_pedido
+                        servicos_lista[chave_servico]['cards_count'] += 1
+
+                        card_servicos.append({
+                            'id': item_trabalho.trabalho_id,
+                            'nome': trabalho.nome,
+                            'nome_curto': _badge_label(trabalho.nome),
+                            'categoria': trabalho.categoria or '',
+                            'tempo_estimado': tempo_estimado_servico,
+                            'tempo_apontado': tempo_apontado_servico,
+                            'tempo_restante': tempo_restante_servico,
+                            'quantidade': qtd_pedido
+                        })
+
+            card_restante = max(0, card_estimado - card_apontado)
+            tempo_apontado_total += card_apontado
+            tempo_restante_total += card_restante
+            cards_metricas.append({
+                'ordem_id': ordem.id,
+                'ordem_numero': ordem.numero,
+                'titulo': _card_title(ordem),
+                'quantidade_total': card_qtd,
+                'tempo_estimado_total': card_estimado,
+                'tempo_apontado_total': card_apontado,
+                'tempo_restante_total': card_restante,
+                'servicos': card_servicos
+            })
         
         # Contar cartões fantasma (apenas para visualização, não duplicar tempo/quantidade)
         for cartao_fantasma in cartoes_fantasma[lista]:
@@ -81,6 +213,58 @@ def index():
         
         tempos_listas[lista] = tempo_total
         quantidades_listas[lista] = quantidade_total
+        cards_metricas_ordenados = sorted(cards_metricas, key=lambda card: ((card.get('ordem_numero') or ''), card.get('ordem_id') or 0))
+        primeiro_card = cards_metricas_ordenados[0] if cards_metricas_ordenados else None
+        if primeiro_card:
+            turnos_primeiro = (primeiro_card['tempo_restante_total'] / segundos_por_turno) if segundos_por_turno else 0
+        else:
+            turnos_primeiro = 0
+
+        for serv in servicos_lista.values():
+            serv['tempo_restante_total'] = max(0, serv['tempo_estimado_total'] - serv['tempo_apontado_total'])
+
+        servicos_ordenados = sorted(
+            servicos_lista.values(),
+            key=lambda serv: (-serv['tempo_restante_total'], serv['nome'])
+        )
+        for serv in servicos_ordenados:
+            serv['tempo_estimado_label'] = _tempo_label(serv['tempo_estimado_total'])
+            serv['tempo_apontado_label'] = _tempo_label(serv['tempo_apontado_total'])
+            serv['tempo_restante_label'] = _tempo_label(serv['tempo_restante_total'])
+
+        cards_topo = sorted(cards_metricas_ordenados, key=lambda card: (-card['tempo_restante_total'], card['ordem_numero'] or ''))[:3]
+        for card in cards_topo:
+            card['tempo_estimado_label'] = _tempo_label(card['tempo_estimado_total'])
+            card['tempo_apontado_label'] = _tempo_label(card['tempo_apontado_total'])
+            card['tempo_restante_label'] = _tempo_label(card['tempo_restante_total'])
+
+        if primeiro_card:
+            primeiro_card = dict(primeiro_card)
+            primeiro_card['tempo_estimado_label'] = _tempo_label(primeiro_card['tempo_estimado_total'])
+            primeiro_card['tempo_apontado_label'] = _tempo_label(primeiro_card['tempo_apontado_total'])
+            primeiro_card['tempo_restante_label'] = _tempo_label(primeiro_card['tempo_restante_total'])
+
+        metricas_listas[lista] = {
+            'lista': lista,
+            'cards_total': len(ordens[lista]),
+            'quantidade_total': quantidade_total,
+            'tempo_estimado_total': tempo_total,
+            'tempo_apontado_total': tempo_apontado_total,
+            'tempo_restante_total': tempo_restante_total,
+            'tempo_estimado_label': _tempo_label(tempo_total),
+            'tempo_apontado_label': _tempo_label(tempo_apontado_total),
+            'tempo_restante_label': _tempo_label(tempo_restante_total),
+            'servicos': servicos_ordenados,
+            'servicos_ids': [serv['id'] for serv in servicos_ordenados],
+            'cards_topo': cards_topo,
+            'primeiro_card': primeiro_card,
+            'turnos_primeiro_card': round(turnos_primeiro, 1),
+            'turnos_primeiro_card_label': f"{round(turnos_primeiro, 1):.1f}" if primeiro_card else '0.0',
+            'turnos_por_dia': turnos_por_dia,
+            'horas_por_turno': horas_por_turno,
+            'categorias': list(categorias_da_lista),
+            'cards_metricas': cards_metricas_ordenados
+        }
 
     template_obj = current_app.jinja_env.get_template('kanban/index.html')
     template_filename = getattr(template_obj, 'filename', None)
@@ -92,6 +276,8 @@ def index():
                           cartoes_fantasma=cartoes_fantasma,
                           tempos_listas=tempos_listas, 
                           quantidades_listas=quantidades_listas,
+                          metricas_listas=metricas_listas,
+                          metricas_listas_json=json.dumps(metricas_listas),
                           Item=Item)
     response = make_response(html)
     if template_filename:
