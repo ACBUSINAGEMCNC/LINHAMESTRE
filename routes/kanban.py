@@ -1,6 +1,8 @@
 from flask import Blueprint, render_template, request, redirect, url_for, flash, jsonify, session, current_app, make_response, abort
 from models import db, Usuario, OrdemServico, Pedido, PedidoOrdemServico, Item, Trabalho, ItemTrabalho, RegistroMensal, KanbanLista, CartaoFantasma, ApontamentoProducao
 from utils import validate_form_data, get_kanban_lists, get_kanban_categories, format_seconds_to_time
+from utils.cache_manager import cache
+from utils.query_monitor import query_monitor, monitor_route_performance
 from datetime import datetime
 from collections import defaultdict
 import json
@@ -33,8 +35,19 @@ def verificar_permissao_kanban():
         return redirect(url_for('main.index'))
 
 @kanban.route('/kanban')
+@monitor_route_performance
 def index():
     """Rota para a página principal do Kanban"""
+    # Tentar buscar do cache (TTL: 2 minutos)
+    usuario_id = session.get('usuario_id')
+    cache_key = f"kanban:metricas:{usuario_id}"
+    cached_data = cache.get(cache_key)
+    
+    if cached_data:
+        current_app.logger.info(f"📦 Cache HIT para Kanban (usuário {usuario_id})")
+        return render_template('kanban/index.html', **cached_data, Item=Item)
+    
+    current_app.logger.info(f"🔄 Cache MISS para Kanban (usuário {usuario_id})")
     listas = get_kanban_lists()
     categorias = get_kanban_categories()
     
@@ -286,20 +299,22 @@ def index():
     template_filename = getattr(template_obj, 'filename', None)
     current_app.logger.warning('KANBAN_TEMPLATE_FILE=%s', template_filename)
 
-    html = render_template('kanban/index.html', 
-                          listas=listas, 
-                          ordens=ordens, 
-                          cartoes_fantasma=cartoes_fantasma,
-                          tempos_listas=tempos_listas, 
-                          quantidades_listas=quantidades_listas,
-                          metricas_listas=metricas_listas,
-                          metricas_listas_json=json.dumps(metricas_listas),
-                          Item=Item)
-    response = make_response(html)
-    if template_filename:
-        response.headers['X-Kanban-Template-File'] = template_filename
-    return response
-
+    # Preparar dados para cache e template
+    template_data = {
+        'listas': listas,
+        'ordens': ordens,
+        'cartoes_fantasma': cartoes_fantasma,
+        'tempos_listas': tempos_listas,
+        'quantidades_listas': quantidades_listas,
+        'metricas_listas': metricas_listas,
+        'metricas_listas_json': json.dumps(metricas_listas)
+    }
+    
+    # Cachear dados por 2 minutos (120 segundos)
+    cache.set(cache_key, template_data, ttl=120)
+    current_app.logger.info(f" Dados do Kanban cacheados para usuário {usuario_id}")
+    
+    return render_template('kanban/index.html', **template_data, Item=Item)
 
 @kanban.route('/kanban/por-numero/<path:numero>')
 def abrir_os_por_numero(numero):

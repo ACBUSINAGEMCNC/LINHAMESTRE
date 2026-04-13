@@ -82,6 +82,8 @@
         .card-header-actions .dropdown .dropdown-toggle { width: 100%; max-width: 100%; overflow: hidden; text-overflow: ellipsis; }
         .card-header-actions .dropdown-menu { z-index: 2000; }
         .item-thumb { width: 100%; max-width: 50%; height: 100%; object-fit: cover; border-radius: 6px; flex: 1 1 50%; min-width: 0; min-height: 95px; background-color: #f8f9fa; padding: 2px; box-sizing: border-box; }
+        .item-thumb.lazy-load:not([src]) { background: linear-gradient(90deg, #f0f0f0 25%, #e0e0e0 50%, #f0f0f0 75%); background-size: 200% 100%; animation: loading 1.5s infinite; }
+        @keyframes loading { 0% { background-position: 200% 0; } 100% { background-position: -200% 0; } }
         /* Botão do número da OS - compacto, centralizado, clicável */
         .os-number-btn {
             background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
@@ -867,7 +869,7 @@
                         </div>
                         <div class="card-header-top">
                             {% if ordem.pedidos and ordem.pedidos[0].pedido.item and ordem.pedidos[0].pedido.item.imagem_path %}
-                                <img src="{{ ordem.pedidos[0].pedido.item.imagem_path }}" class="item-thumb" alt="Imagem do item">
+                                <img data-src="{{ ordem.pedidos[0].pedido.item.imagem_path }}" class="item-thumb lazy-load" alt="Imagem do item" loading="lazy">
                             {% endif %}
                             <div class="card-header-actions">
                                 {% if lista != 'Expedição' %}
@@ -1133,7 +1135,7 @@
                                     <i class="fas fa-grip-lines"></i>
                                 </div>
                                 {% if cartao_fantasma.ordem_servico.pedidos and cartao_fantasma.ordem_servico.pedidos[0].pedido.item and cartao_fantasma.ordem_servico.pedidos[0].pedido.item.imagem_path %}
-                                    <img src="{{ cartao_fantasma.ordem_servico.pedidos[0].pedido.item.imagem_path }}" width="48" height="48" class="item-thumb rounded me-2" alt="Imagem do item">
+                                    <img data-src="{{ cartao_fantasma.ordem_servico.pedidos[0].pedido.item.imagem_path }}" width="48" height="48" class="item-thumb rounded me-2 lazy-load" alt="Imagem do item" loading="lazy">
                                 {% endif %}
                                 <div class="fantasma-info" onclick="openCardDetails('{{ cartao_fantasma.ordem_servico.id }}'); event.stopPropagation()" style="cursor: pointer" title="Abrir detalhes da OS">
                                     <span class="fantasma-posicao">{{ cartao_fantasma.posicao_fila }}</span>
@@ -4151,6 +4153,45 @@
                     }
                 });
             });
+        });
+    })();
+
+    // Lazy loading de imagens dos cards
+    (function initLazyLoading() {
+        const imageObserver = new IntersectionObserver((entries, observer) => {
+            entries.forEach(entry => {
+                if (entry.isIntersecting) {
+                    const img = entry.target;
+                    const src = img.getAttribute('data-src');
+                    if (src) {
+                        img.src = src;
+                        img.removeAttribute('data-src');
+                        observer.unobserve(img);
+                    }
+                }
+            });
+        }, {
+            rootMargin: '50px' // Carregar imagens 50px antes de entrarem na viewport
+        });
+
+        // Observar todas as imagens lazy-load
+        document.querySelectorAll('img.lazy-load').forEach(img => {
+            imageObserver.observe(img);
+        });
+
+        // Reobservar após drag & drop ou mudanças no DOM
+        const mutationObserver = new MutationObserver(() => {
+            document.querySelectorAll('img.lazy-load:not([src])').forEach(img => {
+                if (!img.hasAttribute('data-observed')) {
+                    img.setAttribute('data-observed', 'true');
+                    imageObserver.observe(img);
+                }
+            });
+        });
+
+        mutationObserver.observe(document.querySelector('.kanban-container'), {
+            childList: true,
+            subtree: true
         });
     })();
 
