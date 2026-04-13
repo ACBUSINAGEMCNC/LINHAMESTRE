@@ -88,12 +88,20 @@ def index():
             total += _to_int(getattr(pedido, 'quantidade', 0), 0)
         return total
 
+    # Buscar IDs de todas as OS no Kanban para filtrar apontamentos
+    todas_os_ids = db.session.query(OrdemServico.id).filter(
+        OrdemServico.status.in_(listas)
+    ).all()
+    os_ids_set = {os_id for (os_id,) in todas_os_ids}
+    
+    # Query otimizada: apenas apontamentos das OS visíveis no Kanban
     apontado_rows = (
         db.session.query(
             ApontamentoProducao.ordem_servico_id,
             ApontamentoProducao.trabalho_id,
             db.func.coalesce(db.func.sum(ApontamentoProducao.tempo_decorrido), 0)
         )
+        .filter(ApontamentoProducao.ordem_servico_id.in_(os_ids_set))
         .group_by(ApontamentoProducao.ordem_servico_id, ApontamentoProducao.trabalho_id)
         .all()
     )
@@ -104,8 +112,16 @@ def index():
         apontado_por_os_trabalho[int(ordem_id)][int(trabalho_id)] = _to_int(tempo_total, 0)
 
     for lista in listas:
-        # Buscar ordens normais
+        # Buscar ordens normais com eager loading para evitar N+1 queries
         ordens[lista] = OrdemServico.query.filter_by(status=lista)\
+            .options(
+                db.joinedload(OrdemServico.pedidos)
+                  .joinedload(PedidoOrdemServico.pedido)
+                  .joinedload(Pedido.item),
+                db.joinedload(OrdemServico.pedidos)
+                  .joinedload(PedidoOrdemServico.pedido)
+                  .joinedload(Pedido.cliente)
+            )\
             .order_by(OrdemServico.posicao.asc(), OrdemServico.id.asc()).all()
         
         # Buscar cartões fantasma ativos para esta lista
