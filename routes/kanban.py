@@ -345,6 +345,21 @@ def mover_kanban():
     ordem = OrdemServico.query.get_or_404(ordem_id)
     old_status = ordem.status
     
+    # Validar se pode mover para Expedição - não pode ter apontamentos abertos
+    if nova_lista == 'Expedição':
+        from models import ApontamentoProducao
+        apontamentos_abertos = ApontamentoProducao.query.filter(
+            ApontamentoProducao.ordem_servico_id == ordem_id,
+            ApontamentoProducao.data_fim.is_(None),
+            ApontamentoProducao.tipo_acao.in_(['inicio_setup', 'inicio_producao', 'pausa'])
+        ).count()
+        
+        if apontamentos_abertos > 0:
+            return jsonify({
+                'success': False,
+                'message': f'Não é possível mover para Expedição. Esta OS possui {apontamentos_abertos} apontamento(s) em aberto. Finalize todos os apontamentos antes de enviar para expedição.'
+            })
+    
     # Atualiza lista e posiciona no fim da lista de destino
     ordem.status = nova_lista
     max_pos = db.session.query(db.func.max(OrdemServico.posicao)).filter_by(status=nova_lista).scalar()
@@ -422,6 +437,21 @@ def enviar_para_lista():
     
     ordem = OrdemServico.query.get_or_404(ordem_id)
     old_status = ordem.status
+    
+    # Validar se pode mover para Expedição - não pode ter apontamentos abertos
+    if lista_destino == 'Expedição':
+        from models import ApontamentoProducao
+        apontamentos_abertos = ApontamentoProducao.query.filter(
+            ApontamentoProducao.ordem_servico_id == ordem_id,
+            ApontamentoProducao.data_fim.is_(None),
+            ApontamentoProducao.tipo_acao.in_(['inicio_setup', 'inicio_producao', 'pausa'])
+        ).count()
+        
+        if apontamentos_abertos > 0:
+            return jsonify({
+                'success': False,
+                'message': f'Não é possível enviar para Expedição. Esta OS possui {apontamentos_abertos} apontamento(s) em aberto. Finalize todos os apontamentos antes de enviar para expedição.'
+            })
     
     # Envia para a lista de destino e posiciona no final
     ordem.status = lista_destino

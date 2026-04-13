@@ -2197,22 +2197,23 @@ def registrar_apontamento():
                 ap_prod_aberto = ap_prod_status
                 ap_pausa_aberta = ap_pausa_status
 
-        if ap_outro_operador_aberto is not None:
-            ordem_aberta = OrdemServico.query.get(ap_outro_operador_aberto.ordem_servico_id)
-            item_aberto = Item.query.get(ap_outro_operador_aberto.item_id) if ap_outro_operador_aberto.item_id else None
-            trabalho_aberto = Trabalho.query.get(ap_outro_operador_aberto.trabalho_id) if ap_outro_operador_aberto.trabalho_id else None
-            os_nome = getattr(ordem_aberta, 'numero', None) or getattr(ordem_aberta, 'codigo', None) or f"OS-{ap_outro_operador_aberto.ordem_servico_id}"
-            item_nome = getattr(item_aberto, 'codigo_acb', None) or f"Item {ap_outro_operador_aberto.item_id}"
-            trabalho_nome = getattr(trabalho_aberto, 'nome', None) or f"Trabalho {ap_outro_operador_aberto.trabalho_id}"
-            tipo_aberto = {
-                'inicio_setup': 'setup em andamento',
-                'inicio_producao': 'produção em andamento',
-                'pausa': 'pausa em aberto'
-            }.get(ap_outro_operador_aberto.tipo_acao, 'apontamento em aberto')
-            return jsonify({
-                'success': False,
-                'message': f'Este operador já possui {tipo_aberto} na {os_nome} ({item_nome} / {trabalho_nome}). Finalize ou aplique STOP antes de iniciar outra OS.'
-            })
+        # REMOVIDO: Restrição de 1 OS por operador - agora permite múltiplas OS simultâneas
+        # if ap_outro_operador_aberto is not None:
+        #     ordem_aberta = OrdemServico.query.get(ap_outro_operador_aberto.ordem_servico_id)
+        #     item_aberto = Item.query.get(ap_outro_operador_aberto.item_id) if ap_outro_operador_aberto.item_id else None
+        #     trabalho_aberto = Trabalho.query.get(ap_outro_operador_aberto.trabalho_id) if ap_outro_operador_aberto.trabalho_id else None
+        #     os_nome = getattr(ordem_aberta, 'numero', None) or getattr(ordem_aberta, 'codigo', None) or f"OS-{ap_outro_operador_aberto.ordem_servico_id}"
+        #     item_nome = getattr(item_aberto, 'codigo_acb', None) or f"Item {ap_outro_operador_aberto.item_id}"
+        #     trabalho_nome = getattr(trabalho_aberto, 'nome', None) or f"Trabalho {ap_outro_operador_aberto.trabalho_id}"
+        #     tipo_aberto = {
+        #         'inicio_setup': 'setup em andamento',
+        #         'inicio_producao': 'produção em andamento',
+        #         'pausa': 'pausa em aberto'
+        #     }.get(ap_outro_operador_aberto.tipo_acao, 'apontamento em aberto')
+        #     return jsonify({
+        #         'success': False,
+        #         'message': f'Este operador já possui {tipo_aberto} na {os_nome} ({item_nome} / {trabalho_nome}). Finalize ou aplique STOP antes de iniciar outra OS.'
+        #     })
 
         if tipo_acao == 'inicio_setup':
             # Bloquear somente se já houver um setup em andamento para MESMO item/trabalho
