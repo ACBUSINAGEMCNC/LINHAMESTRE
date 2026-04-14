@@ -2,7 +2,7 @@ from flask import Blueprint, render_template, request, jsonify, flash, redirect,
 from models import db, Usuario, ApontamentoProducao, StatusProducaoOS, OrdemServico, ItemTrabalho, PedidoOrdemServico, Pedido, Item, Trabalho, KanbanLista, CartaoFantasma
 from datetime import datetime, timezone, timedelta
 from sqlalchemy.orm import joinedload
-from sqlalchemy import func
+from sqlalchemy import func, select
 import logging
 import random
 import string
@@ -306,17 +306,56 @@ def validar_codigo():
     if not codigo or len(codigo) != 4 or not codigo.isdigit():
         return jsonify({'valid': False, 'message': 'Código deve ter 4 dígitos'})
     
-    usuario = Usuario.query.filter_by(codigo_operador=codigo).first()
+    # Cache rápido para evitar múltiplas queries do mesmo código
+    from flask import current_app
+    cache_key = f"op_valid:{codigo}"
+    
+    try:
+        if hasattr(current_app, 'cache_store'):
+            cached = current_app.cache_store.get(cache_key)
+            if cached:
+                logger.debug(f"[CACHE HIT] validar-codigo {codigo}")
+                return jsonify(cached)
+    except:
+        pass
+    
+    # Buscar usuário com retry para evitar timeouts
+    max_retries = 2
+    usuario = None
+    
+    for attempt in range(max_retries):
+        try:
+            with db.session.no_autoflush:
+                # Usar query otimizada com índice
+                usuario = db.session.execute(
+                    db.select(Usuario).where(Usuario.codigo_operador == codigo)
+                ).scalar_one_or_none()
+                break
+        except Exception as e:
+            logger.warning(f"Tentativa {attempt + 1} de validar código {codigo} falhou: {e}")
+            if attempt == max_retries - 1:
+                logger.error(f"Erro ao validar código {codigo} após {max_retries} tentativas")
+                return jsonify({'valid': False, 'message': 'Erro ao validar código. Tente novamente.'})
+            time.sleep(0.05)
     
     if not usuario:
-        return jsonify({'valid': False, 'message': 'Código não encontrado'})
+        result = {'valid': False, 'message': 'Código não encontrado'}
+    else:
+        result = {
+            'valid': True, 
+            'usuario_id': usuario.id,
+            'nome': usuario.nome,
+            'message': f'Operador: {usuario.nome}'
+        }
     
-    return jsonify({
-        'valid': True, 
-        'usuario_id': usuario.id,
-        'nome': usuario.nome,
-        'message': f'Operador: {usuario.nome}'
-    })
+    # Cachear resultado por 30 segundos
+    try:
+        if hasattr(current_app, 'cache_store'):
+            current_app.cache_store.set(cache_key, result, timeout=30)
+    except:
+        pass
+    
+    return jsonify(result)
 
 @apontamento_bp.route('/os/<int:ordem_id>/itens', methods=['GET'])
 def buscar_itens_os(ordem_id):
@@ -2177,8 +2216,22 @@ def registrar_apontamento():
         if not dados.get('trabalho_id'):
             return jsonify({'success': False, 'message': 'Tipo de trabalho é obrigatório'})
         
-        # Validar código do operador
-        usuario = Usuario.query.filter_by(codigo_operador=dados['codigo_operador']).first()
+        # Validar código do operador com retry para evitar timeouts
+        max_retries = 3
+        usuario = None
+        
+        for attempt in range(max_retries):
+            try:
+                with db.session.no_autoflush:
+                    usuario = Usuario.query.filter_by(codigo_operador=dados['codigo_operador']).first()
+                    break
+            except Exception as e:
+                logger.warning(f"Tentativa {attempt + 1} de validar operador falhou: {e}")
+                if attempt == max_retries - 1:
+                    logger.error(f"Erro ao validar operador após {max_retries} tentativas")
+                    return jsonify({'success': False, 'message': 'Erro ao validar código do operador. Tente novamente.'})
+                time.sleep(0.1)  # Pequeno delay entre tentativas
+        
         if not usuario:
             return jsonify({'success': False, 'message': 'Código de operador inválido'})
 
@@ -2406,72 +2459,77 @@ def registrar_apontamento():
             if not dados.get('quantidade'):
                 return jsonify({'success': False, 'message': 'Quantidade final é obrigatória'})
         
-        # Buscar ou criar status da OS
-        status_os = status_atual or StatusProducaoOS.query.filter_by(ordem_servico_id=ordem_servico_id).first()
-        if not status_os:
-            status_os = StatusProducaoOS(
-                ordem_servico_id=ordem_servico_id,
-                status_atual='Aguardando',
-                operador_atual_id=usuario.id
-            )
-            db.session.add(status_os)
+        # Buscar ou criar status da OS - EVITAR AUTOFLUSH PREMATURO
+        with db.session.no_autoflush:
+            status_os = status_atual or StatusProducaoOS.query.filter_by(ordem_servico_id=ordem_servico_id).first()
+            if not status_os:
+                status_os = StatusProducaoOS(
+                    ordem_servico_id=ordem_servico_id,
+                    status_atual='Aguardando',
+                    operador_atual_id=usuario.id
+                )
+                db.session.add(status_os)
         
-        # Atualizar status baseado na ação
         agora = datetime.now(LOCAL_TZ).replace(tzinfo=None)
         
-        if tipo_acao == 'inicio_setup':
-            status_os.status_atual = 'Setup em andamento'
-            status_os.operador_atual_id = usuario.id
-            status_os.item_atual_id = item_id
-            status_os.trabalho_atual_id = trabalho_id
-            status_os.inicio_acao = agora
+        # Atualizar status sem autoflush para evitar timeout
+        with db.session.no_autoflush:
+            # Garantir que data_atualizacao seja sempre atualizada
+            status_os.data_atualizacao = agora
             
-        elif tipo_acao == 'fim_setup':
-            status_os.status_atual = 'Setup concluído'
-            
-        elif tipo_acao == 'inicio_producao':
-            status_os.status_atual = 'Produção em andamento'
-            status_os.operador_atual_id = usuario.id
-            status_os.item_atual_id = item_id
-            status_os.trabalho_atual_id = trabalho_id
-            status_os.inicio_acao = agora
-            if dados.get('quantidade'):
-                status_os.quantidade_atual = int(dados['quantidade'])
-            # Se houver pausa aberta para este par, encerrá-la
-            try:
-                pausa_aberta = ap_pausa_aberta or _query_apontamento_aberto(ordem_servico_id, item_id, trabalho_id, 'pausa')
-                if pausa_aberta:
-                    delta_pausa = agora - pausa_aberta.data_hora
-                    pausa_aberta.data_fim = agora
-                    pausa_aberta.tempo_decorrido = int(delta_pausa.total_seconds())
-            except Exception:
-                pass
+            if tipo_acao == 'inicio_setup':
+                status_os.status_atual = 'Setup em andamento'
+                status_os.operador_atual_id = usuario.id
+                status_os.item_atual_id = item_id
+                status_os.trabalho_atual_id = trabalho_id
+                status_os.inicio_acao = agora
                 
-        elif tipo_acao == 'pausa':
-            status_os.status_atual = 'Pausado'
-            status_os.operador_atual_id = usuario.id
-            status_os.item_atual_id = item_id
-            status_os.trabalho_atual_id = trabalho_id
-            status_os.inicio_acao = agora
-            status_os.motivo_parada = dados.get('motivo_parada')
-            if dados.get('quantidade'):
-                status_os.quantidade_atual = int(dados['quantidade'])
+            elif tipo_acao == 'fim_setup':
+                status_os.status_atual = 'Setup concluído'
                 
-        elif tipo_acao == 'stop':
-            status_os.status_atual = 'Aguardando'
-            status_os.operador_atual_id = None
-            status_os.item_atual_id = None
-            status_os.trabalho_atual_id = None
-            status_os.inicio_acao = None
-            status_os.motivo_parada = None
-            # CORREÇÃO: Preservar quantidade informada no STOP
-            if dados.get('quantidade'):
-                status_os.quantidade_atual = int(dados['quantidade'])
-                
-        elif tipo_acao == 'fim_producao':
-            status_os.status_atual = 'Finalizado'
-            if dados.get('quantidade'):
-                status_os.quantidade_atual = int(dados['quantidade'])
+            elif tipo_acao == 'inicio_producao':
+                status_os.status_atual = 'Produção em andamento'
+                status_os.operador_atual_id = usuario.id
+                status_os.item_atual_id = item_id
+                status_os.trabalho_atual_id = trabalho_id
+                status_os.inicio_acao = agora
+                if dados.get('quantidade'):
+                    status_os.quantidade_atual = int(dados['quantidade'])
+                # Se houver pausa aberta para este par, encerrá-la
+                try:
+                    pausa_aberta = ap_pausa_aberta or _query_apontamento_aberto(ordem_servico_id, item_id, trabalho_id, 'pausa')
+                    if pausa_aberta:
+                        delta_pausa = agora - pausa_aberta.data_hora
+                        pausa_aberta.data_fim = agora
+                        pausa_aberta.tempo_decorrido = int(delta_pausa.total_seconds())
+                except Exception:
+                    pass
+                    
+            elif tipo_acao == 'pausa':
+                status_os.status_atual = 'Pausado'
+                status_os.operador_atual_id = usuario.id
+                status_os.item_atual_id = item_id
+                status_os.trabalho_atual_id = trabalho_id
+                status_os.inicio_acao = agora
+                status_os.motivo_parada = dados.get('motivo_parada')
+                if dados.get('quantidade'):
+                    status_os.quantidade_atual = int(dados['quantidade'])
+                    
+            elif tipo_acao == 'stop':
+                status_os.status_atual = 'Aguardando'
+                status_os.operador_atual_id = None
+                status_os.item_atual_id = None
+                status_os.trabalho_atual_id = None
+                status_os.inicio_acao = None
+                status_os.motivo_parada = None
+                # CORREÇÃO: Preservar quantidade informada no STOP
+                if dados.get('quantidade'):
+                    status_os.quantidade_atual = int(dados['quantidade'])
+                    
+            elif tipo_acao == 'fim_producao':
+                status_os.status_atual = 'Finalizado'
+                if dados.get('quantidade'):
+                    status_os.quantidade_atual = int(dados['quantidade'])
         
         # Verificar se é uma ação de finalização (fim_setup, fim_producao, pausa)
         # Se for, buscar o apontamento de início correspondente para calcular tempo decorrido
@@ -2602,10 +2660,45 @@ def registrar_apontamento():
         
     except Exception as e:
         db.session.rollback()
-        return jsonify({
-            'success': False,
-            'message': f'Erro ao registrar apontamento: {str(e)}'
-        })
+        logger.error(f"Erro ao registrar apontamento: {e}")
+        
+        # TENTATIVA DE EMERGÊNCIA: Salvar apenas o apontamento básico sem status
+        try:
+            logger.warning("Tentando fallback de emergência para apontamento...")
+            
+            # Criar apontamento básico sem atualizar status_os
+            apontamento_emergencia = ApontamentoProducao(
+                ordem_servico_id=ordem_servico_id,
+                usuario_id=usuario.id,
+                operador_id=usuario.id,
+                item_id=item_id,
+                trabalho_id=trabalho_id,
+                tipo_acao=tipo_acao,
+                data_hora=agora,
+                quantidade=int(dados['quantidade']) if dados.get('quantidade') else None,
+                motivo_parada=dados.get('motivo_parada'),
+                observacoes=dados.get('observacoes'),
+                lista_kanban=ordem.status if 'ordem' in locals() else 'Produção'
+            )
+            
+            db.session.add(apontamento_emergencia)
+            db.session.commit()
+            
+            logger.info("Fallback de emergência bem-sucedido!")
+            
+            return jsonify({
+                'success': True,
+                'message': f'{tipo_acao} registrado (modo emergência)! Status pode precisar de atualização manual.',
+                'emergency_mode': True,
+                'status': 'Desconhecido'
+            })
+            
+        except Exception as e2:
+            logger.error(f"Fallback de emergência também falhou: {e2}")
+            return jsonify({
+                'success': False,
+                'message': 'Sistema temporariamente indisponível. Tente novamente em alguns segundos.'
+            })
 
 @apontamento_bp.route('/os/<int:ordem_id>/reset', methods=['POST'])
 def reset_apontamentos_os(ordem_id):
