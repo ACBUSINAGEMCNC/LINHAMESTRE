@@ -2529,12 +2529,29 @@ def registrar_apontamento():
             'fim_producao': 'Fim de produção'
         }.get(tipo_acao, tipo_acao)
         
+        # Preparar dados do apontamento para feedback imediato no frontend
+        apontamento_data = None
+        if tipo_acao in ['inicio_setup', 'inicio_producao', 'pausa']:
+            # Buscar dados do trabalho e item para o chip
+            trabalho = Trabalho.query.get(trabalho_id)
+            
+            apontamento_data = {
+                'item_id': item_id,
+                'trabalho_id': trabalho_id,
+                'trabalho_nome': trabalho.nome if trabalho else f'Trabalho #{trabalho_id}',
+                'status': status_os.status_atual,
+                'operador_codigo': usuario.codigo_operador,
+                'operador_nome': usuario.nome,
+                'inicio_acao': agora.isoformat()
+            }
+        
         return jsonify({
             'success': True,
             'message': f'{acao_nome} registrado com sucesso!',
             'status': status_os.status_atual,
             'ultima_quantidade': ultima_quantidade,
-            'quantidade_atual': int(status_os.quantidade_atual) if getattr(status_os, 'quantidade_atual', None) is not None else None
+            'quantidade_atual': int(status_os.quantidade_atual) if getattr(status_os, 'quantidade_atual', None) is not None else None,
+            'apontamento': apontamento_data  # Dados para renderizar chip imediatamente
         })
         
     except Exception as e:

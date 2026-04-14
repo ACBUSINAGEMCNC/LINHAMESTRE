@@ -2540,6 +2540,12 @@
                 } else {
                     // Para demais ações, atualizar status normalmente
                     atualizarStatusCartao(ordemAtualId, data.status);
+                    
+                    // FEEDBACK IMEDIATO: Renderizar chip de status se dados disponíveis
+                    if (data.apontamento && typeof window.renderizarChipsStatus === 'function') {
+                        console.log('[FEEDBACK] Renderizando chip imediatamente após salvar apontamento');
+                        window.renderizarChipsStatus(ordemAtualId, [data.apontamento]);
+                    }
                 }
                 // Atualizar última quantidade exibida, se fornecida pelo backend
                 if (typeof window.atualizarUltimaQuantidadeNoCard === 'function' && 'ultima_quantidade' in data) {
