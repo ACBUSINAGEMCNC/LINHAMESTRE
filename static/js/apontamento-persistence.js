@@ -407,23 +407,49 @@ function clampStartTimestamp(startTs) {
 }
 
 function iniciarTimerTrabalho(ordemId, itemId, trabalhoId, startTimeStr) {
+    console.log(`[TIMER] ===== INICIANDO FUNÇÃO =====`);
+    console.log(`[TIMER] Parâmetros recebidos:`, {ordemId, itemId, trabalhoId, startTimeStr});
+    
     const key = keyTrabalho(ordemId, itemId, trabalhoId);
+    console.log(`[TIMER] Key gerada: ${key}`);
+    
     // Limpar anterior, se existir
     if (timersTrabalho[key]) {
+        console.log(`[TIMER] Limpando timer anterior para key: ${key}`);
         clearInterval(timersTrabalho[key]);
         delete timersTrabalho[key];
     }
-    const el = document.getElementById(`timer-${ordemId}-${itemId}-${trabalhoId}`);
+    
+    const elementId = `timer-${ordemId}-${itemId}-${trabalhoId}`;
+    console.log(`[TIMER] Procurando elemento ID: ${elementId}`);
+    
+    const el = document.getElementById(elementId);
     if (!el) {
-        console.warn(`[TIMER] Elemento timer-${ordemId}-${itemId}-${trabalhoId} não encontrado`);
+        console.error(`[TIMER] ELEMENTO NÃO ENCONTRADO: ${elementId}`);
+        console.log(`[TIMER] Verificando todos os elementos timer no DOM...`);
+        const allTimers = document.querySelectorAll('[id^="timer-"]');
+        console.log(`[TIMER] Timers encontrados:`, Array.from(allTimers).map(t => t.id));
         return;
     }
+    
+    console.log(`[TIMER] Elemento encontrado:`, el);
+    console.log(`[TIMER] Conteúdo atual: "${el.textContent}"`);
+    
     const startTs = clampStartTimestamp(parseStartTimestamp(startTimeStr));
-    console.log(`[TIMER] Iniciando timer para OS ${ordemId}, item ${itemId}, trabalho ${trabalhoId}, início: ${new Date(startTs).toISOString()}`);
+    console.log(`[TIMER] Timestamp parseado: ${startTimeStr} -> ${startTs} (${new Date(startTs).toISOString()})`);
+    
     // Atualização imediata
+    console.log(`[TIMER] Fazendo atualização imediata...`);
     atualizarElementoTimer(el, startTs);
+    console.log(`[TIMER] Após atualização imediata: "${el.textContent}"`);
+    
     // Intervalo de 1s
-    timersTrabalho[key] = setInterval(() => atualizarElementoTimer(el, startTs), 1000);
+    console.log(`[TIMER] Criando intervalo de 1s...`);
+    timersTrabalho[key] = setInterval(() => {
+        atualizarElementoTimer(el, startTs);
+    }, 1000);
+    
+    console.log(`[TIMER] Timer iniciado com sucesso! =====`);
 }
 
 // Expor função globalmente para uso no Kanban
