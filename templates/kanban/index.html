@@ -2545,6 +2545,15 @@
                     if (data.apontamento && typeof window.renderizarChipsStatus === 'function') {
                         console.log('[FEEDBACK] Renderizando chip imediatamente após salvar apontamento');
                         window.renderizarChipsStatus(ordemAtualId, [data.apontamento]);
+                        
+                        // Iniciar timer manualmente após renderizar o chip
+                        setTimeout(() => {
+                            if (typeof window.iniciarTimerTrabalho === 'function') {
+                                const ap = data.apontamento;
+                                console.log('[FEEDBACK] Iniciando timer para o chip renderizado');
+                                window.iniciarTimerTrabalho(ordemAtualId, ap.item_id, ap.trabalho_id, ap.inicio_acao);
+                            }
+                        }, 100);
                     }
                 }
                 // Atualizar última quantidade exibida, se fornecida pelo backend

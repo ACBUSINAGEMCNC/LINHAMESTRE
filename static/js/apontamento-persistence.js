@@ -414,13 +414,20 @@ function iniciarTimerTrabalho(ordemId, itemId, trabalhoId, startTimeStr) {
         delete timersTrabalho[key];
     }
     const el = document.getElementById(`timer-${ordemId}-${itemId}-${trabalhoId}`);
-    if (!el) return;
+    if (!el) {
+        console.warn(`[TIMER] Elemento timer-${ordemId}-${itemId}-${trabalhoId} não encontrado`);
+        return;
+    }
     const startTs = clampStartTimestamp(parseStartTimestamp(startTimeStr));
+    console.log(`[TIMER] Iniciando timer para OS ${ordemId}, item ${itemId}, trabalho ${trabalhoId}, início: ${new Date(startTs).toISOString()}`);
     // Atualização imediata
     atualizarElementoTimer(el, startTs);
     // Intervalo de 1s
     timersTrabalho[key] = setInterval(() => atualizarElementoTimer(el, startTs), 1000);
 }
+
+// Expor função globalmente para uso no Kanban
+window.iniciarTimerTrabalho = iniciarTimerTrabalho;
 
 function atualizarElementoTimer(el, startTs) {
     const now = Date.now();
