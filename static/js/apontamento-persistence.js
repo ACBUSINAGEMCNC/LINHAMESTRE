@@ -787,8 +787,6 @@ function renderizarChipsStatus(ordemId, ativosLista) {
           +   `</div>`
           + `</span>`
         );
-        // Iniciar timer em seguida (após injetar DOM)
-        setTimeout(() => iniciarTimerTrabalho(ordemId, itemId, trabId, inicio), 0);
     });
     
     // Renderizar chips em todos os containers (reais e fantasmas)
@@ -803,6 +801,19 @@ function renderizarChipsStatus(ordemId, ativosLista) {
         const isFantasma = index >= containersReais.length;
         // Cartões fantasma agora mostram o mesmo conteúdo que os reais (sem badge "Fantasma")
         container.innerHTML = htmlContent;
+        
+        // Iniciar timers para todos os apontamentos renderizados
+        if (!isFantasma) {
+            ativosLista.forEach(ap => {
+                const itemId = ap.item_id;
+                const trabId = ap.trabalho_id;
+                const inicio = ap.inicio_acao;
+                setTimeout(() => {
+                    console.log(`[TIMER] Iniciando timer após renderizar chip: OS ${ordemId}, item ${itemId}, trabalho ${trabId}`);
+                    iniciarTimerTrabalho(ordemId, itemId, trabId, inicio);
+                }, 100);
+            });
+        }
         
         if (isFantasma) {
             // Para cartões fantasma, sincronizar cronômetro com cartão real

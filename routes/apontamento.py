@@ -465,6 +465,20 @@ def gerar_codigo_unico():
 def status_ativos():
     """Retorna todos os status de produção ativos para apontamentos (usado para persistência frontend)"""
     try:
+        # Cache curto de 5 segundos para evitar múltiplas queries idênticas
+        from flask import current_app
+        cache_key = f"status_ativos:{request.query_string.decode('utf-8')}"
+        
+        # Tentar buscar do cache se disponível
+        try:
+            if hasattr(current_app, 'cache_store'):
+                cached = current_app.cache_store.get(cache_key)
+                if cached:
+                    logger.debug(f"[CACHE HIT] status-ativos")
+                    return jsonify(cached)
+        except:
+            pass
+        
         t_start = time.perf_counter()
         timings = {}
 
@@ -1768,6 +1782,15 @@ def status_ativos():
                 logger.info(f"/status-ativos timings: {timings}")
         except Exception:
             pass
+        
+        # Cachear resultado por 5 segundos
+        try:
+            if hasattr(current_app, 'cache_store'):
+                current_app.cache_store.set(cache_key, resultado, timeout=5)
+                logger.debug(f"[CACHE SET] status-ativos cacheado por 5s")
+        except:
+            pass
+        
         return jsonify(resultado)
     except Exception as e:
         logger.exception(f"Falha ao buscar status ativos: {e}")
