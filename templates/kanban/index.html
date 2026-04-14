@@ -2448,6 +2448,14 @@
     setupOperadorValidation();
     
     function validarOperador(codigo) {
+        const infoDiv = document.getElementById('operadorInfo');
+        
+        // Timeout de 10 segundos para evitar spinner infinito
+        const timeoutId = setTimeout(() => {
+            console.error('[VALIDACAO] Timeout - validação demorou mais de 10s');
+            infoDiv.innerHTML = '<small class="text-danger"><i class="fas fa-times"></i> Timeout na validação</small>';
+        }, 10000);
+        
         fetch('/apontamento/validar-codigo', {
             method: 'POST',
             headers: {
@@ -2455,9 +2463,14 @@
             },
             body: JSON.stringify({ codigo: codigo })
         })
-        .then(response => response.json())
+        .then(response => {
+            clearTimeout(timeoutId);
+            if (!response.ok) {
+                throw new Error(`HTTP ${response.status}`);
+            }
+            return response.json();
+        })
         .then(data => {
-            const infoDiv = document.getElementById('operadorInfo');
             if (data.valid) {
                 infoDiv.innerHTML = `<small class="text-success"><i class="fas fa-check"></i> ${data.message}</small>`;
             } else {
@@ -2465,8 +2478,9 @@
             }
         })
         .catch(error => {
-            console.error('Erro:', error);
-            document.getElementById('operadorInfo').innerHTML = '<small class="text-danger"><i class="fas fa-times"></i> Erro ao validar</small>';
+            clearTimeout(timeoutId);
+            console.error('[VALIDACAO] Erro:', error);
+            infoDiv.innerHTML = '<small class="text-danger"><i class="fas fa-times"></i> Erro ao validar</small>';
         });
     }
     

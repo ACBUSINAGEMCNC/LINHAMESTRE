@@ -2086,6 +2086,20 @@ def detalhes_ordem_servico(ordem_id):
 def quantidades_por_trabalho(ordem_id):
     """Retorna apenas a última quantidade apontada por trabalho da OS."""
     try:
+        # Cache curto de 3 segundos para evitar múltiplas queries idênticas
+        from flask import current_app
+        cache_key = f"qpt:{ordem_id}"
+        
+        # Tentar buscar do cache
+        try:
+            if hasattr(current_app, 'cache_store'):
+                cached = current_app.cache_store.get(cache_key)
+                if cached:
+                    logger.debug(f"[CACHE HIT] quantidades-por-trabalho OS {ordem_id}")
+                    return jsonify(cached)
+        except:
+            pass
+        
         subquery = (
             db.session.query(
                 ApontamentoProducao.trabalho_id.label('trabalho_id'),
@@ -2117,7 +2131,7 @@ def quantidades_por_trabalho(ordem_id):
             .all()
         )
 
-        return jsonify({
+        resultado = {
             'ordem_servico_id': ordem_id,
             'trabalhos': [
                 {
@@ -2127,7 +2141,16 @@ def quantidades_por_trabalho(ordem_id):
                 }
                 for row in rows
             ]
-        })
+        }
+        
+        # Cachear resultado por 3 segundos
+        try:
+            if hasattr(current_app, 'cache_store'):
+                current_app.cache_store.set(cache_key, resultado, timeout=3)
+        except:
+            pass
+        
+        return jsonify(resultado)
     except Exception as e:
         logger.exception(f"Falha ao buscar quantidades por trabalho da OS {ordem_id}: {e}")
         return jsonify({'error': str(e)}), 500
