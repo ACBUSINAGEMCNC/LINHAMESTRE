@@ -2296,24 +2296,47 @@
             });
     }
     
-    // Event listener para quando o item for selecionado
-    document.getElementById('itemSelecao').addEventListener('change', function(e) {
-        const itemId = e.target.value;
-        const selectTipo = document.getElementById('tipoTrabalho');
-        const quantidade = document.getElementById('quantidade');
-        selectTipo.innerHTML = '<option value="">Carregando tipo de trabalho...</option>';
-        quantidade.value = '';
-        quantidade.min = 0;
-        carregarTiposTrabalhoItem(itemId, { requestToken: modalLoadToken, autoSelectFirst: true });
-        // Limpar informação de última quantidade até que o tipo de trabalho seja selecionado
-        const info = document.getElementById('ultimaQuantidadeInfo');
-        if (info) info.textContent = '';
-    });
-
-    // Quando o tipo de trabalho for selecionado, calcular/mostrar última quantidade
-    document.getElementById('tipoTrabalho').addEventListener('change', function(e) {
-        atualizarUltimaQuantidadeCampo(modalLoadToken);
-    });
+    // Flags para evitar múltiplos event listeners
+    let itemSelecaoListenerAdded = false;
+    let tipoTrabalhoListenerAdded = false;
+    
+    function setupModalListeners() {
+        // Event listener para quando o item for selecionado
+        if (!itemSelecaoListenerAdded) {
+            const itemSelect = document.getElementById('itemSelecao');
+            if (itemSelect) {
+                itemSelect.addEventListener('change', function(e) {
+                    const itemId = e.target.value;
+                    const selectTipo = document.getElementById('tipoTrabalho');
+                    const quantidade = document.getElementById('quantidade');
+                    selectTipo.innerHTML = '<option value="">Carregando tipo de trabalho...</option>';
+                    quantidade.value = '';
+                    quantidade.min = 0;
+                    carregarTiposTrabalhoItem(itemId, { requestToken: modalLoadToken, autoSelectFirst: true });
+                    // Limpar informação de última quantidade até que o tipo de trabalho seja selecionado
+                    const info = document.getElementById('ultimaQuantidadeInfo');
+                    if (info) info.textContent = '';
+                });
+                itemSelecaoListenerAdded = true;
+                console.log('[MODAL] Listener de itemSelecao configurado (uma única vez)');
+            }
+        }
+        
+        // Quando o tipo de trabalho for selecionado, calcular/mostrar última quantidade
+        if (!tipoTrabalhoListenerAdded) {
+            const tipoSelect = document.getElementById('tipoTrabalho');
+            if (tipoSelect) {
+                tipoSelect.addEventListener('change', function(e) {
+                    atualizarUltimaQuantidadeCampo(modalLoadToken);
+                });
+                tipoTrabalhoListenerAdded = true;
+                console.log('[MODAL] Listener de tipoTrabalho configurado (uma única vez)');
+            }
+        }
+    }
+    
+    // Configurar listeners apenas uma vez
+    setupModalListeners();
 
     // Cache simples em memória para última quantidade por OS/Item/Trabalho
     const cacheUltimaQuantidade = new Map();
@@ -2385,29 +2408,44 @@
     
     // Validação do código do operador com debounce
     let validacaoTimeout = null;
-    document.getElementById('codigoOperador').addEventListener('input', function(e) {
-        let value = e.target.value.replace(/\D/g, ''); // Apenas dígitos
-        if (value.length > 4) value = value.substr(0, 4);
-        e.target.value = value;
+    let operadorInputListenerAdded = false;
+    
+    function setupOperadorValidation() {
+        if (operadorInputListenerAdded) return; // Evitar múltiplos listeners
         
-        // Limpar timeout anterior
-        if (validacaoTimeout) {
-            clearTimeout(validacaoTimeout);
-        }
+        const codigoInput = document.getElementById('codigoOperador');
+        if (!codigoInput) return;
         
-        if (value.length === 4) {
-            // Mostrar feedback imediato de validação
-            const infoDiv = document.getElementById('operadorInfo');
-            infoDiv.innerHTML = '<small class="text-muted"><i class="fas fa-spinner fa-spin"></i> Validando...</small>';
+        codigoInput.addEventListener('input', function(e) {
+            let value = e.target.value.replace(/\D/g, ''); // Apenas dígitos
+            if (value.length > 4) value = value.substr(0, 4);
+            e.target.value = value;
             
-            // Debounce de 300ms
-            validacaoTimeout = setTimeout(() => {
-                validarOperador(value);
-            }, 300);
-        } else {
-            document.getElementById('operadorInfo').innerHTML = '';
-        }
-    });
+            // Limpar timeout anterior
+            if (validacaoTimeout) {
+                clearTimeout(validacaoTimeout);
+            }
+            
+            if (value.length === 4) {
+                // Mostrar feedback imediato de validação
+                const infoDiv = document.getElementById('operadorInfo');
+                infoDiv.innerHTML = '<small class="text-muted"><i class="fas fa-spinner fa-spin"></i> Validando...</small>';
+                
+                // Debounce de 300ms
+                validacaoTimeout = setTimeout(() => {
+                    validarOperador(value);
+                }, 300);
+            } else {
+                document.getElementById('operadorInfo').innerHTML = '';
+            }
+        });
+        
+        operadorInputListenerAdded = true;
+        console.log('[MODAL] Listener de validação de operador configurado (uma única vez)');
+    }
+    
+    // Configurar listener apenas uma vez
+    setupOperadorValidation();
     
     function validarOperador(codigo) {
         fetch('/apontamento/validar-codigo', {
