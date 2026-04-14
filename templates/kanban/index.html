@@ -2595,17 +2595,47 @@
                     
                     // FEEDBACK IMEDIATO: Renderizar chip de status se dados disponíveis
                     if (data.apontamento && typeof window.renderizarChipsStatus === 'function') {
-                        console.log('[FEEDBACK] Renderizando chip imediatamente após salvar apontamento');
+                        console.log('[FEEDBACK] ===== INICIANDO RENDERIZAÇÃO DO CHIP =====');
+                        console.log('[FEEDBACK] Dados do apontamento:', data.apontamento);
+                        console.log('[FEEDBACK] OS ID:', ordemAtualId);
+                        
                         window.renderizarChipsStatus(ordemAtualId, [data.apontamento]);
                         
                         // Iniciar timer manualmente após renderizar o chip
                         setTimeout(() => {
+                            const ap = data.apontamento;
+                            console.log('[FEEDBACK] ===== INICIANDO TIMER =====');
+                            console.log('[FEEDBACK] Verificando função iniciarTimerTrabalho:', typeof window.iniciarTimerTrabalho);
+                            
                             if (typeof window.iniciarTimerTrabalho === 'function') {
-                                const ap = data.apontamento;
-                                console.log('[FEEDBACK] Iniciando timer para o chip renderizado');
+                                console.log('[FEEDBACK] Parâmetros do timer:');
+                                console.log('[FEEDBACK]   - OS ID:', ordemAtualId);
+                                console.log('[FEEDBACK]   - Item ID:', ap.item_id);
+                                console.log('[FEEDBACK]   - Trabalho ID:', ap.trabalho_id);
+                                console.log('[FEEDBACK]   - Início:', ap.inicio_acao);
+                                
+                                // Verificar se o elemento do timer existe
+                                const timerId = `timer-${ordemAtualId}-${ap.item_id}-${ap.trabalho_id}`;
+                                const timerElement = document.getElementById(timerId);
+                                console.log('[FEEDBACK] Timer element ID:', timerId);
+                                console.log('[FEEDBACK] Timer element existe?', !!timerElement);
+                                
+                                if (!timerElement) {
+                                    console.error('[FEEDBACK] ❌ ELEMENTO DO TIMER NÃO ENCONTRADO!', timerId);
+                                } else {
+                                    console.log('[FEEDBACK] ✅ Elemento encontrado, iniciando timer...');
+                                }
+                                
                                 window.iniciarTimerTrabalho(ordemAtualId, ap.item_id, ap.trabalho_id, ap.inicio_acao);
+                                console.log('[FEEDBACK] ===== TIMER INICIADO =====');
+                            } else {
+                                console.error('[FEEDBACK] ❌ Função iniciarTimerTrabalho não disponível!');
                             }
-                        }, 100);
+                        }, 200);
+                    } else {
+                        console.warn('[FEEDBACK] ⚠️ Não foi possível renderizar chip:');
+                        console.warn('[FEEDBACK]   - data.apontamento existe?', !!data.apontamento);
+                        console.warn('[FEEDBACK]   - renderizarChipsStatus existe?', typeof window.renderizarChipsStatus);
                     }
                 }
                 // Atualizar última quantidade exibida, se fornecida pelo backend
