@@ -68,6 +68,12 @@ def add_indexes():
                 'table': 'pedido_ordem_servico',
                 'name': 'idx_pedido_os_ordem_id',
                 'sql': 'CREATE INDEX IF NOT EXISTS idx_pedido_os_ordem_id ON pedido_ordem_servico(ordem_servico_id)'
+            },
+            # Índice para Usuario (validação de código operador)
+            {
+                'table': 'usuario',
+                'name': 'idx_usuario_codigo_operador',
+                'sql': 'CREATE INDEX IF NOT EXISTS idx_usuario_codigo_operador ON usuario(codigo_operador) WHERE codigo_operador IS NOT NULL'
             }
         ]
         
