@@ -430,6 +430,10 @@ function clampStartTimestamp(startTs) {
     return startTs;
 }
 
+function keyTrabalho(ordemId, itemId, trabalhoId) {
+    return `${ordemId}-${itemId}-${trabalhoId}`;
+}
+
 function iniciarTimerTrabalho(ordemId, itemId, trabalhoId, startTimeStr) {
     console.log(`[TIMER] ===== INICIANDO FUNÇÃO =====`);
     console.log(`[TIMER] Parâmetros recebidos:`, {ordemId, itemId, trabalhoId, startTimeStr});
