@@ -104,41 +104,82 @@ def _buscar_apontamento_ativo_operador_na_os(usuario_id, ordem_servico_id):
     )
 
 
-def _obter_estado_real_os(ordem_servico_id):
+def _obter_estados_batch(ordem_servico_ids):
+    """
+    OTIMIZAÇÃO: Batch processing de estados para múltiplas OS
+    Busca todos os apontamentos abertos de uma vez usando IN query,
+    eliminando N+1 queries e processando em memória O(1) por OS
+    """
+    if not ordem_servico_ids:
+        return {}
+    
+    # Buscar TODOS os apontamentos abertos de TODAS as OS em UMA query
     apontamentos_abertos = (
         ApontamentoProducao.query.filter(
-            ApontamentoProducao.ordem_servico_id == ordem_servico_id,
+            ApontamentoProducao.ordem_servico_id.in_(ordem_servico_ids),
             ApontamentoProducao.data_fim.is_(None),
             ApontamentoProducao.tipo_acao.in_(['inicio_setup', 'inicio_producao', 'pausa'])
         )
-        .order_by(ApontamentoProducao.data_hora.desc())
+        .order_by(ApontamentoProducao.ordem_servico_id, ApontamentoProducao.data_hora.desc())
         .all()
     )
+    
+    # Agrupar apontamentos por OS em memória usando defaultdict
+    from collections import defaultdict
+    apontamentos_por_os = defaultdict(list)
+    for ap in apontamentos_abertos:
+        apontamentos_por_os[ap.ordem_servico_id].append(ap)
+    
+    # Processar estado de cada OS em memória (O(1) por OS)
+    estados = {}
+    for os_id in ordem_servico_ids:
+        aps = apontamentos_por_os.get(os_id, [])
+        
+        inicio_setup = next((ap for ap in aps if ap.tipo_acao == 'inicio_setup'), None)
+        inicio_producao = next((ap for ap in aps if ap.tipo_acao == 'inicio_producao'), None)
+        pausa = next((ap for ap in aps if ap.tipo_acao == 'pausa'), None)
+        
+        apontamento_base = pausa or inicio_producao or inicio_setup
+        status_real = 'Aguardando'
+        if pausa:
+            status_real = 'Pausado'
+        elif inicio_producao:
+            status_real = 'Produção em andamento'
+        elif inicio_setup:
+            status_real = 'Setup em andamento'
+        
+        estados[os_id] = {
+            'status_atual': status_real,
+            'apontamento_base': apontamento_base,
+            'setup_aberto': inicio_setup,
+            'producao_aberta': inicio_producao,
+            'pausa_aberta': pausa,
+            'item_id': getattr(apontamento_base, 'item_id', None),
+            'trabalho_id': getattr(apontamento_base, 'trabalho_id', None),
+            'usuario_id': getattr(apontamento_base, 'usuario_id', None),
+            'inicio_acao': getattr(apontamento_base, 'data_hora', None)
+        }
+    
+    return estados
 
-    inicio_setup = next((ap for ap in apontamentos_abertos if ap.tipo_acao == 'inicio_setup'), None)
-    inicio_producao = next((ap for ap in apontamentos_abertos if ap.tipo_acao == 'inicio_producao'), None)
-    pausa = next((ap for ap in apontamentos_abertos if ap.tipo_acao == 'pausa'), None)
 
-    apontamento_base = pausa or inicio_producao or inicio_setup
-    status_real = 'Aguardando'
-    if pausa:
-        status_real = 'Pausado'
-    elif inicio_producao:
-        status_real = 'Produção em andamento'
-    elif inicio_setup:
-        status_real = 'Setup em andamento'
-
-    return {
-        'status_atual': status_real,
-        'apontamento_base': apontamento_base,
-        'setup_aberto': inicio_setup,
-        'producao_aberta': inicio_producao,
-        'pausa_aberta': pausa,
-        'item_id': getattr(apontamento_base, 'item_id', None),
-        'trabalho_id': getattr(apontamento_base, 'trabalho_id', None),
-        'usuario_id': getattr(apontamento_base, 'usuario_id', None),
-        'inicio_acao': getattr(apontamento_base, 'data_hora', None)
-    }
+def _obter_estado_real_os(ordem_servico_id):
+    """
+    Função legada mantida para compatibilidade
+    Usa batch processing internamente para melhor performance
+    """
+    estados = _obter_estados_batch([ordem_servico_id])
+    return estados.get(ordem_servico_id, {
+        'status_atual': 'Aguardando',
+        'apontamento_base': None,
+        'setup_aberto': None,
+        'producao_aberta': None,
+        'pausa_aberta': None,
+        'item_id': None,
+        'trabalho_id': None,
+        'usuario_id': None,
+        'inicio_acao': None
+    })
 
 
 def _aplicar_estado_real_status(status, estado_real):
@@ -639,9 +680,24 @@ def status_ativos():
             .all()
         )
         
+        # OTIMIZAÇÃO: Batch processing de estados - buscar TODOS de uma vez
+        os_ids = [status.ordem_servico_id for status in status_ativos_raw]
+        estados_batch = _obter_estados_batch(os_ids)
+        
         status_ativos = []
         for status in status_ativos_raw:
-            estado_real = _obter_estado_real_os(status.ordem_servico_id)
+            # Usar estado pré-carregado do batch (O(1) lookup)
+            estado_real = estados_batch.get(status.ordem_servico_id, {
+                'status_atual': 'Aguardando',
+                'apontamento_base': None,
+                'setup_aberto': None,
+                'producao_aberta': None,
+                'pausa_aberta': None,
+                'item_id': None,
+                'trabalho_id': None,
+                'usuario_id': None,
+                'inicio_acao': None
+            })
             _aplicar_estado_real_status(status, estado_real)
             if estado_real['status_atual'] not in ['Setup em andamento', 'Produção em andamento', 'Pausado']:
                 continue
@@ -2459,77 +2515,80 @@ def registrar_apontamento():
             if not dados.get('quantidade'):
                 return jsonify({'success': False, 'message': 'Quantidade final é obrigatória'})
         
-        # Buscar ou criar status da OS - EVITAR AUTOFLUSH PREMATURO
-        with db.session.no_autoflush:
-            status_os = status_atual or StatusProducaoOS.query.filter_by(ordem_servico_id=ordem_servico_id).first()
-            if not status_os:
-                status_os = StatusProducaoOS(
-                    ordem_servico_id=ordem_servico_id,
-                    status_atual='Aguardando',
-                    operador_atual_id=usuario.id
-                )
-                db.session.add(status_os)
+        # Buscar ou criar status da OS com PESSIMISTIC LOCKING para evitar race conditions
+        # with_for_update() aplica row-level lock, garantindo que apenas uma transação
+        # possa modificar o status por vez, eliminando problemas de concorrência
+        status_os = status_atual or StatusProducaoOS.query.filter_by(
+            ordem_servico_id=ordem_servico_id
+        ).with_for_update().first()
+        
+        if not status_os:
+            status_os = StatusProducaoOS(
+                ordem_servico_id=ordem_servico_id,
+                status_atual='Aguardando',
+                operador_atual_id=usuario.id
+            )
+            db.session.add(status_os)
         
         agora = datetime.now(LOCAL_TZ).replace(tzinfo=None)
         
-        # Atualizar status sem autoflush para evitar timeout
-        with db.session.no_autoflush:
-            # Garantir que data_atualizacao seja sempre atualizada
-            status_os.data_atualizacao = agora
+        # Atualizar status - pessimistic lock já garante integridade
+        # Garantir que data_atualizacao seja sempre atualizada
+        status_os.data_atualizacao = agora
+        
+        if tipo_acao == 'inicio_setup':
+            status_os.status_atual = 'Setup em andamento'
+            status_os.operador_atual_id = usuario.id
+            status_os.item_atual_id = item_id
+            status_os.trabalho_atual_id = trabalho_id
+            status_os.inicio_acao = agora
             
-            if tipo_acao == 'inicio_setup':
-                status_os.status_atual = 'Setup em andamento'
-                status_os.operador_atual_id = usuario.id
-                status_os.item_atual_id = item_id
-                status_os.trabalho_atual_id = trabalho_id
-                status_os.inicio_acao = agora
+        elif tipo_acao == 'fim_setup':
+            status_os.status_atual = 'Setup concluído'
+            
+        elif tipo_acao == 'inicio_producao':
+            status_os.status_atual = 'Produção em andamento'
+            status_os.operador_atual_id = usuario.id
+            status_os.item_atual_id = item_id
+            status_os.trabalho_atual_id = trabalho_id
+            status_os.inicio_acao = agora
+            if dados.get('quantidade'):
+                status_os.quantidade_atual = int(dados['quantidade'])
+            # Se houver pausa aberta para este par, encerrá-la
+            try:
+                pausa_aberta = ap_pausa_aberta or _query_apontamento_aberto(ordem_servico_id, item_id, trabalho_id, 'pausa')
+                if pausa_aberta:
+                    delta_pausa = agora - pausa_aberta.data_hora
+                    pausa_aberta.data_fim = agora
+                    pausa_aberta.tempo_decorrido = int(delta_pausa.total_seconds())
+            except Exception:
+                pass
                 
-            elif tipo_acao == 'fim_setup':
-                status_os.status_atual = 'Setup concluído'
+        elif tipo_acao == 'pausa':
+            status_os.status_atual = 'Pausado'
+            status_os.operador_atual_id = usuario.id
+            status_os.item_atual_id = item_id
+            status_os.trabalho_atual_id = trabalho_id
+            status_os.inicio_acao = agora
+            status_os.motivo_parada = dados.get('motivo_parada')
+            if dados.get('quantidade'):
+                status_os.quantidade_atual = int(dados['quantidade'])
                 
-            elif tipo_acao == 'inicio_producao':
-                status_os.status_atual = 'Produção em andamento'
-                status_os.operador_atual_id = usuario.id
-                status_os.item_atual_id = item_id
-                status_os.trabalho_atual_id = trabalho_id
-                status_os.inicio_acao = agora
-                if dados.get('quantidade'):
-                    status_os.quantidade_atual = int(dados['quantidade'])
-                # Se houver pausa aberta para este par, encerrá-la
-                try:
-                    pausa_aberta = ap_pausa_aberta or _query_apontamento_aberto(ordem_servico_id, item_id, trabalho_id, 'pausa')
-                    if pausa_aberta:
-                        delta_pausa = agora - pausa_aberta.data_hora
-                        pausa_aberta.data_fim = agora
-                        pausa_aberta.tempo_decorrido = int(delta_pausa.total_seconds())
-                except Exception:
-                    pass
-                    
-            elif tipo_acao == 'pausa':
-                status_os.status_atual = 'Pausado'
-                status_os.operador_atual_id = usuario.id
-                status_os.item_atual_id = item_id
-                status_os.trabalho_atual_id = trabalho_id
-                status_os.inicio_acao = agora
-                status_os.motivo_parada = dados.get('motivo_parada')
-                if dados.get('quantidade'):
-                    status_os.quantidade_atual = int(dados['quantidade'])
-                    
-            elif tipo_acao == 'stop':
-                status_os.status_atual = 'Aguardando'
-                status_os.operador_atual_id = None
-                status_os.item_atual_id = None
-                status_os.trabalho_atual_id = None
-                status_os.inicio_acao = None
-                status_os.motivo_parada = None
-                # CORREÇÃO: Preservar quantidade informada no STOP
-                if dados.get('quantidade'):
-                    status_os.quantidade_atual = int(dados['quantidade'])
-                    
-            elif tipo_acao == 'fim_producao':
-                status_os.status_atual = 'Finalizado'
-                if dados.get('quantidade'):
-                    status_os.quantidade_atual = int(dados['quantidade'])
+        elif tipo_acao == 'stop':
+            status_os.status_atual = 'Aguardando'
+            status_os.operador_atual_id = None
+            status_os.item_atual_id = None
+            status_os.trabalho_atual_id = None
+            status_os.inicio_acao = None
+            status_os.motivo_parada = None
+            # CORREÇÃO: Preservar quantidade informada no STOP
+            if dados.get('quantidade'):
+                status_os.quantidade_atual = int(dados['quantidade'])
+                
+        elif tipo_acao == 'fim_producao':
+            status_os.status_atual = 'Finalizado'
+            if dados.get('quantidade'):
+                status_os.quantidade_atual = int(dados['quantidade'])
         
         # Verificar se é uma ação de finalização (fim_setup, fim_producao, pausa)
         # Se for, buscar o apontamento de início correspondente para calcular tempo decorrido
@@ -2783,8 +2842,10 @@ def logs_ordem_servico(os_id):
 def get_logs_ordem_servico(ordem_id):
     """Retorna logs de apontamento de uma ordem de serviço em formato JSON"""
     try:
-        # Buscar todos os apontamentos desta OS
-        apontamentos = ApontamentoProducao.query.filter_by(
+        # OTIMIZAÇÃO: Buscar apontamentos com joinedload para evitar N+1 queries
+        apontamentos = ApontamentoProducao.query.options(
+            joinedload(ApontamentoProducao.usuario)
+        ).filter_by(
             ordem_servico_id=ordem_id
         ).order_by(ApontamentoProducao.data_hora.desc()).all()
         
@@ -2802,9 +2863,13 @@ def get_logs_ordem_servico(ordem_id):
                 'lista_kanban': apontamento.lista_kanban
             }
             
-            # Adicionar informações do operador
+            # Adicionar informações do operador (já carregado via joinedload)
             try:
-                if hasattr(apontamento, 'operador_id') and apontamento.operador_id:
+                if hasattr(apontamento, 'usuario') and apontamento.usuario:
+                    log_info['operador_id'] = apontamento.usuario.id
+                    log_info['operador_nome'] = apontamento.usuario.nome
+                elif hasattr(apontamento, 'operador_id') and apontamento.operador_id:
+                    # Fallback caso usuario não esteja carregado
                     operador = Usuario.query.get(apontamento.operador_id)
                     if operador:
                         log_info['operador_id'] = operador.id
