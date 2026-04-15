@@ -373,27 +373,51 @@ function cardProximoDaViewport(ordemId) {
 }
 
 function parseStartTimestamp(startTimeStr) {
-    if (!startTimeStr) return Date.now();
+    console.log('[PARSE TIMESTAMP] Input:', startTimeStr, 'Type:', typeof startTimeStr);
+    
+    if (!startTimeStr) {
+        console.log('[PARSE TIMESTAMP] Empty input, usando Date.now()');
+        return Date.now();
+    }
 
     if (typeof startTimeStr === 'number') {
-        return Number.isFinite(startTimeStr) ? startTimeStr : Date.now();
+        const result = Number.isFinite(startTimeStr) ? startTimeStr : Date.now();
+        console.log('[PARSE TIMESTAMP] Number input, resultado:', result);
+        return result;
     }
 
     const raw = String(startTimeStr).trim();
-    if (!raw) return Date.now();
+    console.log('[PARSE TIMESTAMP] Raw string:', raw);
+    
+    if (!raw) {
+        console.log('[PARSE TIMESTAMP] Empty string, usando Date.now()');
+        return Date.now();
+    }
 
     const n = Number(raw);
-    if (Number.isFinite(n)) return n;
+    if (Number.isFinite(n)) {
+        console.log('[PARSE TIMESTAMP] Convertido para number:', n);
+        return n;
+    }
 
     let iso = raw;
     const hasTz = /([zZ]|[+-]\d{2}:?\d{2})$/.test(iso);
+    console.log('[PARSE TIMESTAMP] Tem timezone?', hasTz);
+    
     if (!hasTz && /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}/.test(iso)) {
         iso = `${iso}-03:00`;
+        console.log('[PARSE TIMESTAMP] Adicionado timezone -03:00, novo ISO:', iso);
     }
 
     const ts = new Date(iso).getTime();
-    if (Number.isFinite(ts)) return ts;
+    console.log('[PARSE TIMESTAMP] Timestamp parseado:', ts, 'Data:', new Date(ts).toISOString());
+    
+    if (Number.isFinite(ts)) {
+        console.log('[PARSE TIMESTAMP] ✅ Timestamp válido:', ts);
+        return ts;
+    }
 
+    console.log('[PARSE TIMESTAMP] ❌ Timestamp inválido, usando Date.now()');
     return Date.now();
 }
 

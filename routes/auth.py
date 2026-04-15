@@ -17,6 +17,7 @@ def _refresh_user_session(usuario):
     session['usuario_nome'] = usuario.nome
     session['usuario_email'] = usuario.email
     session['usuario_nivel'] = usuario.nivel_acesso
+    session['usuario_nivel_acesso'] = usuario.nivel_acesso  # Para uso nos templates
     session['acesso_kanban'] = usuario.acesso_kanban
     session['acesso_estoque'] = usuario.acesso_estoque
     session['acesso_pedidos'] = usuario.acesso_pedidos

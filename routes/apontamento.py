@@ -2698,6 +2698,12 @@ def registrar_apontamento():
             # Buscar dados do trabalho e item para o chip
             trabalho = Trabalho.query.get(trabalho_id)
             
+            # Preparar timestamp para o timer
+            inicio_timestamp = to_brt_iso(agora)
+            logger.info(f"[TIMER DEBUG] Timestamp gerado: {inicio_timestamp}")
+            logger.info(f"[TIMER DEBUG] Agora (datetime): {agora}")
+            logger.info(f"[TIMER DEBUG] Agora (isoformat): {agora.isoformat()}")
+            
             apontamento_data = {
                 'item_id': item_id,
                 'trabalho_id': trabalho_id,
@@ -2705,8 +2711,10 @@ def registrar_apontamento():
                 'status': status_os.status_atual,
                 'operador_codigo': usuario.codigo_operador,
                 'operador_nome': usuario.nome,
-                'inicio_acao': to_brt_iso(agora)
+                'inicio_acao': inicio_timestamp
             }
+            
+            logger.info(f"[TIMER DEBUG] Apontamento data completo: {apontamento_data}")
         
         return jsonify({
             'success': True,
