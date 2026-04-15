@@ -858,9 +858,26 @@ function renderizarChipsStatus(ordemId, ativosLista) {
                 const itemId = ap.item_id;
                 const trabId = ap.trabalho_id;
                 const inicio = ap.inicio_acao;
+                
+                console.log(`[TIMER CARD] Preparando timer para OS ${ordemId}, item ${itemId}, trabalho ${trabId}`);
+                console.log(`[TIMER CARD] Início recebido:`, inicio);
+                
                 setTimeout(() => {
-                    console.log(`[TIMER] Iniciando timer após renderizar chip: OS ${ordemId}, item ${itemId}, trabalho ${trabId}`);
-                    iniciarTimerTrabalho(ordemId, itemId, trabId, inicio);
+                    const timerId = `timer-${ordemId}-${itemId}-${trabId}`;
+                    const timerEl = document.getElementById(timerId);
+                    
+                    console.log(`[TIMER CARD] Procurando elemento: ${timerId}`);
+                    console.log(`[TIMER CARD] Elemento encontrado?`, !!timerEl);
+                    
+                    if (timerEl) {
+                        console.log(`[TIMER CARD] ✅ Elemento encontrado! Conteúdo atual: "${timerEl.textContent}"`);
+                        console.log(`[TIMER CARD] Iniciando timer com início:`, inicio);
+                        iniciarTimerTrabalho(ordemId, itemId, trabId, inicio);
+                    } else {
+                        console.error(`[TIMER CARD] ❌ ELEMENTO NÃO ENCONTRADO: ${timerId}`);
+                        console.log(`[TIMER CARD] Todos os timers no DOM:`, 
+                            Array.from(document.querySelectorAll('[id^="timer-"]')).map(t => t.id));
+                    }
                 }, 100);
             });
         }
