@@ -1562,4 +1562,5 @@ window.atualizarUltimaQuantidadeNoCard = function(ordemId, ultimaQuantidade) {
     } catch (e) {
         console.warn('Não foi possível atualizar a última quantidade no card:', e);
     }
+};
 }
