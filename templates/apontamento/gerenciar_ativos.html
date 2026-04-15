@@ -1,0 +1,334 @@
+{% extends "base.html" %}
+
+{% block title %}Gerenciar Apontamentos Ativos{% endblock %}
+
+{% block content %}
+<div class="container-fluid mt-4">
+    <div class="row mb-4">
+        <div class="col-12">
+            <div class="d-flex justify-content-between align-items-center">
+                <h2><i class="fas fa-clock"></i> Gerenciar Apontamentos Ativos</h2>
+                <a href="/kanban" class="btn btn-secondary">
+                    <i class="fas fa-arrow-left"></i> Voltar ao Kanban
+                </a>
+            </div>
+            <p class="text-muted">Visualize e gerencie todos os apontamentos em andamento</p>
+        </div>
+    </div>
+
+    {% if apontamentos|length == 0 %}
+    <div class="alert alert-info">
+        <i class="fas fa-info-circle"></i> Nenhum apontamento ativo no momento.
+    </div>
+    {% else %}
+    
+    <!-- Estatísticas -->
+    <div class="row mb-4">
+        <div class="col-md-3">
+            <div class="card bg-primary text-white">
+                <div class="card-body">
+                    <h5 class="card-title"><i class="fas fa-play-circle"></i> Total Ativos</h5>
+                    <h2>{{ apontamentos|length }}</h2>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card bg-info text-white">
+                <div class="card-body">
+                    <h5 class="card-title"><i class="fas fa-tools"></i> Setup</h5>
+                    <h2>{{ apontamentos|selectattr('tipo_acao', 'equalto', 'inicio_setup')|list|length }}</h2>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card bg-success text-white">
+                <div class="card-body">
+                    <h5 class="card-title"><i class="fas fa-cogs"></i> Produção</h5>
+                    <h2>{{ apontamentos|selectattr('tipo_acao', 'equalto', 'inicio_producao')|list|length }}</h2>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card bg-warning text-dark">
+                <div class="card-body">
+                    <h5 class="card-title"><i class="fas fa-pause-circle"></i> Pausados</h5>
+                    <h2>{{ apontamentos|selectattr('tipo_acao', 'equalto', 'pausa')|list|length }}</h2>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Tabela de Apontamentos -->
+    <div class="card">
+        <div class="card-header bg-dark text-white">
+            <h5 class="mb-0"><i class="fas fa-list"></i> Apontamentos em Andamento</h5>
+        </div>
+        <div class="card-body p-0">
+            <div class="table-responsive">
+                <table class="table table-hover mb-0" id="tabelaApontamentos">
+                    <thead class="table-light">
+                        <tr>
+                            <th>Status</th>
+                            <th>OS</th>
+                            <th>Pedido</th>
+                            <th>Item</th>
+                            <th>Trabalho</th>
+                            <th>Operador</th>
+                            <th>Início</th>
+                            <th>Tempo Decorrido</th>
+                            <th>Quantidade</th>
+                            <th class="text-center">Ações</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for apontamento in apontamentos %}
+                        <tr data-apontamento-id="{{ apontamento.id }}" 
+                            data-inicio="{{ apontamento.data_hora.isoformat() if apontamento.data_hora else '' }}">
+                            <td>
+                                {% if apontamento.tipo_acao == 'inicio_setup' %}
+                                <span class="badge bg-info"><i class="fas fa-tools"></i> Setup</span>
+                                {% elif apontamento.tipo_acao == 'inicio_producao' %}
+                                <span class="badge bg-success"><i class="fas fa-cogs"></i> Produção</span>
+                                {% elif apontamento.tipo_acao == 'pausa' %}
+                                <span class="badge bg-warning text-dark"><i class="fas fa-pause-circle"></i> Pausa</span>
+                                {% endif %}
+                            </td>
+                            <td>
+                                <strong>#{{ apontamento.ordem_servico_id }}</strong>
+                            </td>
+                            <td>
+                                {% if apontamento.ordem_servico and apontamento.ordem_servico.pedidos %}
+                                    {% set pedido = apontamento.ordem_servico.pedidos[0].pedido %}
+                                    {{ pedido.numero if pedido else '-' }}
+                                {% else %}
+                                -
+                                {% endif %}
+                            </td>
+                            <td>
+                                {{ apontamento.item.nome if apontamento.item else '-' }}
+                            </td>
+                            <td>
+                                {{ apontamento.trabalho.nome if apontamento.trabalho else '-' }}
+                            </td>
+                            <td>
+                                <i class="fas fa-user"></i> {{ apontamento.usuario.nome if apontamento.usuario else '-' }}
+                                <br>
+                                <small class="text-muted">{{ apontamento.usuario.codigo_operador if apontamento.usuario else '-' }}</small>
+                            </td>
+                            <td>
+                                <small>{{ apontamento.data_hora.strftime('%d/%m/%Y %H:%M:%S') if apontamento.data_hora else '-' }}</small>
+                            </td>
+                            <td>
+                                <span class="timer-display badge bg-secondary" data-inicio="{{ apontamento.data_hora.isoformat() if apontamento.data_hora else '' }}">
+                                    00:00:00
+                                </span>
+                            </td>
+                            <td>
+                                <span class="quantidade-display">{{ apontamento.quantidade if apontamento.quantidade else '-' }}</span>
+                            </td>
+                            <td class="text-center">
+                                <div class="btn-group" role="group">
+                                    <button class="btn btn-sm btn-primary btn-editar" 
+                                            data-id="{{ apontamento.id }}"
+                                            data-quantidade="{{ apontamento.quantidade if apontamento.quantidade else 0 }}"
+                                            data-inicio="{{ apontamento.data_hora.isoformat() if apontamento.data_hora else '' }}"
+                                            title="Editar">
+                                        <i class="fas fa-edit"></i>
+                                    </button>
+                                    <button class="btn btn-sm btn-danger btn-fechar" 
+                                            data-id="{{ apontamento.id }}"
+                                            title="Fechar Apontamento">
+                                        <i class="fas fa-stop-circle"></i>
+                                    </button>
+                                </div>
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+    {% endif %}
+</div>
+
+<!-- Modal de Edição -->
+<div class="modal fade" id="modalEditar" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header bg-primary text-white">
+                <h5 class="modal-title"><i class="fas fa-edit"></i> Editar Apontamento</h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <form id="formEditar">
+                    <input type="hidden" id="editarId">
+                    
+                    <div class="mb-3">
+                        <label for="editarQuantidade" class="form-label">Quantidade</label>
+                        <input type="number" class="form-control" id="editarQuantidade" min="0">
+                    </div>
+                    
+                    <div class="mb-3">
+                        <label for="editarInicio" class="form-label">Data/Hora Início</label>
+                        <input type="datetime-local" class="form-control" id="editarInicio">
+                    </div>
+                    
+                    <div class="mb-3">
+                        <label for="editarFim" class="form-label">Data/Hora Fim (opcional)</label>
+                        <input type="datetime-local" class="form-control" id="editarFim">
+                        <small class="text-muted">Deixe em branco para manter o apontamento aberto</small>
+                    </div>
+                </form>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
+                <button type="button" class="btn btn-primary" id="btnSalvarEdicao">
+                    <i class="fas fa-save"></i> Salvar
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<style>
+    .timer-display {
+        font-family: 'Courier New', monospace;
+        font-size: 1.1em;
+        min-width: 80px;
+        display: inline-block;
+    }
+    
+    .table td {
+        vertical-align: middle;
+    }
+    
+    .btn-group .btn {
+        margin: 0 2px;
+    }
+</style>
+
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    // Atualizar timers a cada segundo
+    function atualizarTimers() {
+        document.querySelectorAll('.timer-display').forEach(function(el) {
+            const inicio = el.getAttribute('data-inicio');
+            if (!inicio) return;
+            
+            const inicioDate = new Date(inicio);
+            const agora = new Date();
+            const diff = Math.floor((agora - inicioDate) / 1000);
+            
+            if (diff < 0) {
+                el.textContent = '00:00:00';
+                return;
+            }
+            
+            const horas = Math.floor(diff / 3600);
+            const minutos = Math.floor((diff % 3600) / 60);
+            const segundos = diff % 60;
+            
+            el.textContent = `${String(horas).padStart(2, '0')}:${String(minutos).padStart(2, '0')}:${String(segundos).padStart(2, '0')}`;
+        });
+    }
+    
+    // Atualizar imediatamente e depois a cada segundo
+    atualizarTimers();
+    setInterval(atualizarTimers, 1000);
+    
+    // Botão Editar
+    document.querySelectorAll('.btn-editar').forEach(function(btn) {
+        btn.addEventListener('click', function() {
+            const id = this.getAttribute('data-id');
+            const quantidade = this.getAttribute('data-quantidade');
+            const inicio = this.getAttribute('data-inicio');
+            
+            document.getElementById('editarId').value = id;
+            document.getElementById('editarQuantidade').value = quantidade;
+            
+            if (inicio) {
+                const inicioDate = new Date(inicio);
+                const localIso = new Date(inicioDate.getTime() - inicioDate.getTimezoneOffset() * 60000).toISOString().slice(0, 16);
+                document.getElementById('editarInicio').value = localIso;
+            }
+            
+            const modal = new bootstrap.Modal(document.getElementById('modalEditar'));
+            modal.show();
+        });
+    });
+    
+    // Salvar Edição
+    document.getElementById('btnSalvarEdicao').addEventListener('click', function() {
+        const id = document.getElementById('editarId').value;
+        const quantidade = document.getElementById('editarQuantidade').value;
+        const inicio = document.getElementById('editarInicio').value;
+        const fim = document.getElementById('editarFim').value;
+        
+        const dados = {
+            quantidade: parseInt(quantidade)
+        };
+        
+        if (inicio) {
+            dados.data_hora = new Date(inicio).toISOString();
+        }
+        
+        if (fim) {
+            dados.data_fim = new Date(fim).toISOString();
+        }
+        
+        fetch(`/apontamento/editar-apontamento/${id}`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify(dados)
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                alert('Apontamento editado com sucesso!');
+                location.reload();
+            } else {
+                alert('Erro: ' + data.message);
+            }
+        })
+        .catch(error => {
+            console.error('Erro:', error);
+            alert('Erro ao editar apontamento');
+        });
+    });
+    
+    // Botão Fechar
+    document.querySelectorAll('.btn-fechar').forEach(function(btn) {
+        btn.addEventListener('click', function() {
+            if (!confirm('Tem certeza que deseja fechar este apontamento?')) {
+                return;
+            }
+            
+            const id = this.getAttribute('data-id');
+            
+            fetch(`/apontamento/fechar-apontamento/${id}`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                }
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    alert('Apontamento fechado com sucesso!');
+                    location.reload();
+                } else {
+                    alert('Erro: ' + data.message);
+                }
+            })
+            .catch(error => {
+                console.error('Erro:', error);
+                alert('Erro ao fechar apontamento');
+            });
+        });
+    });
+});
+</script>
+{% endblock %}

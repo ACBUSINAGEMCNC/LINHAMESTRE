@@ -733,6 +733,11 @@
                     <li class="nav-item">
                         <a class="nav-link" href="/apontamento/dashboard"><i class="fas fa-chart-bar"></i> Dashboard Apontamento</a>
                     </li>
+                    {% if session.get('usuario_nivel_acesso') == 'admin' %}
+                    <li class="nav-item">
+                        <a class="nav-link" href="/apontamento/gerenciar-ativos"><i class="fas fa-clock"></i> Gerenciar Apontamentos</a>
+                    </li>
+                    {% endif %}
                     <li class="nav-item">
                         <a class="nav-link" href="/listas"><i class="fas fa-cog"></i> Listas Kanban</a>
                     </li>

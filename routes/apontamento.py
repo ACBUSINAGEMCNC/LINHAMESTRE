@@ -2705,7 +2705,7 @@ def registrar_apontamento():
                 'status': status_os.status_atual,
                 'operador_codigo': usuario.codigo_operador,
                 'operador_nome': usuario.nome,
-                'inicio_acao': agora.isoformat()
+                'inicio_acao': to_brt_iso(agora)
             }
         
         return jsonify({
@@ -2916,4 +2916,128 @@ def get_logs_ordem_servico(ordem_id):
         return jsonify({
             'success': False,
             'message': f'Erro ao buscar logs de apontamento: {str(e)}'
+        }), 500
+
+
+@apontamento_bp.route('/gerenciar-ativos')
+def gerenciar_apontamentos_ativos():
+    """Tela de gerenciamento de apontamentos ativos (Admin only)"""
+    # Verificar se usuário é admin
+    if 'usuario_id' not in session:
+        flash('Por favor, faça login para acessar esta página', 'warning')
+        return redirect(url_for('auth.login'))
+    
+    usuario = Usuario.query.get(session['usuario_id'])
+    if not usuario or usuario.nivel_acesso != 'admin':
+        flash('Acesso negado. Apenas administradores podem acessar esta página.', 'danger')
+        return redirect(url_for('kanban.index'))
+    
+    # Buscar todos os apontamentos ativos (sem data_fim)
+    apontamentos_ativos = ApontamentoProducao.query.options(
+        joinedload(ApontamentoProducao.ordem_servico)
+            .joinedload(OrdemServico.pedidos)
+            .joinedload(PedidoOrdemServico.pedido),
+        joinedload(ApontamentoProducao.usuario),
+        joinedload(ApontamentoProducao.item),
+        joinedload(ApontamentoProducao.trabalho)
+    ).filter(
+        ApontamentoProducao.data_fim.is_(None),
+        ApontamentoProducao.tipo_acao.in_(['inicio_setup', 'inicio_producao', 'pausa'])
+    ).order_by(ApontamentoProducao.data_hora.desc()).all()
+    
+    return render_template('apontamento/gerenciar_ativos.html', 
+                         apontamentos=apontamentos_ativos,
+                         usuario=usuario)
+
+
+@apontamento_bp.route('/fechar-apontamento/<int:apontamento_id>', methods=['POST'])
+def fechar_apontamento(apontamento_id):
+    """Fechar um apontamento ativo (Admin only)"""
+    if 'usuario_id' not in session:
+        return jsonify({'success': False, 'message': 'Não autorizado'}), 401
+    
+    usuario = Usuario.query.get(session['usuario_id'])
+    if not usuario or usuario.nivel_acesso != 'admin':
+        return jsonify({'success': False, 'message': 'Acesso negado'}), 403
+    
+    try:
+        apontamento = ApontamentoProducao.query.get_or_404(apontamento_id)
+        
+        if apontamento.data_fim:
+            return jsonify({'success': False, 'message': 'Apontamento já está fechado'}), 400
+        
+        # Fechar o apontamento
+        agora = datetime.now(LOCAL_TZ).replace(tzinfo=None)
+        apontamento.data_fim = agora
+        
+        # Calcular tempo decorrido
+        if apontamento.data_hora:
+            delta = agora - apontamento.data_hora
+            apontamento.tempo_decorrido = int(delta.total_seconds())
+        
+        db.session.commit()
+        
+        return jsonify({
+            'success': True,
+            'message': 'Apontamento fechado com sucesso'
+        })
+    except Exception as e:
+        db.session.rollback()
+        logger.exception(f"Erro ao fechar apontamento {apontamento_id}")
+        return jsonify({
+            'success': False,
+            'message': f'Erro ao fechar apontamento: {str(e)}'
+        }), 500
+
+
+@apontamento_bp.route('/editar-apontamento/<int:apontamento_id>', methods=['POST'])
+def editar_apontamento(apontamento_id):
+    """Editar um apontamento (Admin only)"""
+    if 'usuario_id' not in session:
+        return jsonify({'success': False, 'message': 'Não autorizado'}), 401
+    
+    usuario = Usuario.query.get(session['usuario_id'])
+    if not usuario or usuario.nivel_acesso != 'admin':
+        return jsonify({'success': False, 'message': 'Acesso negado'}), 403
+    
+    try:
+        apontamento = ApontamentoProducao.query.get_or_404(apontamento_id)
+        dados = request.get_json()
+        
+        # Atualizar campos permitidos
+        if 'quantidade' in dados:
+            apontamento.quantidade = int(dados['quantidade'])
+        
+        if 'data_hora' in dados:
+            # Parse do datetime
+            try:
+                nova_data = datetime.fromisoformat(dados['data_hora'].replace('Z', '+00:00'))
+                apontamento.data_hora = nova_data.replace(tzinfo=None)
+            except:
+                return jsonify({'success': False, 'message': 'Formato de data inválido'}), 400
+        
+        if 'data_fim' in dados and dados['data_fim']:
+            try:
+                nova_data_fim = datetime.fromisoformat(dados['data_fim'].replace('Z', '+00:00'))
+                apontamento.data_fim = nova_data_fim.replace(tzinfo=None)
+                
+                # Recalcular tempo decorrido
+                if apontamento.data_hora and apontamento.data_fim:
+                    delta = apontamento.data_fim - apontamento.data_hora
+                    apontamento.tempo_decorrido = int(delta.total_seconds())
+            except:
+                return jsonify({'success': False, 'message': 'Formato de data fim inválido'}), 400
+        
+        db.session.commit()
+        
+        return jsonify({
+            'success': True,
+            'message': 'Apontamento editado com sucesso'
+        })
+    except Exception as e:
+        db.session.rollback()
+        logger.exception(f"Erro ao editar apontamento {apontamento_id}")
+        return jsonify({
+            'success': False,
+            'message': f'Erro ao editar apontamento: {str(e)}'
         }), 500
