@@ -221,6 +221,54 @@ function normalizeTrabLabel(n) {
     }
 }
 
+// Função para adicionar indicador visual de operador em um card
+function adicionarIndicadorOperador(ordemId, operadorNome, operadorCodigo) {
+    // Buscar cartão real, ignorando fantasma
+    const allCards = document.querySelectorAll(`[data-ordem-id="${ordemId}"]`);
+    let card = null;
+    for (const c of allCards) {
+        if (!c.classList.contains('fantasma')) {
+            card = c;
+            break;
+        }
+    }
+    if (!card) return;
+    
+    // Remover indicador existente se houver
+    const indicadorExistente = card.querySelector('.operador-indicator');
+    if (indicadorExistente) indicadorExistente.remove();
+    
+    // Criar novo indicador
+    const indicador = document.createElement('div');
+    indicador.className = 'operador-indicator mt-2 small';
+    indicador.innerHTML = `
+        <div class="d-flex align-items-center">
+            <i class="fas fa-user-hard-hat me-1"></i>
+            <span>${operadorNome} (${operadorCodigo})</span>
+        </div>
+    `;
+    
+    // Adicionar ao card
+    const cardBody = card.querySelector('.card-body');
+    if (cardBody) {
+        cardBody.appendChild(indicador);
+    }
+}
+
+// Função para desabilitar botões quando operador diferente está trabalhando
+function desabilitarBotoesOperadorDiferente(ordemId, operadorNome) {
+    const allCards = document.querySelectorAll(`[data-ordem-id="${ordemId}"]`);
+    for (const card of allCards) {
+        if (!card.classList.contains('fantasma')) {
+            const botoes = card.querySelectorAll('.btn-apontamento');
+            botoes.forEach(btn => {
+                btn.disabled = true;
+                btn.title = `Operador ${operadorNome} está trabalhando nesta OS`;
+            });
+        }
+    }
+}
+
 // Função para carregar o estado dos apontamentos ao iniciar a página
 function carregarEstadoApontamentos() {
     if (_carregandoEstado) {
@@ -373,51 +421,38 @@ function cardProximoDaViewport(ordemId) {
 }
 
 function parseStartTimestamp(startTimeStr) {
-    console.log('[PARSE TIMESTAMP] Input:', startTimeStr, 'Type:', typeof startTimeStr);
-    
     if (!startTimeStr) {
-        console.log('[PARSE TIMESTAMP] Empty input, usando Date.now()');
         return Date.now();
     }
 
     if (typeof startTimeStr === 'number') {
-        const result = Number.isFinite(startTimeStr) ? startTimeStr : Date.now();
-        console.log('[PARSE TIMESTAMP] Number input, resultado:', result);
-        return result;
+        return Number.isFinite(startTimeStr) ? startTimeStr : Date.now();
     }
 
     const raw = String(startTimeStr).trim();
-    console.log('[PARSE TIMESTAMP] Raw string:', raw);
     
     if (!raw) {
-        console.log('[PARSE TIMESTAMP] Empty string, usando Date.now()');
         return Date.now();
     }
 
     const n = Number(raw);
     if (Number.isFinite(n)) {
-        console.log('[PARSE TIMESTAMP] Convertido para number:', n);
         return n;
     }
 
     let iso = raw;
     const hasTz = /([zZ]|[+-]\d{2}:?\d{2})$/.test(iso);
-    console.log('[PARSE TIMESTAMP] Tem timezone?', hasTz);
     
     if (!hasTz && /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}/.test(iso)) {
         iso = `${iso}-03:00`;
-        console.log('[PARSE TIMESTAMP] Adicionado timezone -03:00, novo ISO:', iso);
     }
 
     const ts = new Date(iso).getTime();
-    console.log('[PARSE TIMESTAMP] Timestamp parseado:', ts, 'Data:', new Date(ts).toISOString());
     
     if (Number.isFinite(ts)) {
-        console.log('[PARSE TIMESTAMP] ✅ Timestamp válido:', ts);
         return ts;
     }
 
-    console.log('[PARSE TIMESTAMP] ❌ Timestamp inválido, usando Date.now()');
     return Date.now();
 }
 
@@ -435,49 +470,31 @@ function keyTrabalho(ordemId, itemId, trabalhoId) {
 }
 
 function iniciarTimerTrabalho(ordemId, itemId, trabalhoId, startTimeStr) {
-    console.log(`[TIMER] ===== INICIANDO FUNÇÃO =====`);
-    console.log(`[TIMER] Parâmetros recebidos:`, {ordemId, itemId, trabalhoId, startTimeStr});
-    
     const key = keyTrabalho(ordemId, itemId, trabalhoId);
-    console.log(`[TIMER] Key gerada: ${key}`);
     
     // Limpar anterior, se existir
     if (timersTrabalho[key]) {
-        console.log(`[TIMER] Limpando timer anterior para key: ${key}`);
         clearInterval(timersTrabalho[key]);
         delete timersTrabalho[key];
     }
     
     const elementId = `timer-${ordemId}-${itemId}-${trabalhoId}`;
-    console.log(`[TIMER] Procurando elemento ID: ${elementId}`);
-    
     const el = document.getElementById(elementId);
+    
     if (!el) {
-        console.error(`[TIMER] ELEMENTO NÃO ENCONTRADO: ${elementId}`);
-        console.log(`[TIMER] Verificando todos os elementos timer no DOM...`);
-        const allTimers = document.querySelectorAll('[id^="timer-"]');
-        console.log(`[TIMER] Timers encontrados:`, Array.from(allTimers).map(t => t.id));
+        console.error(`[TIMER] Elemento não encontrado: ${elementId}`);
         return;
     }
     
-    console.log(`[TIMER] Elemento encontrado:`, el);
-    console.log(`[TIMER] Conteúdo atual: "${el.textContent}"`);
-    
     const startTs = clampStartTimestamp(parseStartTimestamp(startTimeStr));
-    console.log(`[TIMER] Timestamp parseado: ${startTimeStr} -> ${startTs} (${new Date(startTs).toISOString()})`);
     
     // Atualização imediata
-    console.log(`[TIMER] Fazendo atualização imediata...`);
     atualizarElementoTimer(el, startTs);
-    console.log(`[TIMER] Após atualização imediata: "${el.textContent}"`);
     
     // Intervalo de 1s
-    console.log(`[TIMER] Criando intervalo de 1s...`);
     timersTrabalho[key] = setInterval(() => {
         atualizarElementoTimer(el, startTs);
     }, 1000);
-    
-    console.log(`[TIMER] Timer iniciado com sucesso! =====`);
 }
 
 // Expor função globalmente para uso no Kanban
@@ -688,9 +705,6 @@ function renderizarChipsStatus(ordemId, ativosLista) {
     }
     // Deduplicar
     allCards = Array.from(new Set(allCards));
-    console.debug(`[CHIPS] Encontrados ${allCards.length} cartões (.kanban-card) para OS ${ordemId}`);
-    // Forçar uso da função local sempre no kanban para garantir que chips apareçam
-    console.debug(`[CHIPS] Usando função local do persistence para OS ${ordemId}`);
     
     // Processar tanto cartões reais quanto fantasmas
     const cartoesReais = [];
@@ -704,26 +718,16 @@ function renderizarChipsStatus(ordemId, ativosLista) {
         }
     }
     
-    console.debug(`[CHIPS] Encontrados ${cartoesReais.length} cartões reais e ${cartoesFantasma.length} cartões fantasma para OS ${ordemId}`);
-    
     // Se não há cartões, sair
     if (cartoesReais.length === 0 && cartoesFantasma.length === 0) {
-        console.debug(`[CHIPS] Nenhum cartão encontrado para OS ${ordemId}`);
         return;
     }
     
     // Função para processar um cartão (real ou fantasma)
     function processarCartao(card, isFantasma = false) {
         const container = card.querySelector(`#status-${ordemId}`) || card.querySelector('.status-apontamento');
-        console.debug(`[CHIPS] Procurando container para OS ${ordemId} (${isFantasma ? 'fantasma' : 'real'})`, {
-            card: card,
-            statusById: card.querySelector(`#status-${ordemId}`),
-            statusByClass: card.querySelector('.status-apontamento'),
-            container: container
-        });
         
         if (!container) {
-            console.debug(`[CHIPS] Container de status não encontrado para OS ${ordemId} (${isFantasma ? 'fantasma' : 'real'})`);
             return;
         }
         
@@ -759,11 +763,8 @@ function renderizarChipsStatus(ordemId, ativosLista) {
         // Garantir que o cartão fantasma tenha um container de status
         const container = card.querySelector('.apontamento-status') || card.querySelector('.status-apontamento');
         if (container) {
-            console.debug(`[CHIPS] Container encontrado para cartão fantasma OS ${ordemId}, ID ${card.dataset.cartaoId || 'desconhecido'}`);
-            
             // Verificar se já tem conteúdo e está bloqueado
             if (container.dataset.statusLocked === 'true' && container.innerHTML && container.innerHTML.trim() !== '') {
-                console.debug(`[CHIPS] Mantendo conteúdo existente do cartão fantasma OS ${ordemId}`);
                 return container;
             }
             
@@ -771,25 +772,15 @@ function renderizarChipsStatus(ordemId, ativosLista) {
             container.innerHTML = '';
             return container;
         } else {
-            console.debug(`[CHIPS] Nenhum container encontrado para cartão fantasma OS ${ordemId}`);
             return null;
         }
     }).filter(Boolean);
     
     if (containersReais.length === 0 && containersFantasma.length === 0) {
-        console.debug(`[CHIPS] Nenhum container de status encontrado para OS ${ordemId}`);
         return;
     }
     
-    console.debug(`[CHIPS] Dados recebidos para OS ${ordemId}:`, {
-        ativosLista: ativosLista,
-        isArray: Array.isArray(ativosLista),
-        length: ativosLista?.length
-    });
-    
     if (!Array.isArray(ativosLista) || ativosLista.length === 0) {
-        // Verificar se há apontamento ativo no backend antes de mostrar "aguardando"
-        console.debug(`[CHIPS] Lista vazia para OS ${ordemId}, verificando status no backend`);
         
         // Fazer uma verificação rápida do status atual
         fetch(`/apontamento/status-ativos`)
@@ -799,7 +790,6 @@ function renderizarChipsStatus(ordemId, ativosLista) {
                 const osAtiva = statusAtivos.find(s => (s.ordem_servico_id || s.os_id || s.id) == ordemId);
                 
                 if (osAtiva && Array.isArray(osAtiva.ativos_por_trabalho) && osAtiva.ativos_por_trabalho.length > 0) {
-                    console.debug(`[CHIPS] Encontrado status ativo no backend para OS ${ordemId}, re-renderizando`);
                     // Re-chamar com os dados corretos
                     renderizarChipsStatus(ordemId, osAtiva.ativos_por_trabalho);
                 } else {
@@ -863,24 +853,12 @@ function renderizarChipsStatus(ordemId, ativosLista) {
                 const trabId = ap.trabalho_id;
                 const inicio = ap.inicio_acao;
                 
-                console.log(`[TIMER CARD] Preparando timer para OS ${ordemId}, item ${itemId}, trabalho ${trabId}`);
-                console.log(`[TIMER CARD] Início recebido:`, inicio);
-                
                 setTimeout(() => {
                     const timerId = `timer-${ordemId}-${itemId}-${trabId}`;
                     const timerEl = document.getElementById(timerId);
                     
-                    console.log(`[TIMER CARD] Procurando elemento: ${timerId}`);
-                    console.log(`[TIMER CARD] Elemento encontrado?`, !!timerEl);
-                    
                     if (timerEl) {
-                        console.log(`[TIMER CARD] ✅ Elemento encontrado! Conteúdo atual: "${timerEl.textContent}"`);
-                        console.log(`[TIMER CARD] Iniciando timer com início:`, inicio);
                         iniciarTimerTrabalho(ordemId, itemId, trabId, inicio);
-                    } else {
-                        console.error(`[TIMER CARD] ❌ ELEMENTO NÃO ENCONTRADO: ${timerId}`);
-                        console.log(`[TIMER CARD] Todos os timers no DOM:`, 
-                            Array.from(document.querySelectorAll('[id^="timer-"]')).map(t => t.id));
                     }
                 }, 100);
             });
@@ -935,8 +913,6 @@ function renderizarChipsStatus(ordemId, ativosLista) {
                         console.debug(`[CHIPS] Desbloqueando status do cartão real OS ${ordemId} após 30s`);
                     }
                 }, 30000);
-                
-                console.debug(`[CHIPS] Bloqueando temporariamente status do cartão real OS ${ordemId} por 30s`);
             }
         }
     });
