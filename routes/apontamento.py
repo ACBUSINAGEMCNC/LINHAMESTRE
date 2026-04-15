@@ -714,8 +714,6 @@ def status_ativos():
         timings['status_ativos_query_ms'] = int((time.perf_counter() - t0) * 1000)
 
         logger.debug(f"Encontrados {len(status_ativos)} status ativos (pré-filtro)")
-        for status in status_ativos:
-            logger.debug(f"Status ativo encontrado: ID={status.id}, ordem_servico_id={status.ordem_servico_id}, status_atual='{status.status_atual}'")
         
         # Buscar TODAS as OS que estão em máquinas (mesmo sem apontamento ativo)
         logger.debug(
@@ -757,14 +755,7 @@ def status_ativos():
         logger.debug(f"Encontradas {len(todas_os_em_maquinas)} OS em máquinas")
         
         # Debug: mostrar todas as OS encontradas
-        for os in todas_os_em_maquinas:
-            logger.debug(f"OS encontrada: {getattr(os, 'numero', None) or getattr(os, 'codigo', None) or f'OS-{os.id}'} - Status: {getattr(os, 'status', None)}")
-        
-        # Debug: buscar TODAS as OS independente do status para comparar
-        todas_os_sistema = OrdemServico.query.all()
-        logger.debug(f"Total de OS no sistema: {len(todas_os_sistema)}")
-        for os in todas_os_sistema:
-            logger.debug(f"OS sistema: {getattr(os, 'numero', None) or getattr(os, 'codigo', None) or f'OS-{os.id}'} - Status: {getattr(os, 'status', None)}")
+        # Debug logs removidos para melhor performance
         
         # Formatar resposta
         resultado = {
@@ -777,7 +768,6 @@ def status_ativos():
         # Adicionar informações detalhadas para cada status ativo
         t0 = time.perf_counter()
         for status in status_ativos:
-            logger.debug(f"Iniciando processamento do status ID={status.id}, ordem_servico_id={status.ordem_servico_id}")
             try:
                 status_info = {
                     'id': status.id,
@@ -840,18 +830,11 @@ def status_ativos():
                             status_info['item_id'] = item.id
                             status_info['item_nome'] = item.nome
                             status_info['item_codigo'] = item.codigo_acb
-                            # Caminho da imagem do item para exibição no dashboard
                             status_info['item_imagem_path'] = getattr(item, 'imagem_path', None)
-                            logger.debug(f"Status {status.id}: item encontrado via item_atual_id - nome='{item.nome}', imagem='{getattr(item, 'imagem_path', None)}'")
                             item_encontrado = True
-                        else:
-                            logger.debug(f"Status {status.id}: item com ID {status.item_atual_id} não encontrado no banco")
-                    else:
-                        logger.debug(f"Status {status.id}: sem item_atual_id definido")
                     
                     # Fallback: buscar via OS → Pedido → Item se não encontrou item_atual_id
                     if not item_encontrado:
-                        logger.debug(f"Status {status.id}: tentando fallback via OS → Pedido → Item")
                         os_obj_fallback = getattr(status, 'ordem_servico', None)
                         if os_obj_fallback and getattr(os_obj_fallback, 'pedidos', None):
                             pedido_os = os_obj_fallback.pedidos[0]
@@ -862,11 +845,7 @@ def status_ativos():
                                 status_info['item_nome'] = item.nome
                                 status_info['item_codigo'] = item.codigo_acb
                                 status_info['item_imagem_path'] = getattr(item, 'imagem_path', None)
-                                logger.debug(f"Status {status.id}: item encontrado via fallback - nome='{item.nome}', imagem='{getattr(item, 'imagem_path', None)}'")
                                 item_encontrado = True
-                        
-                        if not item_encontrado:
-                            logger.debug(f"Status {status.id}: nenhum item encontrado (nem via item_atual_id nem via fallback)")
                     
                 except Exception as e_item:
                     logger.error(f"Status {status.id}: falha ao buscar item: {e_item}")
@@ -1426,11 +1405,9 @@ def status_ativos():
         
         # Adicionar OS que estão em máquinas mas NÃO têm status ativo (para mostrar todas as máquinas)
         logger.debug("Adicionando OS sem status ativo...")
-        t0 = time.perf_counter()
+        # Processar OS em máquinas sem status ativo
         for ordem in todas_os_em_maquinas:
-            logger.debug(f"Processando OS {ordem.id} - Status: {getattr(ordem, 'status', None)}")
             if ordem.id in os_com_status_ativo:
-                logger.debug(f"OS {ordem.id} já tem status ativo, pulando...")
                 continue  # Já foi processada acima
                 
             try:
@@ -1509,7 +1486,6 @@ def status_ativos():
                         status_info['ultima_quantidade'] = int(ultimo_ap.quantidade)
                         status_info['item_atual_id'] = ultimo_ap.item_id
                         status_info['trabalho_atual_id'] = ultimo_ap.trabalho_id
-                        logger.debug(f"OS {ordem.id}: último apontamento encontrado - {ultimo_ap.quantidade} peças")
                         
                         # Calcular tempos históricos acumulados mesmo sem status ativo
                         try:
@@ -1552,7 +1528,7 @@ def status_ativos():
                                 media = int(tempo_producao_total / status_info['ultima_quantidade'])
                                 status_info['analytics']['media_seg_por_peca'] = media
                                 
-                            logger.debug(f"OS {ordem.id}: tempos históricos calculados - setup: {tempo_setup_total}s, produção: {tempo_producao_total}s, pausas: {tempo_pausas_total}s")
+                            # Tempos históricos calculados
                             
                         except Exception as e_hist:
                             logger.error(f"OS {ordem.id}: falha ao calcular tempos históricos: {e_hist}")
@@ -1578,7 +1554,7 @@ def status_ativos():
                             'producao_status': None,
                             'media_seg_por_peca': None
                         }
-                        logger.debug(f"OS {ordem.id}: sem apontamentos com quantidade")
+                        # Sem apontamentos com quantidade
                 except Exception as e_ultimo:
                     logger.error(f"OS {ordem.id}: falha ao buscar último apontamento: {e_ultimo}")
                     status_info['ultima_quantidade'] = 0
@@ -1595,7 +1571,6 @@ def status_ativos():
                 
                 # Buscar item/trabalho da OS (mesmo sem apontamento ativo)
                 try:
-                    logger.debug(f"OS {ordem.id}: buscando informações do item via pedidos")
                     if ordem.pedidos:
                         # Agregar clientes e total usando relações já carregadas
                         try:
@@ -1620,17 +1595,13 @@ def status_ativos():
                             logger.error(f"OS {ordem.id}: falha ao agregar clientes/quantidades: {e_cli2}")
 
                         pedido_os = ordem.pedidos[0]
-                        logger.debug(f"OS {ordem.id}: encontrado pedido_os com pedido_id={getattr(pedido_os, 'pedido_id', None)}")
                         pedido = pedido_os.pedido
                         item = pedido.item if pedido else None
                         if item:
-                            logger.debug(f"OS {ordem.id}: encontrado item via relação pre-carregada com item_id={item.id}")
                             status_info['item_id'] = item.id
                             status_info['item_nome'] = item.nome
                             status_info['item_codigo'] = item.codigo_acb
-                            # Caminho da imagem do item para exibição quando não há status ativo
                             status_info['item_imagem_path'] = getattr(item, 'imagem_path', None)
-                            logger.debug(f"OS {ordem.id}: item encontrado - nome='{item.nome}', imagem='{getattr(item, 'imagem_path', None)}'")
                             
                             # Buscar trabalho do item
                             if item.trabalhos:
@@ -1639,7 +1610,6 @@ def status_ativos():
                                 if trabalho:
                                     status_info['trabalho_id'] = trabalho.id
                                     status_info['trabalho_nome'] = trabalho.nome
-                                    logger.debug(f"OS {ordem.id}: trabalho encontrado - nome='{trabalho.nome}'")
                                 
                                 # clientes_quantidades e quantidade_total já definidos acima
                                 # Montar trabalhos_do_item mesmo sem ativos, usando último apontamento
