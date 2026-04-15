@@ -1740,7 +1740,6 @@
         
         // Função para inicializar todos os eventos nos cartões
         function initializeKanbanEvents() {
-            console.log('=== Inicializando eventos do Kanban ===');
             
             // Eventos para abrir detalhes do card
             document.querySelectorAll('.card-title').forEach(function(element) {
@@ -1753,42 +1752,19 @@
             
             // Event listeners para botões de criação de cartão fantasma direto
             const btnFantasma = document.querySelectorAll('.btn-criar-fantasma-direto');
-            console.log('Encontrados', btnFantasma.length, 'botões fantasma direto');
-            
-            // Listar todos os botões encontrados
-            btnFantasma.forEach(function(btn, index) {
-                console.log(`Botão ${index + 1}:`, {
-                    element: btn,
-                    ordemId: btn.dataset.ordemId,
-                    listaOrigem: btn.dataset.listaOrigem,
-                    className: btn.className,
-                    initialized: btn.classList.contains('events-initialized')
-                });
-            });
             
             // Configurar event listeners para botões de criar fantasma
             btnFantasma.forEach(function(btn) {
                 if (!btn.classList.contains('events-initialized')) {
-                    console.log('🔧 Configurando evento para botão OS:', btn.dataset.ordemId);
-                    
                     btn.addEventListener('click', function(e) {
                         e.preventDefault();
                         e.stopPropagation();
                         const ordemId = this.dataset.ordemId;
                         const listaOrigem = this.dataset.listaOrigem;
-                        console.log('🚀 CLIQUE no botão fantasma! OS:', ordemId, 'Lista:', listaOrigem);
                         criarCartaoFantasmaRapido(ordemId, listaOrigem);
                     });
                     
-                    // Teste adicional - evento de mousedown
-                    btn.addEventListener('mousedown', function(e) {
-                        console.log('👆 MOUSEDOWN no botão fantasma OS:', this.dataset.ordemId);
-                    });
-                    
                     btn.classList.add('events-initialized');
-                    console.log('✅ Evento configurado para OS:', btn.dataset.ordemId);
-                } else {
-                    console.log('⏭️ Botão OS', btn.dataset.ordemId, 'já inicializado');
                 }
             });
             
@@ -1799,13 +1775,10 @@
             document.querySelectorAll('.kanban-card').forEach(function(card) {
                 card.classList.add('events-initialized');
             });
-            
-            console.log('=== Inicialização de eventos concluída ===');
         }
         
         // Inicializar eventos após o carregamento do documento
         document.addEventListener('DOMContentLoaded', function() {
-            console.log('DOM carregado - chamando initializeKanbanEvents');
             initializeKanbanEvents();
 
             function setupMoverDropdownPortal() {
@@ -1892,7 +1865,6 @@
             
             // Também inicializar novamente quando o Sortable terminar uma operação de arrasto
             document.addEventListener('sortable-drop-complete', function() {
-                console.log('Sortable drop complete - reinicializando eventos');
                 setTimeout(initializeKanbanEvents, 100);
                 setTimeout(setupMoverDropdownPortal, 120);
             });
@@ -2323,7 +2295,6 @@
                     if (info) info.textContent = '';
                 });
                 itemSelecaoListenerAdded = true;
-                console.log('[MODAL] Listener de itemSelecao configurado (uma única vez)');
             }
         }
         
@@ -2335,7 +2306,6 @@
                     atualizarUltimaQuantidadeCampo(modalLoadToken);
                 });
                 tipoTrabalhoListenerAdded = true;
-                console.log('[MODAL] Listener de tipoTrabalho configurado (uma única vez)');
             }
         }
     }
@@ -2446,7 +2416,6 @@
         });
         
         operadorInputListenerAdded = true;
-        console.log('[MODAL] Listener de validação de operador configurado (uma única vez)');
     }
     
     // Configurar listener apenas uma vez
@@ -3094,16 +3063,11 @@
     
     // Função de teste para debug
     function testarBotaoFantasma() {
-        console.log('=== TESTE BOTÃO FANTASMA ===');
         const botoes = document.querySelectorAll('.btn-criar-fantasma-direto');
-        console.log('Botões encontrados:', botoes.length);
         
         botoes.forEach((btn, i) => {
-            console.log(`Botão ${i}:`, btn, 'OS:', btn.dataset.ordemId);
-            
             // Adicionar evento de teste direto
             btn.onclick = function(e) {
-                console.log('ONCLICK FUNCIONOU! OS:', this.dataset.ordemId);
                 criarCartaoFantasmaRapido(this.dataset.ordemId, this.dataset.listaOrigem);
             };
         });
@@ -3113,7 +3077,6 @@
     
     // Executar teste quando carregado
     setTimeout(function() {
-        console.log('Executando teste automático...');
         testarBotaoFantasma();
         configurarBotaoConfirmarFantasma();
     }, 2000);
@@ -3146,7 +3109,6 @@
     
     // Configurar botões de ação dos cartões fantasma
     function configurarBotoesFantasma() {
-        console.log('Configurando botões de ação dos cartões fantasma...');
         
         // Botões de remover fantasma
         document.querySelectorAll('.btn-remover-fantasma').forEach(function(btn) {
@@ -3325,9 +3287,7 @@
     function configurarBotaoConfirmarFantasma() {
         const btnConfirmar = document.getElementById('btnConfirmarFantasma');
         if (btnConfirmar) {
-            console.log('Configurando botão confirmar fantasma');
             btnConfirmar.addEventListener('click', function() {
-                console.log('Clicou em confirmar fantasma');
                 criarCartaoFantasma();
             });
         } else {
