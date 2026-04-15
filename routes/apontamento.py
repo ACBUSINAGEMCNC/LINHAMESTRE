@@ -2515,12 +2515,12 @@ def registrar_apontamento():
             if not dados.get('quantidade'):
                 return jsonify({'success': False, 'message': 'Quantidade final é obrigatória'})
         
-        # Buscar ou criar status da OS com PESSIMISTIC LOCKING para evitar race conditions
-        # with_for_update() aplica row-level lock, garantindo que apenas uma transação
-        # possa modificar o status por vez, eliminando problemas de concorrência
+        # Buscar ou criar status da OS
+        # NOTA: Removido with_for_update() temporariamente por causar travamentos
+        # A integridade é garantida pela transação e validações de estado
         status_os = status_atual or StatusProducaoOS.query.filter_by(
             ordem_servico_id=ordem_servico_id
-        ).with_for_update().first()
+        ).first()
         
         if not status_os:
             status_os = StatusProducaoOS(
