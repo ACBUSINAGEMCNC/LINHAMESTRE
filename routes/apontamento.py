@@ -355,48 +355,37 @@ def validar_codigo():
         if hasattr(current_app, 'cache_store'):
             cached = current_app.cache_store.get(cache_key)
             if cached:
-                logger.debug(f"[CACHE HIT] validar-codigo {codigo}")
                 return jsonify(cached)
     except:
         pass
     
-    # Buscar usuário com retry para evitar timeouts
-    max_retries = 2
-    usuario = None
-    
-    for attempt in range(max_retries):
-        try:
-            with db.session.no_autoflush:
-                # Usar query otimizada com índice
-                usuario = db.session.execute(
-                    db.select(Usuario).where(Usuario.codigo_operador == codigo)
-                ).scalar_one_or_none()
-                break
-        except Exception as e:
-            logger.warning(f"Tentativa {attempt + 1} de validar código {codigo} falhou: {e}")
-            if attempt == max_retries - 1:
-                logger.error(f"Erro ao validar código {codigo} após {max_retries} tentativas")
-                return jsonify({'valid': False, 'message': 'Erro ao validar código. Tente novamente.'})
-            time.sleep(0.05)
-    
-    if not usuario:
-        result = {'valid': False, 'message': 'Código não encontrado'}
-    else:
-        result = {
-            'valid': True, 
-            'usuario_id': usuario.id,
-            'nome': usuario.nome,
-            'message': f'Operador: {usuario.nome}'
-        }
-    
-    # Cachear resultado por 30 segundos
+    # Query otimizada e direta (sem retry para evitar lentidão)
     try:
-        if hasattr(current_app, 'cache_store'):
-            current_app.cache_store.set(cache_key, result, timeout=30)
-    except:
-        pass
-    
-    return jsonify(result)
+        # Usar filter_by que é mais rápido que where para igualdade simples
+        usuario = Usuario.query.filter_by(codigo_operador=codigo).first()
+        
+        if not usuario:
+            result = {'valid': False, 'message': 'Código não encontrado'}
+        else:
+            result = {
+                'valid': True, 
+                'usuario_id': usuario.id,
+                'nome': usuario.nome,
+                'message': f'Operador: {usuario.nome}'
+            }
+        
+        # Cachear resultado por 60 segundos (aumentado para reduzir queries)
+        try:
+            if hasattr(current_app, 'cache_store'):
+                current_app.cache_store.set(cache_key, result, timeout=60)
+        except:
+            pass
+        
+        return jsonify(result)
+        
+    except Exception as e:
+        logger.error(f"Erro ao validar código {codigo}: {e}")
+        return jsonify({'valid': False, 'message': 'Erro ao validar código'}), 500
 
 @apontamento_bp.route('/os/<int:ordem_id>/itens', methods=['GET'])
 def buscar_itens_os(ordem_id):

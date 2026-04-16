@@ -933,7 +933,7 @@ function atualizarQuantidadesPorTrabalho(ordemId, ativosLista) {
             }
         } catch {}
     }
-    if (!container) { try { console.debug('[QPT] container não encontrado para OS', ordemId); } catch {} return; }
+    if (!container) { return; }
 
     // Cache por OS para manter últimas quantidades por trabalho após primeiro apontamento
     window.__cacheQtdTrabalho = window.__cacheQtdTrabalho || {}; // { [ordemId]: { enabled: true, items: { [trabIdOrKey]: { trab, qty } } } }
