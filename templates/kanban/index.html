@@ -2556,7 +2556,6 @@
                         if (!Number.isNaN(osIdNum)) {
                             window.__qptAfterStop = window.__qptAfterStop || {};
                             window.__qptAfterStop[osIdNum] = true;
-                            try { console.debug('[QPT] (same tab) flag after STOP set', osIdNum); } catch {}
                             try {
                                 const c = document.getElementById(`qtd-por-trabalho-${osIdNum}`);
                                 if (c && c.dataset) delete c.dataset.qptSig;
@@ -2639,7 +2638,6 @@
                             setTimeout(() => {
                                 try { if (window.atualizarQuantidadesPorTrabalho) window.atualizarQuantidadesPorTrabalho(osIdNum, []); } catch {}
                             }, 200);
-                            try { console.debug('[QPT] render imediato pós-salvar', { osIdNum, entrada }); } catch {}
                             try { if (window.markQptTouch) window.markQptTouch(osIdNum); } catch {}
                         }
                     } catch (eForce) { console.warn('Falha ao forçar render imediato da QPT:', eForce); }
@@ -2713,7 +2711,7 @@
                         // Broadcast QPT update para outras abas
                         try { localStorage.setItem('apontamento_broadcast', JSON.stringify({ type: 'qpt_update', osId: osIdNum, ts: Date.now() })); } catch {}
                 }
-                } catch (eQptNow) { console.warn('Falha ao forçar refresh imediato da QPT:', eQptNow); }
+                } catch (eQptNow) {}
                 // Evitar recarregar estado aqui para não duplicar QPT; já fizemos seed + refresh imediato
             } else {
                 mostrarAlerta(data.message, 'error');
@@ -2882,7 +2880,6 @@
         try {
             const osIdNum = parseInt(ordemId, 10);
             if (window.atualizarQuantidadesPorTrabalho && !Number.isNaN(osIdNum)) {
-                console.debug('[QPT] STOP -> refresh imediato', { osIdNum });
                 window.atualizarQuantidadesPorTrabalho(osIdNum, []);
                 try { if (window.markQptTouch) window.markQptTouch(osIdNum); } catch {}
             }

@@ -951,12 +951,10 @@ function atualizarQuantidadesPorTrabalho(ordemId, ativosLista) {
     if (isAfterStop) {
         // Limpar flag após uso
         delete window.__qptAfterStop[ordemId];
-        console.debug('[QPT] Forçando atualização após STOP para OS', ordemId);
     } else if (isEmptyCall) {
         // Manter debounce apenas para chamadas vazias que não são após STOP
         const lastTs = window.__qptRenderLast[ordemId] || 0;
         if (lastTs && (Date.now() - lastTs) < 400) {
-            try { console.debug('[QPT] debounce: ignorando render vazio recente', { ordemId }); } catch {}
             try { window.__qptRenderLast[ordemId] = Date.now(); } catch {}
             return;
         }
@@ -1173,7 +1171,6 @@ try {
             // Marcar toque recente para evitar renders redundantes em seguida
             try { markQptTouch(osId); } catch {}
         } catch {}
-        try { console.debug('[QPT] cache semeado via entrada', { osId, trabId, /* item ignorado no novo modelo */ qty }); } catch {}
     };
 } catch {}
 
