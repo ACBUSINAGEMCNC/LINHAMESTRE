@@ -193,6 +193,36 @@ try {
         if (key === 'apontamento_status') {
             try { if (typeof window.recarregarEstadoApontamentos === 'function') window.recarregarEstadoApontamentos(); } catch {}
         }
+        
+        // Sincronizar status visual entre abas
+        if (key === 'apontamento_status_update') {
+            try {
+                const payload = JSON.parse(ev.newValue || 'null');
+                if (!payload || typeof payload !== 'object') return;
+                const { osId, status, apontamento } = payload;
+                const osNum = parseInt(osId, 10);
+                if (Number.isNaN(osNum)) return;
+                
+                // Atualizar status visual
+                if (typeof window.atualizarStatusCartao === 'function') {
+                    window.atualizarStatusCartao(osNum, status);
+                }
+                
+                // Renderizar chips de status
+                if (apontamento && typeof window.renderizarChipsStatus === 'function') {
+                    window.renderizarChipsStatus(osNum, [apontamento]);
+                    
+                    // Iniciar timer
+                    setTimeout(() => {
+                        if (typeof window.iniciarTimerTrabalho === 'function') {
+                            window.iniciarTimerTrabalho(osNum, apontamento.item_id, apontamento.trabalho_id, apontamento.inicio_acao);
+                        }
+                    }, 200);
+                }
+            } catch (e) {
+                console.warn('Falha ao processar apontamento_status_update:', e);
+            }
+        }
     });
 } catch (e) { console.warn('Falha ao registrar listener de storage para sincronização entre abas:', e); }
 function markQptTouch(osId) {
@@ -308,11 +338,6 @@ function carregarEstadoApontamentos() {
                     const statusAtual = status.status_atual;
                     
                     console.log(`Restaurando status para OS ${ordemId}: ${statusAtual}`);
-                    console.debug(`[BACKEND] Dados completos para OS ${ordemId}:`, {
-                        status_atual: status.status_atual,
-                        ativos_por_trabalho: status.ativos_por_trabalho,
-                        tem_ativos: Array.isArray(status.ativos_por_trabalho) && status.ativos_por_trabalho.length > 0
-                    });
                     
                     // Atualizar visual do card conforme status
                     // Atualizar o status visual normalmente (inclusive Pausado)
@@ -361,7 +386,7 @@ function carregarEstadoApontamentos() {
                     
                 });
                 
-                console.log('Estado dos apontamentos restaurado com sucesso!');
+                console.log('Estado dos apontamentos restaurado com sucesso');
             } else {
                 console.log('Nenhum apontamento ativo encontrado.');
             }
@@ -731,11 +756,13 @@ function renderizarChipsStatus(ordemId, ativosLista) {
             return;
         }
         
-        // Limpar timers anteriores dessa OS e conteúdo
+        // Limpar timers anteriores dessa OS apenas se não for fantasma
         if (!isFantasma) {
             limparTimersTrabalhoDaOS(ordemId);
         }
-        container.innerHTML = '';
+        
+        // NÃO limpar o innerHTML aqui - será limpo apenas se necessário
+        // Isso evita que o status desapareça ao recarregar
         
         return container;
     }
@@ -768,8 +795,7 @@ function renderizarChipsStatus(ordemId, ativosLista) {
                 return container;
             }
             
-            // Limpar conteúdo apenas se não estiver bloqueado
-            container.innerHTML = '';
+            // NÃO limpar conteúdo aqui - será limpo apenas quando renderizar novo conteúdo
             return container;
         } else {
             return null;

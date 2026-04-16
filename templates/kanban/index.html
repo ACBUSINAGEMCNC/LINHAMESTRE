@@ -2581,6 +2581,18 @@
                                 console.error('[FEEDBACK] Função iniciarTimerTrabalho não disponível!');
                             }
                         }, 200);
+                        
+                        // Broadcast status para outras abas
+                        try {
+                            localStorage.setItem('apontamento_status_update', JSON.stringify({
+                                osId: ordemAtualId,
+                                status: data.status,
+                                apontamento: data.apontamento,
+                                timestamp: Date.now()
+                            }));
+                        } catch (e) {
+                            console.warn('Falha ao broadcast status:', e);
+                        }
                     }
                 }
                 // Atualizar última quantidade exibida, se fornecida pelo backend
@@ -2722,19 +2734,16 @@
     function atualizarStatusCartao(ordemId, status) {
         // Buscar TODOS os cartões com essa ordem e verificar qual é o real
         const allCards = document.querySelectorAll(`[data-ordem-id="${ordemId}"]`);
-        console.debug(`[STATUS] Encontrados ${allCards.length} cartões para OS ${ordemId}`);
         
         let card = null;
         for (const c of allCards) {
             if (!c.classList.contains('fantasma')) {
                 card = c;
-                console.debug(`[STATUS] Usando cartão real para OS ${ordemId}`);
                 break;
             }
         }
         
         if (!card) {
-            console.debug(`[STATUS] Nenhum cartão REAL encontrado para OS ${ordemId}`);
             return;
         }
         
