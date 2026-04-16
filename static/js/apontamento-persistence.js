@@ -302,11 +302,9 @@ function desabilitarBotoesOperadorDiferente(ordemId, operadorNome) {
 // Função para carregar o estado dos apontamentos ao iniciar a página
 function carregarEstadoApontamentos() {
     if (_carregandoEstado) {
-        console.debug('carregarEstadoApontamentos já em execução, ignorando chamada duplicada');
         return;
     }
     _carregandoEstado = true;
-    console.log('Carregando estado dos apontamentos...');
     
     // Limpar apenas debounce; manter caches para preservar últimas quantidades
     try {
@@ -330,14 +328,11 @@ function carregarEstadoApontamentos() {
             const ativos = Array.isArray(data.status_ativos) ? data.status_ativos : [];
             const ativosIds = new Set();
             if (ativos.length > 0) {
-                console.log(`Encontrados ${ativos.length} apontamentos ativos`); 
                 ativos.forEach(status => {
                     // Usar ordem_servico_id em vez de ordem_id (que não existe no modelo)
                     const ordemId = status.ordem_servico_id;
                     if (ordemId != null) ativosIds.add(String(ordemId));
                     const statusAtual = status.status_atual;
-                    
-                    console.log(`Restaurando status para OS ${ordemId}: ${statusAtual}`);
                     
                     // Atualizar visual do card conforme status
                     // Atualizar o status visual normalmente (inclusive Pausado)
@@ -385,10 +380,6 @@ function carregarEstadoApontamentos() {
                     }
                     
                 });
-                
-                console.log('Estado dos apontamentos restaurado com sucesso');
-            } else {
-                console.log('Nenhum apontamento ativo encontrado.');
             }
 
             // Garante QPT visível para OS sem ativo (renderiza via cache/LS)
@@ -1381,8 +1372,6 @@ function adicionarIndicadorOperador(ordemId, operadorNome, operadorCodigo) {
             cardBody.appendChild(indicador);
         }
     }
-    
-    console.log(`Indicador de operador adicionado para OS ${ordemId}: ${operadorNome}`);
 }
 
 // Garantir que a função atualizarStatusCartao seja chamada corretamente
@@ -1516,7 +1505,6 @@ function inicializarSistemaApontamentos() {
     }
     _sistemaInicializado = true;
     
-    console.log('Inicializando sistema de persistência de apontamentos...');
     carregarEstadoApontamentos();
 }
 
@@ -1530,7 +1518,7 @@ function iniciarPollingAutomatico() {
         clearInterval(_pollingInterval);
     }
     
-    console.log('🔄 Polling automático iniciado (atualização a cada 15s)');
+    // Polling automático iniciado silenciosamente
     
     _pollingInterval = setInterval(() => {
         try {
@@ -1546,7 +1534,6 @@ function pararPollingAutomatico() {
     if (_pollingInterval) {
         clearInterval(_pollingInterval);
         _pollingInterval = null;
-        console.log('⏸️ Polling automático parado');
     }
 }
 
