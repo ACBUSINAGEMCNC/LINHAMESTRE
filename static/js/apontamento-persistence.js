@@ -966,8 +966,9 @@ function atualizarQuantidadesPorTrabalho(ordemId, ativosLista) {
         const lastTs = window.__qptRenderLast[ordemId] || 0;
         if (lastTs && (Date.now() - lastTs) < 400) {
             try { console.debug('[QPT] debounce: ignorando render vazio recente', { ordemId }); } catch {}
-        try { window.__qptRenderLast[ordemId] = Date.now(); } catch {}
-        return;
+            try { window.__qptRenderLast[ordemId] = Date.now(); } catch {}
+            return;
+        }
     }
 
     // Persistir no formato novo (por trabalho)
@@ -1182,7 +1183,7 @@ try {
             try { markQptTouch(osId); } catch {}
         } catch {}
         try { console.debug('[QPT] cache semeado via entrada', { osId, trabId, /* item ignorado no novo modelo */ qty }); } catch {}
-    }
+    };
 } catch {}
 
 // Função para atualizar completamente o status visual de um card
@@ -1547,4 +1548,3 @@ window.atualizarUltimaQuantidadeNoCard = function(ordemId, ultimaQuantidade) {
         console.warn('Não foi possível atualizar a última quantidade no card:', e);
     }
 };
-}
