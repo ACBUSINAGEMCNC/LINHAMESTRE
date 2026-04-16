@@ -862,11 +862,10 @@ function renderizarChipsStatus(ordemId, ativosLista) {
     // Renderizar chips em todos os containers (reais e fantasmas)
     const htmlContent = frags.join('');
     [...containersReais, ...containersFantasma].forEach((container, index) => {
-        // Verificar se o container já está bloqueado e tem conteúdo
-        if (container.dataset.statusLocked === 'true' && container.innerHTML && container.innerHTML.trim() !== '') {
-            console.debug(`[CHIPS] Pulando atualização de container bloqueado`);
-            return;
-        }
+        // REMOVER bloqueio antes de renderizar para garantir que status apareça ao carregar
+        // O bloqueio será reaplicado após renderizar se necessário
+        delete container.dataset.statusLocked;
+        delete container.dataset.statusLockedTs;
         
         const isFantasma = index >= containersReais.length;
         // Cartões fantasma agora mostram o mesmo conteúdo que os reais (sem badge "Fantasma")
@@ -921,26 +920,9 @@ function renderizarChipsStatus(ordemId, ativosLista) {
             
             // Garantir que o conteúdo não seja sobrescrito por outras atualizações
             container.dataset.statusLocked = 'true';
-        } else {
-            // Bloquear temporariamente cartões reais com status ativos para evitar sobrescrita
-            if (htmlContent && htmlContent.trim() !== '') {
-                container.dataset.statusLocked = 'true';
-                
-                // Registrar timestamp para desbloquear após 30 segundos
-                const now = Date.now();
-                container.dataset.statusLockedTs = now;
-                
-                // Programar desbloqueio após 30 segundos
-                setTimeout(() => {
-                    // Só desbloquear se o timestamp ainda for o mesmo
-                    if (container.dataset.statusLockedTs == now) {
-                        delete container.dataset.statusLocked;
-                        delete container.dataset.statusLockedTs;
-                        console.debug(`[CHIPS] Desbloqueando status do cartão real OS ${ordemId} após 30s`);
-                    }
-                }, 30000);
-            }
         }
+        // NÃO bloquear container após renderizar
+        // Isso permite que o status seja atualizado normalmente ao recarregar
     });
 }
 
