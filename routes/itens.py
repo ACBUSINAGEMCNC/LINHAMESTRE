@@ -1232,7 +1232,7 @@ def _get_item_desenho_pdf_bytes(item: Item) -> tuple[bytes | None, str | None]:
 
     if file_path.startswith('http://') or file_path.startswith('https://'):
         import requests
-        resp = requests.get(file_path, timeout=30)
+        resp = requests.get(file_path, timeout=10)  # Reduzido de 30s para 10s
         if resp.status_code != 200:
             return None, None
         return resp.content, 'application/pdf'
@@ -1242,7 +1242,7 @@ def _get_item_desenho_pdf_bytes(item: Item) -> tuple[bytes | None, str | None]:
         public_url = _build_supabase_public_url_from_file_path(file_path)
         if not public_url:
             return None, None
-        resp = requests.get(public_url, timeout=30)
+        resp = requests.get(public_url, timeout=10)  # Reduzido de 30s para 10s
         if resp.status_code != 200:
             return None, None
         return resp.content, 'application/pdf'
@@ -1327,18 +1327,21 @@ def desenho_pdf_item(item_id):
         flash('Este item não possui desenho técnico.', 'warning')
         return redirect(url_for('itens.visualizar_item', item_id=item.id))
 
+    # Se não tem carimbo de aprovação, redirecionar direto (mais rápido)
     if not item.desenho_aprovado_em:
         return redirect(item.desenho_tecnico_path)
 
+    # Se o PDF está no Supabase e precisa carimbo, fazer download e carimbar
     pdf_bytes, _mime = _get_item_desenho_pdf_bytes(item)
     if not pdf_bytes:
-        flash('Não foi possível obter o PDF do desenho para carimbar.', 'danger')
+        # Se falhar, redirecionar direto ao invés de erro
         return redirect(item.desenho_tecnico_path)
 
     try:
         stamped = _stamp_pdf_approved(pdf_bytes, item.desenho_aprovado_por_nome, item.desenho_aprovado_em)
-    except Exception:
-        flash('Erro ao gerar PDF carimbado.', 'danger')
+    except Exception as e:
+        # Log do erro mas redireciona ao PDF original
+        logger.error(f"Erro ao carimbar PDF do item {item_id}: {e}")
         return redirect(item.desenho_tecnico_path)
 
     filename = f"{(item.codigo_acb or 'DESENHO')}_{(item.nome or 'item')}.pdf".replace(' ', '_')

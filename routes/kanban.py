@@ -687,7 +687,13 @@ def sincronizar_quantidade_pedido():
 @kanban.route('/kanban/detalhes/<int:ordem_id>')
 def detalhes_kanban(ordem_id):
     """Rota para obter detalhes de uma ordem de serviço no Kanban"""
-    ordem = OrdemServico.query.get_or_404(ordem_id)
+    # Eager loading para evitar queries N+1
+    ordem = OrdemServico.query.options(
+        joinedload(OrdemServico.pedidos_ordem_servico).joinedload(PedidoOrdemServico.pedido).joinedload(Pedido.item),
+        joinedload(OrdemServico.pedidos_ordem_servico).joinedload(PedidoOrdemServico.pedido).joinedload(Pedido.cliente),
+        joinedload(OrdemServico.itens_trabalho).joinedload(ItemTrabalho.item),
+        joinedload(OrdemServico.itens_trabalho).joinedload(ItemTrabalho.trabalho)
+    ).get_or_404(ordem_id)
     return render_template('kanban/detalhes_card.html', ordem=ordem, Item=Item)
 
 @kanban.route('/registros-mensais')
