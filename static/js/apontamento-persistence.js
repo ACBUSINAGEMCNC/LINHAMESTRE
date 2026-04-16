@@ -1520,10 +1520,53 @@ function inicializarSistemaApontamentos() {
     carregarEstadoApontamentos();
 }
 
+// Sistema de polling automático para sincronização em tempo real
+let _pollingInterval = null;
+const POLLING_INTERVAL_MS = 15000; // 15 segundos
+
+function iniciarPollingAutomatico() {
+    // Evitar múltiplos intervalos
+    if (_pollingInterval) {
+        clearInterval(_pollingInterval);
+    }
+    
+    console.log('🔄 Polling automático iniciado (atualização a cada 15s)');
+    
+    _pollingInterval = setInterval(() => {
+        try {
+            // Recarregar estado silenciosamente
+            carregarEstadoApontamentos();
+        } catch (e) {
+            console.warn('Erro no polling automático:', e);
+        }
+    }, POLLING_INTERVAL_MS);
+}
+
+function pararPollingAutomatico() {
+    if (_pollingInterval) {
+        clearInterval(_pollingInterval);
+        _pollingInterval = null;
+        console.log('⏸️ Polling automático parado');
+    }
+}
+
 // Inicializar ao carregar a página
 document.addEventListener('DOMContentLoaded', function() {
     // Pequeno delay para evitar conflitos com outros scripts
-    setTimeout(inicializarSistemaApontamentos, 100);
+    setTimeout(() => {
+        inicializarSistemaApontamentos();
+        // Iniciar polling automático após carregar estado inicial
+        setTimeout(iniciarPollingAutomatico, 2000);
+    }, 100);
+});
+
+// Parar polling quando a página for escondida (economizar recursos)
+document.addEventListener('visibilitychange', function() {
+    if (document.hidden) {
+        pararPollingAutomatico();
+    } else {
+        iniciarPollingAutomatico();
+    }
 });
 
 // Expor função para inicialização manual
