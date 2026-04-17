@@ -1,0 +1,253 @@
+{% extends "base.html" %}
+
+{% block title %}Gerenciar Últimos Apontamentos{% endblock %}
+
+{% block content %}
+<div class="container-fluid mt-4">
+    <div class="row mb-4">
+        <div class="col-12">
+            <div class="d-flex justify-content-between align-items-center">
+                <h2><i class="fas fa-history"></i> Gerenciar Últimos Apontamentos</h2>
+                <div>
+                    <a href="/apontamento/gerenciar-ativos" class="btn btn-primary me-2">
+                        <i class="fas fa-clock"></i> Ver Apenas Ativos
+                    </a>
+                    <a href="/kanban" class="btn btn-secondary">
+                        <i class="fas fa-arrow-left"></i> Voltar ao Kanban
+                    </a>
+                </div>
+            </div>
+            <p class="text-muted">Últimos 50 apontamentos (ativos e finalizados) - Você pode editar qualquer um</p>
+        </div>
+    </div>
+
+    {% if apontamentos|length == 0 %}
+    <div class="alert alert-info">
+        <i class="fas fa-info-circle"></i> Nenhum apontamento encontrado.
+    </div>
+    {% else %}
+    
+    <!-- Tabela de Apontamentos -->
+    <div class="card">
+        <div class="card-body">
+            <div class="table-responsive">
+                <table class="table table-hover">
+                    <thead>
+                        <tr>
+                            <th>OS</th>
+                            <th>Item</th>
+                            <th>Trabalho</th>
+                            <th>Operador</th>
+                            <th>Tipo</th>
+                            <th>Início</th>
+                            <th>Fim</th>
+                            <th>Duração</th>
+                            <th>Qtd</th>
+                            <th>Status</th>
+                            <th>Ações</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for apt in apontamentos %}
+                        <tr id="row-{{ apt.id }}" class="{% if not apt.data_fim %}table-warning{% endif %}">
+                            <td>
+                                <strong>{{ apt.ordem_servico.numero_os if apt.ordem_servico else 'N/A' }}</strong>
+                            </td>
+                            <td>
+                                {% if apt.item %}
+                                    {{ apt.item.codigo_acb }}<br>
+                                    <small class="text-muted">{{ apt.item.nome[:30] }}...</small>
+                                {% else %}
+                                    <span class="text-muted">N/A</span>
+                                {% endif %}
+                            </td>
+                            <td>
+                                {% if apt.trabalho %}
+                                    {{ apt.trabalho.titulo }}
+                                {% else %}
+                                    <span class="text-muted">N/A</span>
+                                {% endif %}
+                            </td>
+                            <td>
+                                {% if apt.usuario %}
+                                    {{ apt.usuario.nome }}<br>
+                                    <small class="text-muted">{{ apt.usuario.codigo_operador }}</small>
+                                {% else %}
+                                    <span class="text-muted">N/A</span>
+                                {% endif %}
+                            </td>
+                            <td>
+                                {% if apt.tipo_acao == 'inicio_setup' %}
+                                    <span class="badge bg-info">Setup</span>
+                                {% elif apt.tipo_acao == 'inicio_producao' %}
+                                    <span class="badge bg-success">Produção</span>
+                                {% elif apt.tipo_acao == 'pausa' %}
+                                    <span class="badge bg-warning">Pausa</span>
+                                {% elif apt.tipo_acao == 'stop' %}
+                                    <span class="badge bg-danger">Stop</span>
+                                {% else %}
+                                    <span class="badge bg-secondary">{{ apt.tipo_acao }}</span>
+                                {% endif %}
+                            </td>
+                            <td>
+                                <small>{{ apt.data_hora.strftime('%d/%m/%Y %H:%M') if apt.data_hora else 'N/A' }}</small>
+                            </td>
+                            <td>
+                                <small>{{ apt.data_fim.strftime('%d/%m/%Y %H:%M') if apt.data_fim else '-' }}</small>
+                            </td>
+                            <td>
+                                {% if apt.tempo_decorrido %}
+                                    {% set horas = (apt.tempo_decorrido // 3600) %}
+                                    {% set minutos = ((apt.tempo_decorrido % 3600) // 60) %}
+                                    <small>{{ '%02d'|format(horas) }}:{{ '%02d'|format(minutos) }}h</small>
+                                {% else %}
+                                    <small class="text-muted">-</small>
+                                {% endif %}
+                            </td>
+                            <td>
+                                <strong>{{ apt.quantidade if apt.quantidade else '-' }}</strong>
+                            </td>
+                            <td>
+                                {% if apt.data_fim %}
+                                    <span class="badge bg-secondary">Finalizado</span>
+                                {% else %}
+                                    <span class="badge bg-success">Ativo</span>
+                                {% endif %}
+                            </td>
+                            <td>
+                                <button class="btn btn-sm btn-primary" onclick="editarApontamento({{ apt.id }})">
+                                    <i class="fas fa-edit"></i>
+                                </button>
+                                {% if not apt.data_fim %}
+                                <button class="btn btn-sm btn-danger" onclick="fecharApontamento({{ apt.id }})">
+                                    <i class="fas fa-stop"></i>
+                                </button>
+                                {% endif %}
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+    {% endif %}
+</div>
+
+<!-- Modal de Edição -->
+<div class="modal fade" id="modalEditar" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Editar Apontamento</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <form id="formEditar">
+                    <input type="hidden" id="editApontamentoId">
+                    
+                    <div class="mb-3">
+                        <label class="form-label">Quantidade</label>
+                        <input type="number" class="form-control" id="editQuantidade" min="0">
+                    </div>
+                    
+                    <div class="mb-3">
+                        <label class="form-label">Data/Hora Início</label>
+                        <input type="datetime-local" class="form-control" id="editDataHora">
+                    </div>
+                    
+                    <div class="mb-3">
+                        <label class="form-label">Data/Hora Fim</label>
+                        <input type="datetime-local" class="form-control" id="editDataFim">
+                        <small class="text-muted">Deixe vazio se ainda estiver ativo</small>
+                    </div>
+                </form>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
+                <button type="button" class="btn btn-primary" onclick="salvarEdicao()">Salvar</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+function editarApontamento(id) {
+    // Buscar dados do apontamento
+    fetch(`/apontamento/detalhes/${id}`)
+        .then(r => r.json())
+        .then(data => {
+            document.getElementById('editApontamentoId').value = id;
+            document.getElementById('editQuantidade').value = data.quantidade || '';
+            
+            if (data.data_hora) {
+                const dt = new Date(data.data_hora);
+                document.getElementById('editDataHora').value = dt.toISOString().slice(0, 16);
+            }
+            
+            if (data.data_fim) {
+                const dtFim = new Date(data.data_fim);
+                document.getElementById('editDataFim').value = dtFim.toISOString().slice(0, 16);
+            } else {
+                document.getElementById('editDataFim').value = '';
+            }
+            
+            new bootstrap.Modal(document.getElementById('modalEditar')).show();
+        })
+        .catch(err => {
+            alert('Erro ao carregar dados do apontamento');
+            console.error(err);
+        });
+}
+
+function salvarEdicao() {
+    const id = document.getElementById('editApontamentoId').value;
+    const dados = {
+        quantidade: document.getElementById('editQuantidade').value,
+        data_hora: document.getElementById('editDataHora').value,
+        data_fim: document.getElementById('editDataFim').value
+    };
+    
+    fetch(`/apontamento/editar-apontamento/${id}`, {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify(dados)
+    })
+    .then(r => r.json())
+    .then(data => {
+        if (data.success) {
+            alert('Apontamento editado com sucesso!');
+            location.reload();
+        } else {
+            alert('Erro: ' + data.message);
+        }
+    })
+    .catch(err => {
+        alert('Erro ao salvar');
+        console.error(err);
+    });
+}
+
+function fecharApontamento(id) {
+    if (!confirm('Deseja realmente fechar este apontamento?')) return;
+    
+    fetch(`/apontamento/fechar-apontamento/${id}`, {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'}
+    })
+    .then(r => r.json())
+    .then(data => {
+        if (data.success) {
+            alert('Apontamento fechado com sucesso!');
+            location.reload();
+        } else {
+            alert('Erro: ' + data.message);
+        }
+    })
+    .catch(err => {
+        alert('Erro ao fechar apontamento');
+        console.error(err);
+    });
+}
+</script>
+{% endblock %}

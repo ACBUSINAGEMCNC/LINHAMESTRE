@@ -522,7 +522,12 @@ function atualizarElementoTimer(el, startTs) {
     const h = Math.floor(elapsed / 3600).toString().padStart(2, '0');
     const m = Math.floor((elapsed % 3600) / 60).toString().padStart(2, '0');
     const s = (elapsed % 60).toString().padStart(2, '0');
-    el.textContent = `${h}:${m}:${s}`;
+    const newText = `${h}:${m}:${s}`;
+    
+    // Só atualizar se mudou (otimização)
+    if (el.textContent !== newText) {
+        el.textContent = newText;
+    }
     el.style.display = 'inline-block';
 }
 

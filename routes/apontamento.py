@@ -2888,15 +2888,20 @@ def get_logs_ordem_servico(ordem_id):
 
 @apontamento_bp.route('/gerenciar-ativos')
 def gerenciar_apontamentos_ativos():
-    """Tela de gerenciamento de apontamentos ativos (Admin only)"""
-    # Verificar se usuário é admin
+    """Tela de gerenciamento de apontamentos ativos"""
+    # Verificar se usuário está logado
     if 'usuario_id' not in session:
         flash('Por favor, faça login para acessar esta página', 'warning')
         return redirect(url_for('auth.login'))
     
     usuario = Usuario.query.get(session['usuario_id'])
-    if not usuario or usuario.nivel_acesso != 'admin':
-        flash('Acesso negado. Apenas administradores podem acessar esta página.', 'danger')
+    if not usuario:
+        flash('Usuário não encontrado', 'danger')
+        return redirect(url_for('kanban.index'))
+    
+    # Verificar se tem permissão (admin ou pode_gerenciar_apontamentos)
+    if usuario.nivel_acesso != 'admin' and not usuario.pode_gerenciar_apontamentos:
+        flash('Acesso negado. Você não tem permissão para gerenciar apontamentos.', 'danger')
         return redirect(url_for('kanban.index'))
     
     # Buscar todos os apontamentos ativos (sem data_fim)
@@ -2917,14 +2922,51 @@ def gerenciar_apontamentos_ativos():
                          usuario=usuario)
 
 
+@apontamento_bp.route('/gerenciar-ultimos')
+def gerenciar_ultimos_apontamentos():
+    """Tela de gerenciamento dos últimos 50 apontamentos (ativos e finalizados)"""
+    # Verificar se usuário está logado
+    if 'usuario_id' not in session:
+        flash('Por favor, faça login para acessar esta página', 'warning')
+        return redirect(url_for('auth.login'))
+    
+    usuario = Usuario.query.get(session['usuario_id'])
+    if not usuario:
+        flash('Usuário não encontrado', 'danger')
+        return redirect(url_for('kanban.index'))
+    
+    # Verificar se tem permissão (admin ou pode_gerenciar_apontamentos)
+    if usuario.nivel_acesso != 'admin' and not usuario.pode_gerenciar_apontamentos:
+        flash('Acesso negado. Você não tem permissão para gerenciar apontamentos.', 'danger')
+        return redirect(url_for('kanban.index'))
+    
+    # Buscar últimos 50 apontamentos (ativos e finalizados)
+    ultimos_apontamentos = ApontamentoProducao.query.options(
+        joinedload(ApontamentoProducao.ordem_servico)
+            .joinedload(OrdemServico.pedidos)
+            .joinedload(PedidoOrdemServico.pedido),
+        joinedload(ApontamentoProducao.usuario),
+        joinedload(ApontamentoProducao.item),
+        joinedload(ApontamentoProducao.trabalho)
+    ).order_by(ApontamentoProducao.data_hora.desc()).limit(50).all()
+    
+    return render_template('apontamento/gerenciar_ultimos.html', 
+                         apontamentos=ultimos_apontamentos,
+                         usuario=usuario)
+
+
 @apontamento_bp.route('/fechar-apontamento/<int:apontamento_id>', methods=['POST'])
 def fechar_apontamento(apontamento_id):
-    """Fechar um apontamento ativo (Admin only)"""
+    """Fechar um apontamento ativo"""
     if 'usuario_id' not in session:
         return jsonify({'success': False, 'message': 'Não autorizado'}), 401
     
     usuario = Usuario.query.get(session['usuario_id'])
-    if not usuario or usuario.nivel_acesso != 'admin':
+    if not usuario:
+        return jsonify({'success': False, 'message': 'Usuário não encontrado'}), 403
+    
+    # Verificar permissão
+    if usuario.nivel_acesso != 'admin' and not usuario.pode_gerenciar_apontamentos:
         return jsonify({'success': False, 'message': 'Acesso negado'}), 403
     
     try:

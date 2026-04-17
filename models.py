@@ -846,6 +846,7 @@ class Usuario(db.Model):
     acesso_cadastros = db.Column(db.Boolean, default=False)
     acesso_valores_itens = db.Column(db.Boolean, default=False)
     pode_finalizar_os = db.Column(db.Boolean, default=False)
+    pode_gerenciar_apontamentos = db.Column(db.Boolean, default=False)  # Permissão para gerenciar apontamentos ativos
     codigo_operador = db.Column(db.String(4), unique=True, nullable=True)  # Código de 4 dígitos para apontamentos
     data_criacao = db.Column(db.DateTime, default=datetime.utcnow)
     ultimo_acesso = db.Column(db.DateTime)
