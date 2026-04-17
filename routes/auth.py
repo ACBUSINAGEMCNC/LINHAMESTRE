@@ -173,6 +173,7 @@ def novo_usuario():
             acesso_pedidos = 'acesso_pedidos' in request.form
             acesso_cadastros = 'acesso_cadastros' in request.form
             pode_finalizar_os = 'pode_finalizar_os' in request.form
+            pode_gerenciar_apontamentos = 'pode_gerenciar_apontamentos' in request.form
 
         try:
             acesso_valores_itens = _resolve_acesso_valores_itens(request.form, Usuario.query.get(session['usuario_id']))
@@ -191,7 +192,8 @@ def novo_usuario():
             acesso_pedidos=acesso_pedidos,
             acesso_cadastros=acesso_cadastros,
             acesso_valores_itens=acesso_valores_itens,
-            pode_finalizar_os=pode_finalizar_os
+            pode_finalizar_os=pode_finalizar_os,
+            pode_gerenciar_apontamentos=pode_gerenciar_apontamentos
         )
         
         db.session.add(novo_usuario)
@@ -242,6 +244,7 @@ def editar_usuario(usuario_id):
             usuario.acesso_pedidos = 'acesso_pedidos' in request.form
             usuario.acesso_cadastros = 'acesso_cadastros' in request.form
             usuario.pode_finalizar_os = 'pode_finalizar_os' in request.form
+            usuario.pode_gerenciar_apontamentos = 'pode_gerenciar_apontamentos' in request.form
 
         try:
             usuario.acesso_valores_itens = _resolve_acesso_valores_itens(request.form, Usuario.query.get(session['usuario_id']), current_usuario=usuario)

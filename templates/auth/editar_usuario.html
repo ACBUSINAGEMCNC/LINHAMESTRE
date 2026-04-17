@@ -104,6 +104,16 @@
                             </div>
                             <div class="col-md-4">
                                 <div class="form-check">
+                                    <input class="form-check-input" type="checkbox" id="pode_gerenciar_apontamentos" name="pode_gerenciar_apontamentos" {% if usuario.pode_gerenciar_apontamentos %}checked{% endif %}>
+                                    <label class="form-check-label" for="pode_gerenciar_apontamentos">
+                                        Pode Gerenciar Apontamentos
+                                    </label>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="row mt-2">
+                            <div class="col-md-4">
+                                <div class="form-check">
                                     <input class="form-check-input" type="checkbox" id="acesso_valores_itens" name="acesso_valores_itens" {% if usuario.acesso_valores_itens %}checked{% endif %} {% if not usuario_admin_master %}disabled{% endif %}>
                                     {% if not usuario_admin_master and usuario.acesso_valores_itens %}
                                     <input type="hidden" name="acesso_valores_itens" value="1">

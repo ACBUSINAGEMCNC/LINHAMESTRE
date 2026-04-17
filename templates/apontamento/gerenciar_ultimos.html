@@ -17,7 +17,7 @@
                     </a>
                 </div>
             </div>
-            <p class="text-muted">Últimos 50 apontamentos (ativos e finalizados) - Você pode editar qualquer um</p>
+            <p class="text-muted">Histórico de apontamentos (ativos e finalizados) - 20 por página - Você pode editar qualquer um</p>
         </div>
     </div>
 
@@ -131,6 +131,60 @@
             </div>
         </div>
     </div>
+    
+    <!-- Paginação -->
+    {% if pagination and pagination.pages > 1 %}
+    <div class="mt-3">
+        <nav aria-label="Navegação de páginas">
+            <ul class="pagination justify-content-center">
+                <!-- Primeira página -->
+                <li class="page-item {% if not pagination.has_prev %}disabled{% endif %}">
+                    <a class="page-link" href="{{ url_for('apontamento.gerenciar_ultimos_apontamentos', page=1) }}">
+                        <i class="fas fa-angle-double-left"></i>
+                    </a>
+                </li>
+                
+                <!-- Página anterior -->
+                <li class="page-item {% if not pagination.has_prev %}disabled{% endif %}">
+                    <a class="page-link" href="{{ url_for('apontamento.gerenciar_ultimos_apontamentos', page=pagination.prev_num) if pagination.has_prev else '#' }}">
+                        <i class="fas fa-angle-left"></i>
+                    </a>
+                </li>
+                
+                <!-- Páginas -->
+                {% for p in pagination.iter_pages(left_edge=1, right_edge=1, left_current=2, right_current=2) %}
+                    {% if p %}
+                        <li class="page-item {% if p == pagination.page %}active{% endif %}">
+                            <a class="page-link" href="{{ url_for('apontamento.gerenciar_ultimos_apontamentos', page=p) }}">{{ p }}</a>
+                        </li>
+                    {% else %}
+                        <li class="page-item disabled">
+                            <span class="page-link">...</span>
+                        </li>
+                    {% endif %}
+                {% endfor %}
+                
+                <!-- Próxima página -->
+                <li class="page-item {% if not pagination.has_next %}disabled{% endif %}">
+                    <a class="page-link" href="{{ url_for('apontamento.gerenciar_ultimos_apontamentos', page=pagination.next_num) if pagination.has_next else '#' }}">
+                        <i class="fas fa-angle-right"></i>
+                    </a>
+                </li>
+                
+                <!-- Última página -->
+                <li class="page-item {% if not pagination.has_next %}disabled{% endif %}">
+                    <a class="page-link" href="{{ url_for('apontamento.gerenciar_ultimos_apontamentos', page=pagination.pages) }}">
+                        <i class="fas fa-angle-double-right"></i>
+                    </a>
+                </li>
+            </ul>
+        </nav>
+        <p class="text-center text-muted">
+            Página {{ pagination.page }} de {{ pagination.pages }} | Total: {{ pagination.total }} apontamentos
+        </p>
+    </div>
+    {% endif %}
+    
     {% endif %}
 </div>
 

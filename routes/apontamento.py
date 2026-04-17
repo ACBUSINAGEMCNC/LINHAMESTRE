@@ -2924,7 +2924,7 @@ def gerenciar_apontamentos_ativos():
 
 @apontamento_bp.route('/gerenciar-ultimos')
 def gerenciar_ultimos_apontamentos():
-    """Tela de gerenciamento dos últimos 50 apontamentos (ativos e finalizados)"""
+    """Tela de gerenciamento dos últimos apontamentos (ativos e finalizados) com paginação"""
     # Verificar se usuário está logado
     if 'usuario_id' not in session:
         flash('Por favor, faça login para acessar esta página', 'warning')
@@ -2940,18 +2940,25 @@ def gerenciar_ultimos_apontamentos():
         flash('Acesso negado. Você não tem permissão para gerenciar apontamentos.', 'danger')
         return redirect(url_for('kanban.index'))
     
-    # Buscar últimos 50 apontamentos (ativos e finalizados)
-    ultimos_apontamentos = ApontamentoProducao.query.options(
+    # Paginação: 20 apontamentos por página
+    page = request.args.get('page', 1, type=int)
+    per_page = 20
+    
+    # Buscar apontamentos com paginação
+    pagination = ApontamentoProducao.query.options(
         joinedload(ApontamentoProducao.ordem_servico)
             .joinedload(OrdemServico.pedidos)
             .joinedload(PedidoOrdemServico.pedido),
         joinedload(ApontamentoProducao.usuario),
         joinedload(ApontamentoProducao.item),
         joinedload(ApontamentoProducao.trabalho)
-    ).order_by(ApontamentoProducao.data_hora.desc()).limit(50).all()
+    ).order_by(ApontamentoProducao.data_hora.desc()).paginate(
+        page=page, per_page=per_page, error_out=False
+    )
     
     return render_template('apontamento/gerenciar_ultimos.html', 
-                         apontamentos=ultimos_apontamentos,
+                         apontamentos=pagination.items,
+                         pagination=pagination,
                          usuario=usuario)
 
 
