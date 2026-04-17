@@ -2909,6 +2909,7 @@ def gerenciar_apontamentos_ativos():
     limite_tempo = datetime.now(LOCAL_TZ).replace(tzinfo=None) - timedelta(hours=24)
     
     # Query: ativos OU finalizados nas últimas 24h
+    # NOTA: 'stop' não é incluído pois é apenas um marcador de fechamento, não um apontamento real
     apontamentos_ativos = ApontamentoProducao.query.options(
         joinedload(ApontamentoProducao.ordem_servico)
             .joinedload(OrdemServico.pedidos)
@@ -2923,7 +2924,7 @@ def gerenciar_apontamentos_ativos():
             # OU finalizados nas últimas 24h
             ApontamentoProducao.data_fim >= limite_tempo
         ),
-        ApontamentoProducao.tipo_acao.in_(['inicio_setup', 'inicio_producao', 'pausa', 'stop'])
+        ApontamentoProducao.tipo_acao.in_(['inicio_setup', 'inicio_producao', 'pausa'])
     ).order_by(ApontamentoProducao.data_hora.desc()).all()
     
     return render_template('apontamento/gerenciar_ativos.html', 
@@ -2954,6 +2955,7 @@ def gerenciar_ultimos_apontamentos():
     per_page = 20
     
     # Buscar apontamentos com paginação
+    # NOTA: Excluir 'stop' e 'fim_setup'/'fim_producao' pois são apenas marcadores de fechamento
     pagination = ApontamentoProducao.query.options(
         joinedload(ApontamentoProducao.ordem_servico)
             .joinedload(OrdemServico.pedidos)
@@ -2961,6 +2963,8 @@ def gerenciar_ultimos_apontamentos():
         joinedload(ApontamentoProducao.usuario),
         joinedload(ApontamentoProducao.item),
         joinedload(ApontamentoProducao.trabalho)
+    ).filter(
+        ApontamentoProducao.tipo_acao.in_(['inicio_setup', 'inicio_producao', 'pausa'])
     ).order_by(ApontamentoProducao.data_hora.desc()).paginate(
         page=page, per_page=per_page, error_out=False
     )
