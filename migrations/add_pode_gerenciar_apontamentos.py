@@ -10,8 +10,13 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 def migrate_postgresql_engine(engine):
     """Migração para PostgreSQL usando SQLAlchemy engine"""
     from sqlalchemy import text
+    import logging
+    
+    logger = logging.getLogger(__name__)
     
     try:
+        logger.info("Iniciando verificação da coluna pode_gerenciar_apontamentos...")
+        
         with engine.connect() as conn:
             # Verificar se a coluna já existe
             result = conn.execute(text("""
@@ -21,20 +26,22 @@ def migrate_postgresql_engine(engine):
             """))
             
             if result.fetchone() is None:
-                print("Adicionando coluna pode_gerenciar_apontamentos na tabela usuario...")
+                logger.info("Coluna pode_gerenciar_apontamentos não encontrada. Adicionando...")
                 conn.execute(text("""
                     ALTER TABLE usuario 
                     ADD COLUMN pode_gerenciar_apontamentos BOOLEAN DEFAULT FALSE
                 """))
                 conn.commit()
-                print("✅ Coluna pode_gerenciar_apontamentos adicionada com sucesso!")
+                logger.info("✅ Coluna pode_gerenciar_apontamentos adicionada com sucesso!")
                 return True
             else:
-                print("ℹ️ Coluna pode_gerenciar_apontamentos já existe.")
+                logger.info("ℹ️ Coluna pode_gerenciar_apontamentos já existe.")
                 return True
                 
     except Exception as e:
-        print(f"❌ Erro na migração PostgreSQL: {e}")
+        logger.error(f"❌ Erro na migração PostgreSQL: {e}")
+        import traceback
+        logger.error(traceback.format_exc())
         return False
 
 def migrate_postgresql(conn):
