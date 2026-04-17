@@ -2904,13 +2904,12 @@ def gerenciar_apontamentos_ativos():
         flash('Acesso negado. Você não tem permissão para gerenciar apontamentos.', 'danger')
         return redirect(url_for('kanban.index'))
     
-    # Buscar apontamentos ativos E finalizados recentemente (últimas 24h)
-    from datetime import datetime, timedelta
-    limite_tempo = datetime.now(LOCAL_TZ).replace(tzinfo=None) - timedelta(hours=24)
+    # Paginação "Mostrar Mais": carregar 20 iniciais, depois +20 a cada clique
+    limit = request.args.get('limit', 20, type=int)
     
-    # Query: ativos OU finalizados nas últimas 24h
-    # NOTA: 'stop' não é incluído pois é apenas um marcador de fechamento, não um apontamento real
-    apontamentos_ativos = ApontamentoProducao.query.options(
+    # Buscar apontamentos: ativos primeiro, depois finalizados (ordenados por data_fim desc)
+    # NOTA: 'stop' não é incluído pois é apenas um marcador de fechamento
+    apontamentos_query = ApontamentoProducao.query.options(
         joinedload(ApontamentoProducao.ordem_servico)
             .joinedload(OrdemServico.pedidos)
             .joinedload(PedidoOrdemServico.pedido),
@@ -2918,17 +2917,22 @@ def gerenciar_apontamentos_ativos():
         joinedload(ApontamentoProducao.item),
         joinedload(ApontamentoProducao.trabalho)
     ).filter(
-        db.or_(
-            # Ativos (sem data_fim)
-            ApontamentoProducao.data_fim.is_(None),
-            # OU finalizados nas últimas 24h
-            ApontamentoProducao.data_fim >= limite_tempo
-        ),
         ApontamentoProducao.tipo_acao.in_(['inicio_setup', 'inicio_producao', 'pausa'])
-    ).order_by(ApontamentoProducao.data_hora.desc()).all()
+    ).order_by(
+        # Ativos primeiro (data_fim NULL), depois finalizados por data_fim desc
+        ApontamentoProducao.data_fim.asc().nullsfirst(),
+        ApontamentoProducao.data_hora.desc()
+    ).limit(limit).all()
+    
+    # Contar total de apontamentos disponíveis
+    total_apontamentos = ApontamentoProducao.query.filter(
+        ApontamentoProducao.tipo_acao.in_(['inicio_setup', 'inicio_producao', 'pausa'])
+    ).count()
     
     return render_template('apontamento/gerenciar_ativos.html', 
-                         apontamentos=apontamentos_ativos,
+                         apontamentos=apontamentos_query,
+                         total_apontamentos=total_apontamentos,
+                         limit_atual=limit,
                          usuario=usuario)
 
 

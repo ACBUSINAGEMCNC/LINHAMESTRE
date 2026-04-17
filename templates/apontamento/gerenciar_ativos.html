@@ -17,7 +17,7 @@
                     </a>
                 </div>
             </div>
-            <p class="text-muted">Apontamentos em andamento e finalizados nas últimas 24 horas</p>
+            <p class="text-muted">Apontamentos em andamento e finalizados (editáveis). Mostrando {{ apontamentos|length }} de {{ total_apontamentos }} registros.</p>
         </div>
     </div>
 
@@ -88,14 +88,26 @@
                     <tbody>
                         {% for apontamento in apontamentos %}
                         <tr data-apontamento-id="{{ apontamento.id }}" 
-                            data-inicio="{{ apontamento.data_hora.isoformat() if apontamento.data_hora else '' }}">
+                            data-inicio="{{ apontamento.data_hora.isoformat() if apontamento.data_hora else '' }}"
+                            class="{% if apontamento.data_fim %}table-secondary opacity-75{% endif %}"
+                            style="{% if apontamento.data_fim %}background-color: #f8f9fa !important;{% endif %}">
                             <td>
-                                {% if apontamento.tipo_acao == 'inicio_setup' %}
-                                <span class="badge bg-info"><i class="fas fa-tools"></i> Setup</span>
-                                {% elif apontamento.tipo_acao == 'inicio_producao' %}
-                                <span class="badge bg-success"><i class="fas fa-cogs"></i> Produção</span>
-                                {% elif apontamento.tipo_acao == 'pausa' %}
-                                <span class="badge bg-warning text-dark"><i class="fas fa-pause-circle"></i> Pausa</span>
+                                {% if apontamento.data_fim %}
+                                    {% if apontamento.tipo_acao == 'inicio_setup' %}
+                                    <span class="badge bg-secondary"><i class="fas fa-check"></i> Setup Finalizado</span>
+                                    {% elif apontamento.tipo_acao == 'inicio_producao' %}
+                                    <span class="badge bg-secondary"><i class="fas fa-check"></i> Produção Finalizada</span>
+                                    {% elif apontamento.tipo_acao == 'pausa' %}
+                                    <span class="badge bg-secondary"><i class="fas fa-check"></i> Pausa Finalizada</span>
+                                    {% endif %}
+                                {% else %}
+                                    {% if apontamento.tipo_acao == 'inicio_setup' %}
+                                    <span class="badge bg-info"><i class="fas fa-tools"></i> Setup</span>
+                                    {% elif apontamento.tipo_acao == 'inicio_producao' %}
+                                    <span class="badge bg-success"><i class="fas fa-cogs"></i> Produção</span>
+                                    {% elif apontamento.tipo_acao == 'pausa' %}
+                                    <span class="badge bg-warning text-dark"><i class="fas fa-pause-circle"></i> Pausa</span>
+                                    {% endif %}
                                 {% endif %}
                             </td>
                             <td>
@@ -124,9 +136,19 @@
                                 <small>{{ apontamento.data_hora.strftime('%d/%m/%Y %H:%M:%S') if apontamento.data_hora else '-' }}</small>
                             </td>
                             <td>
-                                <span class="timer-display badge bg-secondary" data-inicio="{{ apontamento.data_hora.isoformat() if apontamento.data_hora else '' }}">
-                                    00:00:00
-                                </span>
+                                {% if apontamento.data_fim %}
+                                    <span class="badge bg-dark">
+                                        {% if apontamento.tempo_decorrido %}
+                                            {{ '%02d:%02d:%02d' % (apontamento.tempo_decorrido // 3600, (apontamento.tempo_decorrido % 3600) // 60, apontamento.tempo_decorrido % 60) }}
+                                        {% else %}
+                                            00:00:00
+                                        {% endif %}
+                                    </span>
+                                {% else %}
+                                    <span class="timer-display badge bg-secondary" data-inicio="{{ apontamento.data_hora.isoformat() if apontamento.data_hora else '' }}">
+                                        00:00:00
+                                    </span>
+                                {% endif %}
                             </td>
                             <td>
                                 <span class="quantidade-display">{{ apontamento.quantidade if apontamento.quantidade else '-' }}</span>
@@ -137,14 +159,17 @@
                                             data-id="{{ apontamento.id }}"
                                             data-quantidade="{{ apontamento.quantidade if apontamento.quantidade else 0 }}"
                                             data-inicio="{{ apontamento.data_hora.isoformat() if apontamento.data_hora else '' }}"
+                                            data-fim="{{ apontamento.data_fim.isoformat() if apontamento.data_fim else '' }}"
                                             title="Editar">
                                         <i class="fas fa-edit"></i>
                                     </button>
+                                    {% if not apontamento.data_fim %}
                                     <button class="btn btn-sm btn-danger btn-fechar" 
                                             data-id="{{ apontamento.id }}"
                                             title="Fechar Apontamento">
                                         <i class="fas fa-stop-circle"></i>
                                     </button>
+                                    {% endif %}
                                 </div>
                             </td>
                         </tr>
@@ -153,6 +178,16 @@
                 </table>
             </div>
         </div>
+        {% if apontamentos|length < total_apontamentos %}
+        <div class="card-footer text-center">
+            <button class="btn btn-primary btn-lg" id="btnMostrarMais">
+                <i class="fas fa-chevron-down"></i> Mostrar Mais (+20)
+            </button>
+            <p class="text-muted mt-2 mb-0">
+                Mostrando {{ apontamentos|length }} de {{ total_apontamentos }} apontamentos
+            </p>
+        </div>
+        {% endif %}
     </div>
     {% endif %}
 </div>
@@ -332,6 +367,35 @@ document.addEventListener('DOMContentLoaded', function() {
                 console.error('Erro:', error);
                 alert('Erro ao fechar apontamento');
             });
+        });
+    });
+    
+    // Botão Mostrar Mais
+    const btnMostrarMais = document.getElementById('btnMostrarMais');
+    if (btnMostrarMais) {
+        btnMostrarMais.addEventListener('click', function() {
+            const urlParams = new URLSearchParams(window.location.search);
+            const limitAtual = parseInt(urlParams.get('limit')) || 20;
+            const novoLimit = limitAtual + 20;
+            
+            // Atualizar URL com novo limit
+            urlParams.set('limit', novoLimit);
+            window.location.search = urlParams.toString();
+        });
+    }
+    
+    // Carregar data_fim no modal de edição
+    document.querySelectorAll('.btn-editar').forEach(function(btn) {
+        btn.addEventListener('click', function() {
+            const fim = this.getAttribute('data-fim');
+            
+            if (fim) {
+                const fimDate = new Date(fim);
+                const localIso = new Date(fimDate.getTime() - fimDate.getTimezoneOffset() * 60000).toISOString().slice(0, 16);
+                document.getElementById('editarFim').value = localIso;
+            } else {
+                document.getElementById('editarFim').value = '';
+            }
         });
     });
 });
