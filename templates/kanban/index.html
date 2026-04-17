@@ -2179,10 +2179,32 @@
     }
     
     function carregarItensOS(ordemId, requestToken = modalLoadToken) {
+        console.log(`[MODAL] Carregando itens para OS ${ordemId}, token: ${requestToken}`);
+        
+        const selectItem = document.getElementById('itemSelecao');
+        const selectTipo = document.getElementById('tipoTrabalho');
+        
+        if (!selectItem || !selectTipo) {
+            console.error('[MODAL] Elementos select não encontrados!');
+            return;
+        }
+        
+        // Mostrar loading
+        selectItem.innerHTML = '<option value="">Carregando itens...</option>';
+        selectItem.disabled = true;
+        
         const carregar = cacheItensOS.has(String(ordemId))
             ? Promise.resolve(cacheItensOS.get(String(ordemId)))
-            : fetch(`/apontamento/os/${ordemId}/itens`)
-                .then(response => response.json())
+            : fetch(`/apontamento/os/${ordemId}/itens`, {
+                method: 'GET',
+                headers: { 'Content-Type': 'application/json' }
+            })
+                .then(response => {
+                    if (!response.ok) {
+                        throw new Error(`HTTP ${response.status}`);
+                    }
+                    return response.json();
+                })
                 .then(data => {
                     cacheItensOS.set(String(ordemId), data);
                     return data;
@@ -2190,17 +2212,25 @@
 
         carregar
             .then(data => {
-                if (requestToken !== modalLoadToken || String(ordemId) !== String(ordemAtualId)) {
+                // Verificar se ainda é a mesma requisição
+                if (requestToken !== modalLoadToken) {
+                    console.log(`[MODAL] Token mudou (${requestToken} != ${modalLoadToken}), ignorando resposta`);
                     return;
                 }
-                const selectItem = document.getElementById('itemSelecao');
-                const selectTipo = document.getElementById('tipoTrabalho');
+                if (String(ordemId) !== String(ordemAtualId)) {
+                    console.log(`[MODAL] OS mudou (${ordemId} != ${ordemAtualId}), ignorando resposta`);
+                    return;
+                }
+                
+                console.log('[MODAL] Dados de itens recebidos:', data);
                 
                 // Limpar dropdowns
                 selectItem.innerHTML = '<option value="">Selecione o item</option>';
                 selectTipo.innerHTML = '<option value="">Selecione o tipo de trabalho</option>';
+                selectItem.disabled = false;
                 
                 if (data.success && data.itens && data.itens.length > 0) {
+                    console.log(`[MODAL] Adicionando ${data.itens.length} itens ao select`);
                     data.itens.forEach(item => {
                         const option = document.createElement('option');
                         option.value = item.id;
@@ -2210,31 +2240,59 @@
                     
                     // Se há apenas um item, selecionar automaticamente
                     if (data.itens.length === 1) {
+                        console.log('[MODAL] Apenas 1 item, selecionando automaticamente');
                         selectItem.value = data.itens[0].id;
-                        carregarTiposTrabalhoItem(data.itens[0].id, { requestToken, autoSelectFirst: true });
+                        // Pequeno delay para garantir que o DOM foi atualizado
+                        setTimeout(() => {
+                            carregarTiposTrabalhoItem(data.itens[0].id, { requestToken, autoSelectFirst: true });
+                        }, 50);
                     }
                 } else {
+                    console.error('[MODAL] Nenhum item encontrado ou erro nos dados:', data);
+                    selectItem.disabled = false;
                     mostrarAlerta('Erro: Nenhum item encontrado para esta OS', 'error');
                 }
             })
             .catch(error => {
-                console.error('Erro ao carregar itens:', error);
+                console.error('[MODAL] Erro ao carregar itens:', error);
+                selectItem.innerHTML = '<option value="">Erro ao carregar</option>';
+                selectItem.disabled = false;
                 mostrarAlerta('Erro ao carregar itens da OS', 'error');
             });
     }
     
     function carregarTiposTrabalhoItem(itemId, options = {}) {
         const { requestToken = modalLoadToken, autoSelectFirst = false } = options;
-        if (!itemId) {
-            const select = document.getElementById('tipoTrabalho');
-            select.innerHTML = '<option value="">Selecione o tipo de trabalho</option>';
+        console.log(`[MODAL] Carregando tipos de trabalho para item ${itemId}, token: ${requestToken}`);
+        
+        const select = document.getElementById('tipoTrabalho');
+        if (!select) {
+            console.error('[MODAL] Select tipoTrabalho não encontrado!');
             return;
         }
         
+        if (!itemId) {
+            select.innerHTML = '<option value="">Selecione o tipo de trabalho</option>';
+            select.disabled = false;
+            return;
+        }
+        
+        // Mostrar loading
+        select.innerHTML = '<option value="">Carregando tipos...</option>';
+        select.disabled = true;
+        
         const carregar = cacheTiposTrabalhoPorItem.has(String(itemId))
             ? Promise.resolve(cacheTiposTrabalhoPorItem.get(String(itemId)))
-            : fetch(`/apontamento/item/${itemId}/tipos-trabalho`)
-                .then(response => response.json())
+            : fetch(`/apontamento/item/${itemId}/tipos-trabalho`, {
+                method: 'GET',
+                headers: { 'Content-Type': 'application/json' }
+            })
+                .then(response => {
+                    if (!response.ok) {
+                        throw new Error(`HTTP ${response.status}`);
+                    }
+                    return response.json();
+                })
                 .then(data => {
                     cacheTiposTrabalhoPorItem.set(String(itemId), data);
                     return data;
@@ -2242,13 +2300,25 @@
 
         carregar
             .then(data => {
-                if (requestToken !== modalLoadToken || String(document.getElementById('itemSelecao').value) !== String(itemId)) {
+                // Verificar se ainda é a mesma requisição
+                if (requestToken !== modalLoadToken) {
+                    console.log(`[MODAL] Token mudou (${requestToken} != ${modalLoadToken}), ignorando resposta de tipos`);
                     return;
                 }
-                const select = document.getElementById('tipoTrabalho');
-                select.innerHTML = '<option value="">Selecione o tipo de trabalho</option>';
                 
-                if (data.success) {
+                const itemSelecaoAtual = document.getElementById('itemSelecao')?.value;
+                if (String(itemSelecaoAtual) !== String(itemId)) {
+                    console.log(`[MODAL] Item mudou (${itemSelecaoAtual} != ${itemId}), ignorando resposta de tipos`);
+                    return;
+                }
+                
+                console.log('[MODAL] Dados de tipos de trabalho recebidos:', data);
+                
+                select.innerHTML = '<option value="">Selecione o tipo de trabalho</option>';
+                select.disabled = false;
+                
+                if (data.success && data.tipos_trabalho && data.tipos_trabalho.length > 0) {
+                    console.log(`[MODAL] Adicionando ${data.tipos_trabalho.length} tipos ao select`);
                     data.tipos_trabalho.forEach(tipo => {
                         const option = document.createElement('option');
                         option.value = tipo.id;
@@ -2260,15 +2330,25 @@
                     });
 
                     if (autoSelectFirst && data.tipos_trabalho.length === 1) {
+                        console.log('[MODAL] Apenas 1 tipo, selecionando automaticamente');
                         select.value = data.tipos_trabalho[0].id;
-                        atualizarUltimaQuantidadeCampo(requestToken);
+                        // Pequeno delay para garantir que o DOM foi atualizado
+                        setTimeout(() => {
+                            atualizarUltimaQuantidadeCampo(requestToken);
+                        }, 50);
                     }
                 } else {
-                    mostrarAlerta('Erro: ' + data.message, 'warning');
+                    console.error('[MODAL] Nenhum tipo de trabalho encontrado ou erro nos dados:', data);
+                    select.disabled = false;
+                    if (data.message) {
+                        mostrarAlerta('Erro: ' + data.message, 'warning');
+                    }
                 }
             })
             .catch(error => {
-                console.error('Erro:', error);
+                console.error('[MODAL] Erro ao carregar tipos de trabalho:', error);
+                select.innerHTML = '<option value="">Erro ao carregar</option>';
+                select.disabled = false;
                 mostrarAlerta('Erro ao carregar tipos de trabalho', 'error');
             });
     }

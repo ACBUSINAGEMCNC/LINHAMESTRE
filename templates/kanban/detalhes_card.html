@@ -172,7 +172,7 @@
                                                     <div class="col-md-12">
                                                         <h6 class="text-muted">Desenho Técnico:</h6>
                                                         <div class="ratio ratio-16x9">
-                                                            <iframe src="{{ url_for('itens.desenho_pdf_item', item_id=item.id) }}" allowfullscreen></iframe>
+                                                            <iframe src="{{ url_for('itens.desenho_pdf_item', item_id=item.id) }}?t={{ ordem.id }}_{{ loop.index0 if loop else 0 }}" allowfullscreen></iframe>
                                                         </div>
                                                     </div>
                                                 </div>
