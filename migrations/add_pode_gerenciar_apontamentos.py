@@ -7,6 +7,36 @@ import sys
 # Adicionar o diretório raiz ao path
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
+def migrate_postgresql_engine(engine):
+    """Migração para PostgreSQL usando SQLAlchemy engine"""
+    from sqlalchemy import text
+    
+    try:
+        with engine.connect() as conn:
+            # Verificar se a coluna já existe
+            result = conn.execute(text("""
+                SELECT column_name 
+                FROM information_schema.columns 
+                WHERE table_name='usuario' AND column_name='pode_gerenciar_apontamentos'
+            """))
+            
+            if result.fetchone() is None:
+                print("Adicionando coluna pode_gerenciar_apontamentos na tabela usuario...")
+                conn.execute(text("""
+                    ALTER TABLE usuario 
+                    ADD COLUMN pode_gerenciar_apontamentos BOOLEAN DEFAULT FALSE
+                """))
+                conn.commit()
+                print("✅ Coluna pode_gerenciar_apontamentos adicionada com sucesso!")
+                return True
+            else:
+                print("ℹ️ Coluna pode_gerenciar_apontamentos já existe.")
+                return True
+                
+    except Exception as e:
+        print(f"❌ Erro na migração PostgreSQL: {e}")
+        return False
+
 def migrate_postgresql(conn):
     """Migração para PostgreSQL"""
     cursor = conn.cursor()

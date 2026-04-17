@@ -229,8 +229,8 @@ def verificar_inicializar_banco():
             logger.warning(f"Erro ao migrar coluna quantidade_snapshot: {str(col_err)}")
 
         try:
-            from migrations.add_pode_gerenciar_apontamentos import migrate_postgresql
-            if migrate_postgresql(db.engine.raw_connection()):
+            from migrations.add_pode_gerenciar_apontamentos import migrate_postgresql_engine
+            if migrate_postgresql_engine(db.engine):
                 logger.info("Coluna pode_gerenciar_apontamentos verificada/adicionada com sucesso.")
             else:
                 logger.warning("Falha ao verificar/adicionar coluna pode_gerenciar_apontamentos.")
