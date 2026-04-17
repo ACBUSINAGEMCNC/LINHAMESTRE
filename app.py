@@ -229,6 +229,18 @@ def verificar_inicializar_banco():
             logger.warning(f"Erro ao migrar coluna quantidade_snapshot: {str(col_err)}")
 
         try:
+            from migrations.add_pode_gerenciar_apontamentos import migrate_postgresql
+            if migrate_postgresql(db.engine.raw_connection()):
+                logger.info("Coluna pode_gerenciar_apontamentos verificada/adicionada com sucesso.")
+            else:
+                logger.warning("Falha ao verificar/adicionar coluna pode_gerenciar_apontamentos.")
+        except Exception as col_err:
+            if _is_max_connections_error(col_err):
+                logger.warning("Supabase sem conexões disponíveis. Pulando migração pode_gerenciar_apontamentos.")
+                return
+            logger.warning(f"Erro ao migrar coluna pode_gerenciar_apontamentos: {str(col_err)}")
+
+        try:
             from migrations.alter_pedido_nome_item_length import migrate_postgres as migrate_pedido_nome_item_len
             if migrate_pedido_nome_item_len():
                 logger.info("Coluna pedido.nome_item verificada/alterada para VARCHAR(255) (Supabase).")
@@ -441,6 +453,17 @@ def verificar_inicializar_banco():
                     else:
                         logger.warning("Falha ao adicionar coluna categoria_trabalho à tabela maquina.")
                         
+                # Verificar se tabela usuario tem a coluna pode_gerenciar_apontamentos
+                cursor.execute("PRAGMA table_info(usuario)")
+                usuario_columns = [column[1] for column in cursor.fetchall()]
+                if 'pode_gerenciar_apontamentos' not in usuario_columns:
+                    logger.info("Coluna pode_gerenciar_apontamentos não encontrada na tabela usuario. Executando migração...")
+                    from migrations.add_pode_gerenciar_apontamentos import migrate_sqlite as migrate_pode_gerenciar
+                    if migrate_pode_gerenciar(conn):
+                        logger.info("Coluna pode_gerenciar_apontamentos adicionada com sucesso à tabela usuario.")
+                    else:
+                        logger.warning("Falha ao adicionar coluna pode_gerenciar_apontamentos à tabela usuario.")
+                
                 # Verificar se tabela maquina tem as colunas imagem e data_cadastro
                 if 'imagem' not in columns or 'data_cadastro' not in columns:
                     logger.info("Colunas imagem ou data_cadastro não encontradas na tabela maquina. Executando migração...")

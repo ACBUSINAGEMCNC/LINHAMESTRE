@@ -26,13 +26,15 @@ def migrate_postgresql(conn):
             """)
             conn.commit()
             print("✅ Coluna pode_gerenciar_apontamentos adicionada com sucesso!")
+            return True
         else:
             print("ℹ️ Coluna pode_gerenciar_apontamentos já existe.")
+            return True
             
     except Exception as e:
         conn.rollback()
         print(f"❌ Erro na migração PostgreSQL: {e}")
-        raise
+        return False
     finally:
         cursor.close()
 
@@ -52,13 +54,15 @@ def migrate_sqlite(conn):
             """)
             conn.commit()
             print("✅ Coluna pode_gerenciar_apontamentos adicionada com sucesso!")
+            return True
         else:
             print("ℹ️ Coluna pode_gerenciar_apontamentos já existe.")
+            return True
             
     except Exception as e:
         conn.rollback()
         print(f"❌ Erro na migração SQLite: {e}")
-        raise
+        return False
     finally:
         cursor.close()
 
