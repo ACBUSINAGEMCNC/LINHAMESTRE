@@ -2904,7 +2904,11 @@ def gerenciar_apontamentos_ativos():
         flash('Acesso negado. Você não tem permissão para gerenciar apontamentos.', 'danger')
         return redirect(url_for('kanban.index'))
     
-    # Buscar todos os apontamentos ativos (sem data_fim)
+    # Buscar apontamentos ativos E finalizados recentemente (últimas 24h)
+    from datetime import datetime, timedelta
+    limite_tempo = datetime.now(LOCAL_TZ).replace(tzinfo=None) - timedelta(hours=24)
+    
+    # Query: ativos OU finalizados nas últimas 24h
     apontamentos_ativos = ApontamentoProducao.query.options(
         joinedload(ApontamentoProducao.ordem_servico)
             .joinedload(OrdemServico.pedidos)
@@ -2913,8 +2917,13 @@ def gerenciar_apontamentos_ativos():
         joinedload(ApontamentoProducao.item),
         joinedload(ApontamentoProducao.trabalho)
     ).filter(
-        ApontamentoProducao.data_fim.is_(None),
-        ApontamentoProducao.tipo_acao.in_(['inicio_setup', 'inicio_producao', 'pausa'])
+        db.or_(
+            # Ativos (sem data_fim)
+            ApontamentoProducao.data_fim.is_(None),
+            # OU finalizados nas últimas 24h
+            ApontamentoProducao.data_fim >= limite_tempo
+        ),
+        ApontamentoProducao.tipo_acao.in_(['inicio_setup', 'inicio_producao', 'pausa', 'stop'])
     ).order_by(ApontamentoProducao.data_hora.desc()).all()
     
     return render_template('apontamento/gerenciar_ativos.html', 
