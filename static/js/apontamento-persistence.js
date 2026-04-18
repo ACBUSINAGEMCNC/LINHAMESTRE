@@ -223,6 +223,24 @@ try {
                 console.warn('Falha ao processar apontamento_status_update:', e);
             }
         }
+        
+        // Heartbeat de sincronização entre abas (atualizações de polling de outras abas)
+        if (key === 'apontamento_heartbeat') {
+            try {
+                const data = JSON.parse(ev.newValue || 'null');
+                if (!data || typeof data !== 'object') return;
+                const ts = data.timestamp || 0;
+                // Se o heartbeat é recente (< 10s) e de outra aba, recarregar estado
+                if (Date.now() - ts < 10000) {
+                    // Recarregar silenciosamente após 500ms para evitar conflito
+                    setTimeout(() => {
+                        if (typeof window.recarregarEstadoApontamentos === 'function') {
+                            window.recarregarEstadoApontamentos();
+                        }
+                    }, 500);
+                }
+            } catch (e) {}
+        }
     });
 } catch (e) { console.warn('Falha ao registrar listener de storage para sincronização entre abas:', e); }
 function markQptTouch(osId) {
@@ -380,6 +398,15 @@ function carregarEstadoApontamentos() {
                     }
                     
                 });
+                
+                // Broadcast para outras abas sincronizarem imediatamente
+                try {
+                    localStorage.setItem('apontamento_heartbeat', JSON.stringify({
+                        timestamp: Date.now(),
+                        count: ativos.length,
+                        ids: Array.from(ativosIds)
+                    }));
+                } catch (e) {}
             }
 
             // Garante QPT visível para OS sem ativo (renderiza via cache/LS)
@@ -1520,7 +1547,7 @@ function inicializarSistemaApontamentos() {
 
 // Sistema de polling automático para sincronização em tempo real
 let _pollingInterval = null;
-const POLLING_INTERVAL_MS = 15000; // 15 segundos
+const POLLING_INTERVAL_MS = 5000; // 5 segundos (mais rápido para sincronização entre dispositivos)
 
 function iniciarPollingAutomatico() {
     // Evitar múltiplos intervalos

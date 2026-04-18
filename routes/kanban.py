@@ -1,7 +1,7 @@
 from flask import Blueprint, render_template, request, redirect, url_for, flash, jsonify, session, current_app, make_response, abort
 from models import db, Usuario, OrdemServico, Pedido, PedidoOrdemServico, Item, Trabalho, ItemTrabalho, RegistroMensal, KanbanLista, CartaoFantasma, ApontamentoProducao
 from utils import validate_form_data, get_kanban_lists, get_kanban_categories, format_seconds_to_time
-from datetime import datetime
+from datetime import datetime, timezone, timedelta
 from collections import defaultdict
 import json
 import re
@@ -143,6 +143,41 @@ def index():
             continue
         apontado_por_os_trabalho[int(ordem_id)][int(trabalho_id)] = _to_int(tempo_total, 0)
 
+    # OTIMIZAÇÃO: Pré-carregar todos os ItemTrabalho e Trabalho usando joinedload
+    # e cachear em dicionários para evitar N+1 queries dentro dos loops
+    todos_item_trabalhos = {}
+    todos_trabalhos = {}
+    
+    # Coletar todos os IDs de itens das OS já carregadas (sem query extra)
+    todos_item_ids = set()
+    for lista in listas:
+        ordens_lista = OrdemServico.query.filter_by(status=lista)\
+            .options(
+                db.joinedload(OrdemServico.pedidos)
+                  .joinedload(PedidoOrdemServico.pedido)
+            ).all()
+        for ordem in ordens_lista:
+            for pedido_os in ordem.pedidos:
+                pedido = pedido_os.pedido
+                if pedido and pedido.item_id:
+                    todos_item_ids.add(pedido.item_id)
+    
+    # Carregar todos os ItemTrabalho e Trabalho de uma vez só
+    if todos_item_ids:
+        item_trabalhos_rows = ItemTrabalho.query.filter(
+            ItemTrabalho.item_id.in_(todos_item_ids)
+        ).options(
+            db.joinedload(ItemTrabalho.trabalho)  # Eager load trabalho
+        ).all()
+        
+        # Agrupar por item_id
+        for it in item_trabalhos_rows:
+            if it.item_id not in todos_item_trabalhos:
+                todos_item_trabalhos[it.item_id] = []
+            todos_item_trabalhos[it.item_id].append(it)
+            if it.trabalho:
+                todos_trabalhos[it.trabalho_id] = it.trabalho
+    
     for lista in listas:
         # Buscar ordens normais com eager loading para evitar N+1 queries
         ordens[lista] = OrdemServico.query.filter_by(status=lista)\
@@ -185,8 +220,9 @@ def index():
                     card_qtd += _to_int(pedido.quantidade, 0)
                     
                     # Calcular tempo total para os trabalhos da categoria correspondente
-                    for item_trabalho in ItemTrabalho.query.filter_by(item_id=pedido.item_id).all():
-                        trabalho = Trabalho.query.get(item_trabalho.trabalho_id)
+                    # OTIMIZAÇÃO: Usar dicionários pré-carregados em vez de queries
+                    for item_trabalho in todos_item_trabalhos.get(pedido.item_id, []):
+                        trabalho = todos_trabalhos.get(item_trabalho.trabalho_id)
                         if not trabalho:
                             continue
                         trabalho_categoria = (trabalho.categoria or '').strip().lower()
