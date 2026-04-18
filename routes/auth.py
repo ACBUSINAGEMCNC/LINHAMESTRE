@@ -160,6 +160,7 @@ def novo_usuario():
         acesso_cadastros = False
         acesso_valores_itens = False
         pode_finalizar_os = False
+        pode_gerenciar_apontamentos = False
         
         if nivel_acesso == 'admin':
             acesso_kanban = True
@@ -167,6 +168,7 @@ def novo_usuario():
             acesso_pedidos = True
             acesso_cadastros = True
             pode_finalizar_os = True
+            pode_gerenciar_apontamentos = 'pode_gerenciar_apontamentos' in request.form
         else:
             acesso_kanban = 'acesso_kanban' in request.form
             acesso_estoque = 'acesso_estoque' in request.form
@@ -238,6 +240,8 @@ def editar_usuario(usuario_id):
             usuario.acesso_pedidos = True
             usuario.acesso_cadastros = True
             usuario.pode_finalizar_os = True
+            # pode_gerenciar_apontamentos é independente do nível admin
+            usuario.pode_gerenciar_apontamentos = 'pode_gerenciar_apontamentos' in request.form
         else:
             usuario.acesso_kanban = 'acesso_kanban' in request.form
             usuario.acesso_estoque = 'acesso_estoque' in request.form
