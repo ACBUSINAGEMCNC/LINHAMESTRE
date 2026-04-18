@@ -2919,8 +2919,9 @@ def gerenciar_apontamentos_ativos():
     ).filter(
         ApontamentoProducao.tipo_acao.in_(['inicio_setup', 'inicio_producao', 'pausa'])
     ).order_by(
-        # Ativos primeiro (data_fim NULL), depois finalizados por data_fim desc
+        # Ativos primeiro (data_fim NULL), depois finalizados por data_fim DESC (mais recente primeiro)
         ApontamentoProducao.data_fim.asc().nullsfirst(),
+        ApontamentoProducao.data_fim.desc(),
         ApontamentoProducao.data_hora.desc()
     ).limit(limit).all()
     
