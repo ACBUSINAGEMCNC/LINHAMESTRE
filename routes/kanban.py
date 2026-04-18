@@ -49,50 +49,26 @@ def verificar_permissao_kanban():
         flash('Você não tem permissão para acessar a área Kanban', 'danger')
         return redirect(url_for('main.index'))
 
-# Cache em memória simples para desenvolvimento (fallback quando cache externo não disponível)
+# Cache em memória simples para desenvolvimento (TTL: 5 minutos via chave temporal)
 _kanban_memory_cache = {}
-
-def _get_memory_cache(usuario_id):
-    """Busca do cache em memória se ainda válido (< 5 minutos)"""
-    key = f"kanban:{usuario_id}"
-    entry = _kanban_memory_cache.get(key)
-    if entry:
-        data, ts = entry
-        if (datetime.now() - ts).seconds < 300:  # 5 minutos
-            return data
-        else:
-            del _kanban_memory_cache[key]
-    return None
-
-def _set_memory_cache(usuario_id, data):
-    """Salva no cache em memória"""
-    _kanban_memory_cache[f"kanban:{usuario_id}"] = (data, datetime.now())
 
 @kanban.route('/kanban')
 @monitor_route_performance
 def index():
     """Rota para a página principal do Kanban"""
     # Tentar buscar do cache (TTL: 5 minutos) se disponível
-    usuario_id = session.get('usuario_id')
+    # Usar chave global baseada no timestamp (blocos de 5 minutos)
+    import time
+    cache_key_global = f"kanban:global:{int(time.time() / 300)}"  # Muda a cada 5 minutos
     cached_data = None
     
     # Cache em memória primeiro (mais rápido)
-    cached_data = _get_memory_cache(usuario_id)
+    cached_data = _kanban_memory_cache.get(cache_key_global)
     if cached_data:
-        current_app.logger.info(f"📦 Memory Cache HIT para Kanban (usuário {usuario_id})")
+        current_app.logger.info(f"📦 Memory Cache HIT para Kanban")
         return render_template('kanban/index.html', **cached_data, Item=Item)
     
-    # Cache externo (Redis/Memcached)
-    if CACHE_AVAILABLE and cache and not cached_data:
-        cache_key = f"kanban:metricas:{usuario_id}"
-        cached_data = cache.get(cache_key)
-        
-        if cached_data:
-            current_app.logger.info(f"📦 External Cache HIT para Kanban (usuário {usuario_id})")
-            _set_memory_cache(usuario_id, cached_data)  # Copiar para memória
-            return render_template('kanban/index.html', **cached_data, Item=Item)
-        
-        current_app.logger.info(f"🔄 Cache MISS para Kanban (usuário {usuario_id})")
+    current_app.logger.info(f"🔄 Cache MISS para Kanban")
     
     listas = get_kanban_lists()
     categorias = get_kanban_categories()
@@ -386,11 +362,9 @@ def index():
         'metricas_listas_json': json.dumps(metricas_listas)
     }
     
-    # Cachear dados por 5 minutos (300 segundos)
-    _set_memory_cache(usuario_id, template_data)  # Cache em memória sempre
-    if CACHE_AVAILABLE and cache:
-        cache.set(cache_key, template_data, ttl=300)  # 5 minutos
-        current_app.logger.info(f" Dados do Kanban cacheados para usuário {usuario_id}")
+    # Cachear dados por 5 minutos (300 segundos) - chave global
+    _kanban_memory_cache[cache_key_global] = template_data
+    current_app.logger.info(f" Dados do Kanban cacheados (chave: {cache_key_global})")
     
     return render_template('kanban/index.html', **template_data, Item=Item)
 
