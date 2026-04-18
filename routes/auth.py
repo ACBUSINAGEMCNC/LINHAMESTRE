@@ -25,6 +25,7 @@ def _refresh_user_session(usuario):
     session['acesso_valores_itens'] = bool(getattr(usuario, 'acesso_valores_itens', False) or _is_master_admin(usuario))
     session['usuario_admin_master'] = _is_master_admin(usuario)
     session['pode_finalizar_os'] = usuario.pode_finalizar_os
+    session['pode_gerenciar_apontamentos'] = bool(getattr(usuario, 'pode_gerenciar_apontamentos', False))
 
 
 def _resolve_acesso_valores_itens(request_form, actor_usuario, current_usuario=None):

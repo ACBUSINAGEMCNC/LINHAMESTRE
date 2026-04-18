@@ -2907,7 +2907,7 @@ def gerenciar_apontamentos_ativos():
     # Paginação "Mostrar Mais": carregar 20 iniciais, depois +20 a cada clique
     limit = request.args.get('limit', 20, type=int)
     
-    # Buscar apontamentos: ativos primeiro, depois finalizados (ordenados por data_fim desc)
+    # Buscar somente apontamentos em andamento
     # NOTA: 'stop' não é incluído pois é apenas um marcador de fechamento
     apontamentos_query = ApontamentoProducao.query.options(
         joinedload(ApontamentoProducao.ordem_servico)
@@ -2917,17 +2917,16 @@ def gerenciar_apontamentos_ativos():
         joinedload(ApontamentoProducao.item),
         joinedload(ApontamentoProducao.trabalho)
     ).filter(
-        ApontamentoProducao.tipo_acao.in_(['inicio_setup', 'inicio_producao', 'pausa'])
+        ApontamentoProducao.tipo_acao.in_(['inicio_setup', 'inicio_producao', 'pausa']),
+        ApontamentoProducao.data_fim.is_(None)
     ).order_by(
-        # Ativos primeiro (data_fim NULL), depois finalizados por data_fim DESC (mais recente primeiro)
-        ApontamentoProducao.data_fim.asc().nullsfirst(),
-        ApontamentoProducao.data_fim.desc(),
         ApontamentoProducao.data_hora.desc()
     ).limit(limit).all()
     
-    # Contar total de apontamentos disponíveis
+    # Contar total de apontamentos em andamento disponíveis
     total_apontamentos = ApontamentoProducao.query.filter(
-        ApontamentoProducao.tipo_acao.in_(['inicio_setup', 'inicio_producao', 'pausa'])
+        ApontamentoProducao.tipo_acao.in_(['inicio_setup', 'inicio_producao', 'pausa']),
+        ApontamentoProducao.data_fim.is_(None)
     ).count()
     
     return render_template('apontamento/gerenciar_ativos.html', 
