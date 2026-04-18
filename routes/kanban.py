@@ -49,20 +49,47 @@ def verificar_permissao_kanban():
         flash('Você não tem permissão para acessar a área Kanban', 'danger')
         return redirect(url_for('main.index'))
 
+# Cache em memória simples para desenvolvimento (fallback quando cache externo não disponível)
+_kanban_memory_cache = {}
+
+def _get_memory_cache(usuario_id):
+    """Busca do cache em memória se ainda válido (< 5 minutos)"""
+    key = f"kanban:{usuario_id}"
+    entry = _kanban_memory_cache.get(key)
+    if entry:
+        data, ts = entry
+        if (datetime.now() - ts).seconds < 300:  # 5 minutos
+            return data
+        else:
+            del _kanban_memory_cache[key]
+    return None
+
+def _set_memory_cache(usuario_id, data):
+    """Salva no cache em memória"""
+    _kanban_memory_cache[f"kanban:{usuario_id}"] = (data, datetime.now())
+
 @kanban.route('/kanban')
 @monitor_route_performance
 def index():
     """Rota para a página principal do Kanban"""
-    # Tentar buscar do cache (TTL: 2 minutos) se disponível
+    # Tentar buscar do cache (TTL: 5 minutos) se disponível
     usuario_id = session.get('usuario_id')
     cached_data = None
     
-    if CACHE_AVAILABLE and cache:
+    # Cache em memória primeiro (mais rápido)
+    cached_data = _get_memory_cache(usuario_id)
+    if cached_data:
+        current_app.logger.info(f"📦 Memory Cache HIT para Kanban (usuário {usuario_id})")
+        return render_template('kanban/index.html', **cached_data, Item=Item)
+    
+    # Cache externo (Redis/Memcached)
+    if CACHE_AVAILABLE and cache and not cached_data:
         cache_key = f"kanban:metricas:{usuario_id}"
         cached_data = cache.get(cache_key)
         
         if cached_data:
-            current_app.logger.info(f"📦 Cache HIT para Kanban (usuário {usuario_id})")
+            current_app.logger.info(f"📦 External Cache HIT para Kanban (usuário {usuario_id})")
+            _set_memory_cache(usuario_id, cached_data)  # Copiar para memória
             return render_template('kanban/index.html', **cached_data, Item=Item)
         
         current_app.logger.info(f"🔄 Cache MISS para Kanban (usuário {usuario_id})")
@@ -143,43 +170,13 @@ def index():
             continue
         apontado_por_os_trabalho[int(ordem_id)][int(trabalho_id)] = _to_int(tempo_total, 0)
 
-    # OTIMIZAÇÃO: Pré-carregar todos os ItemTrabalho e Trabalho usando joinedload
-    # e cachear em dicionários para evitar N+1 queries dentro dos loops
+    # OTIMIZAÇÃO: Buscar todas as ordens de uma vez com eager loading completo
     todos_item_trabalhos = {}
     todos_trabalhos = {}
-    
-    # Coletar todos os IDs de itens das OS já carregadas (sem query extra)
     todos_item_ids = set()
-    for lista in listas:
-        ordens_lista = OrdemServico.query.filter_by(status=lista)\
-            .options(
-                db.joinedload(OrdemServico.pedidos)
-                  .joinedload(PedidoOrdemServico.pedido)
-            ).all()
-        for ordem in ordens_lista:
-            for pedido_os in ordem.pedidos:
-                pedido = pedido_os.pedido
-                if pedido and pedido.item_id:
-                    todos_item_ids.add(pedido.item_id)
     
-    # Carregar todos os ItemTrabalho e Trabalho de uma vez só
-    if todos_item_ids:
-        item_trabalhos_rows = ItemTrabalho.query.filter(
-            ItemTrabalho.item_id.in_(todos_item_ids)
-        ).options(
-            db.joinedload(ItemTrabalho.trabalho)  # Eager load trabalho
-        ).all()
-        
-        # Agrupar por item_id
-        for it in item_trabalhos_rows:
-            if it.item_id not in todos_item_trabalhos:
-                todos_item_trabalhos[it.item_id] = []
-            todos_item_trabalhos[it.item_id].append(it)
-            if it.trabalho:
-                todos_trabalhos[it.trabalho_id] = it.trabalho
-    
+    # Primeiro passo: carregar todas as ordens com todos os relacionamentos necessários
     for lista in listas:
-        # Buscar ordens normais com eager loading para evitar N+1 queries
         ordens[lista] = OrdemServico.query.filter_by(status=lista)\
             .options(
                 db.joinedload(OrdemServico.pedidos)
@@ -190,6 +187,30 @@ def index():
                   .joinedload(Pedido.cliente)
             )\
             .order_by(OrdemServico.posicao.asc(), OrdemServico.id.asc()).all()
+        
+        # Coletar IDs de itens para pré-carregar ItemTrabalho
+        for ordem in ordens[lista]:
+            for pedido_os in ordem.pedidos:
+                pedido = pedido_os.pedido
+                if pedido and pedido.item_id:
+                    todos_item_ids.add(pedido.item_id)
+    
+    # Carregar todos os ItemTrabalho e Trabalho de uma vez só
+    if todos_item_ids:
+        item_trabalhos_rows = ItemTrabalho.query.filter(
+            ItemTrabalho.item_id.in_(todos_item_ids)
+        ).options(
+            db.joinedload(ItemTrabalho.trabalho)
+        ).all()
+        
+        for it in item_trabalhos_rows:
+            if it.item_id not in todos_item_trabalhos:
+                todos_item_trabalhos[it.item_id] = []
+            todos_item_trabalhos[it.item_id].append(it)
+            if it.trabalho:
+                todos_trabalhos[it.trabalho_id] = it.trabalho
+    
+    for lista in listas:
         
         # Buscar cartões fantasma ativos para esta lista
         cartoes_fantasma[lista] = CartaoFantasma.query.filter_by(
@@ -365,9 +386,10 @@ def index():
         'metricas_listas_json': json.dumps(metricas_listas)
     }
     
-    # Cachear dados por 2 minutos (120 segundos) se cache disponível
+    # Cachear dados por 5 minutos (300 segundos)
+    _set_memory_cache(usuario_id, template_data)  # Cache em memória sempre
     if CACHE_AVAILABLE and cache:
-        cache.set(cache_key, template_data, ttl=120)
+        cache.set(cache_key, template_data, ttl=300)  # 5 minutos
         current_app.logger.info(f" Dados do Kanban cacheados para usuário {usuario_id}")
     
     return render_template('kanban/index.html', **template_data, Item=Item)
