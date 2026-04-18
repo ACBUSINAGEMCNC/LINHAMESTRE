@@ -2929,11 +2929,15 @@ def gerenciar_apontamentos_ativos():
         ApontamentoProducao.data_fim.is_(None)
     ).count()
     
+    # Passar hora atual do servidor para calcular tempo decorrido no template
+    server_now = datetime.now(LOCAL_TZ).replace(tzinfo=None)
+    
     return render_template('apontamento/gerenciar_ativos.html', 
                          apontamentos=apontamentos_query,
                          total_apontamentos=total_apontamentos,
                          limit_atual=limit,
-                         usuario=usuario)
+                         usuario=usuario,
+                         server_now=server_now)
 
 
 @apontamento_bp.route('/gerenciar-ultimos')

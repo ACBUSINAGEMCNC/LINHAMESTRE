@@ -841,6 +841,16 @@ function renderizarChipsStatus(ordemId, ativosLista) {
         const motivoLine = chipClass === 'chip-pausa' && (ap.motivo_pausa || ap.motivo_parada)
             ? `<span class="chip-motivo small">Motivo: ${ap.motivo_pausa || ap.motivo_parada}</span>`
             : '';
+        // Pré-calcular tempo decorrido para evitar flash de 00:00:00
+        let timerText = '00:00:00';
+        if (inicio) {
+            const startTs = clampStartTimestamp(parseStartTimestamp(inicio));
+            const elSec = Math.max(0, Math.floor((Date.now() - startTs) / 1000));
+            const hh = Math.floor(elSec / 3600).toString().padStart(2, '0');
+            const mm = Math.floor((elSec % 3600) / 60).toString().padStart(2, '0');
+            const ss = (elSec % 60).toString().padStart(2, '0');
+            timerText = `${hh}:${mm}:${ss}`;
+        }
         frags.push(
             `<span class="apontamento-chip ${chipClass}" data-item-id="${itemId}" data-trabalho-id="${trabId}">`
           +   `<div class="chip-row">`
@@ -849,7 +859,7 @@ function renderizarChipsStatus(ordemId, ativosLista) {
           +        opLine
           +        motivoLine
           +     `</div>`
-          +     `<span class="apontamento-timer" id="timer-${ordemId}-${itemId}-${trabId}">00:00:00</span>`
+          +     `<span class="apontamento-timer" id="timer-${ordemId}-${itemId}-${trabId}">${timerText}</span>`
           +   `</div>`
           + `</span>`
         );
@@ -867,21 +877,19 @@ function renderizarChipsStatus(ordemId, ativosLista) {
         // Cartões fantasma agora mostram o mesmo conteúdo que os reais (sem badge "Fantasma")
         container.innerHTML = htmlContent;
         
-        // Iniciar timers para todos os apontamentos renderizados
+        // Iniciar timers para todos os apontamentos renderizados (sem delay)
         if (!isFantasma) {
             ativosLista.forEach(ap => {
                 const itemId = ap.item_id;
                 const trabId = ap.trabalho_id;
                 const inicio = ap.inicio_acao;
                 
-                setTimeout(() => {
-                    const timerId = `timer-${ordemId}-${itemId}-${trabId}`;
-                    const timerEl = document.getElementById(timerId);
-                    
-                    if (timerEl) {
-                        iniciarTimerTrabalho(ordemId, itemId, trabId, inicio);
-                    }
-                }, 100);
+                const timerId = `timer-${ordemId}-${itemId}-${trabId}`;
+                const timerEl = document.getElementById(timerId);
+                
+                if (timerEl) {
+                    iniciarTimerTrabalho(ordemId, itemId, trabId, inicio);
+                }
             });
         }
         

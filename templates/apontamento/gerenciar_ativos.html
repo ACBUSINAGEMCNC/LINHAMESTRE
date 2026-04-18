@@ -145,8 +145,10 @@
                                         {% endif %}
                                     </span>
                                 {% else %}
-                                    <span class="timer-display badge bg-secondary" data-inicio="{{ apontamento.data_hora.isoformat() if apontamento.data_hora else '' }}">
-                                        00:00:00
+                                    {% set elapsed = ((server_now - apontamento.data_hora).total_seconds()|int) if apontamento.data_hora else 0 %}
+                                    {% if elapsed < 0 %}{% set elapsed = 0 %}{% endif %}
+                                    <span class="timer-display badge bg-secondary" data-elapsed="{{ elapsed }}">
+                                        {{ '%02d:%02d:%02d' % (elapsed // 3600, (elapsed % 3600) // 60, elapsed % 60) }}
                                     </span>
                                 {% endif %}
                             </td>
@@ -250,31 +252,25 @@
 
 <script>
 document.addEventListener('DOMContentLoaded', function() {
-    // Atualizar timers a cada segundo
+    // Atualizar timers a cada segundo (usa elapsed seconds calculados pelo servidor)
     function atualizarTimers() {
         document.querySelectorAll('.timer-display').forEach(function(el) {
-            const inicio = el.getAttribute('data-inicio');
-            if (!inicio) return;
+            let elapsed = parseInt(el.getAttribute('data-elapsed') || '0', 10);
+            if (isNaN(elapsed) || elapsed < 0) elapsed = 0;
             
-            const inicioDate = new Date(inicio);
-            const agora = new Date();
-            const diff = Math.floor((agora - inicioDate) / 1000);
+            // Incrementar 1 segundo
+            elapsed += 1;
+            el.setAttribute('data-elapsed', elapsed);
             
-            if (diff < 0) {
-                el.textContent = '00:00:00';
-                return;
-            }
-            
-            const horas = Math.floor(diff / 3600);
-            const minutos = Math.floor((diff % 3600) / 60);
-            const segundos = diff % 60;
+            const horas = Math.floor(elapsed / 3600);
+            const minutos = Math.floor((elapsed % 3600) / 60);
+            const segundos = elapsed % 60;
             
             el.textContent = `${String(horas).padStart(2, '0')}:${String(minutos).padStart(2, '0')}:${String(segundos).padStart(2, '0')}`;
         });
     }
     
-    // Atualizar imediatamente e depois a cada segundo
-    atualizarTimers();
+    // Atualizar a cada segundo (valor inicial já calculado no servidor)
     setInterval(atualizarTimers, 1000);
     
     // Botão Editar
