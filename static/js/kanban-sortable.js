@@ -17,9 +17,9 @@ document.addEventListener('DOMContentLoaded', function() {
             animation: 200, // Animação mais suave
             easing: 'cubic-bezier(0.25, 0.8, 0.25, 1)', // Easing mais natural
             handle: isTouchDevice ? '.drag-handle' : undefined,
-            delay: 350,
+            delay: isTouchDevice ? 500 : 150, // Delay maior para touch devices
             delayOnTouchOnly: true,
-            touchStartThreshold: 10, // Menos sensível para evitar arrastar acidental
+            touchStartThreshold: 15, // Mais sensível para facilitar arrastar no mobile
             dragClass: 'sortable-drag',
             ghostClass: 'sortable-ghost',
             chosenClass: 'sortable-chosen',
@@ -27,7 +27,7 @@ document.addEventListener('DOMContentLoaded', function() {
             forceFallback: isIOS,
             fallbackClass: 'sortable-fallback',
             fallbackOnBody: true,
-            fallbackTolerance: isIOS ? 6 : 0,
+            fallbackTolerance: isIOS ? 8 : 0, // Aumentado para melhor experiência no iOS
             swapThreshold: 0.5, // Threshold mais responsivo
             invertSwap: true, // Melhor experiência ao trocar posições
             // No iOS o preventDefault em elementos filtrados pode quebrar cliques (ex.: dropdown Mover)

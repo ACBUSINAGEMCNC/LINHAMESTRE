@@ -340,6 +340,33 @@
             color: #6c757d;
             text-align: right;
         }
+        .service-status-badge {
+            display: inline-flex;
+            align-items: center;
+            gap: 3px;
+            padding: 2px 6px;
+            border-radius: 10px;
+            font-size: 0.65rem;
+            font-weight: 600;
+            white-space: nowrap;
+        }
+        .service-status-badge.ok {
+            background: #d1e7dd;
+            color: #0f5132;
+        }
+        .service-status-badge.over {
+            background: #f8d7da;
+            color: #842029;
+        }
+        .column-service-item.service-over-estimate {
+            border-left: 3px solid #dc3545;
+        }
+        .column-service-item.service-in-progress {
+            border-left: 3px solid #198754;
+        }
+        .column-service-progress {
+            margin-top: 4px;
+        }
         @media (max-width: 768px) {
             .column-stats-popover-grid {
                 grid-template-columns: 1fr;
@@ -549,9 +576,28 @@
             font-weight: bold;
             color: #0d6efd;
         }
-        .drag-handle { display: none; }
+        .drag-handle { 
+            display: none;
+            color: #6c757d;
+            padding: 8px;
+            border-radius: 4px;
+            background: rgba(255, 255, 255, 0.9);
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+            transition: all 0.2s;
+        }
+        .drag-handle:active {
+            background: rgba(13, 110, 253, 0.1);
+            color: #0d6efd;
+            transform: scale(1.1);
+        }
         @media (hover: none) and (pointer: coarse) {
-            .drag-handle { display: block; }
+            .drag-handle { 
+                display: flex;
+                align-items: center;
+                justify-content: center;
+                min-width: 32px;
+                min-height: 32px;
+            }
         }
         /* Estilos para o Sortable.js */
         .sortable-ghost {
@@ -829,34 +875,36 @@
                                 <strong data-detail-quantidade>{{ metricas_lista.get('quantidade_total', 0) }}</strong>
                             </div>
                         </div>
-                        {% if metricas_lista.get('primeiro_card') %}
-                        <div class="column-popover-section-title">Primeiro Card</div>
-                        <div class="column-top-card-item">
-                            <div class="column-top-card-main">
-                                <span class="column-top-card-name">{{ metricas_lista.primeiro_card.ordem_numero }}: {{ metricas_lista.primeiro_card.titulo }}</span>
-                            </div>
-                            <div class="column-top-card-meta">
-                                <span><i class="fas fa-hourglass-half"></i> {{ metricas_lista.primeiro_card.tempo_restante_label }}</span>
-                                <span><i class="fas fa-cubes"></i> {{ metricas_lista.primeiro_card.quantidade_total }}</span>
-                                <span><i class="fas fa-flag-checkered"></i> {{ metricas_lista.turnos_primeiro_card_label }} T</span>
-                            </div>
-                        </div>
-                        {% endif %}
                         <div class="column-popover-section-title">Serviços (incluir no cálculo)</div>
                         <div class="column-service-list">
                             {% for serv in metricas_lista.get('servicos', []) %}
-                            <label class="column-service-item {% if serv.id not in metricas_lista.get('servicos_ids', []) %}disabled{% endif %}">
+                            <label class="column-service-item {% if serv.id not in metricas_lista.get('servicos_ids', []) %}disabled{% endif %} {% if serv.tempo_apontado_total > serv.tempo_estimado_total %}service-over-estimate{% elif serv.tempo_apontado_total > 0 %}service-in-progress{% endif %}">
                                 <div class="column-service-toggle">
                                     <input type="checkbox" checked data-service-id="{{ serv.id }}" data-service-toggle>
                                     <div style="flex: 1">
                                         <div class="column-service-main">
                                             <span class="column-service-name">{{ serv.nome }}</span>
+                                            {% if serv.tempo_apontado_total > serv.tempo_estimado_total %}
+                                            <span class="service-status-badge over"><i class="fas fa-exclamation-triangle"></i> Acima</span>
+                                            {% elif serv.tempo_apontado_total > 0 %}
+                                            <span class="service-status-badge ok"><i class="fas fa-check-circle"></i> No prazo</span>
+                                            {% endif %}
                                         </div>
                                         <div class="column-service-meta">
-                                            <span><i class="fas fa-stopwatch"></i> {{ serv.tempo_estimado_label }}</span>
-                                            <span><i class="fas fa-clock"></i> {{ serv.tempo_apontado_label }}</span>
-                                            <span><i class="fas fa-hourglass-half"></i> {{ serv.tempo_restante_label }}</span>
+                                            <span title="Tempo estimado total"><i class="fas fa-stopwatch"></i> {{ serv.tempo_estimado_label }}</span>
+                                            <span title="Tempo já apontado"><i class="fas fa-clock"></i> {{ serv.tempo_apontado_label }}</span>
+                                            <span title="Tempo restante"><i class="fas fa-hourglass-half"></i> {{ serv.tempo_restante_label }}</span>
                                         </div>
+                                        {% if serv.quantidade_apontada and serv.quantidade_total %}
+                                        <div class="column-service-progress">
+                                            <div class="progress" style="height: 4px; margin-top: 4px;">
+                                                <div class="progress-bar {% if serv.tempo_apontado_total > serv.tempo_estimado_total %}bg-danger{% else %}bg-success{% endif %}" 
+                                                     style="width: {{ (serv.quantidade_apontada / serv.quantidade_total * 100)|round }}%"
+                                                     title="{{ serv.quantidade_apontada }} de {{ serv.quantidade_total }} peças"></div>
+                                            </div>
+                                            <small class="text-muted" style="font-size: 0.7rem;">{{ serv.quantidade_apontada }}/{{ serv.quantidade_total }} pçs</small>
+                                        </div>
+                                        {% endif %}
                                     </div>
                                 </div>
                             </label>
