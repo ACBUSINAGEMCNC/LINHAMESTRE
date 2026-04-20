@@ -210,6 +210,9 @@ def index():
             card_apontado = 0
             card_qtd = 0
             card_servicos = []
+            # Rastrear setup já adicionado por trabalho nesta OS
+            setup_adicionado_por_trabalho = set()
+            
             for pedido_os in ordem.pedidos:
                 pedido = pedido_os.pedido
                 if pedido.item_id:
@@ -237,7 +240,15 @@ def index():
                         tempo_peca = _to_int(item_trabalho.tempo_real or item_trabalho.tempo_peca, 0)
                         tempo_setup = _to_int(item_trabalho.tempo_setup, 0)
                         qtd_pedido = _to_int(pedido.quantidade, 0)
-                        tempo_estimado_servico = (tempo_peca * qtd_pedido) + tempo_setup
+                        
+                        # Setup deve ser adicionado apenas UMA VEZ por OS+Trabalho
+                        tempo_producao = tempo_peca * qtd_pedido
+                        if item_trabalho.trabalho_id not in setup_adicionado_por_trabalho:
+                            tempo_estimado_servico = tempo_producao + tempo_setup
+                            setup_adicionado_por_trabalho.add(item_trabalho.trabalho_id)
+                        else:
+                            tempo_estimado_servico = tempo_producao
+                        
                         tempo_apontado_servico = apontado_por_os_trabalho.get(ordem.id, {}).get(item_trabalho.trabalho_id, 0)
                         tempo_restante_servico = max(0, tempo_estimado_servico - tempo_apontado_servico)
 
