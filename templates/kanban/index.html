@@ -846,7 +846,15 @@
                                 <span class="column-stats-chip success"><i class="fas fa-cubes"></i> <span data-metric-quantidade>{{ metricas_lista.get('quantidade_total', 0) }}</span></span>
                                 <span class="column-stats-chip warning"><i class="fas fa-layer-group"></i> <span data-metric-cards>{{ metricas_lista.get('cards_total', 0) }}</span></span>
                             </div>
-                            <span class="column-stats-chip primary"><i class="fas fa-flag-checkered"></i> <span data-metric-turnos>{{ metricas_lista.get('turnos_primeiro_card_label', '0.0') }}</span> T</span>
+                            <span class="column-stats-chip primary" title="Turnos faltantes para concluir"><i class="fas fa-flag-checkered"></i> <span data-metric-turnos>{{ metricas_lista.get('turnos_restantes_label', '0.0') }}</span> T</span>
+                        </div>
+                        <div class="column-stats-progress">
+                            <div class="progress" style="height: 6px; margin: 4px 0;">
+                                <div class="progress-bar bg-success" 
+                                     style="width: {{ metricas_lista.get('progresso_percentual', 0) }}%"
+                                     data-metric-progress-bar
+                                     title="{{ metricas_lista.get('progresso_percentual', 0)|round }}% concluído"></div>
+                            </div>
                         </div>
                         <div class="column-stats-subline">
                             <div class="column-stats-summary">
@@ -871,8 +879,16 @@
                                 <strong data-detail-estimado>{{ metricas_lista.get('tempo_estimado_label', '0m') }}</strong>
                             </div>
                             <div class="column-metric-card">
+                                <small>Turnos faltantes</small>
+                                <strong data-detail-turnos>{{ metricas_lista.get('turnos_restantes_label', '0.0') }} T</strong>
+                            </div>
+                            <div class="column-metric-card">
                                 <small>Quantidade de peças</small>
                                 <strong data-detail-quantidade>{{ metricas_lista.get('quantidade_total', 0) }}</strong>
+                            </div>
+                            <div class="column-metric-card">
+                                <small>Progresso geral</small>
+                                <strong data-detail-progresso>{{ metricas_lista.get('progresso_percentual', 0)|round }}%</strong>
                             </div>
                         </div>
                         <div class="column-popover-section-title">Serviços (incluir no cálculo)</div>
@@ -4271,24 +4287,22 @@
             const tempoRestanteTotal = Math.max(0, tempoEstimadoTotal - tempoApontadoTotal);
             const cardsTotal = metricasBase.cards_total || 0;
 
-            let turnosPrimeiro = 0;
-            if (metricasBase.primeiro_card) {
-                const primeiroCard = metricasBase.primeiro_card;
-                let cardEstimado = 0;
-                let cardApontado = 0;
-                for (const serv of (primeiroCard.servicos || [])) {
-                    if (servicosIdsAtivos.includes(serv.id)) {
-                        cardEstimado += serv.tempo_estimado || 0;
-                        cardApontado += serv.tempo_apontado || 0;
-                    }
-                }
-                const cardRestante = Math.max(0, cardEstimado - cardApontado);
-                turnosPrimeiro = SEGUNDOS_POR_TURNO ? (cardRestante / SEGUNDOS_POR_TURNO) : 0;
-            }
+            // Calcular turnos restantes baseado no tempo restante total
+            const turnosRestantes = SEGUNDOS_POR_TURNO ? (tempoRestanteTotal / SEGUNDOS_POR_TURNO) : 0;
+
+            // Calcular progresso percentual
+            const progressoPercentual = tempoEstimadoTotal > 0 
+                ? Math.min(100, (tempoApontadoTotal / tempoEstimadoTotal) * 100)
+                : 0;
 
             const atualizarLabel = (sel, valor) => {
                 const el = container.querySelector(sel);
                 if (el) el.textContent = valor;
+            };
+
+            const atualizarAtributo = (sel, attr, valor) => {
+                const el = container.querySelector(sel);
+                if (el) el.setAttribute(attr, valor);
             };
 
             atualizarLabel('[data-metric-restante]', formatarTempoLabel(tempoRestanteTotal));
@@ -4296,11 +4310,20 @@
             atualizarLabel('[data-metric-cards]', cardsTotal);
             atualizarLabel('[data-metric-apontado]', formatarTempoLabel(tempoApontadoTotal));
             atualizarLabel('[data-metric-estimado]', formatarTempoLabel(tempoEstimadoTotal));
-            atualizarLabel('[data-metric-turnos]', turnosPrimeiro.toFixed(1));
+            atualizarLabel('[data-metric-turnos]', turnosRestantes.toFixed(1));
             atualizarLabel('[data-detail-apontado]', formatarTempoLabel(tempoApontadoTotal));
             atualizarLabel('[data-detail-restante]', formatarTempoLabel(tempoRestanteTotal));
             atualizarLabel('[data-detail-estimado]', formatarTempoLabel(tempoEstimadoTotal));
+            atualizarLabel('[data-detail-turnos]', turnosRestantes.toFixed(1) + ' T');
             atualizarLabel('[data-detail-quantidade]', quantidadeTotal);
+            atualizarLabel('[data-detail-progresso]', Math.round(progressoPercentual) + '%');
+            
+            // Atualizar barra de progresso
+            const progressBar = container.querySelector('[data-metric-progress-bar]');
+            if (progressBar) {
+                progressBar.style.width = progressoPercentual + '%';
+                progressBar.setAttribute('title', Math.round(progressoPercentual) + '% concluído');
+            }
         }
 
         document.addEventListener('DOMContentLoaded', function() {
