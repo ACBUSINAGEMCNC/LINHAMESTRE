@@ -1,0 +1,531 @@
+{% extends "base.html" %}
+
+{% block title %}Lista de Retirada {{ lista.numero }} - Estoque de Peças{% endblock %}
+
+{% block extra_css %}
+<link href="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/css/select2.min.css" rel="stylesheet" />
+<link href="https://cdn.jsdelivr.net/npm/select2-bootstrap-5-theme@1.3.0/dist/select2-bootstrap-5-theme.min.css" rel="stylesheet" />
+<style>
+    .hero-card {
+        background: linear-gradient(135deg, #0d6efd 0%, #0b5ed7 60%, #084298 100%);
+        color: #fff;
+        border: 0;
+        border-radius: 18px;
+    }
+    
+    .metric-box {
+        border: 1px solid rgba(255, 255, 255, 0.18);
+        border-radius: 14px;
+        padding: 12px 14px;
+        background: rgba(255, 255, 255, 0.08);
+    }
+    
+    .item-thumb {
+        width: 54px;
+        height: 54px;
+        object-fit: cover;
+        border-radius: 10px;
+        border: 1px solid #dee2e6;
+        background: #fff;
+    }
+    
+    .item-thumb-placeholder {
+        width: 54px;
+        height: 54px;
+        border-radius: 10px;
+        border: 1px dashed #ced4da;
+        color: #adb5bd;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        background: #f8f9fa;
+    }
+    
+    .select2-container--bootstrap-5 .select2-selection {
+        min-height: calc(3.1rem + 2px);
+    }
+    
+    /* Impressão profissional */
+    @media print {
+        .no-print { display: none !important; }
+        
+        body {
+            font-size: 11px;
+            color: #000;
+            background: #fff;
+        }
+        
+        .hero-card {
+            background: #fff !important;
+            color: #000 !important;
+            border: 2px solid #000 !important;
+            page-break-after: avoid;
+        }
+        
+        .card {
+            border: 1px solid #000 !important;
+            box-shadow: none !important;
+            page-break-inside: avoid;
+        }
+        
+        table {
+            border-collapse: collapse !important;
+            width: 100%;
+        }
+        
+        table th, table td {
+            border: 1px solid #000 !important;
+            padding: 6px !important;
+        }
+        
+        table thead {
+            background: #f0f0f0 !important;
+            font-weight: bold;
+        }
+        
+        .item-thumb {
+            width: 48px;
+            height: 48px;
+            border: 1px solid #000;
+        }
+        
+        .badge {
+            border: 1px solid #000 !important;
+            color: #000 !important;
+            background: #fff !important;
+        }
+        
+        h1, h2, h3, h4, h5 {
+            color: #000 !important;
+        }
+        
+        .print-header {
+            text-align: center;
+            margin-bottom: 20px;
+            border-bottom: 2px solid #000;
+            padding-bottom: 10px;
+        }
+        
+        .print-footer {
+            margin-top: 30px;
+            border-top: 2px solid #000;
+            padding-top: 10px;
+        }
+        
+        .signature-box {
+            border: 1px solid #000;
+            min-height: 80px;
+            padding: 10px;
+        }
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="container-fluid py-4">
+    <!-- Cabeçalho para impressão -->
+    <div class="print-header d-none d-print-block">
+        <h2>ACB USINAGEM CNC</h2>
+        <h3>LISTA DE RETIRADA DE PEÇAS</h3>
+        <p><strong>Número:</strong> {{ lista.numero }} | <strong>Data:</strong> {{ gerado_em }}</p>
+    </div>
+
+    <!-- Hero Card -->
+    <div class="card hero-card mb-4 no-print">
+        <div class="card-body p-4">
+            <div class="row g-4 align-items-center">
+                <div class="col-lg-7">
+                    <div class="d-flex align-items-center gap-3 mb-3">
+                        <div class="bg-white bg-opacity-10 rounded-3 px-3 py-2">
+                            <i class="fas fa-list-check fa-lg"></i>
+                        </div>
+                        <div>
+                            <h1 class="h3 mb-1">{{ lista.numero }}</h1>
+                            <p class="mb-0 opacity-75">{{ lista.referencia or 'Lista de Retirada de Peças' }}</p>
+                        </div>
+                    </div>
+                    <div class="row g-3">
+                        <div class="col-sm-3">
+                            <div class="metric-box">
+                                <div class="small opacity-75">Status</div>
+                                <div class="fw-bold">
+                                    {% if lista.status == 'baixada' %}
+                                    <i class="fas fa-check-circle text-success"></i> BAIXADA
+                                    {% elif lista.status == 'cancelada' %}
+                                    <i class="fas fa-times-circle text-danger"></i> CANCELADA
+                                    {% else %}
+                                    <i class="fas fa-edit text-warning"></i> RASCUNHO
+                                    {% endif %}
+                                </div>
+                            </div>
+                        </div>
+                        <div class="col-sm-3">
+                            <div class="metric-box">
+                                <div class="small opacity-75">Itens</div>
+                                <div class="fw-bold">{{ total_itens }}</div>
+                            </div>
+                        </div>
+                        <div class="col-sm-3">
+                            <div class="metric-box">
+                                <div class="small opacity-75">Peças</div>
+                                <div class="fw-bold">{{ total_quantidade }}</div>
+                            </div>
+                        </div>
+                        {% if pode_ver_valores %}
+                        <div class="col-sm-3">
+                            <div class="metric-box">
+                                <div class="small opacity-75">Valor</div>
+                                <div class="fw-bold">R$ {{ '%.2f'|format(total_valor) }}</div>
+                            </div>
+                        </div>
+                        {% endif %}
+                    </div>
+                </div>
+                <div class="col-lg-5">
+                    <div class="d-flex flex-wrap justify-content-lg-end gap-2">
+                        <a href="{{ url_for('lista_retirada.historico') }}" class="btn btn-outline-light">
+                            <i class="fas fa-history me-1"></i> Histórico
+                        </a>
+                        <form method="POST" action="{{ url_for('lista_retirada.nova') }}" class="d-inline">
+                            <button type="submit" class="btn btn-light text-primary fw-semibold">
+                                <i class="fas fa-plus me-1"></i> Nova Lista
+                            </button>
+                        </form>
+                        {% if itens_lista %}
+                        <button type="button" onclick="window.print()" class="btn btn-outline-light">
+                            <i class="fas fa-print me-1"></i> Imprimir
+                        </button>
+                        {% endif %}
+                        <a href="{{ url_for('estoque_pecas.index') }}" class="btn btn-outline-light">
+                            <i class="fas fa-arrow-left me-1"></i> Voltar
+                        </a>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    {% with messages = get_flashed_messages(with_categories=true) %}
+    {% if messages %}
+    <div class="no-print">
+        {% for category, message in messages %}
+        <div class="alert alert-{{ category }} alert-dismissible fade show" role="alert">
+            {{ message }}
+            <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+        </div>
+        {% endfor %}
+    </div>
+    {% endif %}
+    {% endwith %}
+
+    <div class="row g-4">
+        <!-- Coluna Esquerda: Formulários -->
+        <div class="col-12 col-xxl-4 no-print">
+            <!-- Dados da Lista -->
+            <div class="card mb-4">
+                <div class="card-header d-flex justify-content-between align-items-center">
+                    <div>
+                        <h5 class="mb-0"><i class="fas fa-folder-open me-2"></i>Dados da Lista</h5>
+                        <small class="text-muted">Informações gerais</small>
+                    </div>
+                    <span class="badge {% if lista.status == 'baixada' %}bg-success{% elif lista.status == 'cancelada' %}bg-danger{% else %}bg-secondary{% endif %}">
+                        {{ lista.status|upper }}
+                    </span>
+                </div>
+                <div class="card-body">
+                    <form method="POST" action="{{ url_for('lista_retirada.atualizar_dados', lista_id=lista.id) }}">
+                        <div class="mb-3">
+                            <label class="form-label">Número</label>
+                            <input type="text" class="form-control" value="{{ lista.numero }}" readonly>
+                        </div>
+                        <div class="mb-3">
+                            <label for="referencia" class="form-label">Referência</label>
+                            <input type="text" class="form-control" id="referencia" name="referencia" 
+                                   value="{{ lista.referencia or '' }}" 
+                                   placeholder="OS, pedido, setor..."
+                                   {% if lista.status == 'baixada' %}readonly{% endif %}>
+                        </div>
+                        <div class="mb-3">
+                            <label for="responsavel" class="form-label">Responsável</label>
+                            <input type="text" class="form-control" id="responsavel" name="responsavel" 
+                                   value="{{ lista.responsavel or '' }}" 
+                                   placeholder="Quem solicitou"
+                                   {% if lista.status == 'baixada' %}readonly{% endif %}>
+                        </div>
+                        <div class="mb-3">
+                            <label for="observacao" class="form-label">Observação</label>
+                            <textarea class="form-control" id="observacao" name="observacao" rows="3" 
+                                      placeholder="Instruções gerais"
+                                      {% if lista.status == 'baixada' %}readonly{% endif %}>{{ lista.observacao or '' }}</textarea>
+                        </div>
+                        {% if lista.status != 'baixada' %}
+                        <button type="submit" class="btn btn-outline-primary w-100">
+                            <i class="fas fa-save"></i> Salvar Dados
+                        </button>
+                        {% endif %}
+                    </form>
+                </div>
+                <div class="card-footer bg-light">
+                    <div class="row g-2 small text-muted">
+                        <div class="col-12"><strong>Criada em:</strong> {{ gerado_em }}</div>
+                        {% if lista.baixado_em %}
+                        <div class="col-12"><strong>Baixada em:</strong> {{ baixado_em }}</div>
+                        {% endif %}
+                    </div>
+                </div>
+            </div>
+
+            <!-- Adicionar Itens -->
+            {% if lista.status == 'rascunho' %}
+            <div class="card mb-4">
+                <div class="card-header">
+                    <h5 class="mb-0"><i class="fas fa-plus-circle me-2"></i>Adicionar Itens</h5>
+                    <small class="text-muted">Pesquise e adicione peças</small>
+                </div>
+                <div class="card-body">
+                    <form method="POST" action="{{ url_for('lista_retirada.adicionar_item', lista_id=lista.id) }}">
+                        <div class="mb-3">
+                            <label for="estoque_id" class="form-label">Pesquisar peça</label>
+                            <select class="form-select select2" id="estoque_id" name="estoque_id" required>
+                                <option value="">Digite código ou nome</option>
+                                {% for item in estoque_lista %}
+                                <option value="{{ item.id }}" 
+                                        data-codigo="{{ item.item.codigo_acb }}" 
+                                        data-nome="{{ item.item.nome }}" 
+                                        data-imagem="{{ get_file_url(item.item.imagem_path) if item.item.imagem_path else '' }}" 
+                                        data-qty="{{ item.quantidade }}">
+                                    {{ item.item.codigo_acb }} - {{ item.item.nome }} (Disp: {{ item.quantidade }})
+                                </option>
+                                {% endfor %}
+                            </select>
+                        </div>
+                        <div class="row g-2">
+                            <div class="col-md-4">
+                                <label for="quantidade" class="form-label">Quantidade</label>
+                                <input type="number" class="form-control" id="quantidade" name="quantidade" min="1" value="1" required>
+                            </div>
+                            <div class="col-md-8">
+                                <label for="observacao_item" class="form-label">Obs. Item</label>
+                                <input type="text" class="form-control" id="observacao_item" name="observacao_item" placeholder="Opcional">
+                            </div>
+                        </div>
+                        <div class="mt-3 d-grid">
+                            <button type="submit" class="btn btn-success">
+                                <i class="fas fa-plus-circle"></i> Adicionar
+                            </button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+
+            <!-- Importar do Estoque -->
+            <div class="card">
+                <div class="card-header">
+                    <h5 class="mb-0"><i class="fas fa-file-import me-2"></i>Importar do Estoque</h5>
+                    <small class="text-muted">Selecione múltiplas peças de uma vez</small>
+                </div>
+                <div class="card-body">
+                    <a href="{{ url_for('estoque_pecas.index') }}?modo_selecao=lista&lista_id={{ lista.id }}" class="btn btn-primary w-100">
+                        <i class="fas fa-boxes me-2"></i> Ir para Estoque e Selecionar
+                    </a>
+                    <small class="text-muted d-block mt-2">
+                        <i class="fas fa-info-circle"></i> Marque as peças no estoque e importe para esta lista
+                    </small>
+                </div>
+            </div>
+            {% endif %}
+        </div>
+
+        <!-- Coluna Direita: Tabela de Itens -->
+        <div class="col-12 col-xxl-8">
+            <div class="card">
+                <div class="card-header d-flex justify-content-between align-items-center">
+                    <div>
+                        <h5 class="mb-0"><i class="fas fa-clipboard-list me-2"></i>Itens da Lista</h5>
+                        <small class="text-muted">{{ total_itens }} itens | {{ total_quantidade }} peças</small>
+                    </div>
+                    {% if pode_ver_valores %}
+                    <div class="text-end">
+                        <strong>Valor Total:</strong> R$ {{ '%.2f'|format(total_valor) }}
+                    </div>
+                    {% endif %}
+                </div>
+                <div class="card-body p-0">
+                    {% if itens_lista %}
+                    <div class="table-responsive">
+                        <table class="table table-hover table-striped align-middle mb-0">
+                            <thead class="table-light">
+                                <tr>
+                                    <th width="70">Imagem</th>
+                                    <th width="120">Código</th>
+                                    <th>Peça</th>
+                                    <th width="80">Qtd.</th>
+                                    <th width="100">Disponível</th>
+                                    <th width="140">Endereço</th>
+                                    {% if pode_ver_valores %}
+                                    <th width="110">Valor Unit.</th>
+                                    <th width="120">Valor Total</th>
+                                    {% endif %}
+                                    <th>Obs.</th>
+                                    {% if lista.status == 'rascunho' %}
+                                    <th width="90" class="no-print">Ações</th>
+                                    {% endif %}
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for item in itens_lista %}
+                                <tr>
+                                    <td class="text-center">
+                                        {% if item.imagem_path %}
+                                        <img src="{{ item.imagem_path }}" alt="{{ item.nome }}" class="item-thumb">
+                                        {% else %}
+                                        <span class="item-thumb-placeholder"><i class="fas fa-image"></i></span>
+                                        {% endif %}
+                                    </td>
+                                    <td><strong>{{ item.codigo_acb }}</strong></td>
+                                    <td>{{ item.nome }}</td>
+                                    <td><span class="badge bg-primary">{{ item.quantidade_solicitada }}</span></td>
+                                    <td>{{ item.quantidade_disponivel }}</td>
+                                    <td><code>{{ item.localizacao }}</code></td>
+                                    {% if pode_ver_valores %}
+                                    <td>R$ {{ '%.2f'|format(item.valor_unitario) }}</td>
+                                    <td><strong>R$ {{ '%.2f'|format(item.valor_total) }}</strong></td>
+                                    {% endif %}
+                                    <td><small>{{ item.observacao_item or '-' }}</small></td>
+                                    {% if lista.status == 'rascunho' %}
+                                    <td class="no-print">
+                                        <form method="POST" action="{{ url_for('lista_retirada.remover_item', lista_id=lista.id, item_id=item.id) }}" class="d-inline">
+                                            <button type="submit" class="btn btn-sm btn-outline-danger" onclick="return confirm('Remover este item?')">
+                                                <i class="fas fa-trash"></i>
+                                            </button>
+                                        </form>
+                                    </td>
+                                    {% endif %}
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                    {% else %}
+                    <div class="text-center py-5 text-muted">
+                        <i class="fas fa-clipboard-list fa-3x mb-3"></i>
+                        <div>Nenhum item adicionado</div>
+                        <div class="small">Use o formulário ao lado para adicionar peças</div>
+                    </div>
+                    {% endif %}
+                </div>
+                {% if itens_lista %}
+                <div class="card-footer bg-light d-flex justify-content-between align-items-center no-print">
+                    <button type="button" onclick="window.print()" class="btn btn-primary">
+                        <i class="fas fa-print"></i> Imprimir
+                    </button>
+                    {% if lista.status == 'rascunho' %}
+                    <div class="btn-group">
+                        <form method="POST" action="{{ url_for('lista_retirada.cancelar', lista_id=lista.id) }}" class="d-inline">
+                            <button type="submit" class="btn btn-outline-danger" onclick="return confirm('Cancelar esta lista?')">
+                                <i class="fas fa-times"></i> Cancelar Lista
+                            </button>
+                        </form>
+                        <form method="POST" action="{{ url_for('lista_retirada.baixar', lista_id=lista.id) }}" class="d-inline ms-2">
+                            <button type="submit" class="btn btn-warning" onclick="return confirm('Confirmar baixa de todos os itens no estoque?')">
+                                <i class="fas fa-box-open"></i> Dar Baixa
+                            </button>
+                        </form>
+                    </div>
+                    {% elif lista.status == 'baixada' %}
+                    <span class="badge bg-success fs-6"><i class="fas fa-check-circle"></i> Lista Baixada</span>
+                    {% endif %}
+                </div>
+                {% endif %}
+            </div>
+
+            <!-- Folha de Separação para Impressão -->
+            {% if itens_lista %}
+            <div class="d-none d-print-block mt-4 print-footer">
+                <h4>FOLHA DE SEPARAÇÃO</h4>
+                <div class="row mb-3">
+                    <div class="col-6">
+                        <strong>Referência:</strong> {{ lista.referencia or '-' }}<br>
+                        <strong>Responsável:</strong> {{ lista.responsavel or '-' }}
+                    </div>
+                    <div class="col-6">
+                        <strong>Total de Itens:</strong> {{ total_itens }}<br>
+                        <strong>Total de Peças:</strong> {{ total_quantidade }}
+                    </div>
+                </div>
+                {% if lista.observacao %}
+                <div class="mb-3">
+                    <strong>Observação:</strong> {{ lista.observacao }}
+                </div>
+                {% endif %}
+                <div class="row mt-4">
+                    <div class="col-6">
+                        <div class="signature-box">
+                            <strong>Separado por:</strong><br><br>
+                            _________________________________<br>
+                            Nome: <br>
+                            Data: ____/____/______
+                        </div>
+                    </div>
+                    <div class="col-6">
+                        <div class="signature-box">
+                            <strong>Conferido por:</strong><br><br>
+                            _________________________________<br>
+                            Nome: <br>
+                            Data: ____/____/______
+                        </div>
+                    </div>
+                </div>
+            </div>
+            {% endif %}
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script src="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/js/select2.min.js"></script>
+<script>
+$(function() {
+    function formatItem(item) {
+        if (!item.id) return item.text;
+        
+        const $el = $(item.element);
+        const codigo = $el.data('codigo') || '';
+        const nome = $el.data('nome') || '';
+        const img = $el.data('imagem') || '';
+        const qty = $el.data('qty');
+
+        const $container = $('<div class="d-flex align-items-center gap-2"></div>');
+        if (img) {
+            $container.append($('<img>').attr('src', img).css({
+                width: '34px', height: '34px', objectFit: 'cover', 
+                borderRadius: '6px', border: '1px solid #ddd'
+            }));
+        }
+        const $txt = $('<div></div>');
+        $txt.append($('<div class="fw-semibold"></div>').text((codigo ? codigo + ' - ' : '') + nome));
+        if (qty !== undefined) {
+            $txt.append($('<div class="text-muted small"></div>').text('Disponível: ' + qty));
+        }
+        $container.append($txt);
+        return $container;
+    }
+
+    function formatSelection(item) {
+        if (!item.id) return item.text;
+        const $el = $(item.element);
+        const codigo = $el.data('codigo') || '';
+        const nome = $el.data('nome') || item.text || '';
+        return (codigo ? codigo + ' - ' : '') + nome;
+    }
+
+    $('.select2').select2({
+        theme: 'bootstrap-5',
+        width: '100%',
+        templateResult: formatItem,
+        templateSelection: formatSelection
+    });
+});
+</script>
+{% endblock %}

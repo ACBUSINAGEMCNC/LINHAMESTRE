@@ -833,6 +833,47 @@ class RegistroMensal(db.Model):
     def __repr__(self):
         return f'<RegistroMensal {self.id}>'
 
+
+# Modelos para Lista de Retirada (armazenamento permanente)
+class ListaRetirada(db.Model):
+    __tablename__ = 'lista_retirada'
+    
+    id = db.Column(db.Integer, primary_key=True)
+    numero = db.Column(db.String(20), unique=True, nullable=False)  # LR-YYYY-NNNN
+    referencia = db.Column(db.String(200))  # OS, pedido, setor
+    responsavel = db.Column(db.String(200))  # Quem solicitou
+    observacao = db.Column(db.Text)
+    status = db.Column(db.String(20), default='rascunho')  # rascunho, baixada, cancelada
+    criado_em = db.Column(db.DateTime, default=datetime.utcnow)
+    baixado_em = db.Column(db.DateTime)
+    criado_por_id = db.Column(db.Integer, db.ForeignKey('usuario.id'))
+    baixado_por_id = db.Column(db.Integer, db.ForeignKey('usuario.id'))
+    
+    # Relationships
+    criado_por = relationship('Usuario', foreign_keys=[criado_por_id], backref='listas_criadas')
+    baixado_por = relationship('Usuario', foreign_keys=[baixado_por_id], backref='listas_baixadas')
+    itens = relationship('ListaRetiradaItem', backref='lista', lazy=True, cascade='all, delete-orphan')
+    
+    def __repr__(self):
+        return f'<ListaRetirada {self.numero}>'
+
+
+class ListaRetiradaItem(db.Model):
+    __tablename__ = 'lista_retirada_item'
+    
+    id = db.Column(db.Integer, primary_key=True)
+    lista_id = db.Column(db.Integer, db.ForeignKey('lista_retirada.id'), nullable=False)
+    estoque_id = db.Column(db.Integer, db.ForeignKey('estoque_pecas.id'), nullable=False)
+    quantidade = db.Column(db.Integer, nullable=False)
+    observacao = db.Column(db.Text)
+    ordem = db.Column(db.Integer, default=0)  # Ordem de exibição
+    
+    # Relationships
+    estoque = relationship('EstoquePecas', backref='itens_lista_retirada')
+    
+    def __repr__(self):
+        return f'<ListaRetiradaItem {self.id}>'
+
 # Modelo para usuários e autenticação
 class Usuario(db.Model):
     id = db.Column(db.Integer, primary_key=True)

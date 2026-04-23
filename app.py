@@ -213,6 +213,17 @@ def verificar_inicializar_banco():
                 logger.warning("Supabase sem conexões disponíveis (Max client connections reached). Pulando migração RLS.")
                 return
             logger.warning(f"Erro ao habilitar RLS nas tabelas temporárias: {str(col_err)}")
+        
+        # Criar tabelas de lista de retirada
+        try:
+            from migrations.add_lista_retirada_tables import migrate_postgres as migrate_lista_retirada_pg
+            migrate_lista_retirada_pg()
+            logger.info("Tabelas lista_retirada criadas/verificadas (Supabase).")
+        except Exception as col_err:
+            if _is_max_connections_error(col_err):
+                logger.warning("Supabase sem conexões disponíveis (Max client connections reached). Pulando migração lista_retirada.")
+                return
+            logger.warning(f"Erro ao criar tabelas lista_retirada: {str(col_err)}")
             
         # Executar migrações adicionais para PostgreSQL
         try:
@@ -1021,6 +1032,7 @@ def create_app():
     from routes.gabaritos_rosca import gabaritos_rosca
     from routes.novas_folhas_processo import novas_folhas_processo
     from routes.auditoria import auditoria
+    from routes.lista_retirada import lista_retirada_bp
     
     app.register_blueprint(clientes)
     app.register_blueprint(materiais)
@@ -1034,6 +1046,7 @@ def create_app():
     app.register_blueprint(kanban)
     app.register_blueprint(arquivos)
     app.register_blueprint(estoque_pecas)
+    app.register_blueprint(lista_retirada_bp)
     app.register_blueprint(auth)
     app.register_blueprint(backup)
     app.register_blueprint(main)
