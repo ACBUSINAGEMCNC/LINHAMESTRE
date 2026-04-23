@@ -229,27 +229,9 @@ def index():
     )
 
 
-@estoque_pecas.route('/estoque-pecas/lista-retirada', methods=['GET', 'POST'])
-def lista_retirada():
-    """REDIRECIONAMENTO: Sistema antigo migrado para routes/lista_retirada.py"""
-    # Redirecionar para o novo sistema de lista de retirada
-    from flask import redirect, url_for
-    return redirect(url_for('lista_retirada.visualizar'))
-
-
-@estoque_pecas.route('/estoque-pecas/lista-retirada/nova', methods=['POST'])
-def nova_lista_retirada():
-    """REDIRECIONAMENTO: Migrado para routes/lista_retirada.py"""
-    from flask import redirect, url_for
-    return redirect(url_for('lista_retirada.nova'))
-
-
-@estoque_pecas.route('/estoque-pecas/lista-retirada/adicionar', methods=['POST'])
-def adicionar_item_lista_retirada():
-    """REDIRECIONAMENTO: Migrado para routes/lista_retirada.py"""
-    from flask import redirect, url_for
-    # Redirecionar para visualizar (o novo sistema não usa esta rota)
-    return redirect(url_for('lista_retirada.visualizar'))
+# ROTAS DE LISTA DE RETIRADA REMOVIDAS
+# Agora gerenciadas por routes/lista_retirada.py
+# Não criar rotas aqui para evitar conflitos!
 
 
 @estoque_pecas.route('/estoque-pecas/lista-retirada/adicionar-OLD', methods=['POST'])
@@ -337,13 +319,6 @@ def adicionar_item_lista_retirada_OLD():
     return redirect(url_for('estoque_pecas.lista_retirada'))
 
 
-@estoque_pecas.route('/estoque-pecas/lista-retirada/remover/<int:estoque_id>', methods=['POST'])
-def remover_item_lista_retirada(estoque_id):
-    """REDIRECIONAMENTO: Migrado para routes/lista_retirada.py"""
-    from flask import redirect, url_for
-    return redirect(url_for('lista_retirada.visualizar'))
-
-
 @estoque_pecas.route('/estoque-pecas/lista-retirada/remover-OLD/<int:estoque_id>', methods=['POST'])
 def remover_item_lista_retirada_OLD(estoque_id):
     lista = _get_lista_retirada_salva()
@@ -357,13 +332,6 @@ def remover_item_lista_retirada_OLD(estoque_id):
     return redirect(url_for('estoque_pecas.lista_retirada'))
 
 
-@estoque_pecas.route('/estoque-pecas/lista-retirada/atualizar', methods=['POST'])
-def atualizar_dados_lista_retirada():
-    """REDIRECIONAMENTO: Migrado para routes/lista_retirada.py"""
-    from flask import redirect, url_for
-    return redirect(url_for('lista_retirada.visualizar'))
-
-
 @estoque_pecas.route('/estoque-pecas/lista-retirada/atualizar-OLD', methods=['POST'])
 def atualizar_dados_lista_retirada_OLD():
     lista = _get_lista_retirada_salva()
@@ -375,13 +343,6 @@ def atualizar_dados_lista_retirada_OLD():
     _salvar_lista_retirada(lista)
     flash('Dados da lista atualizados.', 'success')
     return redirect(url_for('estoque_pecas.lista_retirada'))
-
-
-@estoque_pecas.route('/estoque-pecas/lista-retirada/baixar', methods=['POST'])
-def baixar_lista_retirada():
-    """REDIRECIONAMENTO: Migrado para routes/lista_retirada.py"""
-    from flask import redirect, url_for
-    return redirect(url_for('lista_retirada.visualizar'))
 
 
 @estoque_pecas.route('/estoque-pecas/lista-retirada/baixar-OLD', methods=['POST'])
