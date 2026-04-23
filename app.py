@@ -202,6 +202,17 @@ def verificar_inicializar_banco():
                 logger.warning("Supabase sem conexões disponíveis (Max client connections reached). Pulando migrações de valores.")
                 return
             logger.warning(f"Erro ao migrar valores de itens/permissões: {str(col_err)}")
+        
+        # Habilitar RLS nas tabelas temporárias (segurança Supabase)
+        try:
+            from migrations.enable_rls_temp_tables import migrate_postgres as migrate_rls_temp_tables_pg
+            migrate_rls_temp_tables_pg()
+            logger.info("RLS habilitado nas tabelas temporárias (Supabase).")
+        except Exception as col_err:
+            if _is_max_connections_error(col_err):
+                logger.warning("Supabase sem conexões disponíveis (Max client connections reached). Pulando migração RLS.")
+                return
+            logger.warning(f"Erro ao habilitar RLS nas tabelas temporárias: {str(col_err)}")
             
         # Executar migrações adicionais para PostgreSQL
         try:
