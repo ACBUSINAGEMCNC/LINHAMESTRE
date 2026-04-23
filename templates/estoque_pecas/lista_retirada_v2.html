@@ -325,11 +325,11 @@
                     <small class="text-muted">Selecione múltiplas peças de uma vez</small>
                 </div>
                 <div class="card-body">
-                    <a href="{{ url_for('estoque_pecas.index') }}?modo_selecao=lista&lista_id={{ lista.id }}" class="btn btn-primary w-100">
-                        <i class="fas fa-boxes me-2"></i> Ir para Estoque e Selecionar
-                    </a>
+                    <button type="button" class="btn btn-primary w-100" data-bs-toggle="modal" data-bs-target="#modalImportarEstoque">
+                        <i class="fas fa-boxes me-2"></i> Selecionar do Estoque
+                    </button>
                     <small class="text-muted d-block mt-2">
-                        <i class="fas fa-info-circle"></i> Marque as peças no estoque e importe para esta lista
+                        <i class="fas fa-info-circle"></i> Marque as peças, defina quantidades e importe
                     </small>
                 </div>
             </div>
@@ -481,6 +481,130 @@
         </div>
     </div>
 </div>
+
+<!-- Modal Importar do Estoque -->
+<div class="modal fade" id="modalImportarEstoque" tabindex="-1" aria-labelledby="modalImportarEstoqueLabel" aria-hidden="true">
+    <div class="modal-dialog modal-xl modal-dialog-scrollable">
+        <div class="modal-content">
+            <div class="modal-header bg-primary text-white">
+                <h5 class="modal-title" id="modalImportarEstoqueLabel">
+                    <i class="fas fa-boxes me-2"></i>Selecionar Peças do Estoque
+                </h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <!-- Filtros e Pesquisa -->
+                <div class="row g-3 mb-4">
+                    <div class="col-md-6">
+                        <label class="form-label"><i class="fas fa-search"></i> Pesquisar</label>
+                        <input type="text" class="form-control" id="filtro-pesquisa" placeholder="Digite código ou nome da peça...">
+                    </div>
+                    <div class="col-md-3">
+                        <label class="form-label"><i class="fas fa-warehouse"></i> Estante</label>
+                        <select class="form-select" id="filtro-estante">
+                            <option value="">Todas</option>
+                            <option value="1">Estante 1</option>
+                            <option value="2">Estante 2</option>
+                            <option value="3">Estante 3</option>
+                            <option value="4">Estante 4</option>
+                        </select>
+                    </div>
+                    <div class="col-md-3">
+                        <label class="form-label"><i class="fas fa-filter"></i> Mostrar</label>
+                        <select class="form-select" id="filtro-disponivel">
+                            <option value="todos">Todos</option>
+                            <option value="com-estoque" selected>Apenas com estoque</option>
+                        </select>
+                    </div>
+                </div>
+
+                <!-- Tabela de Seleção -->
+                <div class="table-responsive" style="max-height: 500px;">
+                    <table class="table table-hover table-sm align-middle" id="tabela-estoque-modal">
+                        <thead class="table-light sticky-top">
+                            <tr>
+                                <th width="50">
+                                    <input type="checkbox" class="form-check-input" id="selecionar-todos">
+                                </th>
+                                <th width="60">Imagem</th>
+                                <th>Código</th>
+                                <th>Nome</th>
+                                <th width="100">Disponível</th>
+                                <th width="120">Quantidade</th>
+                                <th width="100">Localização</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for item in estoque_lista %}
+                            <tr class="item-estoque-row" 
+                                data-codigo="{{ item.item.codigo_acb|lower }}" 
+                                data-nome="{{ item.item.nome|lower }}"
+                                data-estante="{{ item.estante or '' }}"
+                                data-disponivel="{{ item.quantidade }}">
+                                <td>
+                                    <input type="checkbox" class="form-check-input checkbox-item" 
+                                           data-id="{{ item.id }}"
+                                           data-codigo="{{ item.item.codigo_acb }}"
+                                           data-nome="{{ item.item.nome }}"
+                                           data-max="{{ item.quantidade }}">
+                                </td>
+                                <td>
+                                    {% if item.item.imagem_path %}
+                                    <img src="{{ get_file_url(item.item.imagem_path) }}" class="item-thumb" alt="{{ item.item.codigo_acb }}">
+                                    {% else %}
+                                    <div class="item-thumb-placeholder">
+                                        <i class="fas fa-image"></i>
+                                    </div>
+                                    {% endif %}
+                                </td>
+                                <td><strong>{{ item.item.codigo_acb }}</strong></td>
+                                <td>{{ item.item.nome }}</td>
+                                <td>
+                                    <span class="badge {% if item.quantidade > 10 %}bg-success{% elif item.quantidade > 0 %}bg-warning{% else %}bg-secondary{% endif %}">
+                                        {{ item.quantidade }}
+                                    </span>
+                                </td>
+                                <td>
+                                    <input type="number" class="form-control form-control-sm input-quantidade" 
+                                           data-id="{{ item.id }}"
+                                           min="1" 
+                                           max="{{ item.quantidade }}" 
+                                           value="1"
+                                           disabled>
+                                </td>
+                                <td class="small text-muted">
+                                    {% if item.estante %}
+                                        E{{ item.estante }}
+                                        {% if item.secao %}-S{{ item.secao }}{% endif %}
+                                        {% if item.linha %}-L{{ item.linha }}{% endif %}
+                                        {% if item.coluna %}-C{{ item.coluna }}{% endif %}
+                                    {% else %}
+                                        -
+                                    {% endif %}
+                                </td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+
+                <!-- Resumo da Seleção -->
+                <div class="alert alert-info mt-3" id="resumo-selecao" style="display: none;">
+                    <i class="fas fa-info-circle"></i> 
+                    <strong id="total-selecionados">0</strong> itens selecionados
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">
+                    <i class="fas fa-times"></i> Cancelar
+                </button>
+                <button type="button" class="btn btn-success" id="btn-importar-selecionados" disabled>
+                    <i class="fas fa-file-import"></i> Importar Selecionados
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
 {% endblock %}
 
 {% block extra_js %}
@@ -526,6 +650,145 @@ $(function() {
         templateResult: formatItem,
         templateSelection: formatSelection
     });
+
+    // ============================================================================
+    // MODAL DE IMPORTAÇÃO DO ESTOQUE
+    // ============================================================================
+    
+    // Filtro de pesquisa
+    $('#filtro-pesquisa').on('input', function() {
+        aplicarFiltros();
+    });
+
+    // Filtro de estante
+    $('#filtro-estante').on('change', function() {
+        aplicarFiltros();
+    });
+
+    // Filtro de disponibilidade
+    $('#filtro-disponivel').on('change', function() {
+        aplicarFiltros();
+    });
+
+    function aplicarFiltros() {
+        const pesquisa = $('#filtro-pesquisa').val().toLowerCase();
+        const estante = $('#filtro-estante').val();
+        const disponivel = $('#filtro-disponivel').val();
+
+        $('.item-estoque-row').each(function() {
+            const $row = $(this);
+            const codigo = $row.data('codigo');
+            const nome = $row.data('nome');
+            const estanteItem = String($row.data('estante'));
+            const qtdDisponivel = parseInt($row.data('disponivel'));
+
+            let mostrar = true;
+
+            // Filtro de pesquisa
+            if (pesquisa && !codigo.includes(pesquisa) && !nome.includes(pesquisa)) {
+                mostrar = false;
+            }
+
+            // Filtro de estante
+            if (estante && estanteItem !== estante) {
+                mostrar = false;
+            }
+
+            // Filtro de disponibilidade
+            if (disponivel === 'com-estoque' && qtdDisponivel <= 0) {
+                mostrar = false;
+            }
+
+            $row.toggle(mostrar);
+        });
+    }
+
+    // Selecionar/Desselecionar todos
+    $('#selecionar-todos').on('change', function() {
+        const checked = $(this).is(':checked');
+        $('.item-estoque-row:visible .checkbox-item').prop('checked', checked).trigger('change');
+    });
+
+    // Habilitar/desabilitar input de quantidade ao marcar checkbox
+    $('.checkbox-item').on('change', function() {
+        const $checkbox = $(this);
+        const id = $checkbox.data('id');
+        const $input = $(`.input-quantidade[data-id="${id}"]`);
+        
+        if ($checkbox.is(':checked')) {
+            $input.prop('disabled', false).focus();
+        } else {
+            $input.prop('disabled', true);
+        }
+
+        atualizarResumo();
+    });
+
+    // Atualizar resumo de seleção
+    function atualizarResumo() {
+        const totalSelecionados = $('.checkbox-item:checked').length;
+        
+        if (totalSelecionados > 0) {
+            $('#resumo-selecao').show();
+            $('#total-selecionados').text(totalSelecionados);
+            $('#btn-importar-selecionados').prop('disabled', false);
+        } else {
+            $('#resumo-selecao').hide();
+            $('#btn-importar-selecionados').prop('disabled', true);
+        }
+    }
+
+    // Importar itens selecionados
+    $('#btn-importar-selecionados').on('click', function() {
+        const itens = [];
+        
+        $('.checkbox-item:checked').each(function() {
+            const $checkbox = $(this);
+            const id = $checkbox.data('id');
+            const $input = $(`.input-quantidade[data-id="${id}"]`);
+            const quantidade = parseInt($input.val()) || 1;
+            const max = parseInt($input.attr('max')) || 0;
+
+            // Validar quantidade
+            if (quantidade > max) {
+                alert(`Quantidade para ${$checkbox.data('codigo')} excede o disponível (${max})`);
+                return false;
+            }
+
+            itens.push({
+                estoque_id: id,
+                quantidade: quantidade
+            });
+        });
+
+        if (itens.length === 0) {
+            alert('Selecione pelo menos um item!');
+            return;
+        }
+
+        // Enviar para o servidor
+        $.ajax({
+            url: '{{ url_for("lista_retirada.adicionar_multiplos", lista_id=lista.id) }}',
+            method: 'POST',
+            contentType: 'application/json',
+            data: JSON.stringify({ itens: itens }),
+            success: function(response) {
+                if (response.success) {
+                    // Fechar modal e recarregar página
+                    $('#modalImportarEstoque').modal('hide');
+                    location.reload();
+                } else {
+                    alert('Erro: ' + (response.message || 'Erro desconhecido'));
+                }
+            },
+            error: function(xhr) {
+                alert('Erro ao importar itens: ' + (xhr.responseJSON?.message || 'Erro de comunicação'));
+            }
+        });
+    });
+
+    // Aplicar filtro inicial (apenas com estoque)
+    aplicarFiltros();
 });
 </script>
 {% endblock %}
