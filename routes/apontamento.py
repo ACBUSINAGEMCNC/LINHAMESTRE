@@ -3046,12 +3046,16 @@ def fechar_apontamento(apontamento_id):
 
 @apontamento_bp.route('/editar-apontamento/<int:apontamento_id>', methods=['POST'])
 def editar_apontamento(apontamento_id):
-    """Editar um apontamento (Admin only)"""
+    """Editar um apontamento (Admin ou usuários com permissão)"""
     if 'usuario_id' not in session:
         return jsonify({'success': False, 'message': 'Não autorizado'}), 401
     
     usuario = Usuario.query.get(session['usuario_id'])
-    if not usuario or usuario.nivel_acesso != 'admin':
+    if not usuario:
+        return jsonify({'success': False, 'message': 'Usuário não encontrado'}), 403
+    
+    # Verificar permissão (admin OU pode_gerenciar_apontamentos)
+    if usuario.nivel_acesso != 'admin' and not usuario.pode_gerenciar_apontamentos:
         return jsonify({'success': False, 'message': 'Acesso negado'}), 403
     
     try:
