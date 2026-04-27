@@ -14,10 +14,22 @@ def require_admin(f):
     """Decorator para exigir acesso admin"""
     @wraps(f)
     def decorated_function(*args, **kwargs):
+        # Verificar se está autenticado
         if not session.get('usuario_id'):
-            return jsonify({'error': 'Não autenticado'}), 401
+            return jsonify({
+                'error': 'Não autenticado',
+                'tests': [],
+                'timestamp': datetime.now().isoformat()
+            }), 401
+        
+        # Verificar se é admin
         if session.get('usuario_nivel') != 'admin':
-            return jsonify({'error': 'Acesso negado - apenas administradores'}), 403
+            return jsonify({
+                'error': 'Acesso negado - apenas administradores',
+                'tests': [],
+                'timestamp': datetime.now().isoformat()
+            }), 403
+        
         return f(*args, **kwargs)
     return decorated_function
 
@@ -106,12 +118,22 @@ def test_ping():
 @require_admin
 def test_database():
     """Testa performance do banco de dados"""
-    from models import db, Item, Pedido, Ordem
-    
     results = {
         'timestamp': datetime.now().isoformat(),
         'tests': []
     }
+    
+    try:
+        from models import db, Item, Pedido, Ordem
+    except Exception as e:
+        logger.error(f"Erro ao importar models: {e}")
+        results['tests'].append({
+            'name': 'Importação de Models',
+            'status': 'error',
+            'response_time': 0,
+            'message': f'Erro ao importar models: {str(e)}'
+        })
+        return jsonify(results)
     
     # Teste 1: Query simples
     try:
@@ -225,7 +247,12 @@ def test_storage():
         response = requests.post(
             storage_url,
             headers=headers,
-            json={'limit': 10, 'offset': 0, 'sortBy': {'column': 'name', 'order': 'asc'}},
+            json={
+                'limit': 10, 
+                'offset': 0, 
+                'prefix': '',  # Parâmetro obrigatório
+                'sortBy': {'column': 'name', 'order': 'asc'}
+            },
             timeout=10
         )
         response_time = (time.time() - start_time) * 1000
@@ -261,13 +288,23 @@ def test_storage():
 @require_admin
 def test_kanban_performance():
     """Testa performance específica do Kanban (cartões, OS, PDF)"""
-    from models import db, Ordem, Pedido, Item, Trabalho
-    
     results = {
         'timestamp': datetime.now().isoformat(),
         'tests': [],
         'warnings': []
     }
+    
+    try:
+        from models import db, Ordem, Pedido, Item, Trabalho
+    except Exception as e:
+        logger.error(f"Erro ao importar models: {e}")
+        results['tests'].append({
+            'name': 'Importação de Models',
+            'status': 'error',
+            'response_time': 0,
+            'message': f'Erro ao importar models: {str(e)}'
+        })
+        return jsonify(results)
     
     # Teste 1: Carregar dados do Kanban (simulação)
     try:
