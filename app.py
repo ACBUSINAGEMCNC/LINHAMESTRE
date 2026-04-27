@@ -224,6 +224,17 @@ def verificar_inicializar_banco():
                 logger.warning("Supabase sem conexões disponíveis (Max client connections reached). Pulando migração lista_retirada.")
                 return
             logger.warning(f"Erro ao criar tabelas lista_retirada: {str(col_err)}")
+        
+        # Criar índices na tabela Item para melhorar performance
+        try:
+            from migrations.add_item_indexes import migrate_postgres as migrate_item_indexes_pg
+            migrate_item_indexes_pg()
+            logger.info("Índices da tabela Item criados/verificados (Supabase).")
+        except Exception as col_err:
+            if _is_max_connections_error(col_err):
+                logger.warning("Supabase sem conexões disponíveis (Max client connections reached). Pulando migração de índices.")
+                return
+            logger.warning(f"Erro ao criar índices da tabela Item: {str(col_err)}")
             
         # Executar migrações adicionais para PostgreSQL
         try:
