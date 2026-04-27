@@ -744,15 +744,21 @@ def create_app():
             'pool_pre_ping': True,
         }
 
-        # Em ambiente serverless, evitar pool de conexões para reduzir "Max client connections reached".
+        # Otimização de connection pool
+        # Em serverless, usar pool pequeno para evitar cold start (40s)
+        # mas não NullPool que força reconexão a cada request
         if is_serverless:
-            engine_options['poolclass'] = NullPool
-            engine_options['pool_recycle'] = 60
+            engine_options['pool_size'] = 2  # Pool mínimo para evitar cold start
+            engine_options['max_overflow'] = 3  # Overflow pequeno
+            engine_options['pool_recycle'] = 300  # 5 minutos (Supabase fecha após 10min)
+            engine_options['pool_pre_ping'] = True  # Testar conexão antes de usar
+            engine_options['pool_timeout'] = 10  # Timeout curto
         else:
             engine_options['pool_recycle'] = 180
             engine_options['pool_size'] = int(os.getenv('DB_POOL_SIZE', '5') or 5)
             engine_options['max_overflow'] = int(os.getenv('DB_MAX_OVERFLOW', '5') or 5)
             engine_options['pool_timeout'] = int(os.getenv('DB_POOL_TIMEOUT', '30') or 30)
+            engine_options['pool_pre_ping'] = True
         # Supabase / poolers podem causar "DuplicatePreparedStatement" no psycopg3.
         # Desativar prepared statements evita esse erro.
         if database_url.lower().startswith('postgresql+psycopg://'):
