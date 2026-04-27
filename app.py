@@ -1046,6 +1046,7 @@ def create_app():
     from routes.auditoria import auditoria
     from routes.lista_retirada import lista_retirada_bp
     from routes.diagnostico import diagnostico_bp
+    from routes.dashboard_apontamentos import dashboard_apontamentos_bp
     
     app.register_blueprint(clientes)
     app.register_blueprint(materiais)
@@ -1071,6 +1072,7 @@ def create_app():
     app.register_blueprint(novas_folhas_processo)
     app.register_blueprint(auditoria)
     app.register_blueprint(diagnostico_bp)
+    app.register_blueprint(dashboard_apontamentos_bp)
 
     # Guard global de autenticação/autorização
     @app.before_request
