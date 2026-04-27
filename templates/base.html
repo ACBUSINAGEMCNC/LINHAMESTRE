@@ -94,6 +94,12 @@
                     </li>
                     {% endif %}
                     
+                    <li class="nav-item">
+                        <a class="nav-link" href="{{ url_for('diagnostico.index') }}" title="Teste de Performance do Sistema">
+                            <i class="fas fa-stethoscope text-danger"></i> Diagnóstico
+                        </a>
+                    </li>
+                    
                     {% if usuario_nivel == 'admin' %}
                     <li class="nav-item dropdown">
                         <a class="nav-link dropdown-toggle" href="#" id="adminDropdown" role="button" data-bs-toggle="dropdown" aria-expanded="false">
@@ -103,7 +109,6 @@
                             <li><a class="dropdown-item" href="{{ url_for('auth.listar_usuarios') }}">Gerenciar Usuários</a></li>
                             <li><a class="dropdown-item" href="{{ url_for('backup.listar_backups') }}">Gerenciar Backups</a></li>
                             <li><hr class="dropdown-divider"></li>
-                            <li><a class="dropdown-item" href="{{ url_for('diagnostico.index') }}"><i class="fas fa-stethoscope text-danger"></i> Diagnóstico do Sistema</a></li>
                             <li><a class="dropdown-item" href="{{ url_for('auditoria.listar_auditoria') }}">Auditoria do Sistema</a></li>
                         </ul>
                     </li>
