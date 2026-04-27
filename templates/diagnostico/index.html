@@ -1,0 +1,412 @@
+{% extends "base.html" %}
+
+{% block title %}Diagnóstico do Sistema{% endblock %}
+
+{% block extra_css %}
+<style>
+    .test-card {
+        border-left: 4px solid #6c757d;
+        transition: all 0.3s;
+    }
+    
+    .test-card.success {
+        border-left-color: #28a745;
+    }
+    
+    .test-card.warning {
+        border-left-color: #ffc107;
+    }
+    
+    .test-card.error {
+        border-left-color: #dc3545;
+    }
+    
+    .test-card.running {
+        border-left-color: #007bff;
+        animation: pulse 1.5s infinite;
+    }
+    
+    @keyframes pulse {
+        0%, 100% { opacity: 1; }
+        50% { opacity: 0.6; }
+    }
+    
+    .metric-badge {
+        font-size: 0.9rem;
+        padding: 0.4rem 0.8rem;
+        border-radius: 8px;
+    }
+    
+    .response-time {
+        font-weight: bold;
+        font-size: 1.1rem;
+    }
+    
+    .response-time.fast {
+        color: #28a745;
+    }
+    
+    .response-time.medium {
+        color: #ffc107;
+    }
+    
+    .response-time.slow {
+        color: #dc3545;
+    }
+    
+    .log-output {
+        background: #1e1e1e;
+        color: #d4d4d4;
+        font-family: 'Courier New', monospace;
+        font-size: 0.85rem;
+        max-height: 400px;
+        overflow-y: auto;
+        padding: 1rem;
+        border-radius: 8px;
+    }
+    
+    .log-line {
+        margin: 0;
+        padding: 2px 0;
+    }
+    
+    .log-success { color: #4ec9b0; }
+    .log-error { color: #f48771; }
+    .log-warning { color: #dcdcaa; }
+    .log-info { color: #9cdcfe; }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="container-fluid py-4">
+    <div class="row mb-4">
+        <div class="col-12">
+            <div class="d-flex justify-content-between align-items-center">
+                <div>
+                    <h1><i class="fas fa-stethoscope me-2"></i>Diagnóstico do Sistema</h1>
+                    <p class="text-muted">Teste de conectividade, performance e análise de lentidão</p>
+                </div>
+                <div>
+                    <button class="btn btn-primary" id="btn-run-all-tests">
+                        <i class="fas fa-play me-2"></i>Executar Todos os Testes
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Informações do Sistema -->
+    <div class="row mb-4">
+        <div class="col-12">
+            <div class="card">
+                <div class="card-header bg-dark text-white">
+                    <h5 class="mb-0"><i class="fas fa-info-circle me-2"></i>Informações do Sistema</h5>
+                </div>
+                <div class="card-body" id="system-info">
+                    <div class="text-center">
+                        <div class="spinner-border text-primary" role="status">
+                            <span class="visually-hidden">Carregando...</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Categorias de Testes -->
+    <div class="row g-4">
+        <!-- Teste de Conectividade -->
+        <div class="col-12 col-lg-6">
+            <div class="card h-100">
+                <div class="card-header bg-primary text-white d-flex justify-content-between align-items-center">
+                    <h5 class="mb-0"><i class="fas fa-network-wired me-2"></i>Conectividade</h5>
+                    <button class="btn btn-sm btn-light" onclick="runTest('ping')">
+                        <i class="fas fa-play"></i> Executar
+                    </button>
+                </div>
+                <div class="card-body" id="test-ping-results">
+                    <p class="text-muted">Clique em "Executar" para testar a conectividade com serviços externos</p>
+                </div>
+            </div>
+        </div>
+
+        <!-- Teste de Banco de Dados -->
+        <div class="col-12 col-lg-6">
+            <div class="card h-100">
+                <div class="card-header bg-success text-white d-flex justify-content-between align-items-center">
+                    <h5 class="mb-0"><i class="fas fa-database me-2"></i>Banco de Dados</h5>
+                    <button class="btn btn-sm btn-light" onclick="runTest('database')">
+                        <i class="fas fa-play"></i> Executar
+                    </button>
+                </div>
+                <div class="card-body" id="test-database-results">
+                    <p class="text-muted">Clique em "Executar" para testar a performance do banco de dados</p>
+                </div>
+            </div>
+        </div>
+
+        <!-- Teste de Storage -->
+        <div class="col-12 col-lg-6">
+            <div class="card h-100">
+                <div class="card-header bg-info text-white d-flex justify-content-between align-items-center">
+                    <h5 class="mb-0"><i class="fas fa-cloud me-2"></i>Supabase Storage</h5>
+                    <button class="btn btn-sm btn-light" onclick="runTest('storage')">
+                        <i class="fas fa-play"></i> Executar
+                    </button>
+                </div>
+                <div class="card-body" id="test-storage-results">
+                    <p class="text-muted">Clique em "Executar" para testar o acesso ao Supabase Storage</p>
+                </div>
+            </div>
+        </div>
+
+        <!-- Teste de Performance do Kanban -->
+        <div class="col-12 col-lg-6">
+            <div class="card h-100">
+                <div class="card-header bg-warning text-dark d-flex justify-content-between align-items-center">
+                    <h5 class="mb-0"><i class="fas fa-columns me-2"></i>Performance Kanban</h5>
+                    <button class="btn btn-sm btn-dark" onclick="runTest('kanban-performance')">
+                        <i class="fas fa-play"></i> Executar
+                    </button>
+                </div>
+                <div class="card-body" id="test-kanban-performance-results">
+                    <p class="text-muted">Clique em "Executar" para analisar a performance do Kanban (cartões, OS, PDF)</p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Log Consolidado -->
+    <div class="row mt-4">
+        <div class="col-12">
+            <div class="card">
+                <div class="card-header bg-dark text-white d-flex justify-content-between align-items-center">
+                    <h5 class="mb-0"><i class="fas fa-terminal me-2"></i>Log de Execução</h5>
+                    <button class="btn btn-sm btn-outline-light" onclick="clearLogs()">
+                        <i class="fas fa-trash"></i> Limpar
+                    </button>
+                </div>
+                <div class="card-body p-0">
+                    <div class="log-output" id="log-output">
+                        <p class="log-line log-info">Sistema de diagnóstico pronto. Execute os testes para ver os logs.</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+// ============================================================================
+// FUNÇÕES DE TESTE
+// ============================================================================
+
+const testEndpoints = {
+    'ping': '/diagnostico/test-ping',
+    'database': '/diagnostico/test-database',
+    'storage': '/diagnostico/test-storage',
+    'kanban-performance': '/diagnostico/test-kanban-performance'
+};
+
+function addLog(message, type = 'info') {
+    const logOutput = document.getElementById('log-output');
+    const timestamp = new Date().toLocaleTimeString('pt-BR');
+    const logLine = document.createElement('p');
+    logLine.className = `log-line log-${type}`;
+    logLine.textContent = `[${timestamp}] ${message}`;
+    logOutput.appendChild(logLine);
+    logOutput.scrollTop = logOutput.scrollHeight;
+}
+
+function clearLogs() {
+    document.getElementById('log-output').innerHTML = '<p class="log-line log-info">Logs limpos.</p>';
+}
+
+function getResponseTimeClass(ms) {
+    if (ms < 200) return 'fast';
+    if (ms < 1000) return 'medium';
+    return 'slow';
+}
+
+function getStatusIcon(status) {
+    switch(status) {
+        case 'success': return '<i class="fas fa-check-circle text-success"></i>';
+        case 'warning': return '<i class="fas fa-exclamation-triangle text-warning"></i>';
+        case 'error': return '<i class="fas fa-times-circle text-danger"></i>';
+        case 'skipped': return '<i class="fas fa-minus-circle text-secondary"></i>';
+        default: return '<i class="fas fa-question-circle text-muted"></i>';
+    }
+}
+
+function renderTestResults(containerId, data) {
+    const container = document.getElementById(containerId);
+    
+    if (!data.tests || data.tests.length === 0) {
+        container.innerHTML = '<p class="text-muted">Nenhum resultado disponível</p>';
+        return;
+    }
+    
+    let html = '<div class="list-group list-group-flush">';
+    
+    data.tests.forEach(test => {
+        const timeClass = getResponseTimeClass(test.response_time);
+        html += `
+            <div class="list-group-item test-card ${test.status}">
+                <div class="d-flex justify-content-between align-items-start">
+                    <div class="flex-grow-1">
+                        <div class="d-flex align-items-center mb-2">
+                            ${getStatusIcon(test.status)}
+                            <strong class="ms-2">${test.name}</strong>
+                        </div>
+                        <div class="small text-muted">${test.message || '-'}</div>
+                        ${test.result ? `<div class="small mt-1"><strong>Resultado:</strong> ${test.result}</div>` : ''}
+                    </div>
+                    <div class="text-end">
+                        <div class="response-time ${timeClass}">${test.response_time.toFixed(0)}ms</div>
+                        ${test.status_code ? `<div class="small text-muted">HTTP ${test.status_code}</div>` : ''}
+                    </div>
+                </div>
+            </div>
+        `;
+    });
+    
+    html += '</div>';
+    
+    // Adicionar warnings se existirem
+    if (data.warnings && data.warnings.length > 0) {
+        html += '<div class="alert alert-warning mt-3 mb-0"><strong>⚠️ Avisos:</strong><ul class="mb-0 mt-2">';
+        data.warnings.forEach(warning => {
+            html += `<li>${warning}</li>`;
+        });
+        html += '</ul></div>';
+    }
+    
+    container.innerHTML = html;
+}
+
+async function runTest(testName) {
+    const endpoint = testEndpoints[testName];
+    const resultsId = `test-${testName}-results`;
+    const container = document.getElementById(resultsId);
+    
+    // Mostrar loading
+    container.innerHTML = `
+        <div class="text-center">
+            <div class="spinner-border text-primary" role="status">
+                <span class="visually-hidden">Executando...</span>
+            </div>
+            <p class="mt-2 text-muted">Executando teste...</p>
+        </div>
+    `;
+    
+    addLog(`Iniciando teste: ${testName}`, 'info');
+    
+    try {
+        const response = await fetch(endpoint);
+        const data = await response.json();
+        
+        renderTestResults(resultsId, data);
+        
+        // Log dos resultados
+        data.tests.forEach(test => {
+            const logType = test.status === 'error' ? 'error' : test.status === 'warning' ? 'warning' : 'success';
+            addLog(`${test.name}: ${test.message} (${test.response_time}ms)`, logType);
+        });
+        
+        addLog(`Teste ${testName} concluído`, 'success');
+        
+    } catch (error) {
+        container.innerHTML = `
+            <div class="alert alert-danger mb-0">
+                <strong>Erro ao executar teste:</strong> ${error.message}
+            </div>
+        `;
+        addLog(`ERRO no teste ${testName}: ${error.message}`, 'error');
+    }
+}
+
+async function runAllTests() {
+    addLog('='.repeat(60), 'info');
+    addLog('INICIANDO BATERIA COMPLETA DE TESTES', 'info');
+    addLog('='.repeat(60), 'info');
+    
+    for (const testName of Object.keys(testEndpoints)) {
+        await runTest(testName);
+        // Pequeno delay entre testes
+        await new Promise(resolve => setTimeout(resolve, 500));
+    }
+    
+    addLog('='.repeat(60), 'info');
+    addLog('BATERIA DE TESTES CONCLUÍDA', 'success');
+    addLog('='.repeat(60), 'info');
+}
+
+async function loadSystemInfo() {
+    try {
+        const response = await fetch('/diagnostico/system-info');
+        const data = await response.json();
+        
+        const html = `
+            <div class="row g-3">
+                <div class="col-md-4">
+                    <div class="metric-badge bg-light border">
+                        <div class="small text-muted">Ambiente</div>
+                        <div class="fw-bold">${data.environment}</div>
+                    </div>
+                </div>
+                <div class="col-md-4">
+                    <div class="metric-badge bg-light border">
+                        <div class="small text-muted">Python</div>
+                        <div class="fw-bold">${data.python_version.split(' ')[0]}</div>
+                    </div>
+                </div>
+                <div class="col-md-4">
+                    <div class="metric-badge bg-light border">
+                        <div class="small text-muted">Plataforma</div>
+                        <div class="fw-bold">${data.platform}</div>
+                    </div>
+                </div>
+                <div class="col-md-4">
+                    <div class="metric-badge bg-light border">
+                        <div class="small text-muted">Banco de Dados</div>
+                        <div class="fw-bold">${data.database_url}</div>
+                    </div>
+                </div>
+                <div class="col-md-4">
+                    <div class="metric-badge bg-light border">
+                        <div class="small text-muted">Supabase</div>
+                        <div class="fw-bold">${data.supabase_url}</div>
+                    </div>
+                </div>
+                <div class="col-md-4">
+                    <div class="metric-badge bg-light border">
+                        <div class="small text-muted">Vercel</div>
+                        <div class="fw-bold">${data.vercel ? 'Sim' : 'Não'}</div>
+                    </div>
+                </div>
+            </div>
+        `;
+        
+        document.getElementById('system-info').innerHTML = html;
+        addLog('Informações do sistema carregadas', 'success');
+        
+    } catch (error) {
+        document.getElementById('system-info').innerHTML = `
+            <div class="alert alert-danger mb-0">Erro ao carregar informações: ${error.message}</div>
+        `;
+        addLog(`Erro ao carregar informações do sistema: ${error.message}`, 'error');
+    }
+}
+
+// ============================================================================
+// INICIALIZAÇÃO
+// ============================================================================
+
+document.getElementById('btn-run-all-tests').addEventListener('click', runAllTests);
+
+// Carregar informações do sistema ao carregar a página
+loadSystemInfo();
+</script>
+{% endblock %}
