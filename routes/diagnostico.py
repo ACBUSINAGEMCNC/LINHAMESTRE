@@ -10,8 +10,8 @@ logger = logging.getLogger(__name__)
 
 diagnostico_bp = Blueprint('diagnostico', __name__)
 
-def require_admin(f):
-    """Decorator para exigir acesso admin"""
+def require_login(f):
+    """Decorator para exigir login (qualquer usuário autenticado)"""
     @wraps(f)
     def decorated_function(*args, **kwargs):
         # Verificar se está autenticado
@@ -22,27 +22,20 @@ def require_admin(f):
                 'timestamp': datetime.now().isoformat()
             }), 401
         
-        # Verificar se é admin
-        if session.get('usuario_nivel') != 'admin':
-            return jsonify({
-                'error': 'Acesso negado - apenas administradores',
-                'tests': [],
-                'timestamp': datetime.now().isoformat()
-            }), 403
-        
+        # Qualquer usuário autenticado pode acessar
         return f(*args, **kwargs)
     return decorated_function
 
 
 @diagnostico_bp.route('/diagnostico')
-@require_admin
+@require_login
 def index():
     """Página principal de diagnóstico do sistema"""
     return render_template('diagnostico/index.html')
 
 
 @diagnostico_bp.route('/diagnostico/test-ping')
-@require_admin
+@require_login
 def test_ping():
     """Testa conectividade com serviços externos"""
     results = {
@@ -115,7 +108,7 @@ def test_ping():
 
 
 @diagnostico_bp.route('/diagnostico/test-database')
-@require_admin
+@require_login
 def test_database():
     """Testa performance do banco de dados"""
     results = {
@@ -124,7 +117,7 @@ def test_database():
     }
     
     try:
-        from models import db, Item, Pedido, Ordem
+        from models import db, Item, Pedido, OrdemServico
     except Exception as e:
         logger.error(f"Erro ao importar models: {e}")
         results['tests'].append({
@@ -177,10 +170,10 @@ def test_database():
             'message': str(e)
         })
     
-    # Teste 3: Query complexa (Ordens com relacionamentos)
+    # Teste 3: Query complexa (Ordens de Serviço com relacionamentos)
     try:
         start_time = time.time()
-        ordens = db.session.query(Ordem).limit(5).all()
+        ordens = db.session.query(OrdemServico).limit(5).all()
         # Forçar carregamento dos relacionamentos
         for ordem in ordens:
             _ = ordem.pedidos
@@ -206,7 +199,7 @@ def test_database():
 
 
 @diagnostico_bp.route('/diagnostico/test-storage')
-@require_admin
+@require_login
 def test_storage():
     """Testa acesso ao Supabase Storage"""
     results = {
@@ -285,7 +278,7 @@ def test_storage():
 
 
 @diagnostico_bp.route('/diagnostico/test-kanban-performance')
-@require_admin
+@require_login
 def test_kanban_performance():
     """Testa performance específica do Kanban (cartões, OS, PDF)"""
     results = {
@@ -295,7 +288,7 @@ def test_kanban_performance():
     }
     
     try:
-        from models import db, Ordem, Pedido, Item, Trabalho
+        from models import db, OrdemServico, Pedido, Item, Trabalho
     except Exception as e:
         logger.error(f"Erro ao importar models: {e}")
         results['tests'].append({
@@ -311,8 +304,8 @@ def test_kanban_performance():
         start_time = time.time()
         
         # Simular query do Kanban
-        ordens = db.session.query(Ordem).filter(
-            Ordem.status.in_(['em_andamento', 'pausada', 'aguardando'])
+        ordens = db.session.query(OrdemServico).filter(
+            OrdemServico.status.in_(['em_andamento', 'pausada', 'aguardando'])
         ).limit(20).all()
         
         query_time = (time.time() - start_time) * 1000
@@ -340,7 +333,7 @@ def test_kanban_performance():
     try:
         start_time = time.time()
         
-        ordem = db.session.query(Ordem).first()
+        ordem = db.session.query(OrdemServico).first()
         if ordem:
             # Forçar carregamento de todos os relacionamentos
             _ = ordem.pedidos
@@ -414,7 +407,7 @@ def test_kanban_performance():
 
 
 @diagnostico_bp.route('/diagnostico/system-info')
-@require_admin
+@require_login
 def system_info():
     """Retorna informações do sistema"""
     import platform
