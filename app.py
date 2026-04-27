@@ -744,15 +744,11 @@ def create_app():
             'pool_pre_ping': True,
         }
 
-        # Otimização de connection pool
-        # Em serverless, usar pool mínimo para evitar "Max connections" no Supabase
-        # mas manter 1 conexão para evitar cold start total
+        # HOTFIX TEMPORÁRIO: Voltar para NullPool até resolver erro 500
+        # O pool estava causando erros no endpoint /apontamento/status-ativos
         if is_serverless:
-            engine_options['pool_size'] = 1  # 1 conexão mantida (evita cold start)
-            engine_options['max_overflow'] = 2  # Máximo 3 conexões simultâneas
-            engine_options['pool_recycle'] = 280  # Reciclar antes do timeout do Supabase (300s)
-            engine_options['pool_pre_ping'] = True  # Testar conexão antes de usar
-            engine_options['pool_timeout'] = 5  # Timeout curto para falhar rápido
+            engine_options['poolclass'] = NullPool  # Sem pool (estável mas lento)
+            engine_options['pool_recycle'] = 60
         else:
             engine_options['pool_recycle'] = 180
             engine_options['pool_size'] = int(os.getenv('DB_POOL_SIZE', '5') or 5)
