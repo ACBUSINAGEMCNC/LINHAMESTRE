@@ -744,19 +744,10 @@ def create_app():
             'pool_pre_ping': True,
         }
 
-        # Solução otimizada: QueuePool com configuração conservadora
-        # + isolation level READ COMMITTED para evitar locks
+        # VOLTAR PARA NullPool - QueuePool causa timeout com múltiplas instâncias Vercel
         if is_serverless:
-            # Pool MUITO pequeno para evitar "Max connections" no Supabase
-            engine_options['poolclass'] = QueuePool
-            engine_options['pool_size'] = 1  # Apenas 1 conexão base
-            engine_options['max_overflow'] = 1  # Máximo 2 conexões simultâneas
-            engine_options['pool_recycle'] = 280  # Reciclar antes do timeout (300s)
-            engine_options['pool_pre_ping'] = True  # Testar antes de usar
-            engine_options['pool_timeout'] = 10  # Timeout para pegar conexão
-            engine_options['pool_reset_on_return'] = 'rollback'  # CRÍTICO: Rollback ao devolver
-            # Isolation level para evitar locks entre transações
-            engine_options['isolation_level'] = 'READ COMMITTED'
+            engine_options['poolclass'] = NullPool
+            engine_options['pool_recycle'] = 60
         else:
             engine_options['pool_recycle'] = 180
             engine_options['pool_size'] = int(os.getenv('DB_POOL_SIZE', '5') or 5)
