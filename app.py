@@ -9,7 +9,7 @@ from types import SimpleNamespace
 from flask import Flask, render_template, redirect, url_for, flash, request, session, send_file, g, has_request_context
 from flask_sqlalchemy import SQLAlchemy
 from sqlalchemy import event, inspect
-from sqlalchemy.pool import NullPool
+from sqlalchemy.pool import NullPool, StaticPool, QueuePool
 from sqlalchemy.exc import OperationalError
 from werkzeug.security import generate_password_hash, check_password_hash
 from werkzeug.utils import secure_filename
@@ -744,11 +744,19 @@ def create_app():
             'pool_pre_ping': True,
         }
 
-        # HOTFIX TEMPORÁRIO: Voltar para NullPool até resolver erro 500
-        # O pool estava causando erros no endpoint /apontamento/status-ativos
+        # Solução otimizada: QueuePool com configuração conservadora
+        # + isolation level READ COMMITTED para evitar locks
         if is_serverless:
-            engine_options['poolclass'] = NullPool  # Sem pool (estável mas lento)
-            engine_options['pool_recycle'] = 60
+            # Pool MUITO pequeno para evitar "Max connections" no Supabase
+            engine_options['poolclass'] = QueuePool
+            engine_options['pool_size'] = 1  # Apenas 1 conexão base
+            engine_options['max_overflow'] = 1  # Máximo 2 conexões simultâneas
+            engine_options['pool_recycle'] = 280  # Reciclar antes do timeout (300s)
+            engine_options['pool_pre_ping'] = True  # Testar antes de usar
+            engine_options['pool_timeout'] = 10  # Timeout para pegar conexão
+            engine_options['pool_reset_on_return'] = 'rollback'  # CRÍTICO: Rollback ao devolver
+            # Isolation level para evitar locks entre transações
+            engine_options['isolation_level'] = 'READ COMMITTED'
         else:
             engine_options['pool_recycle'] = 180
             engine_options['pool_size'] = int(os.getenv('DB_POOL_SIZE', '5') or 5)

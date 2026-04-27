@@ -1844,6 +1844,23 @@
         // Inicializar eventos após o carregamento do documento
         document.addEventListener('DOMContentLoaded', function() {
             initializeKanbanEvents();
+            
+            // Limpar iframes de PDF quando modal fecha para evitar mostrar PDF antigo
+            const cardModal = document.getElementById('cardDetailsModal');
+            if (cardModal) {
+                cardModal.addEventListener('hidden.bs.modal', function() {
+                    // Limpar todos os iframes dentro do modal
+                    const iframes = cardModal.querySelectorAll('iframe');
+                    iframes.forEach(iframe => {
+                        iframe.src = 'about:blank';
+                    });
+                    // Limpar o conteúdo do modal body
+                    const modalBody = cardModal.querySelector('.modal-body');
+                    if (modalBody) {
+                        modalBody.innerHTML = '<div class="text-center p-5"><div class="spinner-border" role="status"></div></div>';
+                    }
+                });
+            }
 
             function setupMoverDropdownPortal() {
                 const portals = new Map();

@@ -1847,8 +1847,25 @@ def status_ativos():
         
         return jsonify(resultado)
     except Exception as e:
-        logger.exception(f"Falha ao buscar status ativos: {e}")
-        return jsonify({'error': str(e), 'message': 'Falha ao buscar status ativos'}), 500
+        import traceback
+        error_details = {
+            'error': str(e),
+            'type': type(e).__name__,
+            'message': 'Falha ao buscar status ativos',
+            'traceback': traceback.format_exc()
+        }
+        logger.exception(f"[ERRO CRÍTICO] Falha ao buscar status ativos: {e}")
+        logger.error(f"[ERRO CRÍTICO] Tipo: {type(e).__name__}")
+        logger.error(f"[ERRO CRÍTICO] Traceback completo:\n{traceback.format_exc()}")
+        
+        # Tentar fazer rollback se houver transação pendente
+        try:
+            db.session.rollback()
+            logger.info("[ERRO CRÍTICO] Rollback executado com sucesso")
+        except:
+            logger.warning("[ERRO CRÍTICO] Falha ao fazer rollback")
+        
+        return jsonify(error_details), 500
 
 @apontamento_bp.route('/detalhes/<int:ordem_id>', methods=['GET'])
 def detalhes_ordem_servico(ordem_id):
