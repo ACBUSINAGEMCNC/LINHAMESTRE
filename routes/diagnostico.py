@@ -128,6 +128,29 @@ def test_database():
         })
         return jsonify(results)
     
+    # Teste 0: Ping no banco (detectar cold start)
+    try:
+        start_time = time.time()
+        db.session.execute(db.text('SELECT 1'))
+        ping_time = (time.time() - start_time) * 1000
+        
+        results['tests'].append({
+            'name': 'Ping no Banco de Dados',
+            'status': 'success',
+            'response_time': round(ping_time, 2),
+            'message': 'OK'
+        })
+        
+        if ping_time > 1000:
+            results.setdefault('warnings', []).append(f'Conexão com banco está lenta ({ping_time:.0f}ms)')
+    except Exception as e:
+        results['tests'].append({
+            'name': 'Ping no Banco de Dados',
+            'status': 'error',
+            'response_time': 0,
+            'message': str(e)
+        })
+    
     # Teste 1: Query simples
     try:
         start_time = time.time()
@@ -175,18 +198,22 @@ def test_database():
         start_time = time.time()
         ordens = db.session.query(OrdemServico).limit(5).all()
         # Forçar carregamento dos relacionamentos
+        pedidos_count = 0
         for ordem in ordens:
             _ = ordem.pedidos
-            _ = ordem.trabalhos
+            pedidos_count += len(ordem.pedidos)
         query_time = (time.time() - start_time) * 1000
         
         results['tests'].append({
             'name': 'Query Complexa (Ordens + Relacionamentos)',
             'status': 'success',
             'response_time': round(query_time, 2),
-            'result': f'{len(ordens)} ordens',
+            'result': f'{len(ordens)} ordens, {pedidos_count} pedidos',
             'message': 'OK'
         })
+        
+        if query_time > 1000:
+            results.setdefault('warnings', []).append('Query complexa está lenta (>1s)')
     except Exception as e:
         results['tests'].append({
             'name': 'Query Complexa',
@@ -337,13 +364,14 @@ def test_kanban_performance():
         if ordem:
             # Forçar carregamento de todos os relacionamentos
             _ = ordem.pedidos
-            for pedido in ordem.pedidos:
-                _ = pedido.item
-                _ = pedido.item.imagem_path if pedido.item else None
-            _ = ordem.trabalhos
-            for trabalho in ordem.trabalhos:
-                _ = trabalho.maquina
-                _ = trabalho.tipo_trabalho
+            pedidos_count = 0
+            for pedido_os in ordem.pedidos:
+                # PedidoOrdemServico tem um relacionamento com Pedido
+                if hasattr(pedido_os, 'pedido'):
+                    _ = pedido_os.pedido
+                    if pedido_os.pedido and hasattr(pedido_os.pedido, 'item'):
+                        _ = pedido_os.pedido.item
+                        pedidos_count += 1
             
         query_time = (time.time() - start_time) * 1000
         
@@ -351,6 +379,7 @@ def test_kanban_performance():
             'name': 'Carregar Detalhes Completos de OS',
             'status': 'success',
             'response_time': round(query_time, 2),
+            'result': f'{pedidos_count} pedidos carregados' if ordem else 'Nenhuma OS encontrada',
             'message': 'OK'
         })
         
