@@ -1234,7 +1234,10 @@ def create_app():
             rel_encoded = quote(rel_path, safe='/')
             public_url = f"{supabase_url}/storage/v1/object/public/{bucket}/{rel_encoded}"
             _current_app.logger.info("Redirecionando para URL Supabase: %s", public_url)
-            return redirect(public_url, code=302)
+            response = redirect(public_url, code=302)
+            # Cache do redirect por 1 hora para evitar requisições repetidas ao Flask
+            response.headers['Cache-Control'] = 'public, max-age=3600'
+            return response
         else:
             # Log do erro de configuração
             _current_app.logger.error("SUPABASE_URL não configurado! Não é possível redirecionar para: %s", file_path)

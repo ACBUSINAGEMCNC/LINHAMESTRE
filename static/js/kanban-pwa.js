@@ -25,6 +25,31 @@ class KanbanPWA {
             try {
                 const registration = await navigator.serviceWorker.register('/sw.js', { scope: '/' });
                 console.log('[PWA] Service Worker registrado:', registration);
+
+                // Forçar ativação imediata do novo SW se houver um waiting
+                // Isso evita que o usuário precise recarregar manualmente
+                if (registration.waiting) {
+                    console.log('[PWA] Novo SW esperando, ativando...');
+                    registration.waiting.postMessage({ type: 'SKIP_WAITING' });
+                }
+
+                // Se um novo SW for instalado, ativar imediatamente
+                registration.addEventListener('updatefound', () => {
+                    console.log('[PWA] Novo SW encontrado, instalando...');
+                    const newWorker = registration.installing;
+                    newWorker.addEventListener('statechange', () => {
+                        if (newWorker.state === 'installed' && navigator.serviceWorker.controller) {
+                            console.log('[PWA] Novo SW instalado, ativando...');
+                            newWorker.postMessage({ type: 'SKIP_WAITING' });
+                        }
+                    });
+                });
+
+                // Recarregar quando o novo SW for ativado
+                navigator.serviceWorker.addEventListener('controllerchange', () => {
+                    console.log('[PWA] SW ativado, recarregando página...');
+                    window.location.reload();
+                });
             } catch (error) {
                 console.error('[PWA] Erro ao registrar Service Worker:', error);
             }
@@ -60,25 +85,23 @@ class KanbanPWA {
                 if (this.bootstrap.frontend_shell) {
                     this.renderKanban(event.data);
                 }
-                this.hideLoading();
-                console.log('[PWA] Cache carregado! Kanban renderizado localmente.');
+                // Não esconde loading ainda — espera pré-cache terminar
+                console.log('[PWA] Cache carregado! Aguardando pré-cache...');
                 this.updateSyncIndicator('synced');
                 // Preenche buracos de mídia/detalhes em background (não bloqueia UI).
-                this.precacheEverything(event.data, { onlyMissing: true });
+                this.precacheEverything(event.data, { onlyMissing: true, onComplete: () => this.onPrecacheComplete('cache_loaded') });
                 break;
-                
+
             case 'full_sync_complete':
                 if (this.bootstrap.frontend_shell) {
                     this.updateLoadingProgress(65, 'Montando Kanban local...');
                     this.renderKanban(event.data);
                 }
-                this.updateLoadingProgress(100, 'Cache local concluído!');
-                this.hideLoading();
-                console.log('[PWA] Full sync completo! Dados em cache para próxima vez.');
-                this.showNotification('Dados salvos no cache local!', 'success');
+                this.updateLoadingProgress(80, 'Pré-aquecendo cache...');
+                console.log('[PWA] Full sync completo! Pré-aquecendo cache...');
                 this.updateSyncIndicator('synced');
                 // Primeira carga: baixa tudo (detalhes, imagens, apontamentos) em background.
-                this.precacheEverything(event.data, { onlyMissing: false });
+                this.precacheEverything(event.data, { onlyMissing: false, onComplete: () => this.onPrecacheComplete('full_sync') });
                 break;
                 
             case 'incremental_update':
@@ -508,16 +531,27 @@ class KanbanPWA {
         // com as requests reais do usuário (abrir modal, apontamento etc.).
         if (this._precachingDone || this._precaching) return;
         this._precaching = true;
+        this._precacheCallback = opts.onComplete || null;
 
         const onlyMissing = opts.onlyMissing !== false;
         const cartoes = (data && data.cartoes) || [];
         if (!cartoes.length) {
             this._precaching = false;
+            if (this._precacheCallback) this._precacheCallback();
             return;
         }
 
         const urls = this._collectPrecacheUrls(cartoes);
         console.log(`[PWA] Agendando pré-cache: ${urls.length} recursos (aguardando idle)`);
+
+        // Timeout de segurança: se o pré-cache não terminar em 30s, esconde o loading
+        // para não travar o usuário para sempre.
+        this._precacheTimeout = setTimeout(() => {
+            if (this._precaching) {
+                console.warn('[PWA] Pré-cache timeout (30s), liberando UI.');
+                this.onPrecacheComplete('timeout');
+            }
+        }, 30000);
 
         // Espera o navegador ficar ocioso + um pequeno delay antes de começar
         // para não colidir com a renderização inicial e cliques imediatos.
@@ -536,6 +570,11 @@ class KanbanPWA {
                 done++;
                 if (done % 20 === 0 || done === urls.length) {
                     console.log(`[PWA] Pré-cache: ${done}/${urls.length} (${label})`);
+                    // Atualiza progresso no loading overlay
+                    if (this.isLoading) {
+                        const percent = Math.min(95, 80 + (done / urls.length) * 15);
+                        this.updateLoadingProgress(percent, `Pré-aquecendo cache (${done}/${urls.length})...`);
+                    }
                 }
             };
 
@@ -561,10 +600,30 @@ class KanbanPWA {
 
             console.log('[PWA] Pré-cache concluído.');
             this._precachingDone = true;
+            this.onPrecacheComplete('success');
         } catch (err) {
             console.warn('[PWA] Erro no pré-cache:', err);
+            this.onPrecacheComplete('error');
         } finally {
+            if (this._precacheTimeout) {
+                clearTimeout(this._precacheTimeout);
+                this._precacheTimeout = null;
+            }
             this._precaching = false;
+        }
+    }
+
+    onPrecacheComplete(reason) {
+        console.log(`[PWA] Pré-cache completo (motivo: ${reason})`);
+        if (this._precacheCallback) {
+            this._precacheCallback(reason);
+            this._precacheCallback = null;
+        }
+        this.hideLoading();
+        if (reason === 'success') {
+            this.showNotification('Cache pré-aquecido com sucesso!', 'success');
+        } else if (reason === 'timeout') {
+            this.showNotification('Pré-cache em background. O app continuará funcionando.', 'info');
         }
     }
 

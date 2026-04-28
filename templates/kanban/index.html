@@ -2629,13 +2629,21 @@
     
     function validarOperador(codigo) {
         const infoDiv = document.getElementById('operadorInfo');
-        
-        // Timeout de 10 segundos para evitar spinner infinito
+
+        // Cache simples no frontend para evitar requests repetidas do mesmo código
+        if (!window._operadorCache) window._operadorCache = new Map();
+        const cached = window._operadorCache.get(codigo);
+        if (cached && Date.now() - cached.timestamp < 60000) { // cache por 60s
+            infoDiv.innerHTML = cached.html;
+            return;
+        }
+
+        // Timeout aumentado para 30 segundos (pré-cache pode sobrecarregar o banco)
         const timeoutId = setTimeout(() => {
-            console.error('[VALIDACAO] Timeout - validação demorou mais de 10s');
+            console.error('[VALIDACAO] Timeout - validação demorou mais de 30s');
             infoDiv.innerHTML = '<small class="text-danger"><i class="fas fa-times"></i> Timeout na validação</small>';
-        }, 10000);
-        
+        }, 30000);
+
         fetch('/apontamento/validar-codigo', {
             method: 'POST',
             headers: {
@@ -2651,10 +2659,13 @@
             return response.json();
         })
         .then(data => {
-            if (data.valid) {
-                infoDiv.innerHTML = `<small class="text-success"><i class="fas fa-check"></i> ${data.message}</small>`;
-            } else {
-                infoDiv.innerHTML = `<small class="text-danger"><i class="fas fa-times"></i> ${data.message}</small>`;
+            const html = data.valid
+                ? `<small class="text-success"><i class="fas fa-check"></i> ${data.message}</small>`
+                : `<small class="text-danger"><i class="fas fa-times"></i> ${data.message}</small>`;
+            infoDiv.innerHTML = html;
+            // Salva no cache do frontend (60s)
+            if (window._operadorCache) {
+                window._operadorCache.set(codigo, { html, timestamp: Date.now() });
             }
         })
         .catch(error => {
