@@ -72,9 +72,18 @@ def _calcular_timeline_lista(lista_id, data_inicio, data_fim):
         if apontamento.ordem_servico:
             os = apontamento.ordem_servico
             
+            # Buscar quantidade do pedido associado
+            pecas_total = 1
+            cliente_nome = None
+            if os.pedidos and len(os.pedidos) > 0:
+                pedido_os = os.pedidos[0]
+                if pedido_os.pedido:
+                    pecas_total = pedido_os.pedido.quantidade or 1
+                    if pedido_os.pedido.cliente:
+                        cliente_nome = pedido_os.pedido.cliente.nome
+            
             # Calcular progresso
             pecas_feitas = apontamento.quantidade or 0
-            pecas_total = os.quantidade or 1
             
             # Calcular previsão
             tempo_decorrido_min = 0
@@ -90,13 +99,6 @@ def _calcular_timeline_lista(lista_id, data_inicio, data_fim):
                 if pecas_faltantes > 0:
                     minutos_faltantes = pecas_faltantes * media_min_peca
                     previsao_termino = fim + timedelta(minutes=minutos_faltantes)
-            
-            # Buscar cliente
-            cliente_nome = None
-            if os.pedidos and len(os.pedidos) > 0:
-                pedido_os = os.pedidos[0]
-                if pedido_os.pedido and pedido_os.pedido.cliente:
-                    cliente_nome = pedido_os.pedido.cliente.nome
             
             detalhes = {
                 'os_numero': str(os.id),
