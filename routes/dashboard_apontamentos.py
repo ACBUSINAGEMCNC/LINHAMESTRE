@@ -30,7 +30,13 @@ def _calcular_timeline_lista(lista_id, data_inicio, data_fim):
     - detalhes: informações do cartão/OS
     """
     
+    # Buscar nome da lista
+    lista = KanbanLista.query.get(lista_id)
+    if not lista:
+        return []
+    
     # Buscar todos os apontamentos da lista no período
+    # Nota: lista_kanban é String com o nome da lista, não FK
     apontamentos = ApontamentoProducao.query.options(
         joinedload(ApontamentoProducao.ordem_servico)
             .joinedload(OrdemServico.pedidos)
@@ -39,7 +45,7 @@ def _calcular_timeline_lista(lista_id, data_inicio, data_fim):
         joinedload(ApontamentoProducao.trabalho),
         joinedload(ApontamentoProducao.usuario)
     ).filter(
-        ApontamentoProducao.lista_kanban_id == lista_id,
+        ApontamentoProducao.lista_kanban == lista.nome,
         ApontamentoProducao.data_hora >= data_inicio,
         ApontamentoProducao.data_hora <= data_fim
     ).order_by(ApontamentoProducao.data_hora).all()
