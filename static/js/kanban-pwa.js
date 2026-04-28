@@ -63,6 +63,8 @@ class KanbanPWA {
                 this.hideLoading();
                 console.log('[PWA] Cache carregado! Kanban renderizado localmente.');
                 this.updateSyncIndicator('synced');
+                // Preenche buracos de mídia/detalhes em background (não bloqueia UI).
+                this.precacheEverything(event.data, { onlyMissing: true });
                 break;
                 
             case 'full_sync_complete':
@@ -75,6 +77,8 @@ class KanbanPWA {
                 console.log('[PWA] Full sync completo! Dados em cache para próxima vez.');
                 this.showNotification('Dados salvos no cache local!', 'success');
                 this.updateSyncIndicator('synced');
+                // Primeira carga: baixa tudo (detalhes, imagens, apontamentos) em background.
+                this.precacheEverything(event.data, { onlyMissing: false });
                 break;
                 
             case 'incremental_update':
@@ -486,6 +490,136 @@ class KanbanPWA {
             await window.kanbanCache.clear();
             window.location.reload();
         }
+    }
+
+    /**
+     * Pré-aquece o cache do Service Worker baixando, em segundo plano,
+     * todos os recursos que o usuário vai consultar (detalhes, imagens,
+     * apontamentos). Similar ao WhatsApp Web: depois da primeira carga,
+     * o app praticamente não precisa mais do servidor para leitura.
+     *
+     * @param {Object} data            Dados da sync (listas + cartoes)
+     * @param {Object} [opts]
+     * @param {boolean} [opts.onlyMissing=true]  Se true, só baixa o que não
+     *                                           estiver no cache ainda.
+     */
+    async precacheEverything(data, opts = {}) {
+        // Só pré-aquecemos uma vez por sessão, para não disputar CPU/rede
+        // com as requests reais do usuário (abrir modal, apontamento etc.).
+        if (this._precachingDone || this._precaching) return;
+        this._precaching = true;
+
+        const onlyMissing = opts.onlyMissing !== false;
+        const cartoes = (data && data.cartoes) || [];
+        if (!cartoes.length) {
+            this._precaching = false;
+            return;
+        }
+
+        const urls = this._collectPrecacheUrls(cartoes);
+        console.log(`[PWA] Agendando pré-cache: ${urls.length} recursos (aguardando idle)`);
+
+        // Espera o navegador ficar ocioso + um pequeno delay antes de começar
+        // para não colidir com a renderização inicial e cliques imediatos.
+        const start = () => this._runPrecache(urls, onlyMissing);
+        if ('requestIdleCallback' in window) {
+            window.requestIdleCallback(() => setTimeout(start, 1500), { timeout: 4000 });
+        } else {
+            setTimeout(start, 2500);
+        }
+    }
+
+    async _runPrecache(urls, onlyMissing) {
+        try {
+            let done = 0;
+            const report = (label) => {
+                done++;
+                if (done % 20 === 0 || done === urls.length) {
+                    console.log(`[PWA] Pré-cache: ${done}/${urls.length} (${label})`);
+                }
+            };
+
+            // Concorrência baixa para não travar o servidor de desenvolvimento
+            // (Flask dev é single-thread) nem brigar com cliques reais.
+            await this._runInBatches(urls, 2, async (item) => {
+                try {
+                    if (onlyMissing) {
+                        const match = await caches.match(item.url);
+                        if (match) { report('hit'); return; }
+                    }
+                    const init = item.type === 'media'
+                        ? { credentials: 'omit', mode: 'no-cors' }
+                        : { credentials: 'same-origin' };
+                    await fetch(item.url, init);
+                    report('fetch');
+                    // Pequeno respiro entre requests para o servidor
+                    await new Promise(r => setTimeout(r, 30));
+                } catch (e) {
+                    // silencioso: um recurso a menos não quebra a experiência
+                }
+            });
+
+            console.log('[PWA] Pré-cache concluído.');
+            this._precachingDone = true;
+        } catch (err) {
+            console.warn('[PWA] Erro no pré-cache:', err);
+        } finally {
+            this._precaching = false;
+        }
+    }
+
+    _collectPrecacheUrls(cartoes) {
+        const set = new Map();
+        const add = (url, type) => {
+            if (!url) return;
+            if (!set.has(url)) set.set(url, { url, type });
+        };
+
+        // Foco: detalhes (HTML do modal) e mídia (imagens/PDF).
+        // Endpoints de apontamento são leves e ficam em SWR via SW
+        // na primeira abertura real — não precisam pré-aquecer.
+        for (const cartao of cartoes) {
+            const ordemId = cartao.ordem_id || cartao.id;
+
+            if (cartao.is_fantasma && cartao.fantasma_id) {
+                add(`/cartao-fantasma/detalhes/${cartao.fantasma_id}`, 'detail');
+            } else if (ordemId && !String(ordemId).startsWith('fantasma-')) {
+                add(`/kanban/detalhes/${ordemId}`, 'detail');
+            }
+
+            if (cartao.item_imagem_path) {
+                add(this._resolveMediaUrl(cartao.item_imagem_path), 'media');
+            }
+            for (const item of (cartao.itens || [])) {
+                if (item.imagem_path) add(this._resolveMediaUrl(item.imagem_path), 'media');
+            }
+            if (cartao.pedido && cartao.pedido.item_imagem) {
+                add(this._resolveMediaUrl(cartao.pedido.item_imagem), 'media');
+            }
+        }
+
+        return Array.from(set.values());
+    }
+
+    _resolveMediaUrl(path) {
+        if (!path) return '';
+        // PDFs não são cacheados pelo SW (opaque response quebra o viewer),
+        // então não tem sentido pré-baixar.
+        if (/\.pdf(\?|$)/i.test(path)) return '';
+        if (/^https?:\/\//i.test(path)) return path;
+        if (path.startsWith('/uploads/')) return path;
+        return `/uploads/${path.replace(/^\/+/, '')}`;
+    }
+
+    async _runInBatches(items, concurrency, worker) {
+        const queue = items.slice();
+        const runners = Array.from({ length: Math.min(concurrency, queue.length) }, async () => {
+            while (queue.length) {
+                const item = queue.shift();
+                await worker(item);
+            }
+        });
+        await Promise.all(runners);
     }
 }
 

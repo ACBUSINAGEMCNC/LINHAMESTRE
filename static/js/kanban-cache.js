@@ -6,7 +6,7 @@
 class KanbanCache {
     constructor() {
         this.dbName = 'linhamestre-kanban';
-        this.dbVersion = 1;
+        this.dbVersion = 2;
         this.db = null;
     }
     
@@ -30,25 +30,20 @@ class KanbanCache {
             
             request.onupgradeneeded = (event) => {
                 const db = event.target.result;
-                
-                // Criar object stores
-                if (!db.objectStoreNames.contains('listas')) {
-                    db.createObjectStore('listas', { keyPath: 'id' });
-                }
-                
-                if (!db.objectStoreNames.contains('cartoes')) {
-                    db.createObjectStore('cartoes', { keyPath: 'id' });
-                }
-                
-                if (!db.objectStoreNames.contains('apontamentos')) {
-                    db.createObjectStore('apontamentos', { keyPath: 'id' });
-                }
-                
-                if (!db.objectStoreNames.contains('metadata')) {
-                    db.createObjectStore('metadata', { keyPath: 'key' });
-                }
-                
-                console.log('[Cache] Object stores criados!');
+
+                // Recriar object stores do zero para invalidar payloads antigos
+                ['listas', 'cartoes', 'apontamentos', 'metadata'].forEach((store) => {
+                    if (db.objectStoreNames.contains(store)) {
+                        db.deleteObjectStore(store);
+                    }
+                });
+
+                db.createObjectStore('listas', { keyPath: 'id' });
+                db.createObjectStore('cartoes', { keyPath: 'id' });
+                db.createObjectStore('apontamentos', { keyPath: 'id' });
+                db.createObjectStore('metadata', { keyPath: 'key' });
+
+                console.log('[Cache] Object stores recriados (upgrade).');
             };
         });
     }

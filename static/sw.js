@@ -3,9 +3,12 @@
  * Cache de assets estáticos e stale-while-revalidate para páginas
  */
 
-const CACHE_VERSION = 'v5';
+const CACHE_VERSION = 'v7';
 const CACHE_STATIC = `linhamestre-static-${CACHE_VERSION}`;
 const CACHE_PAGES  = `linhamestre-pages-${CACHE_VERSION}`;
+const CACHE_MEDIA  = `linhamestre-media-${CACHE_VERSION}`;
+const CACHE_API    = `linhamestre-api-${CACHE_VERSION}`;
+const KNOWN_CACHES = new Set([CACHE_STATIC, CACHE_PAGES, CACHE_MEDIA, CACHE_API]);
 
 // Assets estáticos para pré-cachear na instalação
 const STATIC_ASSETS = [
@@ -17,17 +20,34 @@ const STATIC_ASSETS = [
     '/static/js/kanban-card-click.js'
 ];
 
-// URLs que NUNCA devem ser cacheadas (sempre vai ao servidor)
+// URLs que NUNCA devem ser cacheadas (sempre vão ao servidor)
+// Mantemos apenas endpoints de escrita/estado dinâmico crítico.
 const BYPASS_PATTERNS = [
     '/kanban/full-data',
     '/kanban/sync',
     '/kanban/mover',
+    '/kanban/reordenar',
+    '/kanban/finalizar',
+    '/kanban/atualizar-tempo-real',
+    '/kanban/enviar-para',
+    '/cartao-fantasma/criar',
+    '/cartao-fantasma/mover',
+    '/cartao-fantasma/remover',
+    '/apontamento/registrar',
+    '/apontamento/validar-codigo',
+    '/apontamento/status-ativos',
+    '/apontamento/status-cronometro',
+    '/auth/'
+];
+
+// GET endpoints de detalhes/apontamento que podem ser servidos via SWR.
+const SWR_API_PATTERNS = [
     '/kanban/detalhes/',
     '/cartao-fantasma/detalhes/',
-    '/apontamento/',
-    '/api/',
-    '/auth/',
-    '/uploads/'
+    '/apontamento/os/',
+    '/apontamento/item/',
+    '/apontamento/detalhes/',
+    '/apontamento/quantidades-por-trabalho/'
 ];
 
 // Instalação do Service Worker
@@ -56,7 +76,7 @@ self.addEventListener('activate', (event) => {
         caches.keys().then((cacheNames) => {
             return Promise.all(
                 cacheNames.map((name) => {
-                    if (name !== CACHE_STATIC && name !== CACHE_PAGES) {
+                    if (!KNOWN_CACHES.has(name)) {
                         console.log('[SW] Removendo cache antigo:', name);
                         return caches.delete(name);
                     }
@@ -90,8 +110,28 @@ self.addEventListener('fetch', (event) => {
         event.respondWith(cacheFirstStrategy(request, CACHE_STATIC));
         return;
     }
+
+    // Estratégia 2: CACHE-FIRST para IMAGENS em /uploads/*
+    // URLs são hash-based (imutáveis). PDFs são ignorados de propósito:
+    // respostas opaque (no-cors, cross-origin) não podem ser consumidas
+    // pelo visualizador de PDF do Chrome, resultando em "página indisponível".
+    // Para PDF deixamos o browser seguir o 302 do Flask direto para Supabase.
+    if (url.pathname.startsWith('/uploads/')) {
+        const isPdf = /\.pdf(\?|$)/i.test(url.pathname);
+        if (!isPdf) {
+            event.respondWith(cacheFirstStrategy(request, CACHE_MEDIA));
+        }
+        return;
+    }
+
+    // Estratégia 3: STALE-WHILE-REVALIDATE para detalhes/apontamento (GET)
+    const isSwrApi = SWR_API_PATTERNS.some(p => url.pathname.startsWith(p));
+    if (isSwrApi) {
+        event.respondWith(staleWhileRevalidate(request, CACHE_API));
+        return;
+    }
     
-    // Estratégia 2: STALE-WHILE-REVALIDATE apenas para a página principal do Kanban
+    // Estratégia 4: STALE-WHILE-REVALIDATE apenas para a página principal do Kanban
     if (request.destination === 'document' && (url.pathname === '/kanban' || url.pathname === '/kanban/')) {
         event.respondWith(staleWhileRevalidate(request, CACHE_PAGES));
         return;
@@ -104,18 +144,33 @@ self.addEventListener('fetch', (event) => {
  * Cache-First: serve do cache, busca da rede só se não tiver
  */
 async function cacheFirstStrategy(request, cacheName) {
-    const cached = await caches.match(request);
+    const cache = await caches.open(cacheName);
+    const cached = await cache.match(request);
     if (cached) return cached;
-    
+
+    const url = new URL(request.url);
+    const isMedia = url.pathname.startsWith('/uploads/');
+
     try {
-        const response = await fetch(request);
-        if (response.ok) {
-            const cache = await caches.open(cacheName);
-            cache.put(request, response.clone());
+        // Para /uploads/* usamos no-cors porque a rota faz 302 para Supabase
+        // (cross-origin). Com no-cors recebemos uma resposta opaca que ainda
+        // pode ser cacheada e servida de volta pelo SW.
+        const init = isMedia
+            ? { mode: 'no-cors', credentials: 'omit', redirect: 'follow' }
+            : { redirect: 'follow' };
+        const netRequest = isMedia ? new Request(request.url, init) : request;
+        const response = await fetch(netRequest, isMedia ? undefined : init);
+
+        if (response && (response.ok || response.type === 'opaque' || response.type === 'opaqueredirect')) {
+            try {
+                cache.put(request, response.clone());
+            } catch (err) {
+                // Cache.put pode rejeitar respostas opaqueredirect; ignoramos.
+            }
         }
         return response;
     } catch (e) {
-        console.error('[SW] Falha na rede:', request.url);
+        console.warn('[SW] Falha na rede:', request.url, e && e.message);
         return new Response('Offline', { status: 503 });
     }
 }
