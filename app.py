@@ -1094,6 +1094,8 @@ def create_app():
         if endpoint == 'supabase_redirect':
             return
         # PWA assets públicos
+        if endpoint in ('pwa_manifest', 'pwa_service_worker'):
+            return
         if request.path in ('/static/manifest.json', '/static/sw.js', '/manifest.json', '/sw.js'):
             return
 
@@ -1185,15 +1187,13 @@ def create_app():
         except Exception:
             return {}
     
-    # Rotas públicas para PWA
+    # Rotas públicas para PWA (apenas raiz - evita conflito com static do Flask)
     @app.route('/manifest.json')
-    @app.route('/static/manifest.json')
     def pwa_manifest():
         """Serve o manifest.json do PWA sem autenticação"""
-        return send_from_directory('static', 'manifest.json', mimetype='application/json')
+        return send_from_directory('static', 'manifest.json', mimetype='application/manifest+json')
     
     @app.route('/sw.js')
-    @app.route('/static/sw.js')
     def pwa_service_worker():
         """Serve o service worker sem autenticação"""
         return send_from_directory('static', 'sw.js', mimetype='application/javascript')

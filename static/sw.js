@@ -5,12 +5,10 @@
 
 const CACHE_NAME = 'linhamestre-kanban-v1';
 const ASSETS_TO_CACHE = [
-    '/static/css/styles.css',
+    '/static/css/kanban-pwa.css',
     '/static/js/kanban-cache.js',
     '/static/js/kanban-sync.js',
-    '/static/img/logo.png',
-    'https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/css/bootstrap.min.css',
-    'https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css'
+    '/manifest.json'
 ];
 
 // Instalação do Service Worker
