@@ -1169,3 +1169,169 @@ def listar_trabalhos_ordem(ordem_id):
     
     except Exception as e:
         return jsonify({'success': False, 'message': f'Erro ao listar trabalhos: {str(e)}'})
+
+
+# ===============================
+# ROTAS PWA - CACHE E SYNC
+# ===============================
+
+@kanban.route('/kanban/full-data')
+def full_data():
+    """
+    Retorna TODOS os dados do Kanban para cache local (PWA)
+    Usado no primeiro acesso ou quando cache está vazio
+    """
+    if 'usuario_id' not in session:
+        return jsonify({'success': False, 'message': 'Não autorizado'}), 401
+    
+    try:
+        # Buscar todas as listas ativas
+        listas = KanbanLista.query.filter_by(ativa=True).order_by(KanbanLista.ordem).all()
+        
+        # Buscar todos os cartões (OS) ativos
+        cartoes = []
+        for lista in listas:
+            # Cartões reais
+            ordens = OrdemServico.query.filter_by(status=lista.nome).order_by(OrdemServico.posicao).all()
+            for ordem in ordens:
+                cartoes.append(_serialize_cartao(ordem, lista.id, False))
+            
+            # Cartões fantasma
+            fantasmas = CartaoFantasma.query.filter_by(
+                lista_kanban_id=lista.id,
+                ativo=True
+            ).order_by(CartaoFantasma.posicao).all()
+            for fantasma in fantasmas:
+                cartoes.append(_serialize_cartao_fantasma(fantasma))
+        
+        # Buscar apontamentos ativos (últimas 24h)
+        data_limite = datetime.now() - timedelta(days=1)
+        apontamentos = ApontamentoProducao.query.filter(
+            ApontamentoProducao.data_hora >= data_limite
+        ).all()
+        
+        return jsonify({
+            'success': True,
+            'listas': [_serialize_lista(l) for l in listas],
+            'cartoes': cartoes,
+            'apontamentos': [_serialize_apontamento(a) for a in apontamentos],
+            'timestamp': datetime.now().isoformat()
+        })
+        
+    except Exception as e:
+        current_app.logger.error(f'Erro no full-data: {str(e)}')
+        return jsonify({'success': False, 'message': f'Erro ao carregar dados: {str(e)}'}), 500
+
+
+@kanban.route('/kanban/sync')
+def sync():
+    """
+    Retorna apenas mudanças desde last_update (sync incremental)
+    """
+    if 'usuario_id' not in session:
+        return jsonify({'success': False, 'message': 'Não autorizado'}), 401
+    
+    try:
+        last_update_str = request.args.get('last_update')
+        if not last_update_str:
+            return jsonify({'success': False, 'message': 'Parâmetro last_update obrigatório'}), 400
+        
+        # Parse do timestamp
+        last_update = datetime.fromisoformat(last_update_str.replace('Z', '+00:00'))
+        
+        # Buscar cartões modificados/criados
+        # Nota: Precisaria de campo updated_at em OrdemServico para isso funcionar perfeitamente
+        # Por enquanto, retorna vazio (implementar depois)
+        updated_cards = []
+        deleted_cards = []
+        new_cards = []
+        
+        # Buscar novos apontamentos
+        new_apontamentos = ApontamentoProducao.query.filter(
+            ApontamentoProducao.data_hora >= last_update
+        ).all()
+        
+        has_changes = len(updated_cards) > 0 or len(deleted_cards) > 0 or len(new_cards) > 0 or len(new_apontamentos) > 0
+        
+        return jsonify({
+            'success': True,
+            'has_changes': has_changes,
+            'updated_cards': updated_cards,
+            'deleted_cards': deleted_cards,
+            'new_cards': new_cards,
+            'new_apontamentos': [_serialize_apontamento(a) for a in new_apontamentos],
+            'timestamp': datetime.now().isoformat()
+        })
+        
+    except Exception as e:
+        current_app.logger.error(f'Erro no sync: {str(e)}')
+        return jsonify({'success': False, 'message': f'Erro ao sincronizar: {str(e)}'}), 500
+
+
+# Helpers de serialização
+
+def _serialize_lista(lista):
+    """Serializa uma lista Kanban para JSON"""
+    return {
+        'id': lista.id,
+        'nome': lista.nome,
+        'cor': lista.cor,
+        'ordem': lista.ordem,
+        'tipo_servico': lista.tipo_servico,
+        'ativa': lista.ativa
+    }
+
+
+def _serialize_cartao(ordem, lista_id, is_fantasma):
+    """Serializa um cartão (OS) para JSON"""
+    # Buscar primeiro pedido
+    pedido_info = None
+    if ordem.pedidos and len(ordem.pedidos) > 0:
+        pedido_os = ordem.pedidos[0]
+        if pedido_os.pedido:
+            pedido = pedido_os.pedido
+            pedido_info = {
+                'numero': pedido.numero_pedido,
+                'quantidade': pedido.quantidade,
+                'cliente': pedido.cliente.nome if pedido.cliente else None,
+                'item_codigo': pedido.item.codigo_acb if pedido.item else None,
+                'item_nome': pedido.item.nome if pedido.item else None
+            }
+    
+    return {
+        'id': ordem.id,
+        'numero': ordem.numero,
+        'lista_id': lista_id,
+        'posicao': ordem.posicao,
+        'is_fantasma': is_fantasma,
+        'pedido': pedido_info,
+        'data_criacao': ordem.data_criacao.isoformat() if ordem.data_criacao else None
+    }
+
+
+def _serialize_cartao_fantasma(fantasma):
+    """Serializa um cartão fantasma para JSON"""
+    ordem = fantasma.ordem_servico
+    return {
+        'id': f'fantasma-{fantasma.id}',
+        'fantasma_id': fantasma.id,
+        'ordem_id': ordem.id,
+        'numero': ordem.numero,
+        'lista_id': fantasma.lista_kanban_id,
+        'posicao': fantasma.posicao,
+        'is_fantasma': True,
+        'trabalho_id': fantasma.trabalho_id,
+        'trabalho_nome': fantasma.trabalho.nome if fantasma.trabalho else None
+    }
+
+
+def _serialize_apontamento(apontamento):
+    """Serializa um apontamento para JSON"""
+    return {
+        'id': apontamento.id,
+        'ordem_servico_id': apontamento.ordem_servico_id,
+        'tipo_acao': apontamento.tipo_acao,
+        'data_hora': apontamento.data_hora.isoformat() if apontamento.data_hora else None,
+        'quantidade': apontamento.quantidade,
+        'lista_kanban': apontamento.lista_kanban
+    }
