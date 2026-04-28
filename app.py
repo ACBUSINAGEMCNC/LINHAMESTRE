@@ -1093,6 +1093,9 @@ def create_app():
             return
         if endpoint == 'supabase_redirect':
             return
+        # PWA assets públicos
+        if request.path in ('/static/manifest.json', '/static/sw.js', '/manifest.json', '/sw.js'):
+            return
 
         # Qualquer outra rota exige usuário logado
         if 'usuario_id' not in session:

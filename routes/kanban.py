@@ -1187,22 +1187,32 @@ def full_data():
     try:
         # Buscar todas as listas ativas
         listas = KanbanLista.query.filter_by(ativa=True).order_by(KanbanLista.ordem).all()
+        current_app.logger.info(f'[PWA] Encontradas {len(listas)} listas')
         
         # Buscar todos os cartões (OS) ativos
         cartoes = []
         for lista in listas:
-            # Cartões reais
-            ordens = OrdemServico.query.filter_by(status=lista.nome).order_by(OrdemServico.posicao).all()
-            for ordem in ordens:
-                cartoes.append(_serialize_cartao(ordem, lista.id, False))
-            
-            # Cartões fantasma
-            fantasmas = CartaoFantasma.query.filter_by(
-                lista_kanban_id=lista.id,
-                ativo=True
-            ).order_by(CartaoFantasma.posicao).all()
-            for fantasma in fantasmas:
-                cartoes.append(_serialize_cartao_fantasma(fantasma))
+            try:
+                # Cartões reais
+                ordens = OrdemServico.query.filter_by(status=lista.nome).order_by(OrdemServico.posicao).all()
+                for ordem in ordens:
+                    try:
+                        cartoes.append(_serialize_cartao(ordem, lista.id, False))
+                    except Exception as e:
+                        current_app.logger.error(f'[PWA] Erro ao serializar cartão {ordem.id}: {str(e)}')
+                
+                # Cartões fantasma
+                fantasmas = CartaoFantasma.query.filter_by(
+                    lista_kanban_id=lista.id,
+                    ativo=True
+                ).order_by(CartaoFantasma.posicao).all()
+                for fantasma in fantasmas:
+                    try:
+                        cartoes.append(_serialize_cartao_fantasma(fantasma))
+                    except Exception as e:
+                        current_app.logger.error(f'[PWA] Erro ao serializar fantasma {fantasma.id}: {str(e)}')
+            except Exception as e:
+                current_app.logger.error(f'[PWA] Erro ao processar lista {lista.nome}: {str(e)}')
         
         # Buscar apontamentos ativos (últimas 24h)
         data_limite = datetime.now() - timedelta(days=1)
@@ -1219,7 +1229,9 @@ def full_data():
         })
         
     except Exception as e:
-        current_app.logger.error(f'Erro no full-data: {str(e)}')
+        import traceback
+        current_app.logger.error(f'[PWA] Erro no full-data: {str(e)}')
+        current_app.logger.error(f'[PWA] Traceback: {traceback.format_exc()}')
         return jsonify({'success': False, 'message': f'Erro ao carregar dados: {str(e)}'}), 500
 
 
@@ -1298,6 +1310,14 @@ def _serialize_cartao(ordem, lista_id, is_fantasma):
                 'item_nome': pedido.item.nome if pedido.item else None
             }
     
+    # Converter data_criacao para string
+    data_criacao_str = None
+    if ordem.data_criacao:
+        try:
+            data_criacao_str = ordem.data_criacao.isoformat()
+        except:
+            data_criacao_str = str(ordem.data_criacao)
+    
     return {
         'id': ordem.id,
         'numero': ordem.numero,
@@ -1305,7 +1325,7 @@ def _serialize_cartao(ordem, lista_id, is_fantasma):
         'posicao': ordem.posicao,
         'is_fantasma': is_fantasma,
         'pedido': pedido_info,
-        'data_criacao': ordem.data_criacao.isoformat() if ordem.data_criacao else None
+        'data_criacao': data_criacao_str
     }
 
 
@@ -1327,11 +1347,19 @@ def _serialize_cartao_fantasma(fantasma):
 
 def _serialize_apontamento(apontamento):
     """Serializa um apontamento para JSON"""
+    # Converter data_hora para string
+    data_hora_str = None
+    if apontamento.data_hora:
+        try:
+            data_hora_str = apontamento.data_hora.isoformat()
+        except:
+            data_hora_str = str(apontamento.data_hora)
+    
     return {
         'id': apontamento.id,
         'ordem_servico_id': apontamento.ordem_servico_id,
         'tipo_acao': apontamento.tipo_acao,
-        'data_hora': apontamento.data_hora.isoformat() if apontamento.data_hora else None,
+        'data_hora': data_hora_str,
         'quantidade': apontamento.quantidade,
         'lista_kanban': apontamento.lista_kanban
     }
