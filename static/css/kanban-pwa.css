@@ -1,0 +1,285 @@
+/**
+ * Kanban PWA Styles
+ * Estilos para loading, sync indicator e notificações
+ */
+
+/* Loading Overlay */
+.pwa-loading-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: rgba(0, 0, 0, 0.8);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 9999;
+}
+
+.pwa-loading-content {
+    background: white;
+    border-radius: 12px;
+    padding: 40px;
+    text-align: center;
+    max-width: 500px;
+    box-shadow: 0 10px 40px rgba(0, 0, 0, 0.3);
+}
+
+.pwa-loading-spinner {
+    color: #007bff;
+    margin-bottom: 20px;
+}
+
+.pwa-loading-content h3 {
+    margin-bottom: 20px;
+    color: #2c3e50;
+}
+
+/* Progress Bar */
+.pwa-progress-bar {
+    width: 100%;
+    height: 30px;
+    background: #e9ecef;
+    border-radius: 15px;
+    overflow: hidden;
+    margin: 20px 0;
+    position: relative;
+}
+
+.pwa-progress-fill {
+    height: 100%;
+    background: linear-gradient(90deg, #007bff 0%, #0056b3 100%);
+    transition: width 0.3s ease;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: white;
+    font-weight: 600;
+    font-size: 0.875rem;
+}
+
+.pwa-loading-content p {
+    color: #6c757d;
+    margin-top: 10px;
+    font-size: 0.875rem;
+}
+
+/* Sync Indicator */
+.pwa-sync-indicator {
+    position: fixed;
+    bottom: 20px;
+    right: 20px;
+    padding: 12px 20px;
+    border-radius: 8px;
+    background: white;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+    display: none;
+    align-items: center;
+    gap: 10px;
+    z-index: 1000;
+    font-size: 0.875rem;
+    font-weight: 500;
+}
+
+.pwa-sync-indicator.syncing {
+    background: #fff3cd;
+    color: #856404;
+    border-left: 4px solid #ffc107;
+}
+
+.pwa-sync-indicator.synced {
+    background: #d4edda;
+    color: #155724;
+    border-left: 4px solid #28a745;
+}
+
+.pwa-sync-indicator.error {
+    background: #f8d7da;
+    color: #721c24;
+    border-left: 4px solid #dc3545;
+}
+
+.pwa-sync-indicator i {
+    font-size: 1rem;
+}
+
+/* Notifications */
+.pwa-notification {
+    position: fixed;
+    top: 20px;
+    right: 20px;
+    padding: 15px 20px;
+    border-radius: 8px;
+    background: white;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+    z-index: 1001;
+    max-width: 300px;
+    animation: slideIn 0.3s ease;
+}
+
+@keyframes slideIn {
+    from {
+        transform: translateX(400px);
+        opacity: 0;
+    }
+    to {
+        transform: translateX(0);
+        opacity: 1;
+    }
+}
+
+.pwa-notification.info {
+    background: #d1ecf1;
+    color: #0c5460;
+    border-left: 4px solid #17a2b8;
+}
+
+.pwa-notification.success {
+    background: #d4edda;
+    color: #155724;
+    border-left: 4px solid #28a745;
+}
+
+.pwa-notification.error {
+    background: #f8d7da;
+    color: #721c24;
+    border-left: 4px solid #dc3545;
+}
+
+.pwa-notification.warning {
+    background: #fff3cd;
+    color: #856404;
+    border-left: 4px solid #ffc107;
+}
+
+/* Offline Indicator */
+.pwa-offline-banner {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    background: #ffc107;
+    color: #856404;
+    padding: 10px;
+    text-align: center;
+    font-weight: 600;
+    z-index: 9998;
+    display: none;
+}
+
+.pwa-offline-banner.show {
+    display: block;
+}
+
+/* PWA Install Button */
+.pwa-install-button {
+    position: fixed;
+    bottom: 80px;
+    right: 20px;
+    padding: 12px 24px;
+    background: #007bff;
+    color: white;
+    border: none;
+    border-radius: 8px;
+    box-shadow: 0 4px 12px rgba(0, 123, 255, 0.3);
+    cursor: pointer;
+    font-weight: 600;
+    display: none;
+    align-items: center;
+    gap: 10px;
+    z-index: 1000;
+    transition: all 0.3s ease;
+}
+
+.pwa-install-button:hover {
+    background: #0056b3;
+    transform: translateY(-2px);
+    box-shadow: 0 6px 16px rgba(0, 123, 255, 0.4);
+}
+
+.pwa-install-button.show {
+    display: flex;
+}
+
+/* Loading Skeleton (para quando carrega do cache) */
+.kanban-skeleton {
+    display: flex;
+    gap: 20px;
+    padding: 20px;
+}
+
+.skeleton-list {
+    flex: 1;
+    background: #f8f9fa;
+    border-radius: 8px;
+    padding: 15px;
+    min-height: 400px;
+}
+
+.skeleton-card {
+    background: white;
+    border-radius: 4px;
+    padding: 15px;
+    margin-bottom: 10px;
+    animation: pulse 1.5s ease-in-out infinite;
+}
+
+@keyframes pulse {
+    0%, 100% {
+        opacity: 1;
+    }
+    50% {
+        opacity: 0.5;
+    }
+}
+
+/* Responsive */
+@media (max-width: 768px) {
+    .pwa-loading-content {
+        padding: 30px 20px;
+        max-width: 90%;
+    }
+    
+    .pwa-sync-indicator {
+        bottom: 10px;
+        right: 10px;
+        font-size: 0.75rem;
+        padding: 10px 15px;
+    }
+    
+    .pwa-notification {
+        top: 10px;
+        right: 10px;
+        max-width: calc(100% - 20px);
+    }
+    
+    .pwa-install-button {
+        bottom: 70px;
+        right: 10px;
+        padding: 10px 20px;
+        font-size: 0.875rem;
+    }
+}
+
+/* Dark Mode Support */
+@media (prefers-color-scheme: dark) {
+    .pwa-loading-content {
+        background: #2c3e50;
+        color: #ecf0f1;
+    }
+    
+    .pwa-loading-content h3 {
+        color: #ecf0f1;
+    }
+    
+    .pwa-sync-indicator {
+        background: #34495e;
+        color: #ecf0f1;
+    }
+    
+    .pwa-notification {
+        background: #34495e;
+        color: #ecf0f1;
+    }
+}
