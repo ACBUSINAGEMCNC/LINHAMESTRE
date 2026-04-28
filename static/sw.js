@@ -9,7 +9,6 @@ const CACHE_PAGES  = `linhamestre-pages-${CACHE_VERSION}`;
 
 // Assets estáticos para pré-cachear na instalação
 const STATIC_ASSETS = [
-    '/manifest.json',
     '/static/css/kanban-pwa.css',
     '/static/css/kanban-sortable.css',
     '/static/js/kanban-cache.js',
