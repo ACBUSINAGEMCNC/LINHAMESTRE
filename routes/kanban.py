@@ -56,6 +56,23 @@ _kanban_memory_cache = {}
 @monitor_route_performance
 def index():
     """Rota para a página principal do Kanban"""
+    listas = get_kanban_lists()
+
+    if request.args.get('legacy') != '1':
+        empty_cards = {lista: [] for lista in listas}
+        return render_template(
+            'kanban/index.html',
+            listas=listas,
+            ordens=empty_cards,
+            cartoes_fantasma=empty_cards.copy(),
+            tempos_listas={},
+            quantidades_listas={},
+            metricas_listas={},
+            metricas_listas_json='{}',
+            frontend_shell=True,
+            Item=Item
+        )
+
     # Tentar buscar do cache (TTL: 5 minutos) se disponível
     # Usar chave global baseada no timestamp (blocos de 5 minutos)
     import time
@@ -70,7 +87,6 @@ def index():
     
     current_app.logger.info(f"🔄 Cache MISS para Kanban")
     
-    listas = get_kanban_lists()
     categorias = get_kanban_categories()
     
     ordens = {}
@@ -1298,6 +1314,10 @@ def _serialize_cartao(ordem, lista_id, is_fantasma):
     """Serializa um cartão (OS) para JSON"""
     # Buscar primeiro pedido
     pedido_info = None
+    item_id = None
+    item_imagem_path = None
+    itens = []
+    search_parts = [ordem.numero or '']
     if ordem.pedidos and len(ordem.pedidos) > 0:
         pedido_os = ordem.pedidos[0]
         if pedido_os.pedido:
@@ -1309,6 +1329,43 @@ def _serialize_cartao(ordem, lista_id, is_fantasma):
                 'item_codigo': pedido.item.codigo_acb if pedido.item else None,
                 'item_nome': pedido.item.nome if pedido.item else None
             }
+
+    grouped_items = {}
+    for pedido_os in getattr(ordem, 'pedidos', []) or []:
+        pedido = getattr(pedido_os, 'pedido', None)
+        if not pedido:
+            continue
+
+        cliente_nome = pedido.cliente.nome if pedido.cliente else ''
+        numero_cliente = pedido.numero_pedido_cliente or ''
+        item_codigo = pedido.item.codigo_acb if pedido.item else ''
+        item_nome = pedido.item.nome if pedido.item else (pedido.nome_item or '')
+
+        search_parts.extend([
+            cliente_nome,
+            numero_cliente,
+            item_codigo,
+            item_nome,
+            pedido.nome_item or ''
+        ])
+
+        if pedido.item and not item_id:
+            item_id = pedido.item.id
+        if pedido.item and getattr(pedido.item, 'imagem_path', None) and not item_imagem_path:
+            item_imagem_path = pedido.item.imagem_path
+
+        item_key = pedido.item_id if pedido.item_id else (pedido.nome_item or f'pedido-{pedido.id}')
+        item_label = f"{item_codigo} - {item_nome}".strip(' -') or pedido.nome_item or 'Item sem nome'
+
+        if item_key not in grouped_items:
+            grouped_items[item_key] = {
+                'nome': item_label,
+                'quantidade': pedido.quantidade or 0
+            }
+        else:
+            grouped_items[item_key]['quantidade'] += pedido.quantidade or 0
+
+    itens = list(grouped_items.values())
     
     # Converter data_criacao para string
     data_criacao_str = None
@@ -1320,12 +1377,18 @@ def _serialize_cartao(ordem, lista_id, is_fantasma):
     
     return {
         'id': ordem.id,
+        'ordem_id': ordem.id,
         'numero': ordem.numero,
         'lista_id': lista_id,
+        'lista_nome': ordem.status,
         'posicao': ordem.posicao,
         'is_fantasma': is_fantasma,
         'pedido': pedido_info,
-        'data_criacao': data_criacao_str
+        'data_criacao': data_criacao_str,
+        'item_id': item_id,
+        'item_imagem_path': item_imagem_path,
+        'itens': itens,
+        'search_text': ' '.join([part for part in search_parts if part]).strip()
     }
 
 
@@ -1338,10 +1401,12 @@ def _serialize_cartao_fantasma(fantasma):
         'ordem_id': ordem.id,
         'numero': ordem.numero,
         'lista_id': fantasma.lista_kanban_id,
+        'lista_nome': fantasma.lista.nome if fantasma.lista else None,
         'posicao': fantasma.posicao,
         'is_fantasma': True,
         'trabalho_id': fantasma.trabalho_id,
-        'trabalho_nome': fantasma.trabalho.nome if fantasma.trabalho else None
+        'trabalho_nome': fantasma.trabalho.nome if fantasma.trabalho else None,
+        'search_text': f"{ordem.numero} {fantasma.trabalho.nome if fantasma.trabalho else ''}".strip()
     }
 
 

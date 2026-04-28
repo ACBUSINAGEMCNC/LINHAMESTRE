@@ -9,6 +9,7 @@ class KanbanPWA {
         this.hasCache = false;
         this.loadingProgress = 0;
         this.initialCacheChecked = false;
+        this.bootstrap = window.KANBAN_BOOTSTRAP || { frontend_shell: false, listas: [] };
     }
     
     /**
@@ -56,12 +57,19 @@ class KanbanPWA {
         switch (event.type) {
             case 'cache_loaded':
                 this.hasCache = true;
+                if (this.bootstrap.frontend_shell) {
+                    this.renderKanban(event.data);
+                }
                 this.hideLoading();
-                console.log('[PWA] Cache carregado! Kanban tradicional já renderizado.');
+                console.log('[PWA] Cache carregado! Kanban renderizado localmente.');
                 this.updateSyncIndicator('synced');
                 break;
                 
             case 'full_sync_complete':
+                if (this.bootstrap.frontend_shell) {
+                    this.updateLoadingProgress(65, 'Montando Kanban local...');
+                    this.renderKanban(event.data);
+                }
                 this.updateLoadingProgress(100, 'Cache local concluído!');
                 this.hideLoading();
                 console.log('[PWA] Full sync completo! Dados em cache para próxima vez.');
@@ -70,6 +78,9 @@ class KanbanPWA {
                 break;
                 
             case 'incremental_update':
+                if (this.bootstrap.frontend_shell) {
+                    this.applyIncrementalUpdate(event.delta);
+                }
                 // Atualização incremental - mostrar notificação
                 if (event.delta.has_changes) {
                     const totalChanges = (event.delta.updated_cards?.length || 0) + 
@@ -95,7 +106,6 @@ class KanbanPWA {
     renderKanban(data) {
         console.log('[PWA] Renderizando Kanban...', data);
         
-        // Limpar listas existentes
         const container = document.getElementById('kanban-container');
         if (!container) {
             console.error('[PWA] Container do Kanban não encontrado!');
@@ -103,81 +113,176 @@ class KanbanPWA {
         }
         
         container.innerHTML = '';
-        
-        // Renderizar cada lista
-        for (const lista of data.listas || []) {
-            const listaEl = this.createListaElement(lista);
-            
-            // Adicionar cartões da lista
-            const cartoesDaLista = (data.cartoes || []).filter(c => c.lista_id === lista.id);
-            for (const cartao of cartoesDaLista) {
-                const cartaoEl = this.createCartaoElement(cartao);
-                listaEl.querySelector('.kanban-cards').appendChild(cartaoEl);
-            }
-            
+
+        const listas = data.listas || this.bootstrap.listas || [];
+        const cartoes = [...(data.cartoes || [])].sort((a, b) => (a.posicao || 0) - (b.posicao || 0));
+
+        for (const lista of listas) {
+            const listaEl = this.createListaElement(lista, cartoes.filter(c => c.lista_id === lista.id));
             container.appendChild(listaEl);
         }
+
+        this.afterRender();
         
-        // Reinicializar drag & drop
-        if (window.initDragAndDrop) {
-            window.initDragAndDrop();
-        }
-        
-        // Atualizar indicador de sync
         this.updateSyncIndicator('synced');
     }
     
     /**
      * Cria elemento de lista
      */
-    createListaElement(lista) {
+    createListaElement(lista, cartoesDaLista) {
         const div = document.createElement('div');
-        div.className = 'kanban-list';
+        div.className = 'kanban-column';
         div.dataset.listaId = lista.id;
+        div.id = `column-${this.slugify(lista.nome)}`;
         
         div.innerHTML = `
-            <div class="kanban-list-header" style="background-color: ${lista.cor || '#6c757d'}">
-                <h5>${lista.nome}</h5>
-                <span class="badge bg-light text-dark">0</span>
+            <div class="kanban-column-header">
+                <span>${lista.nome}</span>
+                <span class="column-counter">${cartoesDaLista.length}</span>
             </div>
-            <div class="kanban-cards" data-lista-id="${lista.id}">
-                <!-- Cartões serão inseridos aqui -->
-            </div>
+            <div class="kanban-column-body" data-lista="${this.escapeHtml(lista.nome)}"></div>
         `;
-        
+
+        const body = div.querySelector('.kanban-column-body');
+        for (const cartao of cartoesDaLista) {
+            body.appendChild(this.createCartaoElement(cartao, lista.nome));
+        }
+
         return div;
     }
-    
-    /**
-     * Cria elemento de cartão
-     */
-    createCartaoElement(cartao) {
+
+    createCartaoElement(cartao, listaNome) {
         const div = document.createElement('div');
-        div.className = 'kanban-card';
-        div.dataset.cartaoId = cartao.id;
-        div.draggable = true;
-        
-        const pedido = cartao.pedido || {};
-        const isFantasma = cartao.is_fantasma;
-        
-        div.innerHTML = `
-            <div class="card-header ${isFantasma ? 'bg-warning' : ''}">
-                <strong>${cartao.numero}</strong>
-                ${isFantasma ? '<span class="badge bg-warning">Fantasma</span>' : ''}
+        const isFantasma = Boolean(cartao.is_fantasma);
+        div.className = `kanban-card${isFantasma ? ' fantasma' : ''}`;
+        div.dataset.search = cartao.search_text || cartao.numero || '';
+        div.dataset.ordemId = cartao.ordem_id || cartao.id;
+        if (isFantasma) {
+            div.dataset.cartaoId = cartao.fantasma_id || cartao.id;
+        }
+
+        const itensHtml = (cartao.itens || []).map((item) => `
+            <li class="os-item">
+                <span class="os-item-name">${this.escapeHtml(item.nome || 'Item')}</span>
+                <span class="badge rounded-pill bg-primary os-item-qty">${this.escapeHtml(String(item.quantidade || 0))}</span>
+            </li>
+        `).join('');
+
+        const moveOptions = (this.bootstrap.listas || [])
+            .filter((nome) => nome !== listaNome && nome !== 'Entrada')
+            .map((nome) => `
+                <li><a class="dropdown-item btn-mover-visual" href="#" data-ordem-id="${cartao.ordem_id || cartao.id}" data-lista-destino="${this.escapeHtml(nome)}">
+                    <i class="fas fa-arrow-right me-2 text-primary"></i>${this.escapeHtml(nome)}
+                </a></li>
+            `).join('');
+
+        const apontamentoHtml = (!isFantasma && !['Entrada', 'Expedição'].includes(listaNome)) ? `
+            <div class="apontamento-buttons mt-2 pt-2 border-top">
+                <div class="row g-1">
+                    <div class="col-6"><button class="btn btn-outline-primary btn-sm w-100 apontamento-btn" data-acao="inicio_setup" data-ordem-id="${cartao.ordem_id || cartao.id}" onclick="iniciarApontamentoSetup(this.dataset.ordemId);"><i class="fas fa-play"></i> Setup</button></div>
+                    <div class="col-6"><button class="btn btn-outline-info btn-sm w-100 apontamento-btn" data-acao="fim_setup" data-ordem-id="${cartao.ordem_id || cartao.id}" onclick="finalizarSetup(this.dataset.ordemId);"><i class="fas fa-stop"></i> Fim Setup</button></div>
+                    <div class="col-6"><button class="btn btn-outline-success btn-sm w-100 apontamento-btn" data-acao="inicio_producao" data-ordem-id="${cartao.ordem_id || cartao.id}" onclick="iniciarApontamentoProducao(this.dataset.ordemId);"><i class="fas fa-cogs"></i> Produção</button></div>
+                    <div class="col-6"><button class="btn btn-outline-warning btn-sm w-100 apontamento-btn" data-acao="pausa" data-ordem-id="${cartao.ordem_id || cartao.id}" onclick="pausarApontamento(this.dataset.ordemId);"><i class="fas fa-pause"></i> Pausa</button></div>
+                    <div class="col-12"><button class="btn btn-outline-danger btn-sm w-100 apontamento-btn" data-acao="stop" data-ordem-id="${cartao.ordem_id || cartao.id}" onclick="pararApontamento(this.dataset.ordemId);"><i class="fas fa-stop"></i> Stop</button></div>
+                </div>
             </div>
-            <div class="card-body">
-                ${pedido.cliente ? `<p><strong>Cliente:</strong> ${pedido.cliente}</p>` : ''}
-                ${pedido.item_codigo ? `<p><strong>Item:</strong> ${pedido.item_codigo}</p>` : ''}
-                ${pedido.quantidade ? `<p><strong>Qtd:</strong> ${pedido.quantidade}</p>` : ''}
+        ` : '';
+
+        div.innerHTML = isFantasma ? `
+            <div class="kanban-card-header">
+                <div class="card-header-main">
+                    <div class="drag-handle"><i class="fas fa-grip-lines"></i></div>
+                    <div class="fantasma-info" style="cursor: pointer">
+                        <strong>${this.escapeHtml(cartao.numero || '')}</strong>
+                        <br><small><i class="fas fa-cog"></i> ${this.escapeHtml(cartao.trabalho_nome || 'Fantasma')}</small>
+                    </div>
+                </div>
+            </div>
+            <div class="kanban-card-body">
+                <div class="os-items mt-1">
+                    <div class="small text-muted">Itens da OS</div>
+                    <ul class="os-item-list list-unstyled mb-1">${itensHtml || '<li class="os-item"><span class="os-item-name">Sem itens</span></li>'}</ul>
+                </div>
+            </div>
+        ` : `
+            <div class="drag-handle" style="position: absolute; top: 8px; left: 8px; cursor: grab; z-index: 10;">
+                <i class="fas fa-grip-lines"></i>
+            </div>
+            <div class="card-header-top">
+                ${cartao.item_imagem_path ? `<img src="${this.escapeAttribute(cartao.item_imagem_path)}" class="item-thumb" alt="Imagem do item" loading="lazy">` : ''}
+                <div class="card-header-actions">
+                    ${cartao.item_id ? `<button class="btn btn-sm btn-outline-info" type="button" onclick="event.stopPropagation(); window.open('/folhas-processo-novas?item_id=${cartao.item_id}', '_blank')"><i class="fas fa-clipboard-list"></i> Folha</button>` : ''}
+                    <button class="btn btn-sm btn-outline-purple btn-criar-fantasma-direto" type="button" data-ordem-id="${cartao.ordem_id || cartao.id}" data-lista-origem="${this.escapeHtml(listaNome)}" onclick="event.stopPropagation()"><i class="fas fa-ghost"></i> Fantasma</button>
+                    <div class="dropdown">
+                        <button class="btn btn-sm btn-outline-secondary dropdown-toggle" type="button" data-bs-toggle="dropdown" aria-expanded="false" onclick="event.stopPropagation()"><i class="fas fa-ellipsis-v"></i> Mover</button>
+                        <ul class="dropdown-menu dropdown-menu-end kanban-dropdown-mover">${moveOptions}</ul>
+                    </div>
+                </div>
+            </div>
+            <div class="card-header-main">
+                <button class="os-number-btn" data-ordem-id="${cartao.ordem_id || cartao.id}" onclick="event.stopPropagation();">${this.escapeHtml(cartao.numero || '')}</button>
+            </div>
+            <div class="kanban-card-body">
+                <div class="os-items mt-1">
+                    <div class="small text-muted">Itens da OS</div>
+                    <ul class="os-item-list list-unstyled mb-1">${itensHtml || '<li class="os-item"><span class="os-item-name">Sem itens</span></li>'}</ul>
+                </div>
+                <div class="qtd-por-trabalho mt-1" id="qtd-por-trabalho-${cartao.ordem_id || cartao.id}">
+                    <div class="small text-muted d-flex justify-content-between align-items-center">
+                        <span>Quantidades por trabalho</span>
+                        <span class="badge rounded-pill bg-secondary ultima-qtd" id="ultima-qtd-${cartao.ordem_id || cartao.id}">-</span>
+                    </div>
+                    <ul class="qpt-list list-unstyled mb-1">
+                        <li class="qpt-item"><span class="qpt-label">-</span><span class="badge rounded-pill bg-secondary qpt-qty">-</span></li>
+                    </ul>
+                </div>
+                ${apontamentoHtml}
+                <div class="status-apontamento mt-1" id="status-${cartao.ordem_id || cartao.id}">
+                    <small class="text-muted">Aguardando apontamento</small>
+                    <span class="apontamento-timer" id="timer-${cartao.ordem_id || cartao.id}">00:00:00</span>
+                </div>
             </div>
         `;
-        
-        // Event listeners
-        div.addEventListener('click', () => {
-            this.openCartaoDetails(cartao);
-        });
-        
+
         return div;
+    }
+
+    afterRender() {
+        if (typeof window.initializeKanbanSortable === 'function') {
+            window.initializeKanbanSortable();
+        }
+        if (typeof window.initializeOSButtonClicks === 'function') {
+            window.initializeOSButtonClicks();
+        }
+        if (typeof window.initializeKanbanEvents === 'function') {
+            window.initializeKanbanEvents();
+        }
+        if (typeof window.aplicarFiltrosKanban === 'function') {
+            window.aplicarFiltrosKanban();
+        }
+    }
+
+    slugify(value) {
+        return String(value || '')
+            .normalize('NFD')
+            .replace(/[\u0300-\u036f]/g, '')
+            .toLowerCase()
+            .replace(/[^a-z0-9]+/g, '-')
+            .replace(/(^-|-$)/g, '');
+    }
+
+    escapeHtml(value) {
+        return String(value ?? '')
+            .replace(/&/g, '&amp;')
+            .replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;')
+            .replace(/"/g, '&quot;')
+            .replace(/'/g, '&#39;');
+    }
+
+    escapeAttribute(value) {
+        return this.escapeHtml(value);
     }
     
     /**

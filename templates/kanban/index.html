@@ -847,7 +847,18 @@
             </div>
         </div>
         
-        <div class="kanban-container">
+        <div class="kanban-container" id="kanban-container">
+            {% if frontend_shell %}
+            {% for lista in listas %}
+            <div class="kanban-column" id="column-{{ lista|lower|replace(' ', '-') }}">
+                <div class="kanban-column-header">
+                    <span>{{ lista }}</span>
+                    <span class="column-counter">0</span>
+                </div>
+                <div class="kanban-column-body" data-lista="{{ lista }}"></div>
+            </div>
+            {% endfor %}
+            {% else %}
             {% for lista in listas %}
             <div class="kanban-column" id="column-{{ lista|lower|replace(' ', '-') }}">
                 {% set metricas_lista = metricas_listas.get(lista, {}) %}
@@ -1362,15 +1373,16 @@
                             </div>
                         </div>
                     </div>
-                    {% endfor %}
+                     </div>
                 </div>
             </div>
             {% endfor %}
+            {% endfor %}
+            {% endif %}
         </div>
 
     </div>
     </main>
-
     <footer class="bg-light py-3 mt-5">
         <div class="container text-center">
             <p class="mb-0">&copy; <span id="current-year"></span> ACB Usinagem CNC. Todos os direitos reservados.</p>
@@ -1544,6 +1556,8 @@
 
                 atualizarContadoresVisiveis();
             }
+
+            window.aplicarFiltrosKanban = aplicarFiltrosKanban;
 
             function salvarFiltros() {
                 const buscaEl = document.getElementById('kanbanFiltroBusca');
@@ -1857,6 +1871,8 @@
                 card.classList.add('events-initialized');
             });
         }
+
+        window.initializeKanbanEvents = initializeKanbanEvents;
         
         // Inicializar eventos após o carregamento do documento
         document.addEventListener('DOMContentLoaded', function() {
@@ -4448,6 +4464,9 @@
 </script>
 
 <script type="application/json" data-metricas-json>{{ metricas_listas_json|safe }}</script>
+<script>
+window.KANBAN_BOOTSTRAP = {{ {'frontend_shell': frontend_shell|default(false), 'listas': listas}|tojson|safe }};
+</script>
 
 </body>
 </html>

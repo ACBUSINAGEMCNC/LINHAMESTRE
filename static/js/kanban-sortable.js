@@ -1,5 +1,5 @@
 // Script para habilitar arrastar e soltar no Kanban usando Sortable.js
-document.addEventListener('DOMContentLoaded', function() {
+window.initializeKanbanSortable = function initializeKanbanSortable() {
     console.log('Inicializando Sortable.js para o Kanban');
 
     const isTouchDevice = (
@@ -12,6 +12,10 @@ document.addEventListener('DOMContentLoaded', function() {
     
     // Inicializa o Sortable.js para cada coluna do kanban
     document.querySelectorAll('.kanban-column-body').forEach(function(columnBody) {
+        if (columnBody.dataset.sortableInitialized === '1') {
+            return;
+        }
+
         new Sortable(columnBody, {
             group: 'kanban-columns',
             animation: 200, // Animação mais suave
@@ -180,5 +184,11 @@ document.addEventListener('DOMContentLoaded', function() {
                 }
             }
         });
+
+        columnBody.dataset.sortableInitialized = '1';
     });
+};
+
+document.addEventListener('DOMContentLoaded', function() {
+    window.initializeKanbanSortable();
 });
