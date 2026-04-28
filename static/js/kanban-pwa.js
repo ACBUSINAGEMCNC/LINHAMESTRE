@@ -14,7 +14,9 @@ class KanbanPWA {
      * Inicializa o PWA
      */
     async init() {
-        console.log('[PWA] Inicializando Kanban PWA...');
+        console.log('[PWA] Inicializando Kanban PWA em modo background...');
+        console.log('[PWA] O Kanban tradicional continuará funcionando normalmente.');
+        console.log('[PWA] Cache e sync serão feitos em background para melhorar próximos acessos.');
         
         // Registrar Service Worker
         if ('serviceWorker' in navigator) {
@@ -29,10 +31,10 @@ class KanbanPWA {
         // Inicializar cache
         await window.kanbanCache.init();
         
-        // Mostrar loading
-        this.showLoading();
+        // NÃO mostrar loading - deixar Kanban tradicional carregar
+        // this.showLoading();
         
-        // Iniciar sincronização
+        // Iniciar sincronização em background
         await window.kanbanSync.start((event) => {
             this.handleSyncEvent(event);
         });
@@ -46,28 +48,40 @@ class KanbanPWA {
         
         switch (event.type) {
             case 'cache_loaded':
-                // Cache carregado - renderizar imediatamente
+                // Cache carregado - apenas esconder loading
+                // O Kanban tradicional já está renderizado
                 this.hasCache = true;
                 this.hideLoading();
-                this.renderKanban(event.data);
+                console.log('[PWA] Cache carregado! Kanban tradicional já renderizado.');
+                this.updateSyncIndicator('synced');
                 break;
                 
             case 'full_sync_complete':
-                // Full sync completo - renderizar
+                // Full sync completo - apenas esconder loading
                 this.hideLoading();
-                this.renderKanban(event.data);
-                this.showNotification('Kanban carregado com sucesso!', 'success');
+                console.log('[PWA] Full sync completo! Dados em cache para próxima vez.');
+                this.showNotification('Dados salvos no cache local!', 'success');
+                this.updateSyncIndicator('synced');
                 break;
                 
             case 'incremental_update':
-                // Atualização incremental - aplicar mudanças
-                this.applyIncrementalUpdate(event.delta);
+                // Atualização incremental - mostrar notificação
+                if (event.delta.has_changes) {
+                    const totalChanges = (event.delta.updated_cards?.length || 0) + 
+                                       (event.delta.new_cards?.length || 0) + 
+                                       (event.delta.deleted_cards?.length || 0);
+                    if (totalChanges > 0) {
+                        this.showNotification(`${totalChanges} mudança(s) detectada(s). Recarregue para ver.`, 'info');
+                    }
+                }
+                this.updateSyncIndicator('synced');
                 break;
                 
             case 'sync_error':
                 // Erro de sincronização
                 this.hideLoading();
-                this.showNotification('Erro ao carregar Kanban: ' + event.error, 'error');
+                console.error('[PWA] Erro de sync:', event.error);
+                // Não mostrar notificação de erro - deixar Kanban tradicional funcionar
                 break;
         }
     }

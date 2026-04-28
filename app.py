@@ -6,7 +6,7 @@ import sqlite3
 import logging
 import json
 from types import SimpleNamespace
-from flask import Flask, render_template, redirect, url_for, flash, request, session, send_file, g, has_request_context
+from flask import Flask, render_template, redirect, url_for, flash, request, session, send_file, send_from_directory, g, has_request_context
 from flask_sqlalchemy import SQLAlchemy
 from sqlalchemy import event, inspect
 from sqlalchemy.pool import NullPool, StaticPool, QueuePool
@@ -1184,6 +1184,19 @@ def create_app():
             return {}
         except Exception:
             return {}
+    
+    # Rotas públicas para PWA
+    @app.route('/manifest.json')
+    @app.route('/static/manifest.json')
+    def pwa_manifest():
+        """Serve o manifest.json do PWA sem autenticação"""
+        return send_from_directory('static', 'manifest.json', mimetype='application/json')
+    
+    @app.route('/sw.js')
+    @app.route('/static/sw.js')
+    def pwa_service_worker():
+        """Serve o service worker sem autenticação"""
+        return send_from_directory('static', 'sw.js', mimetype='application/javascript')
     
     # Rota para redirecionar URLs Supabase
     @app.route('/uploads/supabase:/<path:file_path>')
