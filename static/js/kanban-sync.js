@@ -10,6 +10,7 @@ class KanbanSync {
         this.isSyncing = false;
         this.lastSync = null;
         this.onUpdateCallback = null;
+        this.autoSyncEnabled = false;
     }
     
     /**
@@ -190,14 +191,25 @@ class KanbanSync {
      * Inicia sincronização automática
      */
     startAutoSync() {
-        if (this.syncTimer) {
-            clearInterval(this.syncTimer);
-        }
-        
-        this.syncTimer = setInterval(() => {
-            this.incrementalSync();
-        }, this.syncInterval);
-        
+        this.stopAutoSync();
+        this.autoSyncEnabled = true;
+
+        const scheduleNext = async () => {
+            if (!this.autoSyncEnabled) {
+                return;
+            }
+
+            this.syncTimer = setTimeout(async () => {
+                try {
+                    await this.incrementalSync();
+                } finally {
+                    scheduleNext();
+                }
+            }, this.syncInterval);
+        };
+
+        scheduleNext();
+
         console.log(`[Sync] Auto-sync ativado (${this.syncInterval / 1000}s)`);
     }
     
@@ -206,10 +218,11 @@ class KanbanSync {
      */
     stopAutoSync() {
         if (this.syncTimer) {
-            clearInterval(this.syncTimer);
+            clearTimeout(this.syncTimer);
             this.syncTimer = null;
-            console.log('[Sync] Auto-sync desativado');
         }
+        this.autoSyncEnabled = false;
+        console.log('[Sync] Auto-sync desativado');
     }
     
     /**

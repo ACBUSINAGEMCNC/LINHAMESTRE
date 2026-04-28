@@ -21,7 +21,7 @@ class KanbanPWA {
         // Registrar Service Worker
         if ('serviceWorker' in navigator) {
             try {
-                const registration = await navigator.serviceWorker.register('/static/sw.js');
+                const registration = await navigator.serviceWorker.register('/sw.js', { scope: '/' });
                 console.log('[PWA] Service Worker registrado:', registration);
             } catch (error) {
                 console.error('[PWA] Erro ao registrar Service Worker:', error);
