@@ -548,7 +548,7 @@ class KanbanPWA {
                         if (match) { report('hit'); return; }
                     }
                     const init = item.type === 'media'
-                        ? { credentials: 'omit', mode: 'no-cors' }
+                        ? { credentials: 'include', mode: 'no-cors' }
                         : { credentials: 'same-origin' };
                     await fetch(item.url, init);
                     report('fetch');

@@ -3,7 +3,7 @@
  * Cache de assets estáticos e stale-while-revalidate para páginas
  */
 
-const CACHE_VERSION = 'v7';
+const CACHE_VERSION = 'v8';
 const CACHE_STATIC = `linhamestre-static-${CACHE_VERSION}`;
 const CACHE_PAGES  = `linhamestre-pages-${CACHE_VERSION}`;
 const CACHE_MEDIA  = `linhamestre-media-${CACHE_VERSION}`;
@@ -156,7 +156,7 @@ async function cacheFirstStrategy(request, cacheName) {
         // (cross-origin). Com no-cors recebemos uma resposta opaca que ainda
         // pode ser cacheada e servida de volta pelo SW.
         const init = isMedia
-            ? { mode: 'no-cors', credentials: 'omit', redirect: 'follow' }
+            ? { mode: 'no-cors', credentials: 'include', redirect: 'follow' }
             : { redirect: 'follow' };
         const netRequest = isMedia ? new Request(request.url, init) : request;
         const response = await fetch(netRequest, isMedia ? undefined : init);
