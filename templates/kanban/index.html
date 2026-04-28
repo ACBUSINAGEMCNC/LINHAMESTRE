@@ -779,6 +779,9 @@
                     <li class="nav-item">
                         <a class="nav-link" href="/apontamento/dashboard"><i class="fas fa-chart-bar"></i> Dashboard Apontamento</a>
                     </li>
+                    <li class="nav-item">
+                        <a class="nav-link" href="/dashboard/apontamentos"><i class="fas fa-chart-line"></i> Dashboard Timeline <span class="badge bg-success">NOVO</span></a>
+                    </li>
                     {% if session.get('usuario_nivel_acesso') == 'admin' or session.get('pode_gerenciar_apontamentos') %}
                     <li class="nav-item">
                         <a class="nav-link" href="/apontamento/gerenciar-ativos"><i class="fas fa-clock"></i> Gerenciar Apontamentos</a>
