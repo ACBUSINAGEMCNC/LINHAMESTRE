@@ -7,13 +7,9 @@ from flask import Blueprint, render_template, jsonify, request, session, redirec
 from models import db, ApontamentoProducao, KanbanLista, OrdemServico, Item, Trabalho, Usuario, PedidoOrdemServico, Pedido
 from sqlalchemy.orm import joinedload
 from datetime import datetime, timedelta
-import pytz
 import logging
 
 logger = logging.getLogger(__name__)
-
-# Timezone local
-LOCAL_TZ = pytz.timezone('America/Sao_Paulo')
 
 dashboard_apontamentos_bp = Blueprint('dashboard_apontamentos', __name__, url_prefix='/dashboard/apontamentos')
 
@@ -69,7 +65,7 @@ def _calcular_timeline_lista(lista_id, data_inicio, data_fim):
             status = 'stop'
         
         # Calcular fim do apontamento
-        fim = apontamento.data_fim if apontamento.data_fim else datetime.now(LOCAL_TZ).replace(tzinfo=None)
+        fim = apontamento.data_fim if apontamento.data_fim else datetime.now()
         
         # Buscar detalhes da OS
         detalhes = None
@@ -185,7 +181,7 @@ def timeline():
     
     try:
         # Parâmetros
-        data_str = request.args.get('data', datetime.now(LOCAL_TZ).strftime('%Y-%m-%d'))
+        data_str = request.args.get('data', datetime.now().strftime('%Y-%m-%d'))
         listas_ids = request.args.get('listas', '')  # IDs separados por vírgula
         
         # Parse da data
