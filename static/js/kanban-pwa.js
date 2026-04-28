@@ -8,6 +8,7 @@ class KanbanPWA {
         this.isLoading = false;
         this.hasCache = false;
         this.loadingProgress = 0;
+        this.initialCacheChecked = false;
     }
     
     /**
@@ -30,9 +31,15 @@ class KanbanPWA {
         
         // Inicializar cache
         await window.kanbanCache.init();
-        
-        // NÃO mostrar loading - deixar Kanban tradicional carregar
-        // this.showLoading();
+
+        const cached = await window.kanbanCache.getAll();
+        this.hasCache = Boolean(cached?.listas && cached.listas.length > 0);
+        this.initialCacheChecked = true;
+
+        if (!this.hasCache) {
+            this.showLoading();
+            this.updateLoadingProgress(15, 'Preparando cache local do Kanban...');
+        }
         
         // Iniciar sincronização em background
         await window.kanbanSync.start((event) => {
@@ -48,8 +55,6 @@ class KanbanPWA {
         
         switch (event.type) {
             case 'cache_loaded':
-                // Cache carregado - apenas esconder loading
-                // O Kanban tradicional já está renderizado
                 this.hasCache = true;
                 this.hideLoading();
                 console.log('[PWA] Cache carregado! Kanban tradicional já renderizado.');
@@ -57,7 +62,7 @@ class KanbanPWA {
                 break;
                 
             case 'full_sync_complete':
-                // Full sync completo - apenas esconder loading
+                this.updateLoadingProgress(100, 'Cache local concluído!');
                 this.hideLoading();
                 console.log('[PWA] Full sync completo! Dados em cache para próxima vez.');
                 this.showNotification('Dados salvos no cache local!', 'success');
@@ -78,10 +83,8 @@ class KanbanPWA {
                 break;
                 
             case 'sync_error':
-                // Erro de sincronização
                 this.hideLoading();
                 console.error('[PWA] Erro de sync:', event.error);
-                // Não mostrar notificação de erro - deixar Kanban tradicional funcionar
                 break;
         }
     }

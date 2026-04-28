@@ -3,7 +3,7 @@
  * Cache de assets estáticos e stale-while-revalidate para páginas
  */
 
-const CACHE_VERSION = 'v4';
+const CACHE_VERSION = 'v5';
 const CACHE_STATIC = `linhamestre-static-${CACHE_VERSION}`;
 const CACHE_PAGES  = `linhamestre-pages-${CACHE_VERSION}`;
 
@@ -22,6 +22,8 @@ const BYPASS_PATTERNS = [
     '/kanban/full-data',
     '/kanban/sync',
     '/kanban/mover',
+    '/kanban/detalhes/',
+    '/cartao-fantasma/detalhes/',
     '/apontamento/',
     '/api/',
     '/auth/',
@@ -89,8 +91,8 @@ self.addEventListener('fetch', (event) => {
         return;
     }
     
-    // Estratégia 2: STALE-WHILE-REVALIDATE para páginas HTML (inclui /kanban)
-    if (request.destination === 'document' || url.pathname === '/kanban' || url.pathname.startsWith('/kanban')) {
+    // Estratégia 2: STALE-WHILE-REVALIDATE apenas para a página principal do Kanban
+    if (request.destination === 'document' && (url.pathname === '/kanban' || url.pathname === '/kanban/')) {
         event.respondWith(staleWhileRevalidate(request, CACHE_PAGES));
         return;
     }
@@ -125,25 +127,40 @@ async function cacheFirstStrategy(request, cacheName) {
 async function staleWhileRevalidate(request, cacheName) {
     const cache = await caches.open(cacheName);
     const cached = await cache.match(request);
-    
-    // Buscar versão atualizada em background (sem await)
-    const networkFetch = fetch(request).then((response) => {
-        if (response.ok) {
-            cache.put(request, response.clone());
-            console.log('[SW] Cache da página atualizado:', request.url);
-        }
-        return response;
-    }).catch(() => null);
+
+    const networkFetchPromise = fetch(request)
+        .then((response) => {
+            if (response && response.ok) {
+                cache.put(request, response.clone());
+                console.log('[SW] Cache da página atualizado:', request.url);
+            }
+            return response;
+        })
+        .catch((error) => {
+            console.error('[SW] Falha ao buscar página:', request.url, error);
+            return null;
+        });
     
     if (cached) {
-        // Servir do cache imediatamente (carregamento INSTANTÂNEO!)
+        // Atualiza em background, mas responde imediatamente do cache
+        networkFetchPromise.catch(() => null);
         console.log('[SW] Servindo do cache:', request.url);
         return cached;
     }
     
-    // Primeira vez: esperar a rede
+    // Primeira vez: esperar a rede, com fallback seguro
     console.log('[SW] Primeira visita, buscando da rede:', request.url);
-    return networkFetch;
+    const networkResponse = await networkFetchPromise;
+    if (networkResponse) {
+        return networkResponse;
+    }
+
+    return new Response('Offline', {
+        status: 503,
+        headers: {
+            'Content-Type': 'text/plain; charset=utf-8'
+        }
+    });
 }
 
 // Mensagens do cliente
