@@ -1986,7 +1986,7 @@
     </script>
 
     <!-- Modal de Apontamento -->
-    <div class="modal fade" id="modalApontamento" tabindex="-1">
+    <div class="modal fade" id="modalApontamento" tabindex="-1" aria-hidden="true">
         <div class="modal-dialog">
             <div class="modal-content">
                 <div class="modal-header">
@@ -2235,8 +2235,9 @@
         // Carregar itens da OS primeiro
         carregarItensOS(ordemId, requestToken);
         
-        // Abrir modal
-        new bootstrap.Modal(document.getElementById('modalApontamento')).show();
+        // Abrir modal usando instância única para evitar estado inconsistente
+        const modalEl = document.getElementById('modalApontamento');
+        bootstrap.Modal.getOrCreateInstance(modalEl).show();
     }
     
     function configurarModalPorTipo(tipoAcao) {
@@ -2755,7 +2756,12 @@
                     console.warn('Falha ao invalidar cache local do modal:', eCache);
                 }
                 mostrarAlerta(data.message, 'success');
-                bootstrap.Modal.getInstance(document.getElementById('modalApontamento')).hide();
+                if (document.activeElement && typeof document.activeElement.blur === 'function') {
+                    document.activeElement.blur();
+                }
+                const apontamentoModalEl = document.getElementById('modalApontamento');
+                const apontamentoModal = bootstrap.Modal.getInstance(apontamentoModalEl) || bootstrap.Modal.getOrCreateInstance(apontamentoModalEl);
+                apontamentoModal.hide();
                 // Atualizar visual conforme a ação
                 if (tipoAcao === 'stop') {
                     // No STOP, remover qualquer status visual

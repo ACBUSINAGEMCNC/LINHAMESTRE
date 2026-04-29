@@ -23,25 +23,38 @@ class KanbanSync {
         
         // Verificar se tem cache
         const cached = await window.kanbanCache.getAll();
-        
-        if (cached.listas && cached.listas.length > 0) {
-            // Tem cache - carregar do cache primeiro
-            console.log('[Sync] Cache encontrado! Carregando...');
+
+        const hasCache = Boolean(cached.listas && cached.listas.length > 0);
+        const isOffline = navigator.onLine === false;
+
+        if (hasCache) {
             this.lastSync = cached.last_sync;
-            
+        }
+
+        if (isOffline && hasCache) {
+            console.log('[Sync] Offline com cache local. Carregando cache...');
             if (this.onUpdateCallback) {
                 this.onUpdateCallback({
                     type: 'cache_loaded',
                     data: cached
                 });
             }
-            
-            // Depois sincronizar em background
-            await this.incrementalSync();
         } else {
-            // Não tem cache - fazer full sync
-            console.log('[Sync] Cache vazio. Fazendo full sync...');
-            await this.fullSync();
+            if (!hasCache) {
+                console.log('[Sync] Cache vazio. Fazendo full sync...');
+            } else {
+                console.log('[Sync] Cache encontrado, mas priorizando full sync da rede...');
+            }
+
+            const synced = await this.fullSync();
+
+            if (!synced && hasCache && this.onUpdateCallback) {
+                console.warn('[Sync] Full sync falhou, usando cache local como fallback.');
+                this.onUpdateCallback({
+                    type: 'cache_loaded',
+                    data: cached
+                });
+            }
         }
         
         // Iniciar sync automático
@@ -54,6 +67,7 @@ class KanbanSync {
     async fullSync() {
         console.log('[Sync] Full sync iniciado...');
         this.isSyncing = true;
+        let success = false;
         
         try {
             const response = await fetch('/kanban/full-data');
@@ -79,6 +93,7 @@ class KanbanSync {
                     data: data
                 });
             }
+            success = true;
             
             console.log('[Sync] Full sync concluído!');
             
@@ -94,6 +109,8 @@ class KanbanSync {
         } finally {
             this.isSyncing = false;
         }
+
+        return success;
     }
     
     /**

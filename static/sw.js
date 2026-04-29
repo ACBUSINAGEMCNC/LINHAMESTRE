@@ -133,9 +133,10 @@ self.addEventListener('fetch', (event) => {
         return;
     }
     
-    // Estratégia 4: STALE-WHILE-REVALIDATE apenas para a página principal do Kanban
+    // Estratégia 4: NETWORK-FIRST para a página principal do Kanban
+    // Evita abrir com HTML antigo (listas/cartões desatualizados) após mudanças.
     if (request.destination === 'document' && (url.pathname === '/kanban' || url.pathname === '/kanban/')) {
-        event.respondWith(staleWhileRevalidate(request, CACHE_PAGES));
+        event.respondWith(networkFirstStrategy(request, CACHE_PAGES));
         return;
     }
 
@@ -223,6 +224,35 @@ async function staleWhileRevalidate(request, cacheName) {
             'Content-Type': 'text/plain; charset=utf-8'
         }
     });
+}
+
+/**
+ * Network-First: prioriza rede e usa cache apenas como fallback
+ */
+async function networkFirstStrategy(request, cacheName) {
+    const cache = await caches.open(cacheName);
+
+    try {
+        const response = await fetch(request);
+        if (response && response.ok) {
+            cache.put(request, response.clone());
+            console.log('[SW] Network-first (rede):', request.url);
+        }
+        return response;
+    } catch (error) {
+        const cached = await cache.match(request);
+        if (cached) {
+            console.log('[SW] Network-first fallback (cache):', request.url);
+            return cached;
+        }
+
+        return new Response('Offline', {
+            status: 503,
+            headers: {
+                'Content-Type': 'text/plain; charset=utf-8'
+            }
+        });
+    }
 }
 
 // Mensagens do cliente
