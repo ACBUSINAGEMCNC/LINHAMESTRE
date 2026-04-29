@@ -879,10 +879,11 @@ def reordenar_listas():
         if not ordem_ids:
             return jsonify({'success': False, 'message': 'Lista de ordem vazia.'})
 
-        # Só aplicar a regra de proteção se as listas protegidas existirem no payload.
+        # Garantir que Entrada seja primeiro e Expedição seja último
         present_names = {listas_db[lid].nome for lid in ordem_ids if lid in listas_db}
         has_entrada = 'Entrada' in present_names
         has_expedicao = 'Expedição' in present_names
+        
         if has_entrada and has_expedicao:
             first_name = listas_db[ordem_ids[0]].nome
             last_name = listas_db[ordem_ids[-1]].nome
@@ -892,10 +893,14 @@ def reordenar_listas():
         for i, lista_id in enumerate(ordem_ids):
             lista = listas_db.get(lista_id)
             if lista:
-                # Impedir mudar ordem das protegidas (devem permanecer)
-                if lista.nome in PROTECTED_LISTS and ((i == 0 and lista.nome != 'Entrada') or (i == len(ordem_ids)-1 and lista.nome != 'Expedição')):
-                    return jsonify({'success': False, 'message': 'Não é permitido mover listas protegidas.'})
-                lista.ordem = i + 1
+                # Entrada sempre ordem=0, Expedição sempre ordem=1000
+                if lista.nome == 'Entrada':
+                    lista.ordem = 0
+                elif lista.nome == 'Expedição':
+                    lista.ordem = 1000
+                else:
+                    # Outras listas começam em 1
+                    lista.ordem = i + 1
                 lista.data_atualizacao = datetime.utcnow()
 
         db.session.commit()

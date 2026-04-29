@@ -5,40 +5,18 @@ from sqlalchemy import text
 app = create_app()
 app.app_context().push()
 
-# Usar SQL direto para evitar audit_before_flush
-print('Verificando e criando listas Entrada e Expedição...')
+# Forçar ordem correta para Entrada e Expedição
+print('Corrigindo ordem das listas protegidas...')
 
-# Verificar se Entrada existe
-result = db.session.execute(text("SELECT id, nome FROM kanban_lista WHERE nome = 'Entrada'"))
-entrada = result.fetchone()
-if not entrada:
-    print('Criando lista: Entrada')
-    db.session.execute(text("""
-        INSERT INTO kanban_lista (nome, ordem, ativa, cor, data_criacao, data_atualizacao)
-        VALUES ('Entrada', 0, true, '#28a745', NOW(), NOW())
-    """))
-else:
-    print(f'Lista Entrada já existe (id={entrada[0]})')
-
-# Verificar se Expedição existe
-result = db.session.execute(text("SELECT id, nome FROM kanban_lista WHERE nome = 'Expedição'"))
-expedicao = result.fetchone()
-if not expedicao:
-    print('Criando lista: Expedição')
-    db.session.execute(text("""
-        INSERT INTO kanban_lista (nome, ordem, ativa, cor, data_criacao, data_atualizacao)
-        VALUES ('Expedição', 1000, true, '#dc3545', NOW(), NOW())
-    """))
-else:
-    print(f'Lista Expedição já existe (id={expedicao[0]})')
-
-# Reordenar listas existentes
-print('\nReordenando listas...')
-# Primeiro, definir ordem para Entrada e Expedição
+# Entrada sempre deve ser ordem=0
 db.session.execute(text("UPDATE kanban_lista SET ordem = 0 WHERE nome = 'Entrada'"))
-db.session.execute(text("UPDATE kanban_lista SET ordem = 1000 WHERE nome = 'Expedição'"))
+print('Entrada definida para ordem=0')
 
-# Reordenar outras listas sequencialmente
+# Expedição sempre deve ser ordem=1000
+db.session.execute(text("UPDATE kanban_lista SET ordem = 1000 WHERE nome = 'Expedição'"))
+print('Expedição definida para ordem=1000')
+
+# Reordenar outras listas sequencialmente (1, 2, 3, ...)
 result = db.session.execute(text("SELECT id FROM kanban_lista WHERE nome NOT IN ('Entrada', 'Expedição') ORDER BY id"))
 lista_ids = [row[0] for row in result]
 for i, lista_id in enumerate(lista_ids, start=1):
