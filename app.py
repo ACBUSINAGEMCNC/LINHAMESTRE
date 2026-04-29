@@ -759,6 +759,11 @@ def create_app():
         if database_url.lower().startswith('postgresql+psycopg://'):
             engine_options['connect_args'] = {
                 'prepare_threshold': None,
+                'connect_timeout': 5,  # Timeout de conexão 5s para evitar travamento
+            }
+        elif database_url.lower().startswith('postgresql://'):
+            engine_options['connect_args'] = {
+                'connect_timeout': 5,  # Timeout de conexão 5s para evitar travamento
             }
         app.config['SQLALCHEMY_ENGINE_OPTIONS'] = engine_options
     app.config['UPLOAD_FOLDER_DESENHOS'] = os.path.join(basedir, 'uploads/desenhos')
