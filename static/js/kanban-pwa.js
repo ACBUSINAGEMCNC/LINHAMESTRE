@@ -10,6 +10,10 @@ class KanbanPWA {
         this.loadingProgress = 0;
         this.initialCacheChecked = false;
         this.bootstrap = window.KANBAN_BOOTSTRAP || { frontend_shell: false, listas: [] };
+        // Flags de controle de precache
+        this._precacheDone = false;
+        this._precacheRunning = false;
+        this._precacheCompleteCalled = false;
     }
     
     /**
@@ -89,7 +93,9 @@ class KanbanPWA {
                 console.log('[PWA] Cache carregado! Aguardando pré-cache...');
                 this.updateSyncIndicator('synced');
                 // Preenche buracos de mídia/detalhes em background (não bloqueia UI).
-                this.precacheEverything(event.data, { onlyMissing: true, onComplete: () => this.onPrecacheComplete('cache_loaded') });
+                if (!this._precacheDone) {
+                    this.precacheEverything(event.data, { onlyMissing: true, onComplete: () => this.onPrecacheComplete('cache_loaded') });
+                }
                 break;
 
             case 'full_sync_complete':
@@ -101,7 +107,9 @@ class KanbanPWA {
                 console.log('[PWA] Full sync completo! Pré-aquecendo cache...');
                 this.updateSyncIndicator('synced');
                 // Primeira carga: baixa tudo (detalhes, imagens, apontamentos) em background.
-                this.precacheEverything(event.data, { onlyMissing: false, onComplete: () => this.onPrecacheComplete('full_sync') });
+                if (!this._precacheDone) {
+                    this.precacheEverything(event.data, { onlyMissing: false, onComplete: () => this.onPrecacheComplete('full_sync') });
+                }
                 break;
                 
             case 'incremental_update':
@@ -527,10 +535,18 @@ class KanbanPWA {
      *                                           estiver no cache ainda.
      */
     async precacheEverything(data, opts = {}) {
-        // Só pré-aquecemos uma vez por sessão, para não disputar CPU/rede
-        // com as requests reais do usuário (abrir modal, apontamento etc.).
-        if (this._precachingDone || this._precaching) return;
-        this._precaching = true;
+        // Trava global: não iniciar se já está rodando ou já concluído
+        if (this._precacheDone || this._precacheRunning) {
+            console.log(`[PWA] Pré-cache ignorado (já ${this._precacheDone ? 'concluído' : 'rodando'})`);
+            if (opts.onComplete && this._precacheDone) {
+                opts.onComplete('success');
+            } else if (opts.onComplete) {
+                this._precacheCallback = opts.onComplete;
+            }
+            return;
+        }
+
+        this._precacheRunning = true;
         this._precacheCallback = opts.onComplete || null;
 
         const onlyMissing = opts.onlyMissing !== false;
@@ -616,16 +632,24 @@ class KanbanPWA {
     onPrecacheComplete(reason) {
         // Evitar loop infinito - não chamar callback se já foi chamado
         if (this._precacheCompleteCalled) {
-            console.warn('[PWA] onPrecacheComplete já foi chamado, evitando loop');
             return;
         }
         this._precacheCompleteCalled = true;
-        
+
         console.log(`[PWA] Pré-cache completo (motivo: ${reason})`);
-        if (this._precacheCallback) {
-            this._precacheCallback(reason);
-            this._precacheCallback = null;
+
+        // Limpar callback ANTES de executar para evitar loop
+        const callback = this._precacheCallback;
+        this._precacheCallback = null;
+
+        if (callback) {
+            callback(reason);
         }
+
+        // Marcar como concluído e liberar trava
+        this._precacheDone = true;
+        this._precacheRunning = false;
+
         this.hideLoading();
         if (reason === 'success') {
             this.showNotification('Cache pré-aquecido com sucesso!', 'success');
