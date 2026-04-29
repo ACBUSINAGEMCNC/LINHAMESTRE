@@ -614,6 +614,13 @@ class KanbanPWA {
     }
 
     onPrecacheComplete(reason) {
+        // Evitar loop infinito - não chamar callback se já foi chamado
+        if (this._precacheCompleteCalled) {
+            console.warn('[PWA] onPrecacheComplete já foi chamado, evitando loop');
+            return;
+        }
+        this._precacheCompleteCalled = true;
+        
         console.log(`[PWA] Pré-cache completo (motivo: ${reason})`);
         if (this._precacheCallback) {
             this._precacheCallback(reason);
