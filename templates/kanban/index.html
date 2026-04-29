@@ -1865,6 +1865,24 @@
             
             // Configurar botões de ação dos cartões fantasma
             configurarBotoesFantasma();
+
+            // Event listeners para botões de mover visuais
+            document.querySelectorAll('.btn-mover-visual').forEach(function(btn) {
+                if (btn.classList.contains('events-initialized')) {
+                    return;
+                }
+
+                const handler = function(e) {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    const ordemId = this.dataset.ordemId;
+                    const listaDestino = this.dataset.listaDestino;
+                    moverOrdem(ordemId, listaDestino);
+                };
+
+                btn.addEventListener('click', handler);
+                btn.classList.add('events-initialized');
+            });
             
             // Marcar os cartões como inicializados
             document.querySelectorAll('.kanban-card').forEach(function(card) {
@@ -1956,26 +1974,6 @@
             }
 
             setupMoverDropdownPortal();
-            
-            // Event listeners para botões de mover visuais
-            document.querySelectorAll('.btn-mover-visual').forEach(function(btn) {
-                if (btn.classList.contains('events-initialized')) {
-                    return;
-                }
-
-                const handler = function(e) {
-                    e.preventDefault();
-                    e.stopPropagation();
-                    const ordemId = this.dataset.ordemId;
-                    const listaDestino = this.dataset.listaDestino;
-                    moverOrdem(ordemId, listaDestino);
-                };
-
-                btn.addEventListener('click', handler);
-                btn.addEventListener('touchend', handler);
-                btn.addEventListener('pointerup', handler);
-                btn.classList.add('events-initialized');
-            });
             
             // Também inicializar novamente quando o Sortable terminar uma operação de arrasto
             document.addEventListener('sortable-drop-complete', function() {
