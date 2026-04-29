@@ -671,12 +671,6 @@ class KanbanPWA {
         for (const cartao of cartoes) {
             const ordemId = cartao.ordem_id || cartao.id;
 
-            if (cartao.is_fantasma && cartao.fantasma_id) {
-                add(`/cartao-fantasma/detalhes/${cartao.fantasma_id}`, 'detail');
-            } else if (ordemId && !String(ordemId).startsWith('fantasma-')) {
-                add(`/kanban/detalhes/${ordemId}`, 'detail');
-            }
-
             if (cartao.item_imagem_path) {
                 add(this._resolveMediaUrl(cartao.item_imagem_path), 'media');
             }

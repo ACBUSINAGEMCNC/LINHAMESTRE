@@ -3,7 +3,7 @@
  * Cache de assets estáticos e stale-while-revalidate para páginas
  */
 
-const CACHE_VERSION = 'v8';
+const CACHE_VERSION = 'v9';
 const CACHE_STATIC = `linhamestre-static-${CACHE_VERSION}`;
 const CACHE_PAGES  = `linhamestre-pages-${CACHE_VERSION}`;
 const CACHE_MEDIA  = `linhamestre-media-${CACHE_VERSION}`;
@@ -27,6 +27,8 @@ const BYPASS_PATTERNS = [
     '/kanban/sync',
     '/kanban/mover',
     '/kanban/reordenar',
+    '/kanban/listas',
+    '/listas/reordenar',
     '/kanban/finalizar',
     '/kanban/atualizar-tempo-real',
     '/kanban/enviar-para',
@@ -134,6 +136,11 @@ self.addEventListener('fetch', (event) => {
     // Estratégia 4: STALE-WHILE-REVALIDATE apenas para a página principal do Kanban
     if (request.destination === 'document' && (url.pathname === '/kanban' || url.pathname === '/kanban/')) {
         event.respondWith(staleWhileRevalidate(request, CACHE_PAGES));
+        return;
+    }
+
+    // Páginas administrativas / de configuração: SEM cache (sempre rede)
+    if (request.destination === 'document' && (url.pathname.startsWith('/kanban/listas') || url.pathname.startsWith('/listas'))) {
         return;
     }
     
