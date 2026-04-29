@@ -874,34 +874,35 @@ def reordenar_listas():
         except Exception:
             return jsonify({'success': False, 'message': 'Payload inválido: lista de IDs deve conter apenas números.'})
 
-        # Garantir que posições extremas continuem protegidas
+        # Buscar todas as listas no payload
         listas_db = {l.id: l for l in KanbanLista.query.filter(KanbanLista.id.in_(ordem_ids)).all()}
         if not ordem_ids:
             return jsonify({'success': False, 'message': 'Lista de ordem vazia.'})
 
-        # Garantir que Entrada seja primeiro e Expedição seja último
-        present_names = {listas_db[lid].nome for lid in ordem_ids if lid in listas_db}
-        has_entrada = 'Entrada' in present_names
-        has_expedicao = 'Expedição' in present_names
+        # FILTRAR: remover listas protegidas do payload - elas não podem ser reordenadas
+        ordem_ids_filtrados = [lid for lid in ordem_ids if lid in listas_db and listas_db[lid].nome not in PROTECTED_LISTS]
         
-        if has_entrada and has_expedicao:
-            first_name = listas_db[ordem_ids[0]].nome
-            last_name = listas_db[ordem_ids[-1]].nome
-            if first_name != 'Entrada' or last_name != 'Expedição':
-                return jsonify({'success': False, 'message': 'Entrada deve permanecer primeiro e Expedição último.'})
+        if not ordem_ids_filtrados:
+            return jsonify({'success': False, 'message': 'Nenhuma lista válida para reordenar (listas protegidas não podem ser movidas).'})
 
-        for i, lista_id in enumerate(ordem_ids):
+        # Reordenar apenas as listas não protegidas
+        for i, lista_id in enumerate(ordem_ids_filtrados):
             lista = listas_db.get(lista_id)
             if lista:
-                # Entrada sempre ordem=0, Expedição sempre ordem=1000
-                if lista.nome == 'Entrada':
-                    lista.ordem = 0
-                elif lista.nome == 'Expedição':
-                    lista.ordem = 1000
-                else:
-                    # Outras listas começam em 1
-                    lista.ordem = i + 1
+                # Listas não protegidas começam em 1
+                lista.ordem = i + 1
                 lista.data_atualizacao = datetime.utcnow()
+
+        # Garantir que Entrada e Expedição tenham ordem correta (não podem ser alteradas)
+        entrada = KanbanLista.query.filter_by(nome='Entrada').first()
+        if entrada:
+            entrada.ordem = 0
+            entrada.data_atualizacao = datetime.utcnow()
+        
+        expedicao = KanbanLista.query.filter_by(nome='Expedição').first()
+        if expedicao:
+            expedicao.ordem = 1000
+            expedicao.data_atualizacao = datetime.utcnow()
 
         db.session.commit()
         return jsonify({'success': True, 'message': 'Ordem das listas atualizada com sucesso!'})
