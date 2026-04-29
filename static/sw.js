@@ -3,12 +3,18 @@
  * Cache de assets estáticos e stale-while-revalidate para páginas
  */
 
-const CACHE_VERSION = 'v9';
+const CACHE_VERSION = 'v10';
 const CACHE_STATIC = `linhamestre-static-${CACHE_VERSION}`;
 const CACHE_PAGES  = `linhamestre-pages-${CACHE_VERSION}`;
 const CACHE_MEDIA  = `linhamestre-media-${CACHE_VERSION}`;
 const CACHE_API    = `linhamestre-api-${CACHE_VERSION}`;
 const KNOWN_CACHES = new Set([CACHE_STATIC, CACHE_PAGES, CACHE_MEDIA, CACHE_API]);
+const CACHE_LIMITS = {
+    [CACHE_STATIC]: 120,
+    [CACHE_PAGES]: 20,
+    [CACHE_MEDIA]: 350,
+    [CACHE_API]: 300
+};
 
 // Assets estáticos para pré-cachear na instalação
 const STATIC_ASSETS = [
@@ -172,6 +178,7 @@ async function cacheFirstStrategy(request, cacheName) {
         if (response && (response.ok || response.type === 'opaque' || response.type === 'opaqueredirect')) {
             try {
                 cache.put(request, response.clone());
+                await enforceCacheLimit(cacheName);
             } catch (err) {
                 // Cache.put pode rejeitar respostas opaqueredirect; ignoramos.
             }
@@ -195,6 +202,7 @@ async function staleWhileRevalidate(request, cacheName) {
         .then((response) => {
             if (response && response.ok) {
                 cache.put(request, response.clone());
+                enforceCacheLimit(cacheName);
                 console.log('[SW] Cache da página atualizado:', request.url);
             }
             return response;
@@ -236,6 +244,7 @@ async function networkFirstStrategy(request, cacheName) {
         const response = await fetch(request);
         if (response && response.ok) {
             cache.put(request, response.clone());
+            await enforceCacheLimit(cacheName);
             console.log('[SW] Network-first (rede):', request.url);
         }
         return response;
@@ -252,6 +261,20 @@ async function networkFirstStrategy(request, cacheName) {
                 'Content-Type': 'text/plain; charset=utf-8'
             }
         });
+    }
+}
+
+async function enforceCacheLimit(cacheName) {
+    const limit = CACHE_LIMITS[cacheName];
+    if (!limit) return;
+
+    const cache = await caches.open(cacheName);
+    const keys = await cache.keys();
+    if (keys.length <= limit) return;
+
+    const excess = keys.length - limit;
+    for (let i = 0; i < excess; i++) {
+        await cache.delete(keys[i]);
     }
 }
 

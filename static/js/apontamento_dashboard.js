@@ -4,6 +4,9 @@
     lastData: null,
     timerId: null,
     refreshId: null,
+    eventsBound: false,
+    storageListenerBound: false,
+    lastStorageCleanupAt: 0,
     // Mantém o maior valor de quantidade já visto por OS e por trabalho para evitar regressão visual
     // Chaves: `os:<ordem_servico_id>` e `os:<ordem_servico_id>:trab:<trabalho_id|nome|idx>`
     progressCache: new Map()
@@ -20,6 +23,27 @@
   function setStoredQty(key, val) {
     try {
       localStorage.setItem(lsKey(key), String(val || 0));
+    } catch (_) { /* noop */ }
+  }
+
+  function cleanupStoredQty(presentKeys) {
+    try {
+      const now = Date.now();
+      // Evitar varrer localStorage em toda renderização
+      if (now - (STATE.lastStorageCleanupAt || 0) < 60000) return;
+
+      const prefix = 'ap_dash_qty:';
+      const toRemove = [];
+      for (let i = 0; i < localStorage.length; i++) {
+        const k = localStorage.key(i);
+        if (!k || !k.startsWith(prefix)) continue;
+        const canonical = k.slice(prefix.length);
+        if (!presentKeys.has(canonical)) {
+          toRemove.push(k);
+        }
+      }
+      toRemove.forEach((k) => localStorage.removeItem(k));
+      STATE.lastStorageCleanupAt = now;
     } catch (_) { /* noop */ }
   }
 
@@ -478,6 +502,9 @@
         if (!presentKeys.has(key)) STATE.progressCache.delete(key);
       }
     } catch (_) { /* noop */ }
+
+    // Limpar também persistência local de chaves órfãs (evita crescimento infinito)
+    cleanupStoredQty(presentKeys);
     
     // Atualizar chips de status para cada OS que tem ativos
     if (ordemIdsComAtivos.size > 0) {
@@ -713,43 +740,51 @@
     STATE.refreshId = setInterval(() => { if (!document.hidden) fetchAndRender(); }, 10000);
 
     // Listen to cross-tab stop broadcasts to immediately clear any running timers on the dashboard
-    try { window.addEventListener('storage', onStorage); } catch (_) { /* noop */ }
-
-    // Wire up filter change events
-    document.getElementById('filter-lista')?.addEventListener('change', function(e) {
+    if (!STATE.storageListenerBound) {
       try {
-        const sel = e.target;
-        const selected = Array.from(sel.selectedOptions || []).map(o => o.value).filter(v => v && v !== 'Todas');
-        // Persistir como CSV múltiplo (nova chave)
-        if (selected.length > 0) {
-          localStorage.setItem('dashboard_listas_kanban', selected.join(','));
-        } else {
-          localStorage.removeItem('dashboard_listas_kanban');
-        }
-      } catch (err) { /* noop */ }
-      fetchAndRender();
-    });
-    document.getElementById('filter-status')?.addEventListener('change', fetchAndRender);
-    document.getElementById('btn-clear-filters')?.addEventListener('click', function() {
-      const listaFilter = document.getElementById('filter-lista');
-      const statusFilter = document.getElementById('filter-status');
-      if (listaFilter) {
-        // Limpar múltiplas seleções e selecionar 'Todas' se existir
-        Array.from(listaFilter.options).forEach(o => o.selected = false);
-        const optTodas = Array.from(listaFilter.options).find(o => o.value === 'Todas');
-        if (optTodas) optTodas.selected = true;
+        window.addEventListener('storage', onStorage);
+        STATE.storageListenerBound = true;
+      } catch (_) { /* noop */ }
+    }
+
+    // Wire up filter events only once (init pode ser chamado múltiplas vezes)
+    if (!STATE.eventsBound) {
+      document.getElementById('filter-lista')?.addEventListener('change', function(e) {
         try {
-          localStorage.removeItem('dashboard_listas_kanban');
-          localStorage.setItem('dashboard_lista_kanban', 'Todas');
-        } catch (e) { /* noop */ }
-      }
-      if (statusFilter) {
-        Array.from(statusFilter.options).forEach(o => o.selected = false);
-        const optTodos = Array.from(statusFilter.options).find(o => o.value === 'Todos');
-        if (optTodos) optTodos.selected = true;
-      }
-      fetchAndRender();
-    });
+          const sel = e.target;
+          const selected = Array.from(sel.selectedOptions || []).map(o => o.value).filter(v => v && v !== 'Todas');
+          // Persistir como CSV múltiplo (nova chave)
+          if (selected.length > 0) {
+            localStorage.setItem('dashboard_listas_kanban', selected.join(','));
+          } else {
+            localStorage.removeItem('dashboard_listas_kanban');
+          }
+        } catch (err) { /* noop */ }
+        fetchAndRender();
+      });
+      document.getElementById('filter-status')?.addEventListener('change', fetchAndRender);
+      document.getElementById('btn-clear-filters')?.addEventListener('click', function() {
+        const listaFilter = document.getElementById('filter-lista');
+        const statusFilter = document.getElementById('filter-status');
+        if (listaFilter) {
+          // Limpar múltiplas seleções e selecionar 'Todas' se existir
+          Array.from(listaFilter.options).forEach(o => o.selected = false);
+          const optTodas = Array.from(listaFilter.options).find(o => o.value === 'Todas');
+          if (optTodas) optTodas.selected = true;
+          try {
+            localStorage.removeItem('dashboard_listas_kanban');
+            localStorage.setItem('dashboard_lista_kanban', 'Todas');
+          } catch (e) { /* noop */ }
+        }
+        if (statusFilter) {
+          Array.from(statusFilter.options).forEach(o => o.selected = false);
+          const optTodos = Array.from(statusFilter.options).find(o => o.value === 'Todos');
+          if (optTodos) optTodos.selected = true;
+        }
+        fetchAndRender();
+      });
+      STATE.eventsBound = true;
+    }
   }
 
   // Expose init and other useful functions

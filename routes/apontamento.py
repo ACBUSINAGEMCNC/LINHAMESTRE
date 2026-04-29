@@ -1021,8 +1021,8 @@ def status_ativos():
 
                 # Nome da lista Kanban atual (ex.: MAZAK, GLM, SERRA) e normalização/canonização
                 try:
-                    # Primeiro, tentar buscar da OS atual se estiver em uma máquina
-                    os_obj = OrdemServico.query.get(status.ordem_servico_id) if status.ordem_servico_id else None
+                    # Primeiro, usar a OS já pré-carregada no joinedload (evita query extra)
+                    os_obj = getattr(status, 'ordem_servico', None)
                     nome_lista_raw = None
                     
                     if os_obj and hasattr(os_obj, 'status') and getattr(os_obj, 'status'):
@@ -1680,7 +1680,34 @@ def status_ativos():
         # Adicionar cartões fantasma ativos como entradas separadas
         logger.debug("Adicionando cartões fantasma ativos...")
         t0 = time.perf_counter()
-        cartoes_fantasma_ativos = CartaoFantasma.query.filter_by(ativo=True).all()
+        cartoes_fantasma_ativos = (
+            CartaoFantasma.query.options(
+                joinedload(CartaoFantasma.ordem_servico)
+                    .joinedload(OrdemServico.pedidos)
+                    .joinedload(PedidoOrdemServico.pedido)
+                    .joinedload(Pedido.cliente),
+                joinedload(CartaoFantasma.ordem_servico)
+                    .joinedload(OrdemServico.pedidos)
+                    .joinedload(PedidoOrdemServico.pedido)
+                    .joinedload(Pedido.item)
+            )
+            .filter_by(ativo=True)
+            .all()
+        )
+
+        ghost_os_ids = list({cf.ordem_servico_id for cf in cartoes_fantasma_ativos if getattr(cf, 'ordem_servico_id', None)})
+        status_ativos_por_os = {}
+        if ghost_os_ids:
+            status_rows = (
+                StatusProducaoOS.query
+                .filter(StatusProducaoOS.ordem_servico_id.in_(ghost_os_ids))
+                .all()
+            )
+            status_ativos_por_os = {
+                row.ordem_servico_id: row
+                for row in status_rows
+                if row and getattr(row, 'status_atual', None) != 'Finalizado'
+            }
         
         for cf in cartoes_fantasma_ativos:
             try:
@@ -1688,7 +1715,7 @@ def status_ativos():
                 # CORREÇÃO: Permitir cartões fantasma mesmo com status ativo para mostrar no dashboard
                 
                 # Buscar OS do cartão fantasma
-                os_fantasma = OrdemServico.query.get(cf.ordem_servico_id)
+                os_fantasma = getattr(cf, 'ordem_servico', None)
                 if not os_fantasma:
                     continue
                 
@@ -1708,7 +1735,7 @@ def status_ativos():
                     pass
                 
                 # Verificar se há apontamento ativo para esta OS
-                status_ativo_os = StatusProducaoOS.query.filter_by(ordem_servico_id=cf.ordem_servico_id).first()
+                status_ativo_os = status_ativos_por_os.get(cf.ordem_servico_id)
                 status_atual_real = 'Fantasma'
                 
                 # Se há status ativo, usar o status real em vez de "Fantasma"

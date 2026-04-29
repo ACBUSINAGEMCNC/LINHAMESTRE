@@ -670,13 +670,16 @@ class KanbanPWA {
         // na primeira abertura real — não precisam pré-aquecer.
         for (const cartao of cartoes) {
             const ordemId = cartao.ordem_id || cartao.id;
+            const listaNome = String(cartao.lista_nome || '').trim().toLowerCase();
+
+            // Em Expedição não precisamos pré-aquecer endpoints de apontamento.
+            const shouldPrefetchApontamento = listaNome !== 'expedição' && listaNome !== 'expedicao';
 
             // Pré-aquecer endpoints de leitura do apontamento.
             // O Service Worker usa SWR para estes endpoints. Ao pré-baixar aqui,
             // a primeira abertura do modal tende a ser instantânea.
-            if (ordemId && !String(ordemId).startsWith('fantasma-')) {
+            if (shouldPrefetchApontamento && ordemId && !String(ordemId).startsWith('fantasma-')) {
                 add(`/apontamento/os/${ordemId}/itens`, 'api');
-                add(`/apontamento/os/${ordemId}/logs`, 'api');
                 add(`/apontamento/quantidades-por-trabalho/${ordemId}`, 'api');
             }
 
