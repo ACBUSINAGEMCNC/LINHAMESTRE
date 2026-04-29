@@ -56,6 +56,11 @@ _kanban_memory_cache = {}
 @monitor_route_performance
 def index():
     """Rota para a página principal do Kanban"""
+    # Limpar cache se solicitado
+    if request.args.get('clear_cache') == '1':
+        _kanban_memory_cache.clear()
+        current_app.logger.info('🧹 Cache do Kanban limpo manualmente')
+
     listas = get_kanban_lists()
 
     if request.args.get('legacy') != '1':
