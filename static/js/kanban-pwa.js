@@ -671,6 +671,15 @@ class KanbanPWA {
         for (const cartao of cartoes) {
             const ordemId = cartao.ordem_id || cartao.id;
 
+            // Pré-aquecer endpoints de leitura do apontamento.
+            // O Service Worker usa SWR para estes endpoints. Ao pré-baixar aqui,
+            // a primeira abertura do modal tende a ser instantânea.
+            if (ordemId && !String(ordemId).startsWith('fantasma-')) {
+                add(`/apontamento/os/${ordemId}/itens`, 'api');
+                add(`/apontamento/os/${ordemId}/logs`, 'api');
+                add(`/apontamento/quantidades-por-trabalho/${ordemId}`, 'api');
+            }
+
             if (cartao.item_imagem_path) {
                 add(this._resolveMediaUrl(cartao.item_imagem_path), 'media');
             }
