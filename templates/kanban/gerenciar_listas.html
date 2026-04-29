@@ -35,7 +35,7 @@
                         
                         <div id="listas-sortable" class="list-group">
                             {% for lista in listas %}
-                            <div class="list-group-item d-flex justify-content-between align-items-center {% if lista.nome in ['Entrada', 'Expedição'] %}locked{% endif %}" data-id="{{ lista.id }}">
+                            <div class="list-group-item d-flex justify-content-between align-items-center {% if lista.nome in ['Entrada', 'Expedição'] %}locked{% endif %}" data-id="{{ lista.id }}" data-nome="{{ lista.nome }}">
                                 <div class="d-flex align-items-center">
                                     {% if lista.nome not in ['Entrada', 'Expedição'] %}
                                     <i class="fas fa-grip-vertical kanban-list-drag-handle text-muted me-3" style="cursor: move;"></i>
@@ -252,7 +252,16 @@ document.addEventListener('DOMContentLoaded', function() {
                 }
             }
 
-            const ordem = Array.from(evt.to.children).map(item => item.dataset.id);
+            const protectedNames = ['Entrada', 'Expedição'];
+
+            // Enviar para o backend apenas as listas NÃO protegidas.
+            // As listas protegidas são forçadas pelo backend e não devem ser reordenadas.
+            const ordem = Array.from(evt.to.children)
+                .filter(item => {
+                    const nome = (item.dataset.nome || '').trim();
+                    return !protectedNames.includes(nome);
+                })
+                .map(item => item.dataset.id);
             
             fetch('{{ url_for("kanban.reordenar_listas") }}', {
                 method: 'POST',
@@ -271,9 +280,23 @@ document.addEventListener('DOMContentLoaded', function() {
             })
             .then(data => {
                 if (data.success) {
-                    // Atualizar badges de ordem
-                    evt.to.querySelectorAll('.badge').forEach((badge, index) => {
-                        badge.textContent = index + 1;
+                    // Atualizar badges de ordem (numerar apenas não-protegidas)
+                    let n = 1;
+                    evt.to.querySelectorAll('.list-group-item').forEach((el) => {
+                        const badge = el.querySelector('.badge');
+                        if (!badge) return;
+
+                        const nome = (el.dataset.nome || '').trim();
+                        if (nome === 'Entrada') {
+                            badge.textContent = '0';
+                            return;
+                        }
+                        if (nome === 'Expedição') {
+                            badge.textContent = '1000';
+                            return;
+                        }
+                        badge.textContent = String(n);
+                        n += 1;
                     });
                     
                     // Mostrar mensagem de sucesso

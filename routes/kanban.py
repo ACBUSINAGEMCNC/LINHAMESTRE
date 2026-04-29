@@ -905,24 +905,11 @@ def reordenar_listas():
             expedicao.data_atualizacao = datetime.utcnow()
 
         db.session.commit()
+
+        # Invalidar cache do Kanban para refletir a nova ordem imediatamente
+        _kanban_memory_cache.clear()
         return jsonify({'success': True, 'message': 'Ordem das listas atualizada com sucesso!'})
 
-    except Exception as e:
-        db.session.rollback()
-        return jsonify({'success': False, 'message': f'Erro ao reordenar listas: {str(e)}'})
-    """Rota para reordenar as listas Kanban"""
-    try:
-        ordem_ids = request.json.get('ordem', [])
-        
-        for i, lista_id in enumerate(ordem_ids):
-            lista = KanbanLista.query.get(lista_id)
-            if lista:
-                lista.ordem = i + 1
-                lista.data_atualizacao = datetime.utcnow()
-        
-        db.session.commit()
-        return jsonify({'success': True, 'message': 'Ordem das listas atualizada com sucesso!'})
-    
     except Exception as e:
         db.session.rollback()
         return jsonify({'success': False, 'message': f'Erro ao reordenar listas: {str(e)}'})
