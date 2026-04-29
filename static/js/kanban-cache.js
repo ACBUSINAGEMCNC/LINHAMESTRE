@@ -6,8 +6,9 @@
 class KanbanCache {
     constructor() {
         this.dbName = 'linhamestre-kanban';
-        this.dbVersion = 2;
+        this.dbVersion = 3;  // Bump para forçar limpeza de caches antigos
         this.db = null;
+        this.maxSizeBytes = 50 * 1024 * 1024;  // 50MB limite total
     }
     
     /**
@@ -53,40 +54,43 @@ class KanbanCache {
      */
     async saveAll(data) {
         if (!this.db) await this.init();
-        
+
+        // Verificar tamanho antes de salvar para evitar estourar limite
+        await this.enforceSizeLimit();
+
         const transaction = this.db.transaction(
-            ['listas', 'cartoes', 'apontamentos', 'metadata'], 
+            ['listas', 'cartoes', 'apontamentos', 'metadata'],
             'readwrite'
         );
-        
+
         // Salvar listas
         const listasStore = transaction.objectStore('listas');
         await this.clearStore(listasStore);
         for (const lista of data.listas || []) {
             listasStore.put(lista);
         }
-        
+
         // Salvar cartões
         const cartoesStore = transaction.objectStore('cartoes');
         await this.clearStore(cartoesStore);
         for (const cartao of data.cartoes || []) {
             cartoesStore.put(cartao);
         }
-        
+
         // Salvar apontamentos
         const apontamentosStore = transaction.objectStore('apontamentos');
         await this.clearStore(apontamentosStore);
         for (const apontamento of data.apontamentos || []) {
             apontamentosStore.put(apontamento);
         }
-        
+
         // Salvar metadata
         const metadataStore = transaction.objectStore('metadata');
         metadataStore.put({
             key: 'last_sync',
             timestamp: data.timestamp || new Date().toISOString()
         });
-        
+
         return new Promise((resolve, reject) => {
             transaction.oncomplete = () => {
                 console.log('[Cache] Dados salvos com sucesso!');
@@ -179,17 +183,17 @@ class KanbanCache {
      */
     async clear() {
         if (!this.db) await this.init();
-        
+
         const transaction = this.db.transaction(
-            ['listas', 'cartoes', 'apontamentos', 'metadata'], 
+            ['listas', 'cartoes', 'apontamentos', 'metadata'],
             'readwrite'
         );
-        
+
         await this.clearStore(transaction.objectStore('listas'));
         await this.clearStore(transaction.objectStore('cartoes'));
         await this.clearStore(transaction.objectStore('apontamentos'));
         await this.clearStore(transaction.objectStore('metadata'));
-        
+
         return new Promise((resolve, reject) => {
             transaction.oncomplete = () => {
                 console.log('[Cache] Cache limpo!');
@@ -197,6 +201,70 @@ class KanbanCache {
             };
             transaction.onerror = () => reject(transaction.error);
         });
+    }
+
+    /**
+     * Verifica e impõe limite de tamanho total do IndexedDB
+     * Remove apontamentos antigos se exceder 50MB
+     */
+    async enforceSizeLimit() {
+        if (!this.db) await this.init();
+
+        try {
+            const totalSize = await this.getDatabaseSize();
+            if (totalSize <= this.maxSizeBytes) return;
+
+            console.warn(`[Cache] Tamanho excedido: ${(totalSize / 1024 / 1024).toFixed(2)}MB > 50MB. Limpando apontamentos antigos...`);
+
+            // Limpar apontamentos primeiro (geralmente os maiores)
+            const transaction = this.db.transaction(['apontamentos'], 'readwrite');
+            await this.clearStore(transaction.objectStore('apontamentos'));
+
+            await new Promise((resolve, reject) => {
+                transaction.oncomplete = () => {
+                    console.log('[Cache] Apontamentos limpos para liberar espaço');
+                    resolve();
+                };
+                transaction.onerror = () => reject(transaction.error);
+            });
+
+            // Se ainda muito grande, limpar tudo
+            const newSize = await this.getDatabaseSize();
+            if (newSize > this.maxSizeBytes) {
+                console.warn('[Cache] Ainda muito grande após limpar apontamentos. Limpando tudo...');
+                await this.clear();
+            }
+        } catch (error) {
+            console.error('[Cache] Erro ao enforce size limit:', error);
+        }
+    }
+
+    /**
+     * Estima o tamanho total do IndexedDB em bytes
+     */
+    async getDatabaseSize() {
+        if (!this.db) await this.init();
+
+        let totalSize = 0;
+        const stores = ['listas', 'cartoes', 'apontamentos', 'metadata'];
+
+        for (const storeName of stores) {
+            const transaction = this.db.transaction([storeName], 'readonly');
+            const store = transaction.objectStore(storeName);
+            const request = store.getAll();
+
+            await new Promise((resolve, reject) => {
+                request.onsuccess = () => {
+                    const data = request.result;
+                    const size = new Blob([JSON.stringify(data)]).size;
+                    totalSize += size;
+                    resolve();
+                };
+                request.onerror = () => reject(request.error);
+            });
+        }
+
+        return totalSize;
     }
     
     // Helpers

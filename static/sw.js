@@ -3,7 +3,7 @@
  * Cache de assets estáticos e stale-while-revalidate para páginas
  */
 
-const CACHE_VERSION = 'v10';
+const CACHE_VERSION = 'v11';
 const CACHE_STATIC = `linhamestre-static-${CACHE_VERSION}`;
 const CACHE_PAGES  = `linhamestre-pages-${CACHE_VERSION}`;
 const CACHE_MEDIA  = `linhamestre-media-${CACHE_VERSION}`;
@@ -14,6 +14,14 @@ const CACHE_LIMITS = {
     [CACHE_PAGES]: 20,
     [CACHE_MEDIA]: 350,
     [CACHE_API]: 300
+};
+
+// Limite de tamanho total em bytes (50MB por cache para evitar colapso)
+const CACHE_SIZE_LIMITS = {
+    [CACHE_STATIC]: 50 * 1024 * 1024,   // 50MB
+    [CACHE_PAGES]: 20 * 1024 * 1024,    // 20MB
+    [CACHE_MEDIA]: 100 * 1024 * 1024,   // 100MB
+    [CACHE_API]: 50 * 1024 * 1024       // 50MB
 };
 
 // Assets estáticos para pré-cachear na instalação
@@ -265,16 +273,50 @@ async function networkFirstStrategy(request, cacheName) {
 }
 
 async function enforceCacheLimit(cacheName) {
-    const limit = CACHE_LIMITS[cacheName];
-    if (!limit) return;
+    const countLimit = CACHE_LIMITS[cacheName];
+    const sizeLimit = CACHE_SIZE_LIMITS[cacheName];
+    if (!countLimit && !sizeLimit) return;
 
     const cache = await caches.open(cacheName);
     const keys = await cache.keys();
-    if (keys.length <= limit) return;
 
-    const excess = keys.length - limit;
-    for (let i = 0; i < excess; i++) {
-        await cache.delete(keys[i]);
+    // Primeiro, respeitar limite de contagem
+    if (countLimit && keys.length > countLimit) {
+        const excess = keys.length - countLimit;
+        for (let i = 0; i < excess; i++) {
+            await cache.delete(keys[i]);
+        }
+        // Recarregar keys após deletar por contagem
+        keys.length = 0;
+        (await cache.keys()).forEach(k => keys.push(k));
+    }
+
+    // Segundo, respeitar limite de tamanho total
+    if (sizeLimit) {
+        let totalSize = 0;
+        const entries = [];
+
+        for (const request of keys) {
+            const response = await cache.match(request);
+            if (response) {
+                const blob = await response.blob();
+                const size = blob.size;
+                totalSize += size;
+                entries.push({ request, size, response });
+            }
+        }
+
+        if (totalSize > sizeLimit) {
+            // Ordenar por tamanho (maior primeiro) para liberar espaço rápido
+            entries.sort((a, b) => b.size - a.size);
+
+            let currentSize = totalSize;
+            for (const entry of entries) {
+                if (currentSize <= sizeLimit) break;
+                await cache.delete(entry.request);
+                currentSize -= entry.size;
+            }
+        }
     }
 }
 
