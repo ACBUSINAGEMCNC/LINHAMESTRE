@@ -584,7 +584,7 @@ class KanbanPWA {
             let done = 0;
             const report = (label) => {
                 done++;
-                if (done % 20 === 0 || done === urls.length) {
+                if (done % 10 === 0 || done === urls.length) {
                     console.log(`[PWA] Pré-cache: ${done}/${urls.length} (${label})`);
                     // Atualiza progresso no loading overlay
                     if (this.isLoading) {
@@ -594,9 +594,9 @@ class KanbanPWA {
                 }
             };
 
-            // Concorrência baixa para não travar o servidor de desenvolvimento
-            // (Flask dev é single-thread) nem brigar com cliques reais.
-            await this._runInBatches(urls, 2, async (item) => {
+            // Concorrência mínima (1) para não sobrecarregar o servidor nem a rede
+            // e evitar travamentos no navegador por processamento excessivo de rede.
+            await this._runInBatches(urls, 1, async (item) => {
                 try {
                     if (onlyMissing) {
                         const match = await caches.match(item.url);
@@ -607,8 +607,8 @@ class KanbanPWA {
                         : { credentials: 'same-origin' };
                     await fetch(item.url, init);
                     report('fetch');
-                    // Pequeno respiro entre requests para o servidor
-                    await new Promise(r => setTimeout(r, 30));
+                    // Respiro maior entre requests para dar fôlego ao servidor
+                    await new Promise(r => setTimeout(r, 100));
                 } catch (e) {
                     // silencioso: um recurso a menos não quebra a experiência
                 }
@@ -665,10 +665,12 @@ class KanbanPWA {
             if (!set.has(url)) set.set(url, { url, type });
         };
 
+        // Limitar pré-cache aos primeiros 60 cartões para evitar
+        // inchaço imediato do cache e lentidão inicial.
+        const cartoesParaCache = cartoes.slice(0, 60);
+
         // Foco: detalhes (HTML do modal) e mídia (imagens/PDF).
-        // Endpoints de apontamento são leves e ficam em SWR via SW
-        // na primeira abertura real — não precisam pré-aquecer.
-        for (const cartao of cartoes) {
+        for (const cartao of cartoesParaCache) {
             const ordemId = cartao.ordem_id || cartao.id;
             const listaNome = String(cartao.lista_nome || '').trim().toLowerCase();
 

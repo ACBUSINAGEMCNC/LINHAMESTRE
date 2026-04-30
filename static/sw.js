@@ -3,25 +3,21 @@
  * Cache de assets estáticos e stale-while-revalidate para páginas
  */
 
-const CACHE_VERSION = 'v11';
+const CACHE_VERSION = 'v12';
 const CACHE_STATIC = `linhamestre-static-${CACHE_VERSION}`;
 const CACHE_PAGES  = `linhamestre-pages-${CACHE_VERSION}`;
 const CACHE_MEDIA  = `linhamestre-media-${CACHE_VERSION}`;
 const CACHE_API    = `linhamestre-api-${CACHE_VERSION}`;
 const KNOWN_CACHES = new Set([CACHE_STATIC, CACHE_PAGES, CACHE_MEDIA, CACHE_API]);
+
+// Limites de quantidade de itens por cache para evitar lentidão e bloat.
+// Nota: Respostas opacas (Supabase) são "padronizadas" para ~7MB cada pelo browser.
+// 100 itens de média ≈ 700MB de quota real, evitando estouro de 2GB.
 const CACHE_LIMITS = {
     [CACHE_STATIC]: 120,
     [CACHE_PAGES]: 20,
-    [CACHE_MEDIA]: 350,
-    [CACHE_API]: 300
-};
-
-// Limite de tamanho total em bytes (50MB por cache para evitar colapso)
-const CACHE_SIZE_LIMITS = {
-    [CACHE_STATIC]: 50 * 1024 * 1024,   // 50MB
-    [CACHE_PAGES]: 20 * 1024 * 1024,    // 20MB
-    [CACHE_MEDIA]: 100 * 1024 * 1024,   // 100MB
-    [CACHE_API]: 50 * 1024 * 1024       // 50MB
+    [CACHE_MEDIA]: 100,
+    [CACHE_API]: 150
 };
 
 // Assets estáticos para pré-cachear na instalação
@@ -35,7 +31,6 @@ const STATIC_ASSETS = [
 ];
 
 // URLs que NUNCA devem ser cacheadas (sempre vão ao servidor)
-// Mantemos apenas endpoints de escrita/estado dinâmico crítico.
 const BYPASS_PATTERNS = [
     '/kanban/full-data',
     '/kanban/sync',
@@ -73,7 +68,6 @@ self.addEventListener('install', (event) => {
         caches.open(CACHE_STATIC)
             .then((cache) => {
                 console.log('[SW] Cacheando assets estáticos...');
-                // addAll falha se qualquer arquivo não existir - usar add individual
                 return Promise.allSettled(
                     STATIC_ASSETS.map(url => cache.add(url).catch(e => console.warn('[SW] Não cacheou:', url)))
                 );
@@ -128,10 +122,6 @@ self.addEventListener('fetch', (event) => {
     }
 
     // Estratégia 2: CACHE-FIRST para IMAGENS em /uploads/*
-    // URLs são hash-based (imutáveis). PDFs são ignorados de propósito:
-    // respostas opaque (no-cors, cross-origin) não podem ser consumidas
-    // pelo visualizador de PDF do Chrome, resultando em "página indisponível".
-    // Para PDF deixamos o browser seguir o 302 do Flask direto para Supabase.
     if (url.pathname.startsWith('/uploads/')) {
         const isPdf = /\.pdf(\?|$)/i.test(url.pathname);
         if (!isPdf) {
@@ -148,7 +138,6 @@ self.addEventListener('fetch', (event) => {
     }
     
     // Estratégia 4: NETWORK-FIRST para a página principal do Kanban
-    // Evita abrir com HTML antigo (listas/cartões desatualizados) após mudanças.
     if (request.destination === 'document' && (url.pathname === '/kanban' || url.pathname === '/kanban/')) {
         event.respondWith(networkFirstStrategy(request, CACHE_PAGES));
         return;
@@ -158,8 +147,6 @@ self.addEventListener('fetch', (event) => {
     if (request.destination === 'document' && (url.pathname.startsWith('/kanban/listas') || url.pathname.startsWith('/listas'))) {
         return;
     }
-    
-    // Default: network only
 });
 
 /**
@@ -174,9 +161,6 @@ async function cacheFirstStrategy(request, cacheName) {
     const isMedia = url.pathname.startsWith('/uploads/');
 
     try {
-        // Para /uploads/* usamos no-cors porque a rota faz 302 para Supabase
-        // (cross-origin). Com no-cors recebemos uma resposta opaca que ainda
-        // pode ser cacheada e servida de volta pelo SW.
         const init = isMedia
             ? { mode: 'no-cors', credentials: 'include', redirect: 'follow' }
             : { redirect: 'follow' };
@@ -186,10 +170,9 @@ async function cacheFirstStrategy(request, cacheName) {
         if (response && (response.ok || response.type === 'opaque' || response.type === 'opaqueredirect')) {
             try {
                 cache.put(request, response.clone());
-                await enforceCacheLimit(cacheName);
-            } catch (err) {
-                // Cache.put pode rejeitar respostas opaqueredirect; ignoramos.
-            }
+                // Prunagem rápida apenas por contagem (O(1) amortizado)
+                enforceCacheLimit(cacheName);
+            } catch (err) {}
         }
         return response;
     } catch (e) {
@@ -200,7 +183,6 @@ async function cacheFirstStrategy(request, cacheName) {
 
 /**
  * Stale-While-Revalidate: serve do cache IMEDIATAMENTE, atualiza em background
- * Isso faz a página carregar INSTANTANEAMENTE na segunda visita!
  */
 async function staleWhileRevalidate(request, cacheName) {
     const cache = await caches.open(cacheName);
@@ -211,7 +193,6 @@ async function staleWhileRevalidate(request, cacheName) {
             if (response && response.ok) {
                 cache.put(request, response.clone());
                 enforceCacheLimit(cacheName);
-                console.log('[SW] Cache da página atualizado:', request.url);
             }
             return response;
         })
@@ -221,25 +202,16 @@ async function staleWhileRevalidate(request, cacheName) {
         });
     
     if (cached) {
-        // Atualiza em background, mas responde imediatamente do cache
         networkFetchPromise.catch(() => null);
-        console.log('[SW] Servindo do cache:', request.url);
         return cached;
     }
     
-    // Primeira vez: esperar a rede, com fallback seguro
-    console.log('[SW] Primeira visita, buscando da rede:', request.url);
     const networkResponse = await networkFetchPromise;
     if (networkResponse) {
         return networkResponse;
     }
 
-    return new Response('Offline', {
-        status: 503,
-        headers: {
-            'Content-Type': 'text/plain; charset=utf-8'
-        }
-    });
+    return new Response('Offline', { status: 503 });
 }
 
 /**
@@ -252,71 +224,36 @@ async function networkFirstStrategy(request, cacheName) {
         const response = await fetch(request);
         if (response && response.ok) {
             cache.put(request, response.clone());
-            await enforceCacheLimit(cacheName);
-            console.log('[SW] Network-first (rede):', request.url);
+            enforceCacheLimit(cacheName);
         }
         return response;
     } catch (error) {
         const cached = await cache.match(request);
-        if (cached) {
-            console.log('[SW] Network-first fallback (cache):', request.url);
-            return cached;
-        }
-
-        return new Response('Offline', {
-            status: 503,
-            headers: {
-                'Content-Type': 'text/plain; charset=utf-8'
-            }
-        });
+        if (cached) return cached;
+        return new Response('Offline', { status: 503 });
     }
 }
 
+/**
+ * Otimizado: Remove itens antigos por contagem.
+ * Evita ler blobs ou calcular tamanhos (lento e impreciso para opaque responses).
+ */
 async function enforceCacheLimit(cacheName) {
-    const countLimit = CACHE_LIMITS[cacheName];
-    const sizeLimit = CACHE_SIZE_LIMITS[cacheName];
-    if (!countLimit && !sizeLimit) return;
+    const limit = CACHE_LIMITS[cacheName];
+    if (!limit) return;
 
-    const cache = await caches.open(cacheName);
-    const keys = await cache.keys();
-
-    // Primeiro, respeitar limite de contagem
-    if (countLimit && keys.length > countLimit) {
-        const excess = keys.length - countLimit;
-        for (let i = 0; i < excess; i++) {
-            await cache.delete(keys[i]);
-        }
-        // Recarregar keys após deletar por contagem
-        keys.length = 0;
-        (await cache.keys()).forEach(k => keys.push(k));
-    }
-
-    // Segundo, respeitar limite de tamanho total
-    if (sizeLimit) {
-        let totalSize = 0;
-        const entries = [];
-
-        for (const request of keys) {
-            const response = await cache.match(request);
-            if (response) {
-                const blob = await response.blob();
-                const size = blob.size;
-                totalSize += size;
-                entries.push({ request, size, response });
+    try {
+        const cache = await caches.open(cacheName);
+        const keys = await cache.keys();
+        if (keys.length > limit) {
+            const excess = keys.length - limit;
+            for (let i = 0; i < excess; i++) {
+                await cache.delete(keys[i]);
             }
+            console.log(`[SW] Limpeza no cache ${cacheName}: removidos ${excess} itens.`);
         }
-
-        if (totalSize > sizeLimit) {
-            // Ordenar por tamanho (maior primeiro) para liberar espaço rápido
-            entries.sort((a, b) => b.size - a.size);
-
-            let currentSize = totalSize;
-            for (const entry of entries) {
-                if (currentSize <= sizeLimit) break;
-                await cache.delete(entry.request);
-                currentSize -= entry.size;
-            }
-        }
+    } catch (e) {
+        console.warn('[SW] Erro ao limpar cache:', e);
     }
 }
 
