@@ -1,5 +1,6 @@
 from flask import Blueprint, render_template, request, redirect, url_for, flash, jsonify, send_file
-from models import db, OrdemServico, Pedido, PedidoOrdemServico, Item
+from models import db, OrdemServico, Pedido, PedidoOrdemServico, Item, Cliente
+from sqlalchemy.orm import joinedload
 from utils import validate_form_data, generate_next_code
 from datetime import datetime
 from sqlalchemy.exc import IntegrityError
@@ -151,15 +152,21 @@ def _precisa_reconciliar_os_componente_por_composto(ordem_servico):
 
 @ordens.route('/ordens-servico')
 def listar_ordens_servico():
-    """Rota para listar todas as ordens de serviço"""
-    ordens = OrdemServico.query.all()
+    """Rota para listar todas as ordens de serviço otimizada com eager loading"""
+    ordens = OrdemServico.query.options(
+        joinedload(OrdemServico.pedidos).joinedload(PedidoOrdemServico.pedido).joinedload(Pedido.cliente),
+        joinedload(OrdemServico.pedidos).joinedload(PedidoOrdemServico.pedido).joinedload(Pedido.item)
+    ).order_by(OrdemServico.data_criacao.desc(), OrdemServico.id.desc()).all()
     return render_template('ordens/listar.html', ordens=ordens)
 
 
 @ordens.route('/ordens-servico/visualizar/<int:ordem_id>')
 def visualizar_ordem_servico(ordem_id):
-    """Rota para visualizar detalhes de uma ordem de serviço"""
-    ordem = OrdemServico.query.get_or_404(ordem_id)
+    """Rota para visualizar detalhes de uma ordem de serviço otimizada"""
+    ordem = OrdemServico.query.options(
+        joinedload(OrdemServico.pedidos).joinedload(PedidoOrdemServico.pedido).joinedload(Pedido.cliente),
+        joinedload(OrdemServico.pedidos).joinedload(PedidoOrdemServico.pedido).joinedload(Pedido.item)
+    ).get_or_404(ordem_id)
     return render_template('ordens/visualizar.html', ordem=ordem)
 
 @ordens.route('/ordens-servico/nova', methods=['GET', 'POST'])
@@ -217,8 +224,17 @@ def nova_ordem_servico():
 
 @ordens.route('/ordens-servico/imprimir/<int:ordem_id>')
 def imprimir_ordem_servico(ordem_id):
-    """Rota para imprimir uma ordem de serviço"""
-    ordem = OrdemServico.query.get_or_404(ordem_id)
+    """Rota para imprimir uma ordem de serviço otimizada"""
+    ordem = OrdemServico.query.options(
+        joinedload(OrdemServico.pedidos).joinedload(PedidoOrdemServico.pedido).joinedload(Pedido.cliente),
+        joinedload(OrdemServico.pedidos).joinedload(PedidoOrdemServico.pedido).joinedload(Pedido.unidade_entrega),
+        joinedload(OrdemServico.pedidos).joinedload(PedidoOrdemServico.pedido).joinedload(Pedido.item).options(
+            joinedload(Item.trabalhos).joinedload(ItemTrabalho.trabalho),
+            joinedload(Item.materiais).joinedload(ItemMaterial.material),
+            joinedload(Item.componentes).joinedload(ItemComposto.item_componente),
+            joinedload(Item.usado_em_composicao).joinedload(ItemComposto.item_pai).joinedload(Item.componentes).joinedload(ItemComposto.item_componente)
+        )
+    ).get_or_404(ordem_id)
     deve_reconciliar = request.args.get('reconciliar') == '1'
     if not deve_reconciliar:
         try:

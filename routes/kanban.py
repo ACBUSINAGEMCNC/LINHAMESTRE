@@ -54,8 +54,10 @@ _kanban_memory_cache = {}
 
 @kanban.route('/kanban')
 @monitor_route_performance
+@kanban.route('/kanban')
+@monitor_route_performance
 def index():
-    """Rota para a página principal do Kanban"""
+    """Rota para a página principal do Kanban otimizada para evitar N+1 queries"""
     # Limpar cache se solicitado
     if request.args.get('clear_cache') == '1':
         _kanban_memory_cache.clear()
@@ -78,375 +80,177 @@ def index():
             Item=Item
         )
 
-    # Tentar buscar do cache (TTL: 5 minutos) se disponível
-    # Usar chave global baseada no timestamp (blocos de 5 minutos)
+    # Tentar buscar do cache (TTL: 5 minutos)
     import time
-    cache_key_global = f"kanban:global:{int(time.time() / 300)}"  # Muda a cada 5 minutos
-    cached_data = None
-    
-    # Cache em memória primeiro (mais rápido)
+    cache_key_global = f"kanban:global:{int(time.time() / 300)}"
     cached_data = _kanban_memory_cache.get(cache_key_global)
     if cached_data:
         current_app.logger.info(f"📦 Memory Cache HIT para Kanban")
         return render_template('kanban/index.html', **cached_data, Item=Item)
     
-    current_app.logger.info(f"🔄 Cache MISS para Kanban")
+    current_app.logger.info(f"🔄 Cache MISS para Kanban - Iniciando processamento otimizado")
     
     categorias = get_kanban_categories()
-    
-    ordens = {}
-    cartoes_fantasma = {}
-    tempos_listas = {}
-    quantidades_listas = {}
-    metricas_listas = {}
+    ordens = {lista: [] for lista in listas}
+    cartoes_fantasma = {lista: [] for lista in listas}
 
-    turnos_por_dia = 3
-    horas_por_turno = 8
-    segundos_por_turno = horas_por_turno * 3600
+    # 1. Buscar todas as OS ativas com Eager Loading completo
+    all_active_os = OrdemServico.query.filter(OrdemServico.status.in_(listas))\
+        .options(
+            db.joinedload(OrdemServico.pedidos).joinedload(PedidoOrdemServico.pedido).joinedload(Pedido.item),
+            db.joinedload(OrdemServico.pedidos).joinedload(PedidoOrdemServico.pedido).joinedload(Pedido.cliente)
+        ).order_by(OrdemServico.posicao.asc(), OrdemServico.id.asc()).all()
 
-    def _to_int(value, default=0):
-        try:
-            if value is None:
-                return default
-            return int(value)
-        except Exception:
-            return default
+    os_ids = [o.id for o in all_active_os]
+    item_ids = set()
+    for o in all_active_os:
+        for p_os in o.pedidos:
+            if p_os.pedido and p_os.pedido.item_id:
+                item_ids.add(p_os.pedido.item_id)
+        ordens[o.status].append(o)
 
-    def _tempo_label(segundos):
-        total = max(0, _to_int(segundos, 0))
-        horas = total // 3600
-        minutos = (total % 3600) // 60
-        if horas > 0:
-            return f"{horas}h {minutos:02d}m"
-        return f"{minutos}m"
-
-    def _badge_label(nome):
-        base = (nome or '').strip()
-        if not base:
-            return 'Serviço'
-        return base if len(base) <= 18 else f"{base[:18].rstrip()}…"
-
-    def _card_title(ordem):
-        pedido_os = (getattr(ordem, 'pedidos', None) or [None])[0]
-        pedido = getattr(pedido_os, 'pedido', None)
-        item = getattr(pedido, 'item', None)
-        item_nome = ''
-        if item and getattr(item, 'nome', None):
-            item_nome = item.nome
-        elif pedido and getattr(pedido, 'nome_item', None):
-            item_nome = pedido.nome_item
-        return (item_nome or ordem.numero or f"OS {ordem.id}").strip()
-
-    def _card_qty(ordem):
-        total = 0
-        for pedido_os in getattr(ordem, 'pedidos', []) or []:
-            pedido = getattr(pedido_os, 'pedido', None)
-            total += _to_int(getattr(pedido, 'quantidade', 0), 0)
-        return total
-
-    # Buscar IDs de todas as OS no Kanban para filtrar apontamentos
-    todas_os_ids = db.session.query(OrdemServico.id).filter(
-        OrdemServico.status.in_(listas)
-    ).all()
-    os_ids_set = {os_id for (os_id,) in todas_os_ids}
-    
-    # Query otimizada: apenas apontamentos das OS visíveis no Kanban
-    apontado_rows = (
-        db.session.query(
-            ApontamentoProducao.ordem_servico_id,
-            ApontamentoProducao.trabalho_id,
-            db.func.coalesce(db.func.sum(ApontamentoProducao.tempo_decorrido), 0)
-        )
-        .filter(ApontamentoProducao.ordem_servico_id.in_(os_ids_set))
-        .group_by(ApontamentoProducao.ordem_servico_id, ApontamentoProducao.trabalho_id)
-        .all()
-    )
-    apontado_por_os_trabalho = defaultdict(dict)
-    for ordem_id, trabalho_id, tempo_total in apontado_rows:
-        if ordem_id is None or trabalho_id is None:
-            continue
-        apontado_por_os_trabalho[int(ordem_id)][int(trabalho_id)] = _to_int(tempo_total, 0)
-
-    # OTIMIZAÇÃO: Buscar todas as ordens de uma vez com eager loading completo
-    todos_item_trabalhos = {}
+    # 2. Batch query para ItemTrabalho e Trabalho
+    todos_item_trabalhos = defaultdict(list)
     todos_trabalhos = {}
-    todos_item_ids = set()
-    
-    # Primeiro passo: carregar todas as ordens com todos os relacionamentos necessários
-    for lista in listas:
-        ordens[lista] = OrdemServico.query.filter_by(status=lista)\
-            .options(
-                db.joinedload(OrdemServico.pedidos)
-                  .joinedload(PedidoOrdemServico.pedido)
-                  .joinedload(Pedido.item),
-                db.joinedload(OrdemServico.pedidos)
-                  .joinedload(PedidoOrdemServico.pedido)
-                  .joinedload(Pedido.cliente)
-            )\
-            .order_by(OrdemServico.posicao.asc(), OrdemServico.id.asc()).all()
-        
-        # Coletar IDs de itens para pré-carregar ItemTrabalho
-        for ordem in ordens[lista]:
-            for pedido_os in ordem.pedidos:
-                pedido = pedido_os.pedido
-                if pedido and pedido.item_id:
-                    todos_item_ids.add(pedido.item_id)
-    
-    # Carregar todos os ItemTrabalho e Trabalho de uma vez só
-    if todos_item_ids:
-        item_trabalhos_rows = ItemTrabalho.query.filter(
-            ItemTrabalho.item_id.in_(todos_item_ids)
-        ).options(
-            db.joinedload(ItemTrabalho.trabalho)
-        ).all()
-        
-        for it in item_trabalhos_rows:
-            if it.item_id not in todos_item_trabalhos:
-                todos_item_trabalhos[it.item_id] = []
+    if item_ids:
+        it_rows = ItemTrabalho.query.filter(ItemTrabalho.item_id.in_(list(item_ids)))\
+            .options(db.joinedload(ItemTrabalho.trabalho)).all()
+        for it in it_rows:
             todos_item_trabalhos[it.item_id].append(it)
             if it.trabalho:
                 todos_trabalhos[it.trabalho_id] = it.trabalho
-    
+
+    # 3. Batch query para Apontamentos (Sum decorrido)
+    apontado_por_os_trabalho = defaultdict(lambda: defaultdict(int))
+    if os_ids:
+        apontado_rows = db.session.query(
+            ApontamentoProducao.ordem_servico_id,
+            ApontamentoProducao.trabalho_id,
+            db.func.coalesce(db.func.sum(ApontamentoProducao.tempo_decorrido), 0)
+        ).filter(ApontamentoProducao.ordem_servico_id.in_(os_ids))\
+         .group_by(ApontamentoProducao.ordem_servico_id, ApontamentoProducao.trabalho_id).all()
+        
+        for os_id, trab_id, tempo in apontado_rows:
+            if os_id and trab_id:
+                apontado_por_os_trabalho[int(os_id)][int(trab_id)] = int(tempo or 0)
+
+    # 4. Batch query para Cartões Fantasma
+    all_fantasmas = CartaoFantasma.query.filter(CartaoFantasma.lista_kanban.in_(listas), CartaoFantasma.ativo == True)\
+        .order_by(CartaoFantasma.posicao_fila).all()
+    for f in all_fantasmas:
+        cartoes_fantasma[f.lista_kanban].append(f)
+
+    # 5. Cálculos de métricas por lista
+    metricas_listas = {}
+    tempos_listas = {}
+    quantidades_listas = {}
+    segundos_por_turno = 8 * 3600
+
+    def _to_int(v, d=0):
+        try: return int(v or d)
+        except: return d
+
+    def _tempo_label(s):
+        total = max(0, _to_int(s))
+        h, m = total // 3600, (total % 3600) // 60
+        return f"{h}h {m:02d}m" if h > 0 else f"{m}m"
+
+    def _badge_label(n):
+        n = (n or '').strip()
+        return n if len(n) <= 18 else f"{n[:18]}…"
+
     for lista in listas:
+        l_tempo_estimado = 0
+        l_tempo_apontado = 0
+        l_quantidade = 0
+        servicos_map = {}
+        cards_data = []
         
-        # Buscar cartões fantasma ativos para esta lista
-        cartoes_fantasma[lista] = CartaoFantasma.query.filter_by(
-            lista_kanban=lista, 
-            ativo=True
-        ).order_by(CartaoFantasma.posicao_fila).all()
-        
-        # Calcular tempos e quantidades para cada lista
-        tempo_total = 0
-        quantidade_total = 0
-        tempo_apontado_total = 0
-        tempo_restante_total = 0
-        servicos_lista = {}
-        cards_metricas = []
-        categorias_da_lista = [categoria for categoria, listas_categoria in categorias.items() if lista in listas_categoria]
-        categorias_norm = {str(cat).strip().lower() for cat in categorias_da_lista if cat}
-        
-        # Contar ordens normais
-        for ordem in ordens[lista]:
-            card_estimado = 0
-            card_apontado = 0
-            card_qtd = 0
-            card_servicos = []
-            # Rastrear setup já adicionado por trabalho nesta OS
-            setup_adicionado_por_trabalho = set()
-            
-            for pedido_os in ordem.pedidos:
-                pedido = pedido_os.pedido
-                if pedido.item_id:
-                    quantidade_total += pedido.quantidade
-                    card_qtd += _to_int(pedido.quantidade, 0)
-                    
-                    # Calcular tempo total para os trabalhos da categoria correspondente
-                    # OTIMIZAÇÃO: Usar dicionários pré-carregados em vez de queries
-                    for item_trabalho in todos_item_trabalhos.get(pedido.item_id, []):
-                        trabalho = todos_trabalhos.get(item_trabalho.trabalho_id)
-                        if not trabalho:
-                            continue
-                        trabalho_categoria = (trabalho.categoria or '').strip().lower()
-                        incluir = False
-                        
-                        # Verificar se o trabalho pertence à categoria da lista atual
-                        for categoria, listas_categoria in categorias.items():
-                            categoria_norm = (categoria or '').strip().lower()
-                            if lista in listas_categoria and (trabalho_categoria == categoria_norm or not trabalho.categoria):
-                                incluir = True
-                                break
-                        if not incluir:
-                            continue
+        # Filtros de categoria
+        categorias_norm = {c.lower().strip() for c, ls in categorias.items() if lista in ls}
 
-                        tempo_peca = _to_int(item_trabalho.tempo_real or item_trabalho.tempo_peca, 0)
-                        tempo_setup = _to_int(item_trabalho.tempo_setup, 0)
-                        qtd_pedido = _to_int(pedido.quantidade, 0)
-                        
-                        # Setup deve ser adicionado apenas UMA VEZ por OS+Trabalho
-                        tempo_producao = tempo_peca * qtd_pedido
-                        if item_trabalho.trabalho_id not in setup_adicionado_por_trabalho:
-                            tempo_estimado_servico = tempo_producao + tempo_setup
-                            setup_adicionado_por_trabalho.add(item_trabalho.trabalho_id)
-                        else:
-                            tempo_estimado_servico = tempo_producao
-                        
-                        tempo_apontado_servico = apontado_por_os_trabalho.get(ordem.id, {}).get(item_trabalho.trabalho_id, 0)
-                        tempo_restante_servico = max(0, tempo_estimado_servico - tempo_apontado_servico)
+        for os in ordens[lista]:
+            c_estimado = 0
+            c_apontado = 0
+            c_qtd = 0
+            c_servicos = []
+            setup_seen = set()
 
-                        tempo_total += tempo_estimado_servico
-                        card_estimado += tempo_estimado_servico
-                        card_apontado += tempo_apontado_servico
+            for p_os in os.pedidos:
+                p = p_os.pedido
+                if not p or not p.item_id: continue
 
-                        chave_servico = str(item_trabalho.trabalho_id)
-                        if chave_servico not in servicos_lista:
-                            servicos_lista[chave_servico] = {
-                                'id': item_trabalho.trabalho_id,
-                                'nome': trabalho.nome,
-                                'nome_curto': _badge_label(trabalho.nome),
-                                'categoria': trabalho.categoria or '',
-                                'tempo_estimado_total': 0,
-                                'tempo_apontado_total': 0,
-                                'quantidade_total': 0,
-                                'cards_count': 0
-                            }
-                        servicos_lista[chave_servico]['tempo_estimado_total'] += tempo_estimado_servico
-                        servicos_lista[chave_servico]['tempo_apontado_total'] += tempo_apontado_servico
-                        servicos_lista[chave_servico]['quantidade_total'] += qtd_pedido
-                        servicos_lista[chave_servico]['cards_count'] += 1
+                c_qtd += _to_int(p.quantidade)
+                for it in todos_item_trabalhos.get(p.item_id, []):
+                    trab = todos_trabalhos.get(it.trabalho_id)
+                    if not trab: continue
 
-                        card_servicos.append({
-                            'id': item_trabalho.trabalho_id,
-                            'nome': trabalho.nome,
-                            'nome_curto': _badge_label(trabalho.nome),
-                            'categoria': trabalho.categoria or '',
-                            'tempo_estimado': tempo_estimado_servico,
-                            'tempo_apontado': tempo_apontado_servico,
-                            'tempo_restante': tempo_restante_servico,
-                            'quantidade': qtd_pedido
-                        })
+                    # Validar se o serviço pertence a esta coluna
+                    trab_cat = (trab.categoria or '').lower().strip()
+                    if not any(ls_cat == lista and (not trab_cat or trab_cat == cat.lower().strip()) for cat, ls_cat in categorias.items() if lista in ls_cat):
+                        continue
 
-            card_restante = max(0, card_estimado - card_apontado)
-            tempo_apontado_total += card_apontado
-            tempo_restante_total += card_restante
-            cards_metricas.append({
-                'ordem_id': ordem.id,
-                'ordem_numero': ordem.numero,
-                'titulo': _card_title(ordem),
-                'quantidade_total': card_qtd,
-                'tempo_estimado_total': card_estimado,
-                'tempo_apontado_total': card_apontado,
-                'tempo_restante_total': card_restante,
-                'servicos': card_servicos
+                    # Cálculo de tempos
+                    t_peca = _to_int(it.tempo_real or it.tempo_peca)
+                    t_setup = _to_int(it.tempo_setup)
+                    q = _to_int(p.quantidade)
+
+                    t_prod = t_peca * q
+                    t_est = t_prod + (t_setup if it.trabalho_id not in setup_seen else 0)
+                    setup_seen.add(it.trabalho_id)
+
+                    t_ap = apontado_por_os_trabalho[os.id][it.trabalho_id]
+                    t_rest = max(0, t_est - t_ap)
+
+                    c_estimado += t_est
+                    c_apontado += t_ap
+
+                    # Agregar no serviço da lista
+                    sk = str(it.trabalho_id)
+                    if sk not in servicos_map:
+                        servicos_map[sk] = {'id': it.trabalho_id, 'nome': trab.nome, 'nome_curto': _badge_label(trab.nome), 'tempo_estimado_total': 0, 'tempo_apontado_total': 0, 'quantidade_total': 0, 'cards_count': 0}
+                    s = servicos_map[sk]
+                    s['tempo_estimado_total'] += t_est
+                    s['tempo_apontado_total'] += t_ap
+                    s['quantidade_total'] += q
+                    s['cards_count'] += 1
+
+            l_tempo_estimado += c_estimado
+            l_tempo_apontado += c_apontado
+            l_quantidade += c_qtd
+
+            cards_data.append({
+                'ordem_id': os.id, 'ordem_numero': os.numero, 'quantidade_total': c_qtd,
+                'tempo_estimado_total': c_estimado, 'tempo_apontado_total': c_apontado, 'tempo_restante_total': max(0, c_estimado - c_apontado)
             })
-        
-        # Contar cartões fantasma (apenas para visualização, não duplicar tempo/quantidade)
-        for cartao_fantasma in cartoes_fantasma[lista]:
-            # Os cartões fantasma não adicionam tempo/quantidade pois são referências
-            pass
-        
-        tempos_listas[lista] = tempo_total
-        quantidades_listas[lista] = quantidade_total
-        cards_metricas_ordenados = sorted(cards_metricas, key=lambda card: ((card.get('ordem_numero') or ''), card.get('ordem_id') or 0))
-        primeiro_card = cards_metricas_ordenados[0] if cards_metricas_ordenados else None
-        if primeiro_card:
-            turnos_primeiro = (primeiro_card['tempo_restante_total'] / segundos_por_turno) if segundos_por_turno else 0
-        else:
-            turnos_primeiro = 0
 
-        for serv in servicos_lista.values():
-            serv['tempo_restante_total'] = max(0, serv['tempo_estimado_total'] - serv['tempo_apontado_total'])
-
-        servicos_ordenados = sorted(
-            servicos_lista.values(),
-            key=lambda serv: (-serv['tempo_restante_total'], serv['nome'])
-        )
-        for serv in servicos_ordenados:
-            serv['tempo_estimado_label'] = _tempo_label(serv['tempo_estimado_total'])
-            serv['tempo_apontado_label'] = _tempo_label(serv['tempo_apontado_total'])
-            serv['tempo_restante_label'] = _tempo_label(serv['tempo_restante_total'])
-
-        cards_topo = sorted(cards_metricas_ordenados, key=lambda card: (-card['tempo_restante_total'], card['ordem_numero'] or ''))[:3]
-        for card in cards_topo:
-            card['tempo_estimado_label'] = _tempo_label(card['tempo_estimado_total'])
-            card['tempo_apontado_label'] = _tempo_label(card['tempo_apontado_total'])
-            card['tempo_restante_label'] = _tempo_label(card['tempo_restante_total'])
-
-        if primeiro_card:
-            primeiro_card = dict(primeiro_card)
-            primeiro_card['tempo_estimado_label'] = _tempo_label(primeiro_card['tempo_estimado_total'])
-            primeiro_card['tempo_apontado_label'] = _tempo_label(primeiro_card['tempo_apontado_total'])
-            primeiro_card['tempo_restante_label'] = _tempo_label(primeiro_card['tempo_restante_total'])
+        # Finalizar métricas da lista
+        servicos_list = sorted(servicos_map.values(), key=lambda x: (-(x['tempo_estimado_total'] - x['tempo_apontado_total']), x['nome']))
+        for s in servicos_list:
+            s['tempo_restante_total'] = max(0, s['tempo_estimado_total'] - s['tempo_apontado_total'])
+            s['tempo_estimado_label'] = _tempo_label(s['tempo_estimado_total'])
+            s['tempo_apontado_label'] = _tempo_label(s['tempo_apontado_total'])
+            s['tempo_restante_label'] = _tempo_label(s['tempo_restante_total'])
 
         metricas_listas[lista] = {
-            'lista': lista,
-            'cards_total': len(ordens[lista]),
-            'quantidade_total': quantidade_total,
-            'tempo_estimado_total': tempo_total,
-            'tempo_apontado_total': tempo_apontado_total,
-            'tempo_restante_total': tempo_restante_total,
-            'tempo_estimado_label': _tempo_label(tempo_total),
-            'tempo_apontado_label': _tempo_label(tempo_apontado_total),
-            'tempo_restante_label': _tempo_label(tempo_restante_total),
-            'servicos': servicos_ordenados,
-            'servicos_ids': [serv['id'] for serv in servicos_ordenados],
-            'cards_topo': cards_topo,
-            'primeiro_card': primeiro_card,
-            'turnos_primeiro_card': round(turnos_primeiro, 1),
-            'turnos_primeiro_card_label': f"{round(turnos_primeiro, 1):.1f}" if primeiro_card else '0.0',
-            'turnos_por_dia': turnos_por_dia,
-            'horas_por_turno': horas_por_turno,
-            'categorias': list(categorias_da_lista),
-            'cards_metricas': cards_metricas_ordenados
+            'lista': lista, 'cards_total': len(ordens[lista]), 'quantidade_total': l_quantidade,
+            'tempo_estimado_total': l_tempo_estimado, 'tempo_apontado_total': l_tempo_apontado,
+            'tempo_restante_total': max(0, l_tempo_estimado - l_tempo_apontado),
+            'tempo_estimado_label': _tempo_label(l_tempo_estimado),
+            'tempo_apontado_label': _tempo_label(l_tempo_apontado),
+            'tempo_restante_label': _tempo_label(l_tempo_estimado - l_tempo_apontado),
+            'servicos': servicos_list, 'servicos_ids': [s['id'] for s in servicos_list]
         }
+        tempos_listas[lista] = l_tempo_estimado
+        quantidades_listas[lista] = l_quantidade
 
-    template_obj = current_app.jinja_env.get_template('kanban/index.html')
-    template_filename = getattr(template_obj, 'filename', None)
-    current_app.logger.warning('KANBAN_TEMPLATE_FILE=%s', template_filename)
-
-    # Preparar dados para cache e template
     template_data = {
-        'listas': listas,
-        'ordens': ordens,
-        'cartoes_fantasma': cartoes_fantasma,
-        'tempos_listas': tempos_listas,
-        'quantidades_listas': quantidades_listas,
-        'metricas_listas': metricas_listas,
-        'metricas_listas_json': json.dumps(metricas_listas)
+        'listas': listas, 'ordens': ordens, 'cartoes_fantasma': cartoes_fantasma,
+        'tempos_listas': tempos_listas, 'quantidades_listas': quantidades_listas,
+        'metricas_listas': metricas_listas, 'metricas_listas_json': json.dumps(metricas_listas)
     }
-    
-    # Cachear dados por 5 minutos (300 segundos) - chave global
     _kanban_memory_cache[cache_key_global] = template_data
-    current_app.logger.info(f" Dados do Kanban cacheados (chave: {cache_key_global})")
-    
     return render_template('kanban/index.html', **template_data, Item=Item)
-
-@kanban.route('/kanban/por-numero/<path:numero>')
-def abrir_os_por_numero(numero):
-    """Atalho: abrir o Kanban a partir do número da OS (ex: OS-00001)."""
-    ordem = OrdemServico.query.filter_by(numero=numero).first()
-    if not ordem:
-        abort(404)
-    return redirect(url_for('kanban.index', ordem_id=ordem.id))
-
-
-@kanban.route('/kanban/por-pedido/<int:pedido_id>')
-def abrir_os_por_pedido(pedido_id):
-    """Atalho: abrir o Kanban a partir de um Pedido.
-
-    - Se houver 1 OS associada ao pedido, abre direto.
-    - Se houver várias OS (ex.: item composto), mostra uma tela para selecionar qual OS abrir.
-    """
-    pedido = Pedido.query.get_or_404(pedido_id)
-
-    # OS diretamente associadas ao pedido (item simples)
-    ordens_set = {}
-    for assoc in getattr(pedido, 'ordens_servico', []) or []:
-        os_obj = getattr(assoc, 'ordem_servico', None)
-        if os_obj and os_obj.id not in ordens_set:
-            ordens_set[os_obj.id] = os_obj
-
-    # Para item composto, buscar OS através dos pedidos virtuais AUTO-...-{pedido_original_id}
-    if (not ordens_set) and pedido and getattr(pedido, 'item', None) and getattr(pedido.item, 'eh_composto', False):
-        virtuais = Pedido.query.filter(Pedido.numero_pedido.like(f"AUTO-%-{pedido.id}")).all()
-        for pv in virtuais:
-            for assoc in getattr(pv, 'ordens_servico', []) or []:
-                os_obj = getattr(assoc, 'ordem_servico', None)
-                if os_obj and os_obj.id not in ordens_set:
-                    ordens_set[os_obj.id] = os_obj
-
-    ordens = list(ordens_set.values())
-    ordens.sort(key=lambda o: (o.numero or '', o.id))
-
-    if not ordens:
-        flash('Nenhuma OS encontrada para este pedido.', 'warning')
-        return redirect(url_for('pedidos.listar_pedidos'))
-
-    if len(ordens) == 1:
-        return redirect(url_for('kanban.index', ordem_id=ordens[0].id))
-
-    return render_template('kanban/selecionar_os.html', pedido=pedido, ordens=ordens)
-
-@kanban.route('/kanban/mover', methods=['POST'])
 def mover_kanban():
     """Rota para mover uma ordem de serviço entre listas do Kanban"""
     # Validação de dados
@@ -750,8 +554,12 @@ def sincronizar_quantidade_pedido():
 
 @kanban.route('/kanban/detalhes/<int:ordem_id>')
 def detalhes_kanban(ordem_id):
-    """Rota para obter detalhes de uma ordem de serviço no Kanban"""
-    ordem = OrdemServico.query.get_or_404(ordem_id)
+    """Rota para obter detalhes de uma ordem de serviço no Kanban otimizada"""
+    ordem = OrdemServico.query.options(
+        joinedload(OrdemServico.pedidos).joinedload(PedidoOrdemServico.pedido).joinedload(Pedido.cliente),
+        joinedload(OrdemServico.pedidos).joinedload(PedidoOrdemServico.pedido).joinedload(Pedido.unidade_entrega),
+        joinedload(OrdemServico.pedidos).joinedload(PedidoOrdemServico.pedido).joinedload(Pedido.item).joinedload(Item.trabalhos).joinedload(ItemTrabalho.trabalho)
+    ).get_or_404(ordem_id)
     return render_template('kanban/detalhes_card.html', ordem=ordem, Item=Item)
 
 @kanban.route('/registros-mensais')
@@ -1126,6 +934,7 @@ def listar_ordens_disponiveis(lista_destino):
             .filter_by(lista_kanban=lista_destino, ativo=True).subquery()
         
         ordens_disponiveis = OrdemServico.query\
+            .options(db.joinedload(OrdemServico.pedidos).joinedload(PedidoOrdemServico.pedido).joinedload(Pedido.item))\
             .filter(OrdemServico.status != lista_destino)\
             .filter(~OrdemServico.id.in_(ordens_existentes_ids))\
             .filter(OrdemServico.status != 'Finalizado')\
@@ -1135,12 +944,13 @@ def listar_ordens_disponiveis(lista_destino):
         for ordem in ordens_disponiveis:
             for pedido_os in ordem.pedidos:
                 pedido = pedido_os.pedido
+                if not pedido: continue
                 if pedido.item_id:
-                    item = Item.query.get(pedido.item_id)
+                    item_obj = pedido.item
                     ordens_data.append({
                         'id': ordem.id,
                         'numero': ordem.numero,
-                        'item_nome': item.nome if item else pedido.nome_item,
+                        'item_nome': item_obj.nome if item_obj else pedido.nome_item,
                         'quantidade': pedido.quantidade,
                         'lista_atual': ordem.status
                     })
@@ -1192,43 +1002,54 @@ def listar_trabalhos_ordem(ordem_id):
 @kanban.route('/kanban/full-data')
 def full_data():
     """
-    Retorna TODOS os dados do Kanban para cache local (PWA)
-    Usado no primeiro acesso ou quando cache está vazio
+    Retorna TODOS os dados do Kanban para cache local (PWA) de forma otimizada.
+    Utiliza eager loading para evitar N+1 queries e reduzir latência com Vercel/Supabase.
     """
     if 'usuario_id' not in session:
         return jsonify({'success': False, 'message': 'Não autorizado'}), 401
     
     try:
-        # Buscar todas as listas ativas
+        # 1. Buscar todas as listas ativas
         listas = KanbanLista.query.filter_by(ativa=True).order_by(KanbanLista.ordem).all()
-        current_app.logger.info(f'[PWA] Encontradas {len(listas)} listas')
+        listas_nomes = [l.nome for l in listas]
+        listas_map = {l.nome: l for l in listas}
         
-        # Buscar todos os cartões (OS) ativos
+        # 2. Buscar TODOS os cartões reais ativos em uma única query com eager loading completo
+        ordens_all = OrdemServico.query.filter(OrdemServico.status.in_(listas_nomes))\
+            .options(
+                db.joinedload(OrdemServico.pedidos)
+                  .joinedload(PedidoOrdemServico.pedido)
+                  .joinedload(Pedido.item),
+                db.joinedload(OrdemServico.pedidos)
+                  .joinedload(PedidoOrdemServico.pedido)
+                  .joinedload(Pedido.cliente)
+            ).all()
+
         cartoes = []
-        for lista in listas:
-            try:
-                # Cartões reais
-                ordens = OrdemServico.query.filter_by(status=lista.nome).order_by(OrdemServico.posicao).all()
-                for ordem in ordens:
-                    try:
-                        cartoes.append(_serialize_cartao(ordem, lista.id, False))
-                    except Exception as e:
-                        current_app.logger.error(f'[PWA] Erro ao serializar cartão {ordem.id}: {str(e)}')
-                
-                # Cartões fantasma
-                fantasmas = CartaoFantasma.query.filter_by(
-                    lista_kanban_id=lista.id,
-                    ativo=True
-                ).order_by(CartaoFantasma.posicao).all()
-                for fantasma in fantasmas:
-                    try:
-                        cartoes.append(_serialize_cartao_fantasma(fantasma))
-                    except Exception as e:
-                        current_app.logger.error(f'[PWA] Erro ao serializar fantasma {fantasma.id}: {str(e)}')
-            except Exception as e:
-                current_app.logger.error(f'[PWA] Erro ao processar lista {lista.nome}: {str(e)}')
+        for ordem in ordens_all:
+            lista = listas_map.get(ordem.status)
+            if lista:
+                cartoes.append(_serialize_cartao(ordem, lista.id, False))
         
-        # Buscar apontamentos ativos (últimas 24h)
+        # 3. Buscar TODOS os cartões fantasma em uma única query
+        # Nota: models.py mostra lista_kanban como String, mas routes/kanban usava lista_kanban_id
+        # Vamos usar o campo String conforme o model para garantir compatibilidade.
+        fantasmas_all = CartaoFantasma.query.filter(
+            CartaoFantasma.lista_kanban.in_(listas_nomes),
+            CartaoFantasma.ativo == True
+        ).options(
+            db.joinedload(CartaoFantasma.ordem_servico)
+              .joinedload(OrdemServico.pedidos)
+              .joinedload(PedidoOrdemServico.pedido)
+              .joinedload(Pedido.item)
+        ).all()
+
+        for fantasma in fantasmas_all:
+            lista = listas_map.get(fantasma.lista_kanban)
+            if lista:
+                cartoes.append(_serialize_cartao_fantasma(fantasma, lista.id))
+
+        # 4. Buscar apontamentos ativos (últimas 24h) de forma eficiente
         data_limite = datetime.now() - timedelta(days=1)
         apontamentos = ApontamentoProducao.query.filter(
             ApontamentoProducao.data_hora >= data_limite
@@ -1244,7 +1065,7 @@ def full_data():
         
     except Exception as e:
         import traceback
-        current_app.logger.error(f'[PWA] Erro no full-data: {str(e)}')
+        current_app.logger.error(f'[PWA] Erro no full-data otimizado: {str(e)}')
         current_app.logger.error(f'[PWA] Traceback: {traceback.format_exc()}')
         return jsonify({'success': False, 'message': f'Erro ao carregar dados: {str(e)}'}), 500
 
@@ -1390,17 +1211,20 @@ def _serialize_cartao(ordem, lista_id, is_fantasma):
     }
 
 
-def _serialize_cartao_fantasma(fantasma):
-    """Serializa um cartão fantasma para JSON"""
+def _serialize_cartao_fantasma(fantasma, lista_id=None):
+    """Serializa um cartão fantasma para JSON de forma segura"""
     ordem = fantasma.ordem_servico
+    if not ordem:
+        return None
+
     return {
         'id': f'fantasma-{fantasma.id}',
         'fantasma_id': fantasma.id,
         'ordem_id': ordem.id,
         'numero': ordem.numero,
-        'lista_id': fantasma.lista_kanban_id,
-        'lista_nome': fantasma.lista.nome if fantasma.lista else None,
-        'posicao': fantasma.posicao,
+        'lista_id': lista_id,
+        'lista_nome': fantasma.lista_kanban,
+        'posicao': getattr(fantasma, 'posicao_fila', 0),
         'is_fantasma': True,
         'trabalho_id': fantasma.trabalho_id,
         'trabalho_nome': fantasma.trabalho.nome if fantasma.trabalho else None,

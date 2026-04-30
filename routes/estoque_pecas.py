@@ -214,10 +214,10 @@ def _slots_from_entity(entity):
 
 @estoque_pecas.route('/estoque-pecas')
 def index():
-    """Rota para a página principal do estoque de peças"""
+    """Rota para a página principal do estoque de peças otimizada"""
     # Organizar estoque por prateleira
     show_zero = (request.args.get('show_zero') or '').strip().lower() in ('1', 'true', 'yes', 'sim')
-    q = EstoquePecas.query
+    q = EstoquePecas.query.options(joinedload(EstoquePecas.item))
     if not show_zero:
         q = q.filter(EstoquePecas.quantidade > 0)
     estoque = q.order_by(EstoquePecas.estante, EstoquePecas.secao, EstoquePecas.linha, EstoquePecas.coluna).all()
