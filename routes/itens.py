@@ -12,7 +12,7 @@ from models import db, Item, Material, Trabalho, ItemMaterial, ItemTrabalho, Ped
 from utils import validate_form_data, save_file, generate_next_code, parse_json_field
 from flask import current_app, g
 from sqlalchemy import func
-from sqlalchemy.orm import selectinload
+from sqlalchemy.orm import selectinload, joinedload
 from openpyxl import Workbook, load_workbook
 from openpyxl.styles import Font, PatternFill, Alignment
 from openpyxl.utils import get_column_letter

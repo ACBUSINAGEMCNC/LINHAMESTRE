@@ -1,4 +1,5 @@
 from flask import Blueprint, render_template, request, redirect, url_for, flash, jsonify, session, abort
+from sqlalchemy.orm import joinedload
 from models import (db, Usuario, Maquina, Castanha, GabaritoRosca, GabaritoCentroUsinagem,
                    NovaFolhaProcesso, FolhaProcessoSerra, FolhaProcessoTornoCNC, 
                    FolhaProcessoCentroUsinagem, FolhaProcessoManualAcabamento,

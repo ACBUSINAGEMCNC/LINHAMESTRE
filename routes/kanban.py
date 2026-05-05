@@ -3,6 +3,7 @@ from models import db, Usuario, OrdemServico, Pedido, PedidoOrdemServico, Item, 
 from utils import validate_form_data, get_kanban_lists, get_kanban_categories, format_seconds_to_time
 from datetime import datetime, timezone, timedelta
 from collections import defaultdict
+from sqlalchemy.orm import joinedload, selectinload
 import json
 import re
 
@@ -98,8 +99,8 @@ def index():
     # 1. Buscar todas as OS ativas com Eager Loading completo
     all_active_os = OrdemServico.query.filter(OrdemServico.status.in_(listas))\
         .options(
-            db.joinedload(OrdemServico.pedidos).joinedload(PedidoOrdemServico.pedido).joinedload(Pedido.item),
-            db.joinedload(OrdemServico.pedidos).joinedload(PedidoOrdemServico.pedido).joinedload(Pedido.cliente)
+            joinedload(OrdemServico.pedidos).joinedload(PedidoOrdemServico.pedido).joinedload(Pedido.item),
+            joinedload(OrdemServico.pedidos).joinedload(PedidoOrdemServico.pedido).joinedload(Pedido.cliente)
         ).order_by(OrdemServico.posicao.asc(), OrdemServico.id.asc()).all()
 
     os_ids = [o.id for o in all_active_os]
@@ -115,7 +116,7 @@ def index():
     todos_trabalhos = {}
     if item_ids:
         it_rows = ItemTrabalho.query.filter(ItemTrabalho.item_id.in_(list(item_ids)))\
-            .options(db.joinedload(ItemTrabalho.trabalho)).all()
+            .options(joinedload(ItemTrabalho.trabalho)).all()
         for it in it_rows:
             todos_item_trabalhos[it.item_id].append(it)
             if it.trabalho:
@@ -935,7 +936,7 @@ def listar_ordens_disponiveis(lista_destino):
             .filter_by(lista_kanban=lista_destino, ativo=True).subquery()
         
         ordens_disponiveis = OrdemServico.query\
-            .options(db.joinedload(OrdemServico.pedidos).joinedload(PedidoOrdemServico.pedido).joinedload(Pedido.item))\
+            .options(joinedload(OrdemServico.pedidos).joinedload(PedidoOrdemServico.pedido).joinedload(Pedido.item))\
             .filter(OrdemServico.status != lista_destino)\
             .filter(~OrdemServico.id.in_(ordens_existentes_ids))\
             .filter(OrdemServico.status != 'Finalizado')\
@@ -1018,10 +1019,10 @@ def full_data():
         # 2. Buscar TODOS os cartões reais ativos em uma única query com eager loading completo
         ordens_all = OrdemServico.query.filter(OrdemServico.status.in_(listas_nomes))\
             .options(
-                db.joinedload(OrdemServico.pedidos)
+                joinedload(OrdemServico.pedidos)
                   .joinedload(PedidoOrdemServico.pedido)
                   .joinedload(Pedido.item),
-                db.joinedload(OrdemServico.pedidos)
+                joinedload(OrdemServico.pedidos)
                   .joinedload(PedidoOrdemServico.pedido)
                   .joinedload(Pedido.cliente)
             ).all()
@@ -1039,7 +1040,7 @@ def full_data():
             CartaoFantasma.lista_kanban.in_(listas_nomes),
             CartaoFantasma.ativo == True
         ).options(
-            db.joinedload(CartaoFantasma.ordem_servico)
+            joinedload(CartaoFantasma.ordem_servico)
               .joinedload(OrdemServico.pedidos)
               .joinedload(PedidoOrdemServico.pedido)
               .joinedload(Pedido.item)

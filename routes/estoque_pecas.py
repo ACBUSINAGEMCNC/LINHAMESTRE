@@ -6,6 +6,7 @@ from datetime import date, datetime
 
 from flask import Blueprint, render_template, request, redirect, url_for, flash, jsonify, current_app, session
 from sqlalchemy import or_
+from sqlalchemy.orm import joinedload
 from sqlalchemy.exc import ProgrammingError
 from openpyxl import load_workbook
 
