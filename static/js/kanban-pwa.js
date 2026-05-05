@@ -665,9 +665,9 @@ class KanbanPWA {
             if (!set.has(url)) set.set(url, { url, type });
         };
 
-        // Limitar pré-cache aos primeiros 60 cartões para evitar
-        // inchaço imediato do cache e lentidão inicial.
-        const cartoesParaCache = cartoes.slice(0, 60);
+        // Limitar pré-cache aos primeiros 120 cartões (detalhes são leves, mídias têm limite próprio no SW)
+        // Aumentado para garantir que a maioria dos cartões visíveis estejam instantâneos.
+        const cartoesParaCache = cartoes.slice(0, 120);
 
         // Foco: detalhes (HTML do modal) e mídia (imagens/PDF).
         for (const cartao of cartoesParaCache) {
@@ -681,6 +681,7 @@ class KanbanPWA {
             // O Service Worker usa SWR para estes endpoints. Ao pré-baixar aqui,
             // a primeira abertura do modal tende a ser instantânea.
             if (shouldPrefetchApontamento && ordemId && !String(ordemId).startsWith('fantasma-')) {
+                add(`/kanban/detalhes/${ordemId}`, 'api');
                 add(`/apontamento/os/${ordemId}/itens`, 'api');
                 add(`/apontamento/quantidades-por-trabalho/${ordemId}`, 'api');
             }

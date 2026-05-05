@@ -1,4 +1,4 @@
-from flask import Blueprint, render_template, request, redirect, url_for, flash, jsonify, session, current_app, make_response, abort
+from flask import Blueprint, render_template, request, redirect, url_for, flash, jsonify, session, current_app, make_response, abort, g
 from models import db, Usuario, OrdemServico, Pedido, PedidoOrdemServico, Item, Trabalho, ItemTrabalho, RegistroMensal, KanbanLista, CartaoFantasma, ApontamentoProducao
 from utils import validate_form_data, get_kanban_lists, get_kanban_categories, format_seconds_to_time
 from datetime import datetime, timezone, timedelta
@@ -35,7 +35,8 @@ def verificar_permissao_kanban():
         flash('Por favor, faça login para acessar esta página', 'warning')
         return redirect(url_for('auth.login', next=request.url))
 
-    usuario = Usuario.query.get(session['usuario_id'])
+    # Otimização: Usar objeto usuário leve do g para evitar query desnecessária ao banco
+    usuario = getattr(g, 'usuario', None)
     if not usuario:
         flash('Usuário não encontrado', 'danger')
         return redirect(url_for('auth.login'))

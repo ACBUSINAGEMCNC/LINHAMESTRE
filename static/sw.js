@@ -3,7 +3,7 @@
  * Cache de assets estáticos e stale-while-revalidate para páginas
  */
 
-const CACHE_VERSION = 'v12';
+const CACHE_VERSION = 'v13';
 const CACHE_STATIC = `linhamestre-static-${CACHE_VERSION}`;
 const CACHE_PAGES  = `linhamestre-pages-${CACHE_VERSION}`;
 const CACHE_MEDIA  = `linhamestre-media-${CACHE_VERSION}`;
@@ -14,10 +14,10 @@ const KNOWN_CACHES = new Set([CACHE_STATIC, CACHE_PAGES, CACHE_MEDIA, CACHE_API]
 // Nota: Respostas opacas (Supabase) são "padronizadas" para ~7MB cada pelo browser.
 // 100 itens de média ≈ 700MB de quota real, evitando estouro de 2GB.
 const CACHE_LIMITS = {
-    [CACHE_STATIC]: 120,
-    [CACHE_PAGES]: 20,
+    [CACHE_STATIC]: 150,
+    [CACHE_PAGES]: 30,
     [CACHE_MEDIA]: 100,
-    [CACHE_API]: 150
+    [CACHE_API]: 400 // Aumentado para suportar detalhes de até 120+ cartões sem despejo
 };
 
 // Assets estáticos para pré-cachear na instalação
@@ -47,7 +47,6 @@ const BYPASS_PATTERNS = [
     '/apontamento/registrar',
     '/apontamento/validar-codigo',
     '/apontamento/status-ativos',
-    '/apontamento/status-cronometro',
     '/auth/'
 ];
 
