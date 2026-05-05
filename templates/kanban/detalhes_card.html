@@ -83,7 +83,7 @@
                                         'pedido_id': pedido_os.pedido.id,
                                         'pedido_os_id': pedido_os.id,
                                         'cliente': pedido_os.pedido.cliente.nome,
-                                        'unidade': pedido_os.pedido.unidade_entrega.nome,
+                                        'unidade': pedido_os.pedido.unidade_entrega.nome if pedido_os.pedido.unidade_entrega else '-',
                                         'quantidade': pedido_os.pedido.quantidade,
                                         'quantidade_snapshot': pedido_os.quantidade_snapshot,
                                         'quantidade_alterada': pedido_os.quantidade_alterada
@@ -94,11 +94,12 @@
                                             'name': item_name,
                                             'total_qty': pedido_os.pedido.quantidade,
                                             'item_id': pedido_os.pedido.item_id,
+                                            'item_obj': pedido_os.pedido.item,
                                             'orders': [{
                                                 'pedido_id': pedido_os.pedido.id,
                                                 'pedido_os_id': pedido_os.id,
                                                 'cliente': pedido_os.pedido.cliente.nome,
-                                                'unidade': pedido_os.pedido.unidade_entrega.nome,
+                                                'unidade': pedido_os.pedido.unidade_entrega.nome if pedido_os.pedido.unidade_entrega else '-',
                                                 'quantidade': pedido_os.pedido.quantidade,
                                                 'quantidade_snapshot': pedido_os.quantidade_snapshot,
                                                 'quantidade_alterada': pedido_os.quantidade_alterada
@@ -164,8 +165,8 @@
                                                 </div>
                                             </div>
                                             
-                                            {% if item_data.item_id %}
-                                                {% set item = Item.query.get(item_data.item_id) %}
+                                            {% if item_data.item_id and item_data.item_obj %}
+                                                {% set item = item_data.item_obj %}
                                                 
                                                 {% if item.desenho_tecnico %}
                                                 <div class="row mb-3">

@@ -1,4 +1,4 @@
-from flask import Blueprint, render_template, request, redirect, url_for, flash, jsonify, session
+from flask import Blueprint, render_template, request, redirect, url_for, flash, jsonify, session, g
 from models import db, Usuario, Estoque, Material, MovimentacaoEstoque, OrdemServico
 from utils import validate_form_data
 from datetime import datetime
@@ -11,7 +11,7 @@ def verificar_permissao_estoque():
         flash('Por favor, faça login para acessar esta página', 'warning')
         return redirect(url_for('auth.login', next=request.url))
 
-    usuario = Usuario.query.get(session['usuario_id'])
+    usuario = getattr(g, 'usuario', None)
     if not usuario:
         flash('Usuário não encontrado', 'danger')
         return redirect(url_for('auth.login'))

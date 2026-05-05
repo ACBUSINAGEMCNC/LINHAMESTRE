@@ -12,7 +12,7 @@ from models import db, Item, Material, Trabalho, ItemMaterial, ItemTrabalho, Ped
 from utils import validate_form_data, save_file, generate_next_code, parse_json_field
 from flask import current_app, g
 from sqlalchemy import func
-from sqlalchemy.orm import selectinload
+from sqlalchemy.orm import selectinload, joinedload
 from openpyxl import Workbook, load_workbook
 from openpyxl.styles import Font, PatternFill, Alignment
 from openpyxl.utils import get_column_letter
@@ -883,29 +883,30 @@ def novo_item():
 
 @itens.route('/itens/editar/<int:item_id>', methods=['GET', 'POST'])
 def editar_item(item_id):
-    """Rota para editar um item existente"""
-    item = Item.query.get_or_404(item_id)
+    """Rota para editar um item existente otimizada"""
+    item = Item.query.options(
+        joinedload(Item.materiais).joinedload(ItemMaterial.material),
+        joinedload(Item.trabalhos).joinedload(ItemTrabalho.trabalho)
+    ).get_or_404(item_id)
     materiais = Material.query.all()
     trabalhos = Trabalho.query.all()
     pode_ver_valores = _usuario_pode_ver_valores()
 
     item_materiais = []
     for im in item.materiais:
-        material = Material.query.get(im.material_id)
         item_materiais.append({
             'id': im.material_id,
-            'nome': material.nome,
-            'tipo': material.tipo,
+            'nome': im.material.nome if im.material else 'Material não encontrado',
+            'tipo': im.material.tipo if im.material else '',
             'comprimento': im.comprimento,
             'quantidade': im.quantidade
         })
 
     item_trabalhos = []
     for it in item.trabalhos:
-        trabalho = Trabalho.query.get(it.trabalho_id)
         item_trabalhos.append({
             'id': it.trabalho_id,
-            'nome': trabalho.nome,
+            'nome': it.trabalho.nome if it.trabalho else 'Trabalho não encontrado',
             'tempo_setup': it.tempo_setup,
             'tempo_peca': it.tempo_peca
         })
@@ -1191,8 +1192,13 @@ def excluir_item(item_id):
 
 @itens.route('/itens/visualizar/<int:item_id>')
 def visualizar_item(item_id):
-    """Rota para visualizar detalhes de um item"""
-    item = Item.query.get_or_404(item_id)
+    """Rota para visualizar detalhes de um item otimizada"""
+    item = Item.query.options(
+        joinedload(Item.materiais).joinedload(ItemMaterial.material),
+        joinedload(Item.trabalhos).joinedload(ItemTrabalho.trabalho),
+        joinedload(Item.componentes).joinedload(ItemComposto.item_componente),
+        joinedload(Item.usado_em_composicao).joinedload(ItemComposto.item_pai)
+    ).get_or_404(item_id)
     return render_template('itens/visualizar.html', item=item, pode_ver_valores=_usuario_pode_ver_valores())
 
 
@@ -1727,8 +1733,10 @@ def editar_item_composto(item_id):
 
 @itens.route('/itens/composto/visualizar/<int:item_id>')
 def visualizar_item_composto(item_id):
-    """Rota para visualizar detalhes de um item composto"""
-    item = Item.query.get_or_404(item_id)
+    """Rota para visualizar detalhes de um item composto otimizada"""
+    item = Item.query.options(
+        joinedload(Item.componentes).joinedload(ItemComposto.item_componente)
+    ).get_or_404(item_id)
     
     if not item.eh_composto:
         flash('Este item não é um item composto!', 'danger')

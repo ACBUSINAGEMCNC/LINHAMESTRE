@@ -1,4 +1,4 @@
-from flask import Blueprint, redirect, url_for, flash, session, request
+from flask import Blueprint, redirect, url_for, flash, session, request, g
 from models import Usuario
 
 folhas_processo = Blueprint('folhas_processo', __name__)
@@ -10,7 +10,7 @@ def verificar_permissao():
         flash('Por favor, faça login para acessar esta página', 'warning')
         return redirect(url_for('auth.login', next=request.url))
 
-    usuario = Usuario.query.get(session['usuario_id'])
+    usuario = getattr(g, 'usuario', None)
     if not usuario:
         flash('Usuário não encontrado', 'danger')
         return redirect(url_for('auth.login'))

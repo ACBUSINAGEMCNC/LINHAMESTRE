@@ -24,6 +24,7 @@ uploads/
 
 # Node.js
 node_modules/
+.next/
 
 # Build / dist / cache
 *.egg-info/

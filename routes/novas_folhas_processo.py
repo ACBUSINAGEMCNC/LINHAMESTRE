@@ -1,4 +1,5 @@
 from flask import Blueprint, render_template, request, redirect, url_for, flash, jsonify, session, abort
+from sqlalchemy.orm import joinedload
 from models import (db, Usuario, Maquina, Castanha, GabaritoRosca, GabaritoCentroUsinagem,
                    NovaFolhaProcesso, FolhaProcessoSerra, FolhaProcessoTornoCNC, 
                    FolhaProcessoCentroUsinagem, FolhaProcessoManualAcabamento,
@@ -22,12 +23,12 @@ def listar_folhas():
         except Exception:
             abort(400)
         # Filtrar por item específico
-        folhas = NovaFolhaProcesso.query.filter_by(ativo=True, item_id=item_id_int).order_by(NovaFolhaProcesso.data_criacao.desc()).all()
+        folhas = NovaFolhaProcesso.query.options(joinedload(NovaFolhaProcesso.maquina)).filter_by(ativo=True, item_id=item_id_int).order_by(NovaFolhaProcesso.data_criacao.desc()).all()
         item = Item.query.get(item_id_int)
         return render_template('novas_folhas_processo/listar.html', folhas=folhas, item=item)
     else:
         # Listar todas as folhas
-        folhas = NovaFolhaProcesso.query.filter_by(ativo=True).order_by(NovaFolhaProcesso.data_criacao.desc()).all()
+        folhas = NovaFolhaProcesso.query.options(joinedload(NovaFolhaProcesso.maquina), joinedload(NovaFolhaProcesso.item)).filter_by(ativo=True).order_by(NovaFolhaProcesso.data_criacao.desc()).all()
         return render_template('novas_folhas_processo/listar.html', folhas=folhas)
 
 @novas_folhas_processo.route('/folhas-processo-novas/nova/<int:item_id>', methods=['GET', 'POST'])

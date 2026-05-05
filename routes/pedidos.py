@@ -1124,7 +1124,11 @@ def listar_pedidos():
     # O usuário pode usar filtros para vê-los
     mostrar_todos = request.args.get('mostrar_todos', '0') == '1'
     
-    query = Pedido.query.options(joinedload(Pedido.item)).filter(
+    query = Pedido.query.options(
+        joinedload(Pedido.item),
+        joinedload(Pedido.cliente),
+        joinedload(Pedido.unidade_entrega)
+    ).filter(
         (Pedido.numero_pedido == None) | (~Pedido.numero_pedido.like('AUTO-%'))
     )
     

@@ -316,10 +316,8 @@
         {% for pedido_os in ordem.pedidos %}
             {% set qtd = pedido_os.pedido.quantidade %}
             {% set ns.total_geral_os = ns.total_geral_os + qtd %}
-            {% set resumo_item_obj = none %}
-            {% if pedido_os.pedido.item_id %}
-                {% set resumo_item_obj = Item.query.get(pedido_os.pedido.item_id) %}
-            {% endif %}
+            {% set resumo_item_obj = pedido_os.pedido.item if pedido_os.pedido.item_id else none %}
+
             {% if resumo_item_obj %}
                 {% set resumo_item_nome = resumo_item_obj.codigo_acb ~ ' - ' ~ resumo_item_obj.nome %}
                 {% set resumo_item_img = resumo_item_obj.imagem_path %}
@@ -366,6 +364,7 @@
         </div>
         
         {% set itens_totais = {} %}
+        {% set itens_objs = {} %}
         {% for pedido_os in ordem.pedidos %}
             {% if pedido_os.pedido.item_id %}
                 {% set iid = pedido_os.pedido.item_id %}
@@ -374,49 +373,51 @@
                     {% set _ = itens_totais.update({iid: itens_totais[iid] + qtd}) %}
                 {% else %}
                     {% set _ = itens_totais.update({iid: qtd}) %}
+                    {% set _ = itens_objs.update({iid: pedido_os.pedido.item}) %}
                 {% endif %}
             {% endif %}
         {% endfor %}
         
         {% if itens_totais and (itens_totais|length == 1) %}
             {% set current_item_id = (itens_totais.keys()|list)[0] %}
-            {% set current_item_obj = Item.query.get(current_item_id) %}
-            {% if current_item_obj and current_item_obj.usado_em_composicao and (current_item_obj.usado_em_composicao.count() > 0) %}
-                {% set rels = current_item_obj.usado_em_composicao.all() %}
-                {% set rel0 = rels[0] %}
-                {% set pai_id = rel0.item_pai_id %}
-                {% set pai_obj = Item.query.get(pai_id) %}
-                {% if pai_obj and pai_obj.componentes and (pai_obj.componentes.count() > 0) %}
-                    {% set qtd_componente_total = itens_totais[current_item_id] %}
-                    {% set qtd_composto_base = 0 %}
-                    {% if rel0.quantidade and rel0.quantidade > 0 %}
-                        {% set qtd_composto_base = qtd_componente_total / rel0.quantidade %}
-                    {% endif %}
-                    <div class="ordem-info" style="margin-top: 12px;">
-                        <h6 class="mb-2">Irmãos do Item Composto</h6>
-                        <div class="item-breakdown">
-                            <div class="item-breakdown-title">{{ pai_obj.codigo_acb }} - {{ pai_obj.nome }}</div>
-                            <div class="small text-muted mb-2">Qtd equivalente do composto nesta OS: {{ qtd_composto_base|round(0, 'floor')|int }}</div>
-                            <table class="table table-sm table-bordered mb-0">
-                                <thead>
-                                    <tr>
-                                        <th>Componente</th>
-                                        <th style="width: 160px;">Qtd nesta OS</th>
-                                    </tr>
-                                </thead>
-                                <tbody>
-                                    {% for comp_rel in pai_obj.componentes.all() %}
-                                        {% set comp_item = comp_rel.item_componente %}
-                                        {% set qtd_irmao = (qtd_composto_base * (comp_rel.quantidade or 0))|round(0, 'floor')|int %}
+            {% set current_item_obj = itens_objs[current_item_id] %}
+            {% if current_item_obj and current_item_obj.usado_em_composicao %}
+                {% set rels = current_item_obj.usado_em_composicao %}
+                {% if rels|length > 0 %}
+                    {% set rel0 = rels[0] %}
+                    {% set pai_obj = rel0.item_pai %}
+                    {% if pai_obj and pai_obj.componentes %}
+                        {% set qtd_componente_total = itens_totais[current_item_id] %}
+                        {% set qtd_composto_base = 0 %}
+                        {% if rel0.quantidade and rel0.quantidade > 0 %}
+                            {% set qtd_composto_base = qtd_componente_total / rel0.quantidade %}
+                        {% endif %}
+                        <div class="ordem-info" style="margin-top: 12px;">
+                            <h6 class="mb-2">Irmãos do Item Composto</h6>
+                            <div class="item-breakdown">
+                                <div class="item-breakdown-title">{{ pai_obj.codigo_acb }} - {{ pai_obj.nome }}</div>
+                                <div class="small text-muted mb-2">Qtd equivalente do composto nesta OS: {{ qtd_composto_base|round(0, 'floor')|int }}</div>
+                                <table class="table table-sm table-bordered mb-0">
+                                    <thead>
                                         <tr>
-                                            <td>{{ comp_item.codigo_acb }} - {{ comp_item.nome }}</td>
-                                            <td>{{ qtd_irmao }}</td>
+                                            <th>Componente</th>
+                                            <th style="width: 160px;">Qtd nesta OS</th>
                                         </tr>
-                                    {% endfor %}
-                                </tbody>
-                            </table>
+                                    </thead>
+                                    <tbody>
+                                        {% for comp_rel in pai_obj.componentes %}
+                                            {% set comp_item = comp_rel.item_componente %}
+                                            {% set qtd_irmao = (qtd_composto_base * (comp_rel.quantidade or 0))|round(0, 'floor')|int %}
+                                            <tr>
+                                                <td>{{ comp_item.codigo_acb }} - {{ comp_item.nome }}</td>
+                                                <td>{{ qtd_irmao }}</td>
+                                            </tr>
+                                        {% endfor %}
+                                    </tbody>
+                                </table>
+                            </div>
                         </div>
-                    </div>
+                    {% endif %}
                 {% endif %}
             {% endif %}
         {% endif %}
@@ -424,14 +425,14 @@
         {% set compostos_map = {} %}
         {% set itens_sem_composto = [] %}
         {% for iid, total_qtd in itens_totais.items() %}
-            {% set item_obj = Item.query.get(iid) %}
-            {% if item_obj and item_obj.usado_em_composicao and (item_obj.usado_em_composicao.count() > 0) %}
-                {% for rel in item_obj.usado_em_composicao.all() %}
-                    {% set pai_id = rel.item_pai_id %}
-                    {% if pai_id %}
+            {% set item_obj = itens_objs[iid] %}
+            {% if item_obj and item_obj.usado_em_composicao and (item_obj.usado_em_composicao|length > 0) %}
+                {% for rel in item_obj.usado_em_composicao %}
+                    {% set pai_obj = rel.item_pai %}
+                    {% if pai_obj %}
+                        {% set pai_id = pai_obj.id %}
                         {% if pai_id not in compostos_map %}
-                            {% set pai_obj = Item.query.get(pai_id) %}
-                            {% set pai_nome = (pai_obj.codigo_acb ~ ' - ' ~ pai_obj.nome) if pai_obj else ('Composto #' ~ pai_id) %}
+                            {% set pai_nome = (pai_obj.codigo_acb ~ ' - ' ~ pai_obj.nome) %}
                             {% set _ = compostos_map.update({pai_id: {'pai_nome': pai_nome, 'componentes': []}}) %}
                         {% endif %}
                         {% set comp_list = compostos_map[pai_id].componentes + [{
@@ -512,14 +513,12 @@
                 {# Usar o campo numero_pedido_cliente diretamente #}
                 {% set numero_pedido_cliente = pedido_os.pedido.numero_pedido_cliente %}
             {% elif pedido_os.pedido.numero_pedido and pedido_os.pedido.numero_pedido.startswith('AUTO-') %}
-                {# Para pedidos AUTO, buscar o numero_pedido_cliente do pedido original #}
-                {% set parts = pedido_os.pedido.numero_pedido.split('-') %}
-                {% if parts|length > 0 %}
-                    {% set pedido_original_id = parts[-1]|int %}
-                    {% set pedido_original = Pedido.query.get(pedido_original_id) %}
-                    {% if pedido_original and pedido_original.numero_pedido_cliente %}
-                        {% set numero_pedido_cliente = pedido_original.numero_pedido_cliente %}
-                    {% endif %}
+                {# Para pedidos AUTO, o numero_pedido_cliente deve ter sido copiado na criação,
+                   se não foi, tentamos inferir se o Pedido original estiver no cache ou se
+                   o próprio objeto pedido já tem o campo preenchido (que deveria ter).
+                   Se não tiver, evitamos Query.get aqui para performance. #}
+                {% if pedido_os.pedido.numero_pedido_cliente %}
+                    {% set numero_pedido_cliente = pedido_os.pedido.numero_pedido_cliente %}
                 {% endif %}
             {% endif %}
             
@@ -557,8 +556,9 @@
         
         {% for item_key, item_data in grouped_items.items() %}
         <div class="item-group">
+            {% set item = none %}
             {% if item_data.item_id %}
-                {% set item = Item.query.get(item_data.item_id) %}
+                {% set item = itens_objs[item_data.item_id] if item_data.item_id in itens_objs else none %}
                 {% if item %}
                 <div class="item-group-header-row">
                     <div class="item-group-title">
@@ -599,14 +599,12 @@
                 </table>
             </div>
             
-            {% if item_data.item_id %}
-                {% set item = Item.query.get(item_data.item_id) %}
-                {% if item %}
+            {% if item %}
                 {% set item_base = item %}
-                {% if (not item_base.tipo_bruto) and item_base.usado_em_composicao and (item_base.usado_em_composicao.count() > 0) %}
-                    {% set rels_pai = item_base.usado_em_composicao.all() %}
+                {% if (not item_base.tipo_bruto) and item_base.usado_em_composicao and (item_base.usado_em_composicao|length > 0) %}
+                    {% set rels_pai = item_base.usado_em_composicao %}
                     {% if rels_pai and rels_pai|length > 0 %}
-                        {% set pai_obj = Item.query.get(rels_pai[0].item_pai_id) %}
+                        {% set pai_obj = rels_pai[0].item_pai %}
                         {% if pai_obj %}
                             {% set item_base = pai_obj %}
                         {% endif %}

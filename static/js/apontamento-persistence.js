@@ -1547,7 +1547,7 @@ function inicializarSistemaApontamentos() {
 
 // Sistema de polling automático para sincronização em tempo real
 let _pollingInterval = null;
-const POLLING_INTERVAL_MS = 5000; // 5 segundos (mais rápido para sincronização entre dispositivos)
+const POLLING_INTERVAL_MS = 15000; // 15 segundos (otimização de custos Vercel)
 
 function iniciarPollingAutomatico() {
     // Evitar múltiplos intervalos
