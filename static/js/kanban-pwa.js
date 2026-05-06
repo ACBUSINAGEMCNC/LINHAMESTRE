@@ -89,13 +89,10 @@ class KanbanPWA {
                 if (this.bootstrap.frontend_shell) {
                     this.renderKanban(event.data);
                 }
-                // Não esconde loading ainda — espera pré-cache terminar
-                console.log('[PWA] Cache carregado! Aguardando pré-cache...');
+                console.log('[PWA] Cache carregado! Pré-cache em massa desativado.');
                 this.updateSyncIndicator('synced');
                 // Preenche buracos de mídia/detalhes em background (não bloqueia UI).
-                if (!this._precacheDone) {
-                    this.precacheEverything(event.data, { onlyMissing: true, onComplete: () => this.onPrecacheComplete('cache_loaded') });
-                }
+                this.hideLoading();
                 break;
 
             case 'full_sync_complete':
@@ -103,13 +100,11 @@ class KanbanPWA {
                     this.updateLoadingProgress(65, 'Montando Kanban local...');
                     this.renderKanban(event.data);
                 }
-                this.updateLoadingProgress(80, 'Pré-aquecendo cache...');
-                console.log('[PWA] Full sync completo! Pré-aquecendo cache...');
+                this.updateLoadingProgress(100, 'Kanban pronto...');
+                console.log('[PWA] Full sync completo! Pré-cache em massa desativado.');
                 this.updateSyncIndicator('synced');
                 // Primeira carga: pré-aquece apenas endpoints leves em background.
-                if (!this._precacheDone) {
-                    this.precacheEverything(event.data, { onlyMissing: true, onComplete: () => this.onPrecacheComplete('full_sync') });
-                }
+                this.hideLoading();
                 break;
                 
             case 'incremental_update':

@@ -3,7 +3,7 @@
  * Cache de assets estáticos e stale-while-revalidate para páginas
  */
 
-const CACHE_VERSION = 'v11';
+const CACHE_VERSION = 'v12';
 const CACHE_STATIC = `linhamestre-static-${CACHE_VERSION}`;
 const CACHE_PAGES  = `linhamestre-pages-${CACHE_VERSION}`;
 const CACHE_MEDIA  = `linhamestre-media-${CACHE_VERSION}`;
@@ -58,12 +58,6 @@ const BYPASS_PATTERNS = [
 
 // GET endpoints de detalhes/apontamento que podem ser servidos via SWR.
 const SWR_API_PATTERNS = [
-    '/kanban/detalhes/',
-    '/cartao-fantasma/detalhes/',
-    '/apontamento/os/',
-    '/apontamento/item/',
-    '/apontamento/detalhes/',
-    '/apontamento/quantidades-por-trabalho/'
 ];
 
 // Instalação do Service Worker
