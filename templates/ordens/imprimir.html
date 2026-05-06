@@ -526,8 +526,8 @@
             {% if item_key in grouped_items %}
                 {% set orders_novos = grouped_items[item_key].orders + [{
                     'pedido_id': pedido_os.pedido.id,
-                    'cliente': pedido_os.pedido.cliente.nome,
-                    'unidade': pedido_os.pedido.unidade_entrega.nome,
+                    'cliente': pedido_os.pedido.cliente.nome if pedido_os.pedido.cliente else '-',
+                    'unidade': pedido_os.pedido.unidade_entrega.nome if pedido_os.pedido.unidade_entrega else '-',
                     'quantidade': pedido_os.pedido.quantidade,
                     'numero_pedido_cliente': numero_pedido_cliente,
                     'numero_pedido': pedido_os.pedido.numero_pedido
@@ -544,8 +544,8 @@
                         'item_id': pedido_os.pedido.item_id,
                         'orders': [{
                             'pedido_id': pedido_os.pedido.id,
-                            'cliente': pedido_os.pedido.cliente.nome,
-                            'unidade': pedido_os.pedido.unidade_entrega.nome,
+                            'cliente': pedido_os.pedido.cliente.nome if pedido_os.pedido.cliente else '-',
+                            'unidade': pedido_os.pedido.unidade_entrega.nome if pedido_os.pedido.unidade_entrega else '-',
                             'quantidade': pedido_os.pedido.quantidade,
                             'numero_pedido_cliente': numero_pedido_cliente,
                             'numero_pedido': pedido_os.pedido.numero_pedido

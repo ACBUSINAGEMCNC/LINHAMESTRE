@@ -31,20 +31,19 @@ class KanbanSync {
             this.lastSync = cached.last_sync;
         }
 
-        if (isOffline && hasCache) {
-            console.log('[Sync] Offline com cache local. Carregando cache...');
+        if (hasCache) {
+            console.log('[Sync] Cache local encontrado. Carregando primeiro do IndexedDB...');
             if (this.onUpdateCallback) {
                 this.onUpdateCallback({
                     type: 'cache_loaded',
                     data: cached
                 });
             }
-        } else {
-            if (!hasCache) {
-                console.log('[Sync] Cache vazio. Fazendo full sync...');
-            } else {
-                console.log('[Sync] Cache encontrado, mas priorizando full sync da rede...');
+            if (!isOffline) {
+                await this.incrementalSync();
             }
+        } else {
+            console.log('[Sync] Cache vazio. Fazendo full sync...');
 
             const synced = await this.fullSync();
 
@@ -168,11 +167,7 @@ class KanbanSync {
         } catch (error) {
             console.error('[Sync] Erro no incremental sync:', error);
             
-            // Se falhar, tentar full sync
-            if (error.message.includes('404') || error.message.includes('500')) {
-                console.log('[Sync] Erro no servidor, tentando full sync...');
-                await this.fullSync();
-            }
+            console.log('[Sync] Incremental falhou; mantendo cache local e tentando novamente no próximo ciclo.');
         } finally {
             this.isSyncing = false;
         }

@@ -106,9 +106,9 @@ class KanbanPWA {
                 this.updateLoadingProgress(80, 'Pré-aquecendo cache...');
                 console.log('[PWA] Full sync completo! Pré-aquecendo cache...');
                 this.updateSyncIndicator('synced');
-                // Primeira carga: baixa tudo (detalhes, imagens, apontamentos) em background.
+                // Primeira carga: pré-aquece apenas endpoints leves em background.
                 if (!this._precacheDone) {
-                    this.precacheEverything(event.data, { onlyMissing: false, onComplete: () => this.onPrecacheComplete('full_sync') });
+                    this.precacheEverything(event.data, { onlyMissing: true, onComplete: () => this.onPrecacheComplete('full_sync') });
                 }
                 break;
                 
@@ -525,8 +525,7 @@ class KanbanPWA {
 
     /**
      * Pré-aquece o cache do Service Worker baixando, em segundo plano,
-     * todos os recursos que o usuário vai consultar (detalhes, imagens,
-     * apontamentos). Similar ao WhatsApp Web: depois da primeira carga,
+     * recursos leves que o usuário vai consultar (apontamentos). Similar ao WhatsApp Web: depois da primeira carga,
      * o app praticamente não precisa mais do servidor para leitura.
      *
      * @param {Object} data            Dados da sync (listas + cartoes)
@@ -665,9 +664,8 @@ class KanbanPWA {
             if (!set.has(url)) set.set(url, { url, type });
         };
 
-        // Foco: detalhes (HTML do modal) e mídia (imagens/PDF).
-        // Endpoints de apontamento são leves e ficam em SWR via SW
-        // na primeira abertura real — não precisam pré-aquecer.
+        // Foco: endpoints leves de apontamento. Mídia/imagens NÃO são pré-baixadas
+        // para evitar crescimento e limpeza repetida do cache de media.
         for (const cartao of cartoes) {
             const ordemId = cartao.ordem_id || cartao.id;
             const listaNome = String(cartao.lista_nome || '').trim().toLowerCase();
@@ -683,15 +681,6 @@ class KanbanPWA {
                 add(`/apontamento/quantidades-por-trabalho/${ordemId}`, 'api');
             }
 
-            if (cartao.item_imagem_path) {
-                add(this._resolveMediaUrl(cartao.item_imagem_path), 'media');
-            }
-            for (const item of (cartao.itens || [])) {
-                if (item.imagem_path) add(this._resolveMediaUrl(item.imagem_path), 'media');
-            }
-            if (cartao.pedido && cartao.pedido.item_imagem) {
-                add(this._resolveMediaUrl(cartao.pedido.item_imagem), 'media');
-            }
         }
 
         return Array.from(set.values());

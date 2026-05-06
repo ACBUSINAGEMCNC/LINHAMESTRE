@@ -127,16 +127,10 @@ self.addEventListener('fetch', (event) => {
         return;
     }
 
-    // Estratégia 2: CACHE-FIRST para IMAGENS em /uploads/*
-    // URLs são hash-based (imutáveis). PDFs são ignorados de propósito:
-    // respostas opaque (no-cors, cross-origin) não podem ser consumidas
-    // pelo visualizador de PDF do Chrome, resultando em "página indisponível".
-    // Para PDF deixamos o browser seguir o 302 do Flask direto para Supabase.
+    // Estratégia 2: uploads/mídia seguem rede/browser cache.
+    // Não usar Cache Storage aqui: imagens de OS/itens podem crescer muito
+    // e causar limpeza repetida/colapso de armazenamento local.
     if (url.pathname.startsWith('/uploads/')) {
-        const isPdf = /\.pdf(\?|$)/i.test(url.pathname);
-        if (!isPdf) {
-            event.respondWith(cacheFirstStrategy(request, CACHE_MEDIA));
-        }
         return;
     }
 
