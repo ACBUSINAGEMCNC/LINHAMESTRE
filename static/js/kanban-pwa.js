@@ -147,7 +147,9 @@ class KanbanPWA {
         const listas = (data.listas || this.bootstrap.listas || [])
             .slice()
             .sort((a, b) => (a.ordem ?? 0) - (b.ordem ?? 0));
-        const cartoes = [...(data.cartoes || [])].sort((a, b) => (a.posicao || 0) - (b.posicao || 0));
+        const cartoes = [...(data.cartoes || [])]
+            .filter(c => c.status !== 'Finalizado' && c.lista_id)
+            .sort((a, b) => (a.posicao || 0) - (b.posicao || 0));
 
         for (const lista of listas) {
             const listaEl = this.createListaElement(lista, cartoes.filter(c => c.lista_id === lista.id));
@@ -204,7 +206,7 @@ class KanbanPWA {
         const moveOptions = '';
         const reorderOption = '';
 
-        const apontamentoHtml = (!isFantasma && !['Entrada', 'Expedição'].includes(listaNome)) ? `
+        const apontamentoHtml = (!['Entrada', 'Expedição'].includes(listaNome)) ? `
             <div class="apontamento-buttons mt-2 pt-2 border-top">
                 <div class="row g-1">
                     <div class="col-6"><button class="btn btn-outline-primary btn-sm w-100 apontamento-btn" data-acao="inicio_setup" data-ordem-id="${cartao.ordem_id || cartao.id}" onclick="iniciarApontamentoSetup(this.dataset.ordemId);"><i class="fas fa-play"></i> Setup</button></div>
@@ -216,23 +218,14 @@ class KanbanPWA {
             </div>
         ` : '';
 
-        div.innerHTML = isFantasma ? `
-            <div class="kanban-card-header">
-                <div class="card-header-main">
-                    <div class="drag-handle"><i class="fas fa-grip-lines"></i></div>
-                    <div class="fantasma-info" style="cursor: pointer">
-                        <strong>${this.escapeHtml(cartao.numero || '')}</strong>
-                        <br><small><i class="fas fa-cog"></i> ${this.escapeHtml(cartao.trabalho_nome || 'Fantasma')}</small>
-                    </div>
-                </div>
-            </div>
-            <div class="kanban-card-body">
-                <div class="os-items mt-1">
-                    <div class="small text-muted">Itens da OS</div>
-                    <ul class="os-item-list list-unstyled mb-1">${itensHtml || '<li class="os-item"><span class="os-item-name">Sem itens</span></li>'}</ul>
-                </div>
-            </div>
-        ` : `
+        const fantasmaBadge = isFantasma
+            ? `<span class="badge rounded-pill bg-purple text-white ms-2" title="Cartão fantasma"><i class="fas fa-ghost"></i> Fantasma</span>`
+            : '';
+        const fantasmaRemoveBtn = isFantasma
+            ? `<button class="btn btn-sm btn-outline-danger btn-remover-fantasma" type="button" data-cartao-id="${cartao.fantasma_id || cartao.id}" onclick="event.stopPropagation()"><i class="fas fa-times"></i> Fechar</button>`
+            : '';
+
+        div.innerHTML = `
             <div class="drag-handle" style="position: absolute; top: 8px; left: 8px; cursor: grab; z-index: 10;">
                 <i class="fas fa-grip-lines"></i>
             </div>
@@ -242,6 +235,7 @@ class KanbanPWA {
                     ${cartao.item_id ? `<button class="btn btn-sm btn-outline-info" type="button" onclick="event.stopPropagation(); window.open('/folhas-processo-novas?item_id=${cartao.item_id}', '_blank')"><i class="fas fa-clipboard-list"></i> Folha</button>` : ''}
                     <button class="btn btn-sm btn-outline-purple btn-criar-fantasma-direto" type="button" data-ordem-id="${cartao.ordem_id || cartao.id}" data-lista-origem="${this.escapeHtml(listaNome)}" onclick="event.stopPropagation()"><i class="fas fa-ghost"></i> Fantasma</button>
                     <button class="btn btn-sm btn-outline-primary btn-mover-visual" type="button" data-ordem-id="${cartao.ordem_id || cartao.id}" data-lista-destino="${this.escapeHtml(listaNome)}" onclick="event.stopPropagation()"><i class="fas fa-arrows-alt"></i> Mover</button>
+                    ${fantasmaRemoveBtn}
                     ${moveOptions || reorderOption ? `
                     <div class="dropdown">
                         <button class="btn btn-sm btn-outline-secondary dropdown-toggle" type="button" data-bs-toggle="dropdown" aria-expanded="false" onclick="event.stopPropagation()"><i class="fas fa-ellipsis-v"></i> Opções</button>
@@ -251,7 +245,8 @@ class KanbanPWA {
                 </div>
             </div>
             <div class="card-header-main">
-                <button class="os-number-btn" data-ordem-id="${cartao.ordem_id || cartao.id}" onclick="event.stopPropagation();">${this.escapeHtml(cartao.numero || '')}</button>
+                <button class="os-number-btn" data-ordem-id="${cartao.ordem_id || cartao.id}" onclick="event.stopPropagation(); if (typeof openCardDetails === 'function') { openCardDetails(this.dataset.ordemId); }">${this.escapeHtml(cartao.numero || '')}</button>
+                ${fantasmaBadge}
             </div>
             <div class="kanban-card-body">
                 <div class="os-items mt-1">
@@ -290,6 +285,9 @@ class KanbanPWA {
         }
         if (typeof window.aplicarFiltrosKanban === 'function') {
             window.aplicarFiltrosKanban();
+        }
+        if (typeof window.atualizarEstadoApontamentos === 'function') {
+            window.atualizarEstadoApontamentos();
         }
     }
 

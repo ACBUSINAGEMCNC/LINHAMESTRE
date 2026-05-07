@@ -177,10 +177,14 @@ class KanbanSync {
      * Aplica mudanças incrementais no cache
      */
     async applyDelta(delta) {
-        // Atualizar cartões modificados
+        // Atualizar cartões modificados (OS finalizada -> remover do cache)
         if (delta.updated_cards && delta.updated_cards.length > 0) {
             for (const cartao of delta.updated_cards) {
-                await window.kanbanCache.updateCartao(cartao);
+                if (cartao.status === 'Finalizado') {
+                    await window.kanbanCache.deleteCartao(cartao.id);
+                } else {
+                    await window.kanbanCache.updateCartao(cartao);
+                }
             }
         }
         

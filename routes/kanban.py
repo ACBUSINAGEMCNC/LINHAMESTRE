@@ -613,64 +613,81 @@ def finalizar_kanban():
     
     ordem_id = request.form['ordem_id']
     
-    ordem = OrdemServico.query.get_or_404(ordem_id)
-    ordem.status = 'Finalizado'
+    try:
+        ordem = OrdemServico.query.get_or_404(ordem_id)
+        ordem.status = 'Finalizado'
+        ordem.data_atualizacao = local_now_naive()
+        
+        # Desativar cartões fantasma associados a esta OS
+        CartaoFantasma.query.filter_by(ordem_servico_id=ordem.id, ativo=True).update({'ativo': False})
+        
+        # Atualizar data de entrega dos pedidos associados
+        pedidos_originais_ids = set()
+        for pedido_os in ordem.pedidos:
+            pedido = Pedido.query.get(pedido_os.pedido_id)
+            if pedido:
+                pedido.data_entrega = datetime.now().date()
+
+                # Se for pedido virtual (AUTO-*), tentar concluir o pedido original do item composto
+                if pedido.numero_pedido and pedido.numero_pedido.startswith('AUTO-'):
+                    m = re.search(r'-(\d+)$', pedido.numero_pedido)
+                    if m:
+                        try:
+                            pedidos_originais_ids.add(int(m.group(1)))
+                        except Exception:
+                            pass
+
+        # Concluir pedidos originais somente quando todas OS dos componentes estiverem finalizadas
+        for original_id in sorted(list(pedidos_originais_ids)):
+            pedido_original = Pedido.query.get(original_id)
+            if not pedido_original or pedido_original.data_entrega:
+                continue
+
+            # Buscar todos pedidos virtuais gerados para este pedido original
+            virtuais = Pedido.query.filter(Pedido.numero_pedido.like(f"AUTO-%-{original_id}")).all()
+            if not virtuais:
+                continue
+
+            # Coletar status das OS associadas aos pedidos virtuais
+            os_status = []
+            for pv in virtuais:
+                for assoc in pv.ordens_servico or []:
+                    if assoc.ordem_servico:
+                        os_status.append((assoc.ordem_servico_id, assoc.ordem_servico.status))
+
+            # Sem OS associada -> não dá pra inferir conclusão
+            if not os_status:
+                continue
+
+            # Considera concluído se todas as OS vinculadas aos componentes estiverem Finalizado
+            if all(st == 'Finalizado' for _, st in os_status):
+                pedido_original.data_entrega = datetime.now().date()
+        
+        # Adicionar ao registro mensal (evitar duplicata)
+        data_atual = datetime.now().date()
+        mes_referencia = f"{data_atual.year}-{data_atual.month:02d}"
+        
+        ja_existe = RegistroMensal.query.filter_by(
+            ordem_servico_id=ordem.id,
+            mes_referencia=mes_referencia
+        ).first()
+        
+        if not ja_existe:
+            registro = RegistroMensal(
+                ordem_servico_id=ordem.id,
+                data_finalizacao=data_atual,
+                mes_referencia=mes_referencia
+            )
+            db.session.add(registro)
+        
+        db.session.commit()
+        
+        return jsonify({'success': True, 'message': f'OS {ordem.numero} finalizada com sucesso.'})
     
-    # Atualizar data de entrega dos pedidos associados
-    pedidos_originais_ids = set()
-    for pedido_os in ordem.pedidos:
-        pedido = Pedido.query.get(pedido_os.pedido_id)
-        pedido.data_entrega = datetime.now().date()
-
-        # Se for pedido virtual (AUTO-*), tentar concluir o pedido original do item composto
-        if pedido and pedido.numero_pedido and pedido.numero_pedido.startswith('AUTO-'):
-            m = re.search(r'-(\d+)$', pedido.numero_pedido)
-            if m:
-                try:
-                    pedidos_originais_ids.add(int(m.group(1)))
-                except Exception:
-                    pass
-
-    # Concluir pedidos originais somente quando todas OS dos componentes estiverem finalizadas
-    for original_id in sorted(list(pedidos_originais_ids)):
-        pedido_original = Pedido.query.get(original_id)
-        if not pedido_original or pedido_original.data_entrega:
-            continue
-
-        # Buscar todos pedidos virtuais gerados para este pedido original
-        virtuais = Pedido.query.filter(Pedido.numero_pedido.like(f"AUTO-%-{original_id}")).all()
-        if not virtuais:
-            continue
-
-        # Coletar status das OS associadas aos pedidos virtuais
-        os_status = []
-        for pv in virtuais:
-            for assoc in pv.ordens_servico or []:
-                if assoc.ordem_servico:
-                    os_status.append((assoc.ordem_servico_id, assoc.ordem_servico.status))
-
-        # Sem OS associada -> não dá pra inferir conclusão
-        if not os_status:
-            continue
-
-        # Considera concluído se todas as OS vinculadas aos componentes estiverem Finalizado
-        if all(st == 'Finalizado' for _, st in os_status):
-            pedido_original.data_entrega = datetime.now().date()
-    
-    # Adicionar ao registro mensal
-    data_atual = datetime.now().date()
-    mes_referencia = f"{data_atual.year}-{data_atual.month:02d}"
-    
-    registro = RegistroMensal(
-        ordem_servico_id=ordem.id,
-        data_finalizacao=data_atual,
-        mes_referencia=mes_referencia
-    )
-    
-    db.session.add(registro)
-    db.session.commit()
-    
-    return jsonify({'success': True})
+    except Exception as e:
+        db.session.rollback()
+        current_app.logger.error(f'[finalizar_kanban] Erro ao finalizar OS {ordem_id}: {e}')
+        return jsonify({'success': False, 'message': f'Erro ao finalizar OS: {str(e)}'}), 500
 
 @kanban.route('/kanban/atualizar-tempo-real', methods=['POST'])
 def atualizar_tempo_real():
@@ -1233,9 +1250,9 @@ def full_data():
                 
                 # Cartões fantasma
                 fantasmas = CartaoFantasma.query.filter_by(
-                    lista_kanban_id=lista.id,
+                    lista_kanban=lista.nome,
                     ativo=True
-                ).order_by(CartaoFantasma.posicao).all()
+                ).order_by(CartaoFantasma.posicao_fila.asc(), CartaoFantasma.id.asc()).all()
                 for fantasma in fantasmas:
                     try:
                         cartoes.append(_serialize_cartao_fantasma(fantasma))
@@ -1295,6 +1312,20 @@ def sync():
                 lista_id = listas_map.get(ordem.status)
                 if lista_id:
                     updated_cards.append(_serialize_cartao(ordem, lista_id, False))
+                elif ordem.status == 'Finalizado':
+                    # OS finalizada deve ser removida do cache do cliente
+                    deleted_cards.append(ordem.id)
+
+        # Buscar cartões fantasma modificados desde last_update
+        fantasmas_modificados = CartaoFantasma.query.filter(
+            CartaoFantasma.data_atualizacao >= last_update
+        ).all()
+        if fantasmas_modificados:
+            for fantasma in fantasmas_modificados:
+                if fantasma.ativo:
+                    updated_cards.append(_serialize_cartao_fantasma(fantasma))
+                else:
+                    deleted_cards.append(f"fantasma-{fantasma.id}")
 
         # Buscar novos apontamentos
         new_apontamentos = ApontamentoProducao.query.filter(
@@ -1417,19 +1448,22 @@ def _serialize_cartao(ordem, lista_id, is_fantasma):
 def _serialize_cartao_fantasma(fantasma):
     """Serializa um cartão fantasma para JSON"""
     ordem = fantasma.ordem_servico
-    return {
+    lista = KanbanLista.query.filter_by(nome=fantasma.lista_kanban).first()
+    lista_id = lista.id if lista else None
+    lista_nome = lista.nome if lista else fantasma.lista_kanban
+    base = _serialize_cartao(ordem, lista_id, True)
+    base.update({
         'id': f'fantasma-{fantasma.id}',
         'fantasma_id': fantasma.id,
-        'ordem_id': ordem.id,
-        'numero': ordem.numero,
-        'lista_id': fantasma.lista_kanban_id,
-        'lista_nome': fantasma.lista.nome if fantasma.lista else None,
-        'posicao': fantasma.posicao,
+        'lista_id': lista_id,
+        'lista_nome': lista_nome,
+        'posicao': fantasma.posicao_fila,
         'is_fantasma': True,
         'trabalho_id': fantasma.trabalho_id,
         'trabalho_nome': fantasma.trabalho.nome if fantasma.trabalho else None,
         'search_text': f"{ordem.numero} {fantasma.trabalho.nome if fantasma.trabalho else ''}".strip()
-    }
+    })
+    return base
 
 
 def _serialize_apontamento(apontamento):

@@ -1200,24 +1200,36 @@
                     
                     <!-- Cartões fantasma -->
                     {% for cartao_fantasma in cartoes_fantasma[lista] %}
-                    <div class="kanban-card fantasma" data-cartao-id="{{ cartao_fantasma.id }}" data-fantasma-ordem-id="{{ cartao_fantasma.ordem_servico.id }}" data-search="{% if cartao_fantasma.ordem_servico %}{{ cartao_fantasma.ordem_servico.numero }}{% endif %} {% if cartao_fantasma.ordem_servico and cartao_fantasma.ordem_servico.pedidos %}{% for pedido_os in cartao_fantasma.ordem_servico.pedidos %} {{ pedido_os.pedido.cliente.nome if pedido_os.pedido and pedido_os.pedido.cliente else '' }} {{ pedido_os.pedido.numero_pedido_cliente if pedido_os.pedido and pedido_os.pedido.numero_pedido_cliente else '' }} {{ pedido_os.pedido.item.codigo_acb if pedido_os.pedido and pedido_os.pedido.item else '' }} {{ pedido_os.pedido.item.nome if pedido_os.pedido and pedido_os.pedido.item else '' }} {{ pedido_os.pedido.nome_item if pedido_os.pedido and pedido_os.pedido.nome_item else '' }}{% endfor %}{% endif %}">
-                        <div class="kanban-card-header">
-                            <div class="card-header-main">
-                                <div class="drag-handle" onclick="event.stopPropagation()">
-                                    <i class="fas fa-grip-lines"></i>
-                                </div>
-                                {% if cartao_fantasma.ordem_servico.pedidos and cartao_fantasma.ordem_servico.pedidos[0].pedido.item and cartao_fantasma.ordem_servico.pedidos[0].pedido.item.imagem_path %}
-                                    <img data-src="{{ cartao_fantasma.ordem_servico.pedidos[0].pedido.item.imagem_path }}" width="48" height="48" class="item-thumb rounded me-2 lazy-load" alt="Imagem do item" loading="lazy">
+                    <div class="kanban-card fantasma" data-cartao-id="{{ cartao_fantasma.id }}" data-fantasma-ordem-id="{{ cartao_fantasma.ordem_servico.id }}" data-ordem-id="{{ cartao_fantasma.ordem_servico.id }}" data-search="{% if cartao_fantasma.ordem_servico %}{{ cartao_fantasma.ordem_servico.numero }}{% endif %} {% if cartao_fantasma.ordem_servico and cartao_fantasma.ordem_servico.pedidos %}{% for pedido_os in cartao_fantasma.ordem_servico.pedidos %} {{ pedido_os.pedido.cliente.nome if pedido_os.pedido and pedido_os.pedido.cliente else '' }} {{ pedido_os.pedido.numero_pedido_cliente if pedido_os.pedido and pedido_os.pedido.numero_pedido_cliente else '' }} {{ pedido_os.pedido.item.codigo_acb if pedido_os.pedido and pedido_os.pedido.item else '' }} {{ pedido_os.pedido.item.nome if pedido_os.pedido and pedido_os.pedido.item else '' }} {{ pedido_os.pedido.nome_item if pedido_os.pedido and pedido_os.pedido.nome_item else '' }}{% endfor %}{% endif %}">
+                        <div class="drag-handle" onclick="event.stopPropagation()">
+                            <i class="fas fa-grip-lines"></i>
+                        </div>
+                        <div class="card-header-top">
+                            {% if cartao_fantasma.ordem_servico.pedidos and cartao_fantasma.ordem_servico.pedidos[0].pedido.item and cartao_fantasma.ordem_servico.pedidos[0].pedido.item.imagem_path %}
+                                <img data-src="{{ cartao_fantasma.ordem_servico.pedidos[0].pedido.item.imagem_path }}" class="item-thumb lazy-load" alt="Imagem do item" loading="lazy">
+                            {% endif %}
+                            <div class="card-header-actions">
+                                {% if cartao_fantasma.ordem_servico.pedidos and cartao_fantasma.ordem_servico.pedidos[0].pedido.item_id %}
+                                <button class="btn btn-sm btn-outline-info" type="button" onclick="event.stopPropagation(); window.open('/folhas-processo-novas?item_id={{ cartao_fantasma.ordem_servico.pedidos[0].pedido.item_id }}', '_blank')">
+                                    <i class="fas fa-clipboard-list"></i> Folha
+                                </button>
                                 {% endif %}
-                                <div class="fantasma-info" onclick="openCardDetails('{{ cartao_fantasma.ordem_servico.id }}'); event.stopPropagation()" style="cursor: pointer" title="Abrir detalhes da OS">
-                                    <span class="fantasma-posicao">{{ cartao_fantasma.posicao_fila }}</span>
-                                    <strong>{{ cartao_fantasma.ordem_servico.numero }}</strong>
-                                    <small class="text-muted">(Lista origem: {{ cartao_fantasma.ordem_servico.status }})</small>
-                                    {% if cartao_fantasma.trabalho %}
-                                        <br><small><i class="fas fa-cog"></i> {{ cartao_fantasma.trabalho.nome }}</small>
-                                    {% endif %}
-                                 </div>
+                                <button class="btn btn-sm btn-outline-primary btn-mover-visual" type="button"
+                                        data-ordem-id="{{ cartao_fantasma.ordem_servico.id }}" data-lista-destino="{{ lista }}"
+                                        onclick="event.stopPropagation()">
+                                    <i class="fas fa-arrows-alt"></i> Mover
+                                </button>
+                                <button class="btn btn-sm btn-outline-danger btn-remover-fantasma" type="button"
+                                        data-cartao-id="{{ cartao_fantasma.id }}" onclick="event.stopPropagation()">
+                                    <i class="fas fa-times"></i> Fechar
+                                </button>
                             </div>
+                        </div>
+                        <div class="card-header-main">
+                            <button class="os-number-btn" data-ordem-id="{{ cartao_fantasma.ordem_servico.id }}" onclick="event.stopPropagation(); openCardDetails('{{ cartao_fantasma.ordem_servico.id }}');">
+                                {{ cartao_fantasma.ordem_servico.numero }}
+                            </button>
+                            <span class="badge rounded-pill bg-purple text-white ms-2" title="Cartão fantasma"><i class="fas fa-ghost"></i> Fantasma</span>
                         </div>
                         <div class="kanban-card-body">
                             {% if cartao_fantasma.ordem_servico.pedidos %}
@@ -1319,11 +1331,9 @@
                                 </div>
                                 
                                 <!-- Indicadores de status (baseado na OS real) -->
-                                <div class="apontamento-status mt-2" id="status-fantasma-{{ cartao_fantasma.id }}">
-                                    <div class="d-flex justify-content-between align-items-center small">
-                                        <span class="status-text">Aguardando</span>
-                                        <span class="apontamento-timer" id="timer-fantasma-{{ cartao_fantasma.id }}">00:00:00</span>
-                                    </div>
+                                <div class="status-apontamento mt-2" id="status-{{ cartao_fantasma.ordem_servico.id }}">
+                                    <small class="text-muted">Aguardando apontamento</small>
+                                    <span class="apontamento-timer" id="timer-{{ cartao_fantasma.ordem_servico.id }}">00:00:00</span>
                                 </div>
                             </div>
                             {% endif %}
@@ -1945,18 +1955,40 @@
             if (confirm('Deseja finalizar esta Ordem de Serviço? Ela será movida para o registro mensal.')) {
                 fetch('/kanban/finalizar', {
                     method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/x-www-form-urlencoded',
-                    },
+                    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
                     body: `ordem_id=${ordemId}`
                 })
-                .then(response => response.json())
+                .then(response => {
+                    if (!response.ok) return response.json().then(d => { throw new Error(d.message || `HTTP ${response.status}`); });
+                    return response.json();
+                })
                 .then(data => {
                     if (data.success) {
-                        // Fechar o modal e recarregar a página
-                        bootstrap.Modal.getInstance(document.getElementById('cardDetailsModal')).hide();
-                        window.location.reload();
+                        const modal = document.getElementById('cardDetailsModal');
+                        if (modal) {
+                            const bsModal = bootstrap.Modal.getInstance(modal);
+                            if (bsModal) bsModal.hide();
+                        }
+                        // Remover do cache PWA para que a OS finalizada não apareça mais
+                        const limparERecarregar = async () => {
+                            try {
+                                if (window.kanbanCache) {
+                                    // Remover cartão normal e possíveis cartões fantasma do cache
+                                    await window.kanbanCache.deleteCartao(Number(ordemId));
+                                    await window.kanbanCache.deleteCartao(String(ordemId));
+                                }
+                            } catch (cacheErr) {
+                                console.warn('[finalizarOS] Falha ao limpar cache:', cacheErr);
+                            }
+                            window.location.reload();
+                        };
+                        limparERecarregar();
+                    } else {
+                        alert('Erro ao finalizar OS: ' + (data.message || 'Tente novamente.'));
                     }
+                })
+                .catch(err => {
+                    alert('Erro ao finalizar OS: ' + err.message);
                 });
             }
         }
