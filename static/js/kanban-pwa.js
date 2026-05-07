@@ -144,7 +144,9 @@ class KanbanPWA {
         
         container.innerHTML = '';
 
-        const listas = data.listas || this.bootstrap.listas || [];
+        const listas = (data.listas || this.bootstrap.listas || [])
+            .slice()
+            .sort((a, b) => (a.ordem ?? 0) - (b.ordem ?? 0));
         const cartoes = [...(data.cartoes || [])].sort((a, b) => (a.posicao || 0) - (b.posicao || 0));
 
         for (const lista of listas) {
@@ -199,18 +201,8 @@ class KanbanPWA {
             </li>
         `).join('');
 
-        const moveOptions = (this.bootstrap.listas || [])
-            .filter((nome) => nome !== listaNome && nome !== 'Entrada')
-            .map((nome) => `
-                <li><a class="dropdown-item btn-mover-visual" href="#" data-ordem-id="${cartao.ordem_id || cartao.id}" data-lista-destino="${this.escapeHtml(nome)}">
-                    <i class="fas fa-arrow-right me-2 text-primary"></i>${this.escapeHtml(nome)}
-                </a></li>
-            `).join('');
-        const reorderOption = `
-            <li><a class="dropdown-item btn-mover-visual" href="#" data-ordem-id="${cartao.ordem_id || cartao.id}" data-lista-destino="${this.escapeHtml(listaNome)}">
-                <i class="fas fa-list-ol me-2 text-success"></i>Reordenar nesta lista
-            </a></li>
-        `;
+        const moveOptions = '';
+        const reorderOption = '';
 
         const apontamentoHtml = (!isFantasma && !['Entrada', 'Expedição'].includes(listaNome)) ? `
             <div class="apontamento-buttons mt-2 pt-2 border-top">
@@ -249,10 +241,13 @@ class KanbanPWA {
                 <div class="card-header-actions">
                     ${cartao.item_id ? `<button class="btn btn-sm btn-outline-info" type="button" onclick="event.stopPropagation(); window.open('/folhas-processo-novas?item_id=${cartao.item_id}', '_blank')"><i class="fas fa-clipboard-list"></i> Folha</button>` : ''}
                     <button class="btn btn-sm btn-outline-purple btn-criar-fantasma-direto" type="button" data-ordem-id="${cartao.ordem_id || cartao.id}" data-lista-origem="${this.escapeHtml(listaNome)}" onclick="event.stopPropagation()"><i class="fas fa-ghost"></i> Fantasma</button>
+                    <button class="btn btn-sm btn-outline-primary btn-mover-visual" type="button" data-ordem-id="${cartao.ordem_id || cartao.id}" data-lista-destino="${this.escapeHtml(listaNome)}" onclick="event.stopPropagation()"><i class="fas fa-arrows-alt"></i> Mover</button>
+                    ${moveOptions || reorderOption ? `
                     <div class="dropdown">
-                        <button class="btn btn-sm btn-outline-secondary dropdown-toggle" type="button" data-bs-toggle="dropdown" aria-expanded="false" onclick="event.stopPropagation()"><i class="fas fa-ellipsis-v"></i> Mover</button>
+                        <button class="btn btn-sm btn-outline-secondary dropdown-toggle" type="button" data-bs-toggle="dropdown" aria-expanded="false" onclick="event.stopPropagation()"><i class="fas fa-ellipsis-v"></i> Opções</button>
                         <ul class="dropdown-menu dropdown-menu-end kanban-dropdown-mover">${moveOptions}${reorderOption}</ul>
                     </div>
+                    ` : ''}
                 </div>
             </div>
             <div class="card-header-main">

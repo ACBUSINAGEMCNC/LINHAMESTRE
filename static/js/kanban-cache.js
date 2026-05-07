@@ -110,7 +110,8 @@ class KanbanCache {
             'readonly'
         );
         
-        const listas = await this.getAllFromStore(transaction.objectStore('listas'));
+        const listas = (await this.getAllFromStore(transaction.objectStore('listas')))
+            .sort((a, b) => (a.ordem ?? 0) - (b.ordem ?? 0));
         const cartoes = await this.getAllFromStore(transaction.objectStore('cartoes'));
         const apontamentos = await this.getAllFromStore(transaction.objectStore('apontamentos'));
         const metadata = await this.getFromStore(transaction.objectStore('metadata'), 'last_sync');

@@ -20,8 +20,8 @@ window.initializeKanbanSortable = function initializeKanbanSortable() {
             group: 'kanban-columns',
             animation: 200, // Animação mais suave
             easing: 'cubic-bezier(0.25, 0.8, 0.25, 1)', // Easing mais natural
-            handle: isTouchDevice ? '.drag-handle' : undefined,
-            delay: isTouchDevice ? 500 : 150, // Delay maior para touch devices
+            handle: '.drag-handle',
+            delay: isTouchDevice ? 500 : 0, // Sem delay no desktop para facilitar arraste
             delayOnTouchOnly: true,
             touchStartThreshold: 15, // Mais sensível para facilitar arrastar no mobile
             dragClass: 'sortable-drag',

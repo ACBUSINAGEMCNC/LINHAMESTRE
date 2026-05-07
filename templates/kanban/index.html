@@ -451,10 +451,12 @@
         
         /* Melhorias no dropdown de mover */
         .kanban-dropdown-mover {
-            min-width: 280px;
-            max-width: min(340px, 90vw);
-            max-height: none;
-            overflow-y: visible;
+            min-width: 320px;
+            max-width: min(420px, 92vw);
+            max-height: min(70vh, 520px);
+            overflow-y: auto;
+            padding-top: 6px;
+            padding-bottom: 6px;
         }
         .kanban-dropdown-mover .dropdown-item {
             white-space: normal;
@@ -586,33 +588,6 @@
             padding: 0.25rem 0.5rem;
             font-size: 0.75rem;
         }
-        .item-quantity {
-            font-weight: bold;
-            color: #0d6efd;
-        }
-        .drag-handle { 
-            display: none;
-            color: #6c757d;
-            padding: 8px;
-            border-radius: 4px;
-            background: rgba(255, 255, 255, 0.9);
-            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
-            transition: all 0.2s;
-        }
-        .drag-handle:active {
-            background: rgba(13, 110, 253, 0.1);
-            color: #0d6efd;
-            transform: scale(1.1);
-        }
-        @media (hover: none) and (pointer: coarse) {
-            .drag-handle { 
-                display: flex;
-                align-items: center;
-                justify-content: center;
-                min-width: 32px;
-                min-height: 32px;
-            }
-        }
         /* Estilos para o Sortable.js */
         .sortable-ghost {
             opacity: 0.4;
@@ -627,6 +602,10 @@
         .sortable-drag {
             opacity: 0.8;
             transform: rotate(1deg);
+        }
+        .kanban-card.is-moving {
+            opacity: 0.85;
+            box-shadow: 0 0 0 2px rgba(13, 110, 253, 0.15);
         }
         /* .tempo-total (DEPRECATED) consolidado em .metric-badge.metric-tempo */
         /* Métricas compactas do card (itens, peças, tempo) */
@@ -988,11 +967,16 @@
                                             title="Criar cartão fantasma desta OS">
                                         <i class="fas fa-ghost"></i> Fantasma
                                     </button>
+                                    <button class="btn btn-sm btn-outline-primary btn-mover-visual" type="button"
+                                            data-ordem-id="{{ ordem.id }}" data-lista-destino="{{ lista }}"
+                                            onclick="event.stopPropagation()">
+                                        <i class="fas fa-arrows-alt"></i> Mover
+                                    </button>
                                     <div class="dropdown">
                                         <button class="btn btn-sm btn-outline-secondary dropdown-toggle" type="button" 
                                                 id="dropdownMenuButton{{ ordem.id }}" data-bs-toggle="dropdown" 
                                                 aria-expanded="false" onclick="event.stopPropagation()">
-                                            <i class="fas fa-ellipsis-v"></i> Mover
+                                            <i class="fas fa-ellipsis-v"></i> Opções
                                         </button>
                                         <ul class="dropdown-menu dropdown-menu-end kanban-dropdown-mover" aria-labelledby="dropdownMenuButton{{ ordem.id }}">
                                             {% if ordem.pedidos and ordem.pedidos[0].pedido.item_id %}
@@ -1004,18 +988,6 @@
                                             </a></li>
                                             <li><hr class="dropdown-divider"></li>
                                             {% endif %}
-                                            <li class="dropdown-header"><i class="fas fa-arrows-alt me-2"></i>Mover para:</li>
-                                            {% for lista_destino in listas %}
-                                                {% if lista_destino != lista and lista_destino not in ['Entrada'] %}
-                                                    <li><a class="dropdown-item btn-mover-visual" href="#" data-ordem-id="{{ ordem.id }}" data-lista-destino="{{ lista_destino }}">
-                                                        <i class="fas fa-arrow-right me-2 text-primary"></i>{{ lista_destino }}
-                                                    </a></li>
-                                                {% endif %}
-                                            {% endfor %}
-                                            <li><a class="dropdown-item btn-mover-visual" href="#" data-ordem-id="{{ ordem.id }}" data-lista-destino="{{ lista }}">
-                                                <i class="fas fa-list-ol me-2 text-success"></i>Reordenar nesta lista
-                                            </a></li>
-                                            <li><hr class="dropdown-divider"></li>
                                             <li><a class="dropdown-item text-purple btn-criar-fantasma-menu" href="#" data-ordem-id="{{ ordem.id }}" data-lista-origem="{{ lista }}">
                                                 <i class="fas fa-ghost me-2"></i>Criar cartão fantasma
                                             </a></li>
@@ -1694,9 +1666,8 @@
             const card = document.querySelector(`.kanban-card[data-ordem-id="${ordemId}"]`);
             const listaOrigem = card?.closest('.kanban-column-body')?.dataset?.lista;
             if (card) {
-                // Feedback visual imediato
-                card.style.opacity = '0.5';
-                card.style.transform = 'scale(0.95)';
+                // Feedback visual imediato (sem reduzir escala para evitar piscada)
+                card.classList.add('is-moving');
             }
 
             if (Number.isFinite(novaPosicao) && listaOrigem && listaOrigem === listaDestino) {
@@ -1737,8 +1708,7 @@
                     setTimeout(() => _aplicarMoveNoCache(ordemId, listaDestino, novaPosicao), 150);
                 } else {
                     if (card) {
-                        card.style.opacity = '1';
-                        card.style.transform = 'scale(1)';
+                        card.classList.remove('is-moving');
                     }
                     mostrarToast(data.message || 'Erro ao mover cartão', 'error');
                 }
@@ -1756,8 +1726,7 @@
             })
             .catch(error => {
                 if (card) {
-                    card.style.opacity = '1';
-                    card.style.transform = 'scale(1)';
+                    card.classList.remove('is-moving');
                 }
                 mostrarToast('Erro ao mover cartão', 'error');
             });
@@ -1770,49 +1739,74 @@
                 return;
             }
             const infoEl = modalEl.querySelector('[data-mover-info]');
+            const listaEl = modalEl.querySelector('[data-mover-lista]');
             const selectEl = modalEl.querySelector('[data-mover-posicao]');
             const btnConfirmar = modalEl.querySelector('[data-mover-confirmar]');
-            if (!selectEl || !btnConfirmar) {
+            if (!selectEl || !btnConfirmar || !listaEl) {
                 moverOrdem(ordemId, listaDestino);
                 return;
             }
-
+            const card = document.querySelector(`.kanban-card[data-ordem-id="${ordemId}"]`);
+            const listaOrigem = card?.closest('.kanban-column-body')?.dataset?.lista || listaDestino;
             modalEl.dataset.ordemId = ordemId;
-            modalEl.dataset.listaDestino = listaDestino;
 
-            let total = 1;
-            try {
-                if (window.kanbanCache) {
-                    const cached = await window.kanbanCache.getAll();
-                    const lista = cached?.listas?.find(l => l.nome === listaDestino);
-                    if (lista) {
-                        total = (cached.cartoes || []).filter(c => c.lista_id === lista.id).length;
+            const listasDisponiveis = Array.from(document.querySelectorAll('.kanban-column-body'))
+                .map(col => col.dataset.lista)
+                .filter(Boolean);
+            listaEl.innerHTML = '';
+            listasDisponiveis
+                .filter(nome => nome !== 'Entrada' || nome === listaOrigem)
+                .forEach(nome => {
+                    const opt = document.createElement('option');
+                    opt.value = nome;
+                    opt.textContent = nome;
+                    if (nome === listaDestino || (!listaDestino && nome === listaOrigem)) {
+                        opt.selected = true;
                     }
-                }
-            } catch (e) {
-                total = 1;
-            }
+                    listaEl.appendChild(opt);
+                });
 
-            const maxPos = Math.max(1, total + 1);
-            selectEl.innerHTML = '';
-            for (let i = 1; i <= maxPos; i += 1) {
-                const opt = document.createElement('option');
-                opt.value = String(i);
-                opt.textContent = `${i}º`;
-                if (i === maxPos) opt.selected = true;
-                selectEl.appendChild(opt);
-            }
-            if (infoEl) {
-                infoEl.textContent = `Lista: ${listaDestino} • Total atual: ${total} cartão(ões)`;
-            }
+            const carregarPosicoes = async (nomeLista) => {
+                let total = 1;
+                try {
+                    if (window.kanbanCache) {
+                        const cached = await window.kanbanCache.getAll();
+                        const lista = cached?.listas?.find(l => l.nome === nomeLista);
+                        if (lista) {
+                            total = (cached.cartoes || []).filter(c => c.lista_id === lista.id).length;
+                        }
+                    }
+                } catch (e) {
+                    total = 1;
+                }
+
+                const maxPos = Math.max(1, total + 1);
+                selectEl.innerHTML = '';
+                for (let i = 1; i <= maxPos; i += 1) {
+                    const opt = document.createElement('option');
+                    opt.value = String(i);
+                    opt.textContent = `${i}º`;
+                    if (i === maxPos) opt.selected = true;
+                    selectEl.appendChild(opt);
+                }
+                if (infoEl) {
+                    infoEl.textContent = `Lista: ${nomeLista} • Total atual: ${total} cartão(ões)`;
+                }
+            };
+
+            await carregarPosicoes(listaEl.value || listaOrigem || listaDestino);
+            listaEl.onchange = () => {
+                carregarPosicoes(listaEl.value);
+            };
 
             const modal = bootstrap.Modal.getOrCreateInstance(modalEl);
             modal.show();
 
             const onConfirm = () => {
                 const pos = Number.parseInt(selectEl.value, 10);
+                const listaEscolhida = listaEl.value || listaDestino;
                 modal.hide();
-                moverOrdem(ordemId, listaDestino, Number.isNaN(pos) ? undefined : pos);
+                moverOrdem(ordemId, listaEscolhida, Number.isNaN(pos) ? undefined : pos);
             };
             btnConfirmar.onclick = onConfirm;
         }
@@ -2080,9 +2074,16 @@
                     menu.style.position = 'fixed';
                     menu.style.zIndex = '2000';
                     menu.style.left = `${Math.min(rect.left, window.innerWidth - menu.offsetWidth - 8)}px`;
-                    const top = rect.bottom;
-                    const maxTop = window.innerHeight - menu.offsetHeight - 8;
-                    menu.style.top = `${Math.min(top, maxTop)}px`;
+                    const spaceBelow = window.innerHeight - rect.bottom - 8;
+                    const spaceAbove = rect.top - 8;
+                    if (spaceBelow < menu.offsetHeight && spaceAbove > spaceBelow) {
+                        const top = Math.max(8, rect.top - menu.offsetHeight);
+                        menu.style.top = `${top}px`;
+                    } else {
+                        const top = rect.bottom;
+                        const maxTop = window.innerHeight - menu.offsetHeight - 8;
+                        menu.style.top = `${Math.min(top, maxTop)}px`;
+                    }
                 }
 
                 document.querySelectorAll('.dropdown').forEach(function(dropdownEl) {
@@ -2152,6 +2153,8 @@
                 </div>
                 <div class="modal-body">
                     <p class="text-muted small mb-2" data-mover-info></p>
+                    <label class="form-label">Lista de destino</label>
+                    <select class="form-select form-select-lg mb-3" data-mover-lista></select>
                     <label class="form-label">Posição desejada</label>
                     <select class="form-select form-select-lg" data-mover-posicao></select>
                 </div>
