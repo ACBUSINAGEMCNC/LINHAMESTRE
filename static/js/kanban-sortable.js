@@ -172,6 +172,18 @@ window.initializeKanbanSortable = function initializeKanbanSortable() {
                         .then(data => {
                             if (data.success) {
                                 console.log('Reordenação salva com sucesso');
+                                if (typeof _aplicarReordenarNoCache === 'function') {
+                                    _aplicarReordenarNoCache(ordemId, novaLista, novaPosicao)
+                                        .then(() => {
+                                            if (window.kanbanCache && window.kanbanPWA) {
+                                                window.kanbanCache.getAll().then(cached => {
+                                                    if (cached) {
+                                                        window.kanbanPWA.renderKanban(cached);
+                                                    }
+                                                });
+                                            }
+                                        });
+                                }
                             } else {
                                 console.error('Erro ao salvar reordenação:', data.message);
                                 // Reverter em caso de erro

@@ -470,7 +470,6 @@
         }
         .kanban-dropdown-mover .btn-mover-visual:hover {
             background-color: #e3f2fd;
-            padding-left: 20px;
         }
         .kanban-dropdown-mover .btn-mover-visual i {
             transition: transform 0.2s ease;
@@ -1617,12 +1616,13 @@
             document.addEventListener('DOMContentLoaded', initKanbanFiltroUI);
         })();
 
-        function _aplicarMoveNoCache(ordemId, listaDestino) {
+        async function _aplicarMoveNoCache(ordemId, listaDestino, novaPosicao) {
             if (!window.kanbanCache || !window.kanbanPWA) {
                 window.location.reload();
                 return;
             }
-            window.kanbanCache.getAll().then(cached => {
+            try {
+                const cached = await window.kanbanCache.getAll();
                 if (!cached || !cached.listas || !cached.cartoes) {
                     window.location.reload();
                     return;
@@ -1640,12 +1640,52 @@
                     cartao.lista_id = novaLista.id;
                     cartao.lista_nome = listaDestino;
                     cartao.posicao = maxPos + 1;
+                    await window.kanbanCache.updateCartao(cartao);
+                    await window.kanbanCache.updateLastSync(new Date().toISOString());
+                    if (Number.isFinite(novaPosicao)) {
+                        await _aplicarReordenarNoCache(ordemId, listaDestino, novaPosicao, cached);
+                    }
                 }
                 window.kanbanPWA.renderKanban(cached);
-            }).catch(() => window.location.reload());
+            } catch (e) {
+                window.location.reload();
+            }
         }
 
-        function moverOrdem(ordemId, listaDestino) {
+        async function _aplicarReordenarNoCache(ordemId, listaDestino, novaPosicao, cachedSnapshot) {
+            if (!window.kanbanCache || !window.kanbanPWA) {
+                window.location.reload();
+                return;
+            }
+            const cached = cachedSnapshot || await window.kanbanCache.getAll();
+            if (!cached || !cached.listas || !cached.cartoes) {
+                return;
+            }
+            const lista = cached.listas.find(l => l.nome === listaDestino);
+            if (!lista) {
+                return;
+            }
+            const cartoesLista = cached.cartoes
+                .filter(c => c.lista_id === lista.id)
+                .sort((a, b) => (a.posicao || 0) - (b.posicao || 0));
+            const targetId = String(ordemId);
+            const idxAtual = cartoesLista.findIndex(c => String(c.ordem_id || c.id) === targetId);
+            if (idxAtual === -1) return;
+            const [movido] = cartoesLista.splice(idxAtual, 1);
+            const pos = Math.max(1, Math.min(Number(novaPosicao) || 1, cartoesLista.length + 1));
+            cartoesLista.splice(pos - 1, 0, movido);
+            await Promise.all(cartoesLista.map((c, idx) => {
+                const novaPos = idx + 1;
+                if (c.posicao !== novaPos) {
+                    c.posicao = novaPos;
+                    return window.kanbanCache.updateCartao(c);
+                }
+                return Promise.resolve();
+            }));
+            await window.kanbanCache.updateLastSync(new Date().toISOString());
+        }
+
+        function moverOrdem(ordemId, listaDestino, novaPosicao) {
             // Encontrar o cartão
             const card = document.querySelector(`.kanban-card[data-ordem-id="${ordemId}"]`);
             if (card) {
@@ -1667,13 +1707,24 @@
                     mostrarToast('Cartão movido com sucesso!', 'success');
                     // Atualizar cache IndexedDB e re-render PWA sem recarregar página
                     // (evita SW servir versão cacheada antiga do /kanban)
-                    setTimeout(() => _aplicarMoveNoCache(ordemId, listaDestino), 150);
+                    setTimeout(() => _aplicarMoveNoCache(ordemId, listaDestino, novaPosicao), 150);
                 } else {
                     if (card) {
                         card.style.opacity = '1';
                         card.style.transform = 'scale(1)';
                     }
                     mostrarToast(data.message || 'Erro ao mover cartão', 'error');
+                }
+            })
+            .then(async () => {
+                if (Number.isFinite(novaPosicao)) {
+                    await fetch('/kanban/reordenar', {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/x-www-form-urlencoded'
+                        },
+                        body: `ordem_id=${encodeURIComponent(ordemId)}&nova_posicao=${encodeURIComponent(novaPosicao)}&lista=${encodeURIComponent(listaDestino)}`
+                    }).catch(() => null);
                 }
             })
             .catch(error => {
@@ -1899,12 +1950,28 @@
                     return;
                 }
 
-                const handler = function(e) {
+                const handler = async function(e) {
                     e.preventDefault();
                     e.stopPropagation();
                     const ordemId = this.dataset.ordemId;
                     const listaDestino = this.dataset.listaDestino;
-                    moverOrdem(ordemId, listaDestino);
+                    let novaPosicao;
+                    try {
+                        if (window.kanbanCache) {
+                            const cached = await window.kanbanCache.getAll();
+                            const lista = cached?.listas?.find(l => l.nome === listaDestino);
+                            if (lista) {
+                                const total = (cached.cartoes || []).filter(c => c.lista_id === lista.id).length;
+                                const input = prompt(`Posição na lista "${listaDestino}" (1-${Math.max(1, total + 1)}):`, String(Math.max(1, total + 1)));
+                                if (input === null) return;
+                                novaPosicao = Number.parseInt(input, 10);
+                                if (Number.isNaN(novaPosicao)) novaPosicao = undefined;
+                            }
+                        }
+                    } catch (err) {
+                        novaPosicao = undefined;
+                    }
+                    moverOrdem(ordemId, listaDestino, novaPosicao);
                 };
 
                 btn.addEventListener('click', handler);
