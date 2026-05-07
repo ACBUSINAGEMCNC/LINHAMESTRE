@@ -142,9 +142,12 @@ window.initializeKanbanSortable = function initializeKanbanSortable() {
                         .then(data => {
                             if (data.success) {
                                 console.log('Movimento salvo com sucesso');
-                                // Feedback visual antes de recarregar
-                                evt.item.style.opacity = '0.5';
-                                setTimeout(() => window.location.reload(), 200);
+                                if (typeof _aplicarMoveNoCache === 'function') {
+                                    _aplicarMoveNoCache(ordemId, novaLista);
+                                } else {
+                                    evt.item.style.opacity = '0.5';
+                                    setTimeout(() => window.location.reload(), 200);
+                                }
                             } else {
                                 // Reverter em caso de erro
                                 evt.from.appendChild(evt.item);

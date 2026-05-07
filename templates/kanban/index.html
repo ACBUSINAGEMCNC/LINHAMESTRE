@@ -1617,6 +1617,34 @@
             document.addEventListener('DOMContentLoaded', initKanbanFiltroUI);
         })();
 
+        function _aplicarMoveNoCache(ordemId, listaDestino) {
+            if (!window.kanbanCache || !window.kanbanPWA) {
+                window.location.reload();
+                return;
+            }
+            window.kanbanCache.getAll().then(cached => {
+                if (!cached || !cached.listas || !cached.cartoes) {
+                    window.location.reload();
+                    return;
+                }
+                const novaLista = cached.listas.find(l => l.nome === listaDestino);
+                if (!novaLista) {
+                    window.location.reload();
+                    return;
+                }
+                const cartao = cached.cartoes.find(c => String(c.ordem_id || c.id) === String(ordemId));
+                if (cartao) {
+                    const maxPos = Math.max(0, ...cached.cartoes
+                        .filter(c => c.lista_id === novaLista.id && c !== cartao)
+                        .map(c => c.posicao || 0));
+                    cartao.lista_id = novaLista.id;
+                    cartao.lista_nome = listaDestino;
+                    cartao.posicao = maxPos + 1;
+                }
+                window.kanbanPWA.renderKanban(cached);
+            }).catch(() => window.location.reload());
+        }
+
         function moverOrdem(ordemId, listaDestino) {
             // Encontrar o cartão
             const card = document.querySelector(`.kanban-card[data-ordem-id="${ordemId}"]`);
@@ -1636,17 +1664,16 @@
             .then(response => response.json())
             .then(data => {
                 if (data.success) {
-                    // Mostrar toast de sucesso
                     mostrarToast('Cartão movido com sucesso!', 'success');
-                    // Recarregar com pequeno delay para feedback
-                    setTimeout(() => window.location.reload(), 300);
+                    // Atualizar cache IndexedDB e re-render PWA sem recarregar página
+                    // (evita SW servir versão cacheada antiga do /kanban)
+                    setTimeout(() => _aplicarMoveNoCache(ordemId, listaDestino), 150);
                 } else {
-                    // Reverter visual em caso de erro
                     if (card) {
                         card.style.opacity = '1';
                         card.style.transform = 'scale(1)';
                     }
-                    mostrarToast('Erro ao mover cartão', 'error');
+                    mostrarToast(data.message || 'Erro ao mover cartão', 'error');
                 }
             })
             .catch(error => {
