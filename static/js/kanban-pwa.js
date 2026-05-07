@@ -158,6 +158,11 @@ class KanbanPWA {
 
         this.afterRender();
         
+        // Reaplicar status de apontamento após reconstruir DOM (evitar fantasma sem status)
+        if (typeof window.carregarEstadoApontamentos === 'function') {
+            setTimeout(() => window.carregarEstadoApontamentos(), 100);
+        }
+        
         this.updateSyncIndicator('synced');
     }
     

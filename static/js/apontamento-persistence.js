@@ -579,8 +579,6 @@ function limparTimersTrabalhoDaOS(ordemId) {
 // Função para sincronizar cronômetro do cartão fantasma com o cartão real
 function sincronizarCronometroFantasma(ordemId, containerFantasma) {
     try {
-        console.debug(`[SYNC] Iniciando sincronização para OS ${ordemId}`);
-        
         // Buscar cartão real da mesma OS - tentar vários seletores
         let cartoesReais = document.querySelectorAll(`[data-ordem-id="${ordemId}"]:not(.fantasma)`);
         if (cartoesReais.length === 0) {
@@ -598,15 +596,11 @@ function sincronizarCronometroFantasma(ordemId, containerFantasma) {
             });
         }
         
-        console.debug(`[SYNC] Encontrados ${cartoesReais.length} cartões reais para OS ${ordemId}`);
-        
         if (cartoesReais.length === 0) {
-            console.debug(`[SYNC] Nenhum cartão real encontrado para OS ${ordemId}`);
             return;
         }
         
         const cartaoReal = cartoesReais[0];
-        console.debug(`[SYNC] Cartão real encontrado:`, cartaoReal);
         
         // Buscar container de status no cartão real - tentar vários seletores
         let containerReal = cartaoReal.querySelector('.apontamento-status');
@@ -623,10 +617,7 @@ function sincronizarCronometroFantasma(ordemId, containerFantasma) {
             containerReal = cartaoReal.querySelector('[class*="apontamento"][class*="status"]');
         }
         
-        console.debug(`[SYNC] Container real encontrado:`, containerReal);
-        
         if (!containerReal) {
-            console.debug(`[SYNC] Container real não encontrado para OS ${ordemId}`);
             return;
         }
         
@@ -634,17 +625,10 @@ function sincronizarCronometroFantasma(ordemId, containerFantasma) {
         const timersReais = containerReal.querySelectorAll('.apontamento-timer');
         const timersFantasma = containerFantasma.querySelectorAll('.apontamento-timer');
         
-        console.debug(`[SYNC] Timers encontrados - Reais: ${timersReais.length}, Fantasma: ${timersFantasma.length}`);
-        console.debug(`[SYNC] Timers reais:`, Array.from(timersReais).map(t => ({ id: t.id, text: t.textContent })));
-        console.debug(`[SYNC] Timers fantasma:`, Array.from(timersFantasma).map(t => ({ id: t.id, text: t.textContent })));
-        
         // Sincronizar cada timer
-        let sincronizados = 0;
         timersReais.forEach((timerReal, index) => {
             const timerFantasma = timersFantasma[index];
             if (timerFantasma && timerReal.textContent) {
-                const tempoAnterior = timerFantasma.textContent;
-                
                 // Copiar conteúdo e atributos
                 timerFantasma.textContent = timerReal.textContent;
                 timerFantasma.innerHTML = timerReal.innerHTML;
@@ -662,23 +646,8 @@ function sincronizarCronometroFantasma(ordemId, containerFantasma) {
                 
                 // Forçar repaint
                 timerFantasma.offsetHeight;
-                
-                sincronizados++;
-                console.debug(`[SYNC] Timer ${index} sincronizado: ${tempoAnterior} -> ${timerReal.textContent}`);
-                console.debug(`[SYNC] Timer fantasma após sync:`, {
-                    display: timerFantasma.style.display,
-                    visibility: timerFantasma.style.visibility,
-                    content: timerFantasma.textContent,
-                    classes: timerFantasma.className
-                });
-            } else if (timerFantasma) {
-                console.debug(`[SYNC] Timer ${index} não sincronizado - Real: '${timerReal.textContent}', Fantasma existe: ${!!timerFantasma}`);
-            } else {
-                console.debug(`[SYNC] Timer fantasma ${index} não encontrado`);
             }
         });
-        
-        console.debug(`[SYNC] Total de timers sincronizados: ${sincronizados}`);
         
         // Configurar observador para manter sincronização contínua
         if (!containerFantasma.dataset.syncObserver) {
@@ -703,7 +672,6 @@ function sincronizarCronometroFantasma(ordemId, containerFantasma) {
             });
             
             containerFantasma.dataset.syncObserver = 'true';
-            console.debug(`[SYNC] Observer configurado para OS ${ordemId}`);
         }
         
     } catch (error) {
@@ -908,35 +876,13 @@ function renderizarChipsStatus(ordemId, ativosLista) {
         
         if (isFantasma) {
             // Para cartões fantasma, sincronizar cronômetro com cartão real
-            console.debug(`[SYNC] Configurando sincronização para cartão fantasma OS ${ordemId}`);
-            
             // Sincronização inicial imediata
             setTimeout(() => {
                 sincronizarCronometroFantasma(ordemId, container);
             }, 50);
             
-            // Sincronização adicional após 500ms para garantir
-            setTimeout(() => {
-                sincronizarCronometroFantasma(ordemId, container);
-            }, 500);
-            
-            // Configurar sincronização periódica a cada 1 segundo
-            const syncInterval = setInterval(() => {
-                if (document.contains(container)) {
-                    sincronizarCronometroFantasma(ordemId, container);
-                } else {
-                    // Container foi removido, limpar intervalo
-                    clearInterval(syncInterval);
-                    console.debug(`[SYNC] Limpando intervalo para OS ${ordemId} - container removido`);
-                }
-            }, 1000);
-            
-            // Armazenar referência do intervalo para limpeza posterior
-            container.dataset.syncInterval = syncInterval;
-            console.debug(`[SYNC] Intervalo configurado para OS ${ordemId}:`, syncInterval);
-            
-            // Garantir que o conteúdo não seja sobrescrito por outras atualizações
-            container.dataset.statusLocked = 'true';
+            // O MutationObserver já cuida da sincronização contínua (configurado abaixo)
+            // Não usar setInterval polling para evitar logs massivos e uso excessivo de CPU
         }
         // NÃO bloquear container após renderizar
         // Isso permite que o status seja atualizado normalmente ao recarregar
