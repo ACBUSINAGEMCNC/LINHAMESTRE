@@ -744,10 +744,15 @@ def create_app():
             'pool_pre_ping': True,
         }
 
-        # VOLTAR PARA NullPool - QueuePool causa timeout com múltiplas instâncias Vercel
-        if is_serverless:
+        # Supabase pooler (porta 6543 / pooler.supabase.com): usar NullPool sempre.
+        # O PgBouncer mantém o pool interno; QueuePool fica stale antes do recycle,
+        # causando 500 após ~1 min de idle (tanto local quanto serverless).
+        uses_supabase_pooler = (
+            ':6543' in database_url or
+            'pooler.supabase.com' in database_url
+        )
+        if is_serverless or uses_supabase_pooler:
             engine_options['poolclass'] = NullPool
-            engine_options['pool_recycle'] = 60
         else:
             engine_options['pool_recycle'] = 180
             engine_options['pool_size'] = int(os.getenv('DB_POOL_SIZE', '5') or 5)
