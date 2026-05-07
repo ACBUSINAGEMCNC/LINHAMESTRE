@@ -249,6 +249,15 @@ def verificar_inicializar_banco():
             logger.warning(f"Erro ao migrar coluna pode_gerenciar_apontamentos: {str(col_err)}")
 
         try:
+            from migrations.add_ordem_servico_data_atualizacao import migrate_postgres as migrate_ordem_data_pg
+            if migrate_ordem_data_pg():
+                logger.info("Coluna ordem_servico.data_atualizacao verificada/adicionada com sucesso.")
+            else:
+                logger.warning("Falha ao migrar ordem_servico.data_atualizacao.")
+        except Exception as col_err:
+            logger.warning(f"Erro ao migrar coluna ordem_servico.data_atualizacao: {str(col_err)}")
+
+        try:
             from migrations.alter_pedido_nome_item_length import migrate_postgres as migrate_pedido_nome_item_len
             if migrate_pedido_nome_item_len():
                 logger.info("Coluna pedido.nome_item verificada/alterada para VARCHAR(255) (Supabase).")

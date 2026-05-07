@@ -1,5 +1,5 @@
 from flask import Blueprint, render_template, request, redirect, url_for, flash, jsonify, session, current_app, make_response, abort
-from models import db, Usuario, OrdemServico, Pedido, PedidoOrdemServico, Item, Trabalho, ItemTrabalho, RegistroMensal, KanbanLista, CartaoFantasma, ApontamentoProducao
+from models import db, Usuario, OrdemServico, Pedido, PedidoOrdemServico, Item, Trabalho, ItemTrabalho, RegistroMensal, KanbanLista, CartaoFantasma, ApontamentoProducao, local_now_naive
 from utils import validate_form_data, get_kanban_lists, get_kanban_categories, format_seconds_to_time
 from datetime import datetime, timezone, timedelta
 from collections import defaultdict
@@ -478,6 +478,7 @@ def mover_kanban():
         
         # Atualiza lista e posiciona no fim da lista de destino
         ordem.status = nova_lista
+        ordem.data_atualizacao = local_now_naive()
         try:
             max_pos = db.session.query(db.func.max(OrdemServico.posicao)).filter_by(status=nova_lista).scalar()
             ordem.posicao = (max_pos or 0) + 1
@@ -491,6 +492,7 @@ def mover_kanban():
                     .order_by(OrdemServico.posicao.asc(), OrdemServico.id.asc()).all()
                 for idx, card in enumerate(cards_origem, start=1):
                     card.posicao = idx
+                    card.data_atualizacao = local_now_naive()
             except Exception:
                 pass
         
@@ -538,6 +540,7 @@ def reordenar_kanban():
         # Reindexar posições sequenciais
         for idx, oid in enumerate(ids, start=1):
             card_by_id[oid].posicao = idx
+            card_by_id[oid].data_atualizacao = local_now_naive()
         
         db.session.commit()
         
@@ -581,6 +584,7 @@ def enviar_para_lista():
     
     # Envia para a lista de destino e posiciona no final
     ordem.status = lista_destino
+    ordem.data_atualizacao = local_now_naive()
     max_pos = db.session.query(db.func.max(OrdemServico.posicao)).filter_by(status=lista_destino).scalar()
     ordem.posicao = (max_pos or 0) + 1
     
@@ -590,6 +594,7 @@ def enviar_para_lista():
             .order_by(OrdemServico.posicao.asc(), OrdemServico.id.asc()).all()
         for idx, card in enumerate(cards_origem, start=1):
             card.posicao = idx
+            card.data_atualizacao = local_now_naive()
     
     db.session.commit()
     
@@ -1276,13 +1281,21 @@ def sync():
         # Parse do timestamp
         last_update = datetime.fromisoformat(last_update_str.replace('Z', '+00:00'))
         
-        # Buscar cartões modificados/criados
-        # Nota: Precisaria de campo updated_at em OrdemServico para isso funcionar perfeitamente
-        # Por enquanto, retorna vazio (implementar depois)
         updated_cards = []
         deleted_cards = []
         new_cards = []
         
+        # Buscar cartões modificados desde last_update
+        ordens_modificadas = OrdemServico.query.filter(
+            OrdemServico.data_atualizacao >= last_update
+        ).all()
+        if ordens_modificadas:
+            listas_map = {l.nome: l.id for l in KanbanLista.query.filter_by(ativa=True).all()}
+            for ordem in ordens_modificadas:
+                lista_id = listas_map.get(ordem.status)
+                if lista_id:
+                    updated_cards.append(_serialize_cartao(ordem, lista_id, False))
+
         # Buscar novos apontamentos
         new_apontamentos = ApontamentoProducao.query.filter(
             ApontamentoProducao.data_hora >= last_update

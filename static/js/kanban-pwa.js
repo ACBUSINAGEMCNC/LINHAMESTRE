@@ -206,6 +206,11 @@ class KanbanPWA {
                     <i class="fas fa-arrow-right me-2 text-primary"></i>${this.escapeHtml(nome)}
                 </a></li>
             `).join('');
+        const reorderOption = `
+            <li><a class="dropdown-item btn-mover-visual" href="#" data-ordem-id="${cartao.ordem_id || cartao.id}" data-lista-destino="${this.escapeHtml(listaNome)}">
+                <i class="fas fa-list-ol me-2 text-success"></i>Reordenar nesta lista
+            </a></li>
+        `;
 
         const apontamentoHtml = (!isFantasma && !['Entrada', 'Expedição'].includes(listaNome)) ? `
             <div class="apontamento-buttons mt-2 pt-2 border-top">
@@ -246,7 +251,7 @@ class KanbanPWA {
                     <button class="btn btn-sm btn-outline-purple btn-criar-fantasma-direto" type="button" data-ordem-id="${cartao.ordem_id || cartao.id}" data-lista-origem="${this.escapeHtml(listaNome)}" onclick="event.stopPropagation()"><i class="fas fa-ghost"></i> Fantasma</button>
                     <div class="dropdown">
                         <button class="btn btn-sm btn-outline-secondary dropdown-toggle" type="button" data-bs-toggle="dropdown" aria-expanded="false" onclick="event.stopPropagation()"><i class="fas fa-ellipsis-v"></i> Mover</button>
-                        <ul class="dropdown-menu dropdown-menu-end kanban-dropdown-mover">${moveOptions}</ul>
+                        <ul class="dropdown-menu dropdown-menu-end kanban-dropdown-mover">${moveOptions}${reorderOption}</ul>
                     </div>
                 </div>
             </div>
@@ -350,10 +355,21 @@ class KanbanPWA {
      * Atualiza cartão no DOM
      */
     updateCartaoInDOM(cartao) {
-        const cartaoEl = document.querySelector(`[data-cartao-id="${cartao.id}"]`);
+        const targetSelector = cartao.is_fantasma
+            ? `[data-cartao-id="${cartao.fantasma_id || cartao.id}"]`
+            : `[data-ordem-id="${cartao.ordem_id || cartao.id}"]`;
+        const cartaoEl = document.querySelector(targetSelector);
+        const newCartaoEl = this.createCartaoElement(cartao, cartao.lista_nome);
+        const listaEl = document.querySelector(`.kanban-column[data-lista-id="${cartao.lista_id}"] .kanban-column-body`);
         if (cartaoEl) {
-            const newCartaoEl = this.createCartaoElement(cartao);
-            cartaoEl.replaceWith(newCartaoEl);
+            if (listaEl && cartaoEl.closest('.kanban-column-body') !== listaEl) {
+                cartaoEl.remove();
+                listaEl.appendChild(newCartaoEl);
+            } else {
+                cartaoEl.replaceWith(newCartaoEl);
+            }
+        } else if (listaEl) {
+            listaEl.appendChild(newCartaoEl);
         }
     }
     
@@ -361,7 +377,7 @@ class KanbanPWA {
      * Remove cartão do DOM
      */
     removeCartaoFromDOM(cartaoId) {
-        const cartaoEl = document.querySelector(`[data-cartao-id="${cartaoId}"]`);
+        const cartaoEl = document.querySelector(`[data-cartao-id="${cartaoId}"], [data-ordem-id="${cartaoId}"]`);
         if (cartaoEl) {
             cartaoEl.remove();
         }
@@ -371,7 +387,7 @@ class KanbanPWA {
      * Adiciona cartão ao DOM
      */
     addCartaoToDOM(cartao) {
-        const listaEl = document.querySelector(`[data-lista-id="${cartao.lista_id}"] .kanban-cards`);
+        const listaEl = document.querySelector(`.kanban-column[data-lista-id="${cartao.lista_id}"] .kanban-column-body`);
         if (listaEl) {
             const cartaoEl = this.createCartaoElement(cartao);
             listaEl.appendChild(cartaoEl);

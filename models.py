@@ -554,6 +554,7 @@ class OrdemServico(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     numero = db.Column(db.String(20), unique=True)
     data_criacao = db.Column(db.Date, default=datetime.now().date())
+    data_atualizacao = db.Column(db.DateTime, default=local_now_naive, onupdate=local_now_naive)
     status = db.Column(db.String(50), default='Entrada')
     posicao = db.Column(db.Integer, nullable=False, default=0)
     aprovado_em = db.Column(db.DateTime, nullable=True)

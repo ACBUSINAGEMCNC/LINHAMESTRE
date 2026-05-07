@@ -27,6 +27,7 @@
         body {
             background-color: #f0f2f5;
         }
+
         .kanban-container {
             display: flex;
             overflow-x: auto;
@@ -1011,6 +1012,9 @@
                                                     </a></li>
                                                 {% endif %}
                                             {% endfor %}
+                                            <li><a class="dropdown-item btn-mover-visual" href="#" data-ordem-id="{{ ordem.id }}" data-lista-destino="{{ lista }}">
+                                                <i class="fas fa-list-ol me-2 text-success"></i>Reordenar nesta lista
+                                            </a></li>
                                             <li><hr class="dropdown-divider"></li>
                                             <li><a class="dropdown-item text-purple btn-criar-fantasma-menu" href="#" data-ordem-id="{{ ordem.id }}" data-lista-origem="{{ lista }}">
                                                 <i class="fas fa-ghost me-2"></i>Criar cartão fantasma
@@ -1688,10 +1692,33 @@
         function moverOrdem(ordemId, listaDestino, novaPosicao) {
             // Encontrar o cartão
             const card = document.querySelector(`.kanban-card[data-ordem-id="${ordemId}"]`);
+            const listaOrigem = card?.closest('.kanban-column-body')?.dataset?.lista;
             if (card) {
                 // Feedback visual imediato
                 card.style.opacity = '0.5';
                 card.style.transform = 'scale(0.95)';
+            }
+
+            if (Number.isFinite(novaPosicao) && listaOrigem && listaOrigem === listaDestino) {
+                fetch('/kanban/reordenar', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/x-www-form-urlencoded'
+                    },
+                    body: `ordem_id=${encodeURIComponent(ordemId)}&nova_posicao=${encodeURIComponent(novaPosicao)}&lista=${encodeURIComponent(listaDestino)}`
+                })
+                .then(response => response.json())
+                .then(data => {
+                    if (data.success) {
+                        mostrarToast('Posição atualizada!', 'success');
+                        _aplicarReordenarNoCache(ordemId, listaDestino, novaPosicao)
+                            .then(() => window.kanbanCache?.getAll().then(cached => cached && window.kanbanPWA?.renderKanban(cached)));
+                    } else {
+                        mostrarToast(data.message || 'Erro ao reordenar', 'error');
+                    }
+                })
+                .catch(() => mostrarToast('Erro ao reordenar', 'error'));
+                return;
             }
             
             fetch('/kanban/mover', {
@@ -1734,6 +1761,60 @@
                 }
                 mostrarToast('Erro ao mover cartão', 'error');
             });
+        }
+
+        async function abrirModalMoverPosicao(ordemId, listaDestino) {
+            const modalEl = document.getElementById('modalMoverPosicao');
+            if (!modalEl) {
+                moverOrdem(ordemId, listaDestino);
+                return;
+            }
+            const infoEl = modalEl.querySelector('[data-mover-info]');
+            const selectEl = modalEl.querySelector('[data-mover-posicao]');
+            const btnConfirmar = modalEl.querySelector('[data-mover-confirmar]');
+            if (!selectEl || !btnConfirmar) {
+                moverOrdem(ordemId, listaDestino);
+                return;
+            }
+
+            modalEl.dataset.ordemId = ordemId;
+            modalEl.dataset.listaDestino = listaDestino;
+
+            let total = 1;
+            try {
+                if (window.kanbanCache) {
+                    const cached = await window.kanbanCache.getAll();
+                    const lista = cached?.listas?.find(l => l.nome === listaDestino);
+                    if (lista) {
+                        total = (cached.cartoes || []).filter(c => c.lista_id === lista.id).length;
+                    }
+                }
+            } catch (e) {
+                total = 1;
+            }
+
+            const maxPos = Math.max(1, total + 1);
+            selectEl.innerHTML = '';
+            for (let i = 1; i <= maxPos; i += 1) {
+                const opt = document.createElement('option');
+                opt.value = String(i);
+                opt.textContent = `${i}º`;
+                if (i === maxPos) opt.selected = true;
+                selectEl.appendChild(opt);
+            }
+            if (infoEl) {
+                infoEl.textContent = `Lista: ${listaDestino} • Total atual: ${total} cartão(ões)`;
+            }
+
+            const modal = bootstrap.Modal.getOrCreateInstance(modalEl);
+            modal.show();
+
+            const onConfirm = () => {
+                const pos = Number.parseInt(selectEl.value, 10);
+                modal.hide();
+                moverOrdem(ordemId, listaDestino, Number.isNaN(pos) ? undefined : pos);
+            };
+            btnConfirmar.onclick = onConfirm;
         }
         
         // Função para mostrar toast
@@ -1955,23 +2036,7 @@
                     e.stopPropagation();
                     const ordemId = this.dataset.ordemId;
                     const listaDestino = this.dataset.listaDestino;
-                    let novaPosicao;
-                    try {
-                        if (window.kanbanCache) {
-                            const cached = await window.kanbanCache.getAll();
-                            const lista = cached?.listas?.find(l => l.nome === listaDestino);
-                            if (lista) {
-                                const total = (cached.cartoes || []).filter(c => c.lista_id === lista.id).length;
-                                const input = prompt(`Posição na lista "${listaDestino}" (1-${Math.max(1, total + 1)}):`, String(Math.max(1, total + 1)));
-                                if (input === null) return;
-                                novaPosicao = Number.parseInt(input, 10);
-                                if (Number.isNaN(novaPosicao)) novaPosicao = undefined;
-                            }
-                        }
-                    } catch (err) {
-                        novaPosicao = undefined;
-                    }
-                    moverOrdem(ordemId, listaDestino, novaPosicao);
+                    abrirModalMoverPosicao(ordemId, listaDestino);
                 };
 
                 btn.addEventListener('click', handler);
@@ -2076,6 +2141,27 @@
             });
         });
     </script>
+
+    <!-- Modal de Mover / Reordenar -->
+    <div class="modal fade" id="modalMoverPosicao" tabindex="-1" aria-hidden="true">
+        <div class="modal-dialog modal-dialog-centered">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">Mover cartão</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <p class="text-muted small mb-2" data-mover-info></p>
+                    <label class="form-label">Posição desejada</label>
+                    <select class="form-select form-select-lg" data-mover-posicao></select>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Cancelar</button>
+                    <button type="button" class="btn btn-primary" data-mover-confirmar>Confirmar</button>
+                </div>
+            </div>
+        </div>
+    </div>
 
     <!-- Modal de Apontamento -->
     <div class="modal fade" id="modalApontamento" tabindex="-1" aria-hidden="true">
