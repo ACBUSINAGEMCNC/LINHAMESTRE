@@ -136,7 +136,7 @@ window.initializeKanbanSortable = function initializeKanbanSortable() {
                             headers: {
                                 'Content-Type': 'application/x-www-form-urlencoded'
                             },
-                            body: `ordem_id=${ordemId}&nova_lista=${novaLista}`
+                            body: `ordem_id=${encodeURIComponent(ordemId)}&nova_lista=${encodeURIComponent(novaLista)}`
                         })
                         .then(response => response.json())
                         .then(data => {

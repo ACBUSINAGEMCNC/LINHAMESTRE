@@ -1680,20 +1680,24 @@ def status_ativos():
         # Adicionar cartões fantasma ativos como entradas separadas
         logger.debug("Adicionando cartões fantasma ativos...")
         t0 = time.perf_counter()
-        cartoes_fantasma_ativos = (
-            CartaoFantasma.query.options(
-                joinedload(CartaoFantasma.ordem_servico)
-                    .joinedload(OrdemServico.pedidos)
-                    .joinedload(PedidoOrdemServico.pedido)
-                    .joinedload(Pedido.cliente),
-                joinedload(CartaoFantasma.ordem_servico)
-                    .joinedload(OrdemServico.pedidos)
-                    .joinedload(PedidoOrdemServico.pedido)
-                    .joinedload(Pedido.item)
+        try:
+            cartoes_fantasma_ativos = (
+                CartaoFantasma.query.options(
+                    joinedload(CartaoFantasma.ordem_servico)
+                        .joinedload(OrdemServico.pedidos)
+                        .joinedload(PedidoOrdemServico.pedido)
+                        .joinedload(Pedido.cliente),
+                    joinedload(CartaoFantasma.ordem_servico)
+                        .joinedload(OrdemServico.pedidos)
+                        .joinedload(PedidoOrdemServico.pedido)
+                        .joinedload(Pedido.item)
+                )
+                .filter_by(ativo=True)
+                .all()
             )
-            .filter_by(ativo=True)
-            .all()
-        )
+        except Exception as e_cf_query:
+            logger.error(f"[status_ativos] Falha ao buscar cartoes_fantasma_ativos: {e_cf_query}")
+            cartoes_fantasma_ativos = []
 
         ghost_os_ids = list({cf.ordem_servico_id for cf in cartoes_fantasma_ativos if getattr(cf, 'ordem_servico_id', None)})
         status_ativos_por_os = {}

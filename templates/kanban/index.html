@@ -1631,7 +1631,7 @@
                 headers: {
                     'Content-Type': 'application/x-www-form-urlencoded',
                 },
-                body: `ordem_id=${ordemId}&nova_lista=${listaDestino}`
+                body: `ordem_id=${encodeURIComponent(ordemId)}&nova_lista=${encodeURIComponent(listaDestino)}`
             })
             .then(response => response.json())
             .then(data => {

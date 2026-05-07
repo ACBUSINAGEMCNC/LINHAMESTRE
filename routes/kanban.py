@@ -457,39 +457,50 @@ def mover_kanban():
     ordem_id = request.form['ordem_id']
     nova_lista = request.form['nova_lista']
     
-    ordem = OrdemServico.query.get_or_404(ordem_id)
-    old_status = ordem.status
-    
-    # Validar se pode mover para Expedição - não pode ter apontamentos abertos
-    if nova_lista == 'Expedição':
-        from models import ApontamentoProducao
-        apontamentos_abertos = ApontamentoProducao.query.filter(
-            ApontamentoProducao.ordem_servico_id == ordem_id,
-            ApontamentoProducao.data_fim.is_(None),
-            ApontamentoProducao.tipo_acao.in_(['inicio_setup', 'inicio_producao', 'pausa'])
-        ).count()
+    try:
+        ordem = OrdemServico.query.get_or_404(ordem_id)
+        old_status = ordem.status
         
-        if apontamentos_abertos > 0:
-            return jsonify({
-                'success': False,
-                'message': f'Não é possível mover para Expedição. Esta OS possui {apontamentos_abertos} apontamento(s) em aberto. Finalize todos os apontamentos antes de enviar para expedição.'
-            })
-    
-    # Atualiza lista e posiciona no fim da lista de destino
-    ordem.status = nova_lista
-    max_pos = db.session.query(db.func.max(OrdemServico.posicao)).filter_by(status=nova_lista).scalar()
-    ordem.posicao = (max_pos or 0) + 1
-    
-    # Reindexa a lista de origem para manter posições sequenciais
-    if old_status and old_status != nova_lista:
-        cards_origem = OrdemServico.query.filter_by(status=old_status)\
-            .order_by(OrdemServico.posicao.asc(), OrdemServico.id.asc()).all()
-        for idx, card in enumerate(cards_origem, start=1):
-            card.posicao = idx
-    
-    db.session.commit()
-    
-    return jsonify({'success': True})
+        # Validar se pode mover para Expedição - não pode ter apontamentos abertos
+        if nova_lista == 'Expedição':
+            from models import ApontamentoProducao
+            apontamentos_abertos = ApontamentoProducao.query.filter(
+                ApontamentoProducao.ordem_servico_id == ordem_id,
+                ApontamentoProducao.data_fim.is_(None),
+                ApontamentoProducao.tipo_acao.in_(['inicio_setup', 'inicio_producao', 'pausa'])
+            ).count()
+            
+            if apontamentos_abertos > 0:
+                return jsonify({
+                    'success': False,
+                    'message': f'Não é possível mover para Expedição. Esta OS possui {apontamentos_abertos} apontamento(s) em aberto. Finalize todos os apontamentos antes de enviar para expedição.'
+                })
+        
+        # Atualiza lista e posiciona no fim da lista de destino
+        ordem.status = nova_lista
+        try:
+            max_pos = db.session.query(db.func.max(OrdemServico.posicao)).filter_by(status=nova_lista).scalar()
+            ordem.posicao = (max_pos or 0) + 1
+        except Exception:
+            pass
+        
+        # Reindexa a lista de origem para manter posições sequenciais
+        if old_status and old_status != nova_lista:
+            try:
+                cards_origem = OrdemServico.query.filter_by(status=old_status)\
+                    .order_by(OrdemServico.posicao.asc(), OrdemServico.id.asc()).all()
+                for idx, card in enumerate(cards_origem, start=1):
+                    card.posicao = idx
+            except Exception:
+                pass
+        
+        db.session.commit()
+        
+        return jsonify({'success': True})
+    except Exception as e:
+        db.session.rollback()
+        current_app.logger.error(f'[mover_kanban] Erro: {e}')
+        return jsonify({'success': False, 'message': str(e)}), 500
 
 @kanban.route('/kanban/reordenar', methods=['POST'])
 def reordenar_kanban():

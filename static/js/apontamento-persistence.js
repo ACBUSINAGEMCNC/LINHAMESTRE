@@ -830,26 +830,12 @@ function renderizarChipsStatus(ordemId, ativosLista) {
     }
     
     if (!Array.isArray(ativosLista) || ativosLista.length === 0) {
-        
-        // Fazer uma verificação rápida do status atual
-        fetch(`/apontamento/status-ativos`)
-            .then(response => response.json())
-            .then(data => {
-                const statusAtivos = data.status_ativos || [];
-                const osAtiva = statusAtivos.find(s => (s.ordem_servico_id || s.os_id || s.id) == ordemId);
-                
-                if (osAtiva && Array.isArray(osAtiva.ativos_por_trabalho) && osAtiva.ativos_por_trabalho.length > 0) {
-                    // Re-chamar com os dados corretos
-                    renderizarChipsStatus(ordemId, osAtiva.ativos_por_trabalho);
-                } else {
-                    // Mostrar "aguardando" em todos os containers
-                    [...containersReais, ...containersFantasma].forEach(container => {
-                        // Não atualizar containers com status bloqueado (cartões fantasma)
-                        if (container.dataset.statusLocked === 'true') return;
-                        container.innerHTML = '<small class="text-muted">Aguardando apontamento</small>';
-                    });
-                }
-            });
+        // Mostrar "aguardando" sem disparar fetch individual por OS
+        // (carregarEstadoApontamentos já faz o fetch global periodicamente)
+        [...containersReais, ...containersFantasma].forEach(container => {
+            if (container.dataset.statusLocked === 'true') return;
+            container.innerHTML = '<small class="text-muted">Aguardando apontamento</small>';
+        });
         return;
     }
     const frags = [];
