@@ -143,38 +143,56 @@ def _download_supabase_storage_files(tmpdir):
         
         # Baixar cada arquivo
         downloaded = 0
-        for file_info in files:
+        failed = 0
+        total_size = 0
+        
+        for i, file_info in enumerate(files, 1):
             file_path = file_info['name']
             download_url = f"{supabase_url}/storage/v1/object/public/{bucket_name}/{file_path}"
             
             try:
-                logger.debug(f"Baixando: {file_path}")
-                file_response = requests.get(download_url, timeout=30)
+                logger.debug(f"[{i}/{len(files)}] Baixando: {file_path}")
+                
+                # Timeout maior para arquivos grandes (até 2 minutos por arquivo)
+                file_response = requests.get(download_url, timeout=120, stream=True)
+                
                 if file_response.status_code == 200:
                     # Criar estrutura de diretórios
                     local_file_path = os.path.join(storage_dir, file_path)
                     os.makedirs(os.path.dirname(local_file_path), exist_ok=True)
                     
-                    # Salvar arquivo
+                    # Salvar arquivo em chunks para arquivos grandes
+                    file_size = 0
                     with open(local_file_path, 'wb') as f:
-                        f.write(file_response.content)
+                        for chunk in file_response.iter_content(chunk_size=8192):
+                            if chunk:
+                                f.write(chunk)
+                                file_size += len(chunk)
                     
                     downloaded += 1
-                    file_size = len(file_response.content)
-                    logger.debug(f"Arquivo baixado: {file_path} ({file_size} bytes)")
+                    total_size += file_size
+                    logger.debug(f"✓ Baixado: {file_path} ({file_size / 1024:.1f} KB)")
                     
-                    # Log de progresso a cada 10 arquivos
-                    if downloaded % 10 == 0:
-                        logger.info(f"Progresso: {downloaded}/{len(files)} arquivos baixados")
+                    # Log de progresso a cada 5 arquivos
+                    if downloaded % 5 == 0:
+                        logger.info(f"Progresso Supabase: {downloaded}/{len(files)} arquivos ({total_size / 1024 / 1024:.1f} MB)")
                 else:
-                    logger.warning(f"Erro ao baixar {file_path}: {file_response.status_code}")
+                    failed += 1
+                    logger.warning(f"✗ Erro HTTP {file_response.status_code} ao baixar: {file_path}")
+            except requests.exceptions.Timeout:
+                failed += 1
+                logger.error(f"✗ Timeout ao baixar: {file_path}")
             except Exception as e:
-                logger.error(f"Erro ao baixar arquivo {file_path}: {str(e)}")
+                failed += 1
+                logger.error(f"✗ Erro ao baixar {file_path}: {str(e)}")
         
-        logger.info(f"Download concluído: {downloaded}/{len(files)} arquivos baixados com sucesso")
+        logger.info(f"Download concluído: {downloaded}/{len(files)} arquivos baixados ({total_size / 1024 / 1024:.2f} MB)")
+        
+        if failed > 0:
+            logger.warning(f"⚠️  {failed} arquivo(s) falharam no download")
         
         if downloaded == 0:
-            logger.warning("Nenhum arquivo foi baixado com sucesso!")
+            logger.warning("❌ Nenhum arquivo foi baixado com sucesso!")
         
         # Criar arquivo de mapeamento
         mapping_file = os.path.join(storage_dir, 'file_mapping.json')
@@ -185,7 +203,9 @@ def _download_supabase_storage_files(tmpdir):
                 'download_date': datetime.now().isoformat(),
                 'supabase_url': supabase_url,
                 'total_files': len(files),
-                'downloaded_files': downloaded
+                'downloaded_files': downloaded,
+                'failed_files': failed,
+                'total_size_bytes': total_size
             }, f, indent=2, ensure_ascii=False)
         
         logger.info(f"Arquivo de mapeamento criado: {mapping_file}")
@@ -1654,22 +1674,46 @@ def criar_backup():
                 logger.info(f"Uploads incluídos no backup: {uploads_included}")
         except Exception as zip_error:
             logger.error(f"Erro ao verificar conteúdo do ZIP: {zip_error}")
-            
-        # Registrar backup no banco de dados
+        
+        # Fechar sessão antiga que pode ter expirado durante backup demorado
+        try:
+            db.session.rollback()
+            db.session.close()
+        except Exception:
+            pass
+        
+        # Criar nova sessão para registrar o backup
+        logger.info("Criando nova sessão do banco para registrar backup...")
         tamanho = os.path.getsize(caminho_arquivo)
-        logger.info(f"Tamanho do arquivo de backup: {tamanho} bytes")
-        novo_backup = Backup(
-            nome_arquivo=nome_arquivo,
-            data_criacao=datetime.now(),
-            tamanho=tamanho,
-            usuario_id=session.get('usuario_id'),
-            descricao=descricao,
-            automatico=False
-        )
+        logger.info(f"Tamanho do arquivo de backup: {tamanho} bytes ({tamanho / 1024 / 1024:.2f} MB)")
+        
+        # Tentar registrar com retry em caso de falha
+        max_retries = 3
+        for attempt in range(max_retries):
+            try:
+                novo_backup = Backup(
+                    nome_arquivo=nome_arquivo,
+                    data_criacao=datetime.now(),
+                    tamanho=tamanho,
+                    usuario_id=session.get('usuario_id'),
+                    descricao=descricao,
+                    automatico=False
+                )
 
-        db.session.add(novo_backup)
-        db.session.commit()
-        logger.info(f"Backup registrado no banco de dados com ID {novo_backup.id}")
+                db.session.add(novo_backup)
+                db.session.commit()
+                logger.info(f"Backup registrado no banco de dados com ID {novo_backup.id}")
+                break
+            except Exception as db_error:
+                logger.warning(f"Tentativa {attempt + 1}/{max_retries} falhou ao registrar backup: {str(db_error)}")
+                db.session.rollback()
+                if attempt < max_retries - 1:
+                    time.sleep(1)  # Aguardar 1 segundo antes de tentar novamente
+                else:
+                    # Última tentativa falhou, mas o backup foi criado
+                    logger.error(f"Não foi possível registrar o backup no banco após {max_retries} tentativas")
+                    flash(f'Backup criado com sucesso em {nome_arquivo}, mas não foi registrado no banco. Você pode importá-lo manualmente.', 'warning')
+                    return redirect(url_for('backup.listar_backups'))
 
         flash(f'Backup criado com sucesso! Tipo de banco: {db_type.upper()}', 'success')
     except Exception as e:
