@@ -2375,10 +2375,10 @@ def registrar_apontamento():
                 return jsonify({'success': False, 'message': 'Não é possível pausar: você não possui produção em andamento para este item/trabalho.'})
 
         if tipo_acao == 'stop':
-            # Pode parar produção em andamento, pausa aberta, ou setup em andamento para este par
-            ap_prod = ap_prod_aberto
-            ap_pausa = ap_pausa_aberta
-            ap_setup = ap_setup_aberto
+            # CORREÇÃO: Buscar apontamentos DESTE OPERADOR para o item/trabalho especificado
+            ap_prod = _query_apontamento_aberto(ordem_servico_id, item_id, trabalho_id, 'inicio_producao', usuario.id)
+            ap_pausa = _query_apontamento_aberto(ordem_servico_id, item_id, trabalho_id, 'pausa', usuario.id)
+            ap_setup = _query_apontamento_aberto(ordem_servico_id, item_id, trabalho_id, 'inicio_setup', usuario.id)
 
             # Se não encontrou apontamento para o item/trabalho especificado, busca qualquer apontamento ativo do operador nesta OS
             if not ap_prod and not ap_pausa and not ap_setup:
@@ -2389,23 +2389,15 @@ def registrar_apontamento():
                     trabalho_id = ap_operador_os.trabalho_id
                     if ap_operador_os.tipo_acao == 'inicio_producao':
                         ap_prod = ap_operador_os
-                        ap_prod_aberto = ap_operador_os
                     elif ap_operador_os.tipo_acao == 'pausa':
                         ap_pausa = ap_operador_os
-                        ap_pausa_aberta = ap_operador_os
                     elif ap_operador_os.tipo_acao == 'inicio_setup':
                         ap_setup = ap_operador_os
-                        ap_setup_aberto = ap_operador_os
 
             if not ap_prod and not ap_pausa and not ap_setup:
-                return jsonify({'success': False, 'message': 'Não é possível aplicar STOP: não há apontamento ativo (produção/pausa/setup) para este item/trabalho.'})
+                return jsonify({'success': False, 'message': 'Não é possível aplicar STOP: você não possui apontamento ativo (produção/pausa/setup) nesta OS.'})
 
-            # Validar operador que abriu o apontamento ativo
-            # CORREÇÃO: Cada operador pode parar apenas seus próprios apontamentos
-            ap_base = ap_prod or ap_pausa or ap_setup
-            if ap_base and ap_base.usuario_id != usuario.id:
-                op = Usuario.query.get(ap_base.usuario_id)
-                return jsonify({'success': False, 'message': f'Apenas o operador que iniciou ({op.nome}) pode aplicar STOP.'})
+            # Não precisa mais validar operador, pois já filtramos por usuario.id acima
 
         if tipo_acao == 'fim_producao':
             # Deve existir uma produção em andamento DESTE OPERADOR para esta combinação
