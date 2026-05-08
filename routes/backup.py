@@ -1,7 +1,7 @@
 from flask import Blueprint, render_template, request, redirect, url_for, flash, send_file, session
 from models import db, Backup, Usuario
 from routes.auth import login_required, permissao_requerida
-from datetime import datetime, date
+from datetime import datetime, date, time as datetime_time
 import os
 import sys
 import subprocess
@@ -553,7 +553,7 @@ def _criar_backup_supabase_alternativo(arquivo_destino: str, conn_info: dict):
                                     elif isinstance(value, str):
                                         # Escapar aspas simples
                                         values.append(f"'{value.replace("'", "''")}'")
-                                    elif isinstance(value, (datetime, date, time)):
+                                    elif isinstance(value, (datetime, date, datetime_time)):
                                         # Normalizar datas/horas para string e citar
                                         if isinstance(value, datetime):
                                             formatted = value.strftime('%Y-%m-%d %H:%M:%S.%f')
