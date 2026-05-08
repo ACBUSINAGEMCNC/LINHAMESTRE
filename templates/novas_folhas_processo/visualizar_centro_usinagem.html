@@ -2,222 +2,150 @@
 
 {% block title %}{{ folha.titulo_completo }} - Visualizar{% endblock %}
 
+{% block extra_css %}
+<style>
+    .folha-processo-container .card-header {
+        font-weight: bold;
+        text-transform: uppercase;
+    }
+
+    .header-azul { background-color: #0020f1 !important; color: white !important; }
+    .header-verde { background-color: #007f30 !important; color: white !important; }
+    .header-preto { background-color: #1a1a1a !important; color: white !important; }
+    .header-amarelo { background-color: #ffc107 !important; color: black !important; }
+    .header-vermelho { background-color: #d31e1e !important; color: white !important; }
+
+    .main-process-title {
+        background-color: #ffc107 !important;
+        color: black !important;
+        text-align: center;
+        padding: 10px;
+        font-weight: bold;
+        text-transform: uppercase;
+        font-size: 1.5rem;
+        margin-bottom: 20px;
+        border: 2px solid #000;
+    }
+
+    .dotted-line {
+        border-bottom: 1px dotted #888;
+        height: 30px;
+        margin-bottom: 5px;
+        width: 100%;
+    }
+
+    @media screen {
+        .folha-processo-container {
+            background-color: white;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 0 15px rgba(0,0,0,0.1);
+            max-width: 1100px;
+            margin: 20px auto;
+        }
+    }
+
+    @media print {
+        .folha-processo-container {
+            padding: 0;
+            margin: 0;
+            width: 100%;
+        }
+        .container {
+            max-width: 100% !important;
+            width: 100% !important;
+        }
+    }
+</style>
+{% endblock %}
+
 {% block content %}
-<div class="container-fluid mt-4">
-    <div class="row mb-4">
-        <div class="col-12">
-            <div class="card bg-primary text-white">
-                <div class="card-body">
-                    <div class="d-flex align-items-center justify-content-between">
-                        <div class="d-flex align-items-center">
-                            {% if folha.maquina.imagem_path %}
-                            <img src="{{ folha.maquina.imagem_path }}" alt="Máquina" class="rounded me-3" style="max-height: 80px; max-width: 80px;">
-                            {% else %}
-                            <i class="fas fa-industry fa-4x me-3"></i>
-                            {% endif %}
-                            <div>
-                                <h3 class="mb-1">{{ folha.titulo_completo }}</h3>
-                                <p class="mb-0">
-                                    <i class="fas fa-tag me-1"></i>Categoria: {{ folha.categoria_maquina.title() }} |
-                                    <i class="fas fa-calendar me-1"></i>Criado: {{ folha.data_criacao.strftime('%d/%m/%Y') }}
-                                </p>
-                            </div>
-                        </div>
-                        <div>
-                            <button type="button" class="btn btn-light me-2" onclick="window.print()">
-                                <i class="fas fa-print"></i> Imprimir
-                            </button>
-                            {% if folha.item and folha.item.desenho_path %}
-                            <a class="btn btn-outline-light me-2" href="{{ get_file_url(folha.item.desenho_path) }}" target="_blank">
-                                <i class="fas fa-drafting-compass me-1"></i> Desenho
-                            </a>
-                            {% endif %}
-                            <a href="{{ url_for('novas_folhas_processo.editar_centro_usinagem', folha_id=folha.id) }}" class="btn btn-outline-light me-2">
-                                <i class="fas fa-edit"></i> Editar
-                            </a>
-                            <a href="{{ url_for('auditoria.auditoria_entidade', entidade_tipo='NovaFolhaProcesso', entidade_id=folha.id) }}" class="btn btn-outline-light me-2">
-                                <i class="fas fa-clipboard-check"></i> Auditoria
-                            </a>
-                            <a href="{{ url_for('novas_folhas_processo.listar_folhas') }}" class="btn btn-outline-light">
-                                <i class="fas fa-list"></i> Voltar
-                            </a>
-                        </div>
-                    </div>
-                </div>
-            </div>
-        </div>
-    </div>
-
-    <div class="row">
-        <div class="col-lg-8 mb-4">
-            <div class="card">
-                <div class="card-header bg-success text-white">
-                    <h5 class="mb-0"><i class="fas fa-cog me-2"></i>Dados do Processo</h5>
-                </div>
-                <div class="card-body">
-                    {% if folha_centro %}
-                        <div class="row mb-3">
-                            <div class="col-12">
-                                <strong><i class="fas fa-puzzle-piece me-1"></i>Gabarito:</strong><br>
-                                {% if folha_centro.gabarito_centro %}
-                                    {{ folha_centro.gabarito_centro.codigo }} - {{ folha_centro.gabarito_centro.nome or '' }}
-                                {% else %}
-                                    <span class="text-muted">Não informado</span>
-                                {% endif %}
-                            </div>
-                        </div>
-
-                        {% if folha_centro.como_zeramento %}
-                        <div class="row mb-3">
-                            <div class="col-12">
-                                <strong><i class="fas fa-crosshairs me-1"></i>Como fazer o zeramento:</strong>
-                                <div class="bg-light p-3 rounded border mt-2">{{ folha_centro.como_zeramento|nl2br }}</div>
-                            </div>
-                        </div>
-                        {% endif %}
-
-                        {% if folha_centro.observacoes %}
-                        <div class="row">
-                            <div class="col-12">
-                                <strong><i class="fas fa-sticky-note me-1"></i>Observações:</strong>
-                                <div class="bg-warning bg-opacity-10 p-3 rounded border mt-2">{{ folha_centro.observacoes|nl2br }}</div>
-                            </div>
-                        </div>
-                        {% endif %}
-                    {% else %}
-                        <p class="text-muted">Nenhuma informação cadastrada.</p>
-                    {% endif %}
-                </div>
-            </div>
-
-            <!-- Ferramental -->
-            {% if ferramentas %}
-            <div class="card mt-4">
-                <div class="card-header bg-success text-white">
-                    <h5 class="mb-0"><i class="fas fa-tools me-2"></i>Ferramental ({{ ferramentas|length }})</h5>
-                </div>
-                <div class="card-body">
-                    {% for ferramenta in ferramentas %}
-                    <div class="border rounded p-3 mb-2">
-                        <div class="row align-items-center">
-                            <div class="col-2">
-                                <strong class="badge bg-dark">{{ ferramenta.posicao }}</strong>
-                            </div>
-                            <div class="col-5">
-                                <strong>{{ ferramenta.descricao }}</strong>
-                            </div>
-                            <div class="col-5">
-                                <small class="text-muted">{{ ferramenta.configuracao }}</small>
-                                {% if ferramenta.suporte_bt or ferramenta.comprimento_fora %}
-                                <div class="text-muted">
-                                    {% if ferramenta.suporte_bt %}<small><strong>Suporte/BT:</strong> {{ ferramenta.suporte_bt }}</small>{% endif %}
-                                    {% if ferramenta.comprimento_fora %}<small class="ms-2"><strong>Fora:</strong> {{ ferramenta.comprimento_fora }}</small>{% endif %}
-                                </div>
-                                {% endif %}
-                            </div>
-                        </div>
-                        {% if ferramenta.imagem %}
-                        <div class="row mt-2">
-                            <div class="col-12">
-                                <img src="{{ get_file_url(ferramenta.imagem) }}" alt="Ferramenta" class="img-thumbnail" style="max-height: 60px;">
-                            </div>
-                        </div>
-                        {% endif %}
-                    </div>
-                    {% endfor %}
-                </div>
-            </div>
+<div class="folha-processo-container container-fluid">
+    <!-- Botões de Ação (não aparecem na impressão) -->
+    <div class="row mb-3 no-print">
+        <div class="col-12 d-flex justify-content-end gap-2">
+            <button type="button" class="btn btn-success" onclick="window.print()">
+                <i class="fas fa-print"></i> Imprimir
+            </button>
+            {% if folha.item and folha.item.desenho_path %}
+            <a class="btn btn-outline-success" href="{{ get_file_url(folha.item.desenho_path) }}" target="_blank">
+                <i class="fas fa-drafting-compass"></i> Desenho
+            </a>
             {% endif %}
-        </div>
-
-        <div class="col-lg-4 mb-4">
-            <div class="card mb-4">
-                <div class="card-header bg-info text-white">
-                    <h5 class="mb-0"><i class="fas fa-image me-2"></i>Gabarito Montado</h5>
-                </div>
-                <div class="card-body text-center">
-                    {% if folha_centro and folha_centro.imagem_gabarito_montado %}
-                        <img src="{{ get_file_url(folha_centro.imagem_gabarito_montado) }}" alt="Gabarito" class="img-fluid rounded border">
-                    {% else %}
-                        <div class="text-muted">
-                            <i class="fas fa-image fa-3x mb-2"></i>
-                            <div>Sem imagem</div>
-                        </div>
-                    {% endif %}
-                </div>
-            </div>
-
-            <div class="card">
-                <div class="card-header bg-info text-white">
-                    <h5 class="mb-0"><i class="fas fa-image me-2"></i>Zeramento</h5>
-                </div>
-                <div class="card-body text-center">
-                    {% if folha_centro and folha_centro.imagem_zeramento %}
-                        <img src="{{ get_file_url(folha_centro.imagem_zeramento) }}" alt="Zeramento" class="img-fluid rounded border">
-                    {% else %}
-                        <div class="text-muted">
-                            <i class="fas fa-image fa-3x mb-2"></i>
-                            <div>Sem imagem</div>
-                        </div>
-                    {% endif %}
-                </div>
-            </div>
+            <a href="{{ url_for('novas_folhas_processo.editar_centro_usinagem', folha_id=folha.id) }}" class="btn btn-outline-dark">
+                <i class="fas fa-edit"></i> Editar
+            </a>
+            <a href="{{ url_for('auditoria.auditoria_entidade', entidade_tipo='NovaFolhaProcesso', entidade_id=folha.id) }}" class="btn btn-outline-dark">
+                <i class="fas fa-clipboard-check"></i> Auditoria
+            </a>
+            <a href="{{ url_for('novas_folhas_processo.listar_folhas') }}" class="btn btn-outline-dark">
+                <i class="fas fa-list"></i> Voltar
+            </a>
         </div>
     </div>
 
-    <!-- Medidas Críticas -->
-    {% if medidas %}
-    <div class="row">
-        <div class="col-12">
-            <div class="card mb-4">
-                <div class="card-header bg-primary text-white">
-                    <h5 class="mb-0"><i class="fas fa-ruler me-2"></i>Medidas Críticas ({{ medidas|length }})</h5>
+    <!-- Título Principal -->
+    <div class="main-process-title">
+        FOLHA DE PROCESSO - USINAGEM
+    </div>
+
+    <!-- Seção de Máquina e Peça -->
+    <div class="row mb-4">
+        <!-- Máquina Info -->
+        <div class="col-8 border-end">
+            <div class="d-flex align-items-start">
+                {% if folha.maquina.imagem_path %}
+                <img src="{{ folha.maquina.imagem_path }}" alt="Máquina" class="rounded me-3 border" style="max-height: 120px; max-width: 150px; object-fit: contain;">
+                {% else %}
+                <div class="rounded me-3 border bg-light d-flex align-items-center justify-content-center" style="width: 150px; height: 120px;">
+                    <i class="fas fa-industry fa-3x text-muted"></i>
                 </div>
-                <div class="card-body">
-                    <div class="table-responsive">
-                        <table class="table table-sm">
-                            <thead>
-                                <tr>
-                                    <th>Descrição</th>
-                                    <th>Valor</th>
-                                    <th>Tolerância</th>
-                                </tr>
-                            </thead>
-                            <tbody>
-                                {% for medida in medidas %}
-                                <tr>
-                                    <td><strong>{{ medida.descricao }}</strong></td>
-                                    <td>{{ medida.valor }}</td>
-                                    <td><span class="badge bg-warning text-dark">{{ medida.tolerancia }}</span></td>
-                                </tr>
-                                {% endfor %}
-                            </tbody>
-                        </table>
+                {% endif %}
+                <div class="mt-2">
+                    <h4 class="mb-3 fw-bold">{{ folha.titulo_completo }}</h4>
+                    <div class="mb-2">
+                        <i class="fas fa-tag me-2 text-dark"></i><strong>Categoria:</strong> {{ folha.categoria_maquina.title() }}
+                    </div>
+                    <div>
+                        <i class="fas fa-calendar me-2 text-dark"></i><strong>Criado:</strong> {{ folha.data_criacao.strftime('%d/%m/%Y') }}
                     </div>
                 </div>
             </div>
         </div>
-    </div>
-    {% endif %}
+        <!-- Peça Info -->
+        <div class="col-4">
+            <div class="d-flex align-items-start justify-content-between">
+                {% if folha.item and folha.item.imagem_path %}
+                <img src="{{ folha.item.imagem_path }}" alt="Peça" class="rounded me-3 border" style="max-height: 100px; max-width: 100px; object-fit: contain;">
+                {% else %}
+                <div class="rounded me-3 border bg-light d-flex align-items-center justify-content-center" style="width: 100px; height: 100px;">
+                    <i class="fas fa-box fa-2x text-muted"></i>
+                </div>
+                {% endif %}
+                <div class="text-end">
+                    {% if folha.item.codigo_acb %}
+                    <div class="h6 fw-bold mb-2">{{ folha.item.codigo_acb }}</div>
+                    {% endif %}
+                    {% if folha.item.nome %}
+                    <div class="small text-muted">{{ folha.item.nome }}</div>
+                    {% endif %}
+                </div>
+            </div>
 
-    <!-- Imagens de Peças -->
-    {% if imagens_peca %}
-    <div class="row">
-        <div class="col-12">
-            <div class="card mb-4">
-                <div class="card-header bg-success text-white">
-                    <h5 class="mb-0"><i class="fas fa-images me-2"></i>Imagens de Peças ({{ imagens_peca|length }})</h5>
+            <!-- Imagens de Peças -->
+            {% if imagens_peca %}
+            <div class="card mt-3">
+                <div class="card-header header-verde">
+                    <h6 class="mb-0"><i class="fas fa-images me-2"></i>IMAGENS DE PEÇAS ({{ imagens_peca|length }})</h6>
                 </div>
                 <div class="card-body">
-                    <div class="row">
+                    <div class="row g-2">
                         {% for imagem in imagens_peca %}
-                        <div class="col-md-4 mb-3">
-                            <div class="card">
-                                <img src="{{ get_file_url(imagem.imagem) }}" alt="Peça" class="card-img-top">
+                        <div class="col-4">
+                            <div class="text-center border rounded p-1">
+                                <img src="{{ get_file_url(imagem.imagem) }}" alt="Peça" class="img-fluid rounded mb-1" style="max-height: 150px;">
                                 {% if imagem.observacao %}
-                                <div class="card-body p-2">
-                                    <small class="text-muted">{{ imagem.observacao }}</small>
-                                </div>
+                                <div class="small text-muted" style="font-size: 0.7rem;">{{ imagem.observacao }}</div>
                                 {% endif %}
                             </div>
                         </div>
@@ -225,8 +153,179 @@
                     </div>
                 </div>
             </div>
+            {% endif %}
         </div>
     </div>
-    {% endif %}
+
+    <div class="row">
+        <!-- Coluna Esquerda -->
+        <div class="col-lg-4">
+            <!-- Dados do Gabarito -->
+            <div class="card mb-3">
+                <div class="card-header header-azul">
+                    <h6 class="mb-0"><i class="fas fa-puzzle-piece me-2"></i>DADOS DO GABARITO</h6>
+                </div>
+                <div class="card-body">
+                    {% if folha_centro and folha_centro.gabarito_centro %}
+                    <div class="fw-bold">{{ folha_centro.gabarito_centro.codigo }}</div>
+                    <div class="small">{{ folha_centro.gabarito_centro.nome or '' }}</div>
+                    {% else %}
+                    <div class="text-muted small">Nenhum gabarito selecionado</div>
+                    {% endif %}
+                </div>
+            </div>
+
+            <!-- Ferramentas -->
+            <div class="card mb-3">
+                <div class="card-header header-verde">
+                    <h6 class="mb-0"><i class="fas fa-tools me-2"></i>FERRAMENTAL ({{ ferramentas|length }})</h6>
+                </div>
+                <div class="card-body p-2">
+                    {% if ferramentas %}
+                        {% for ferramenta in ferramentas %}
+                        <div class="border rounded p-2 mb-2 bg-light">
+                            <div class="d-flex align-items-center mb-1">
+                                <span class="badge bg-dark me-2">{{ ferramenta.posicao }}</span>
+                                <span class="fw-bold small">{{ ferramenta.descricao }}</span>
+                            </div>
+                            <div class="small text-muted ps-4">
+                                {{ ferramenta.configuracao }}
+                                {% if ferramenta.comprimento_fora %} | {{ ferramenta.comprimento_fora }} FORA{% endif %}
+                            </div>
+                        </div>
+                        {% endfor %}
+                    {% else %}
+                        <div class="text-muted small p-2">Nenhuma ferramenta cadastrada</div>
+                    {% endif %}
+                </div>
+            </div>
+
+            <!-- Observações -->
+            <div class="card mb-3">
+                <div class="card-header header-preto">
+                    <h6 class="mb-0"><i class="fas fa-comment-dots me-2"></i>OBSERVAÇÕES</h6>
+                </div>
+                <div class="card-body">
+                    {% if folha_centro and folha_centro.observacoes %}
+                        <div class="small">{{ folha_centro.observacoes|nl2br }}</div>
+                    {% else %}
+                        <div class="text-muted small">Nenhuma observação</div>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+
+        <!-- Coluna Direita -->
+        <div class="col-lg-8">
+            <!-- Imagens do Processo -->
+            <div class="card mb-3">
+                <div class="card-header header-amarelo">
+                    <h6 class="mb-0 text-dark"><i class="fas fa-camera me-2"></i>IMAGENS DO PROCESSO</h6>
+                </div>
+                <div class="card-body">
+                    <div class="row g-2">
+                        {% if folha_centro %}
+                            {% if folha_centro.imagem_gabarito_montado %}
+                            <div class="col-6">
+                                <div class="text-center border rounded p-1">
+                                    <img src="{{ get_file_url(folha_centro.imagem_gabarito_montado) }}" alt="Gabarito Montado" class="img-fluid rounded mb-1" style="max-height: 250px;">
+                                    <div class="small fw-bold">Gabarito Montado</div>
+                                </div>
+                            </div>
+                            {% endif %}
+                            {% if folha_centro.imagem_zeramento %}
+                            <div class="col-6">
+                                <div class="text-center border rounded p-1">
+                                    <img src="{{ get_file_url(folha_centro.imagem_zeramento) }}" alt="Zeramento" class="img-fluid rounded mb-1" style="max-height: 250px;">
+                                    <div class="small fw-bold">Zeramento</div>
+                                </div>
+                            </div>
+                            {% endif %}
+                        {% endif %}
+
+                        {% if not folha_centro or (not folha_centro.imagem_gabarito_montado and not folha_centro.imagem_zeramento) %}
+                            <div class="col-12 text-center text-muted py-4">Sem imagens principais do processo</div>
+                        {% endif %}
+                    </div>
+                </div>
+            </div>
+
+            <div class="row g-3">
+                <!-- Zeramento Detalhes -->
+                <div class="col-6">
+                    <div class="card h-100 mb-0">
+                        <div class="card-header header-vermelho">
+                            <h6 class="mb-0"><i class="fas fa-crosshairs me-2"></i>DETALHES DE ZERAMENTO</h6>
+                        </div>
+                        <div class="card-body">
+                            {% if folha_centro and folha_centro.como_zeramento %}
+                                <div class="small">{{ folha_centro.como_zeramento|nl2br }}</div>
+                            {% else %}
+                                <div class="text-muted small">Não informado</div>
+                            {% endif %}
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Medidas Críticas -->
+                <div class="col-6">
+                    <div class="card h-100 mb-0">
+                        <div class="card-header header-azul">
+                            <h6 class="mb-0"><i class="fas fa-ruler-combined me-2"></i>MEDIDAS CRÍTICAS ({{ medidas|length }})</h6>
+                        </div>
+                        <div class="card-body p-0">
+                            {% if medidas %}
+                            <table class="table table-sm table-bordered mb-0" style="font-size: 0.85rem;">
+                                <thead class="bg-light">
+                                    <tr>
+                                        <th class="ps-2">Descrição</th>
+                                        <th>Valor</th>
+                                        <th>Tolerância</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {% for medida in medidas %}
+                                    <tr>
+                                        <td class="ps-2 fw-bold text-uppercase">{{ medida.descricao }}</td>
+                                        <td>{{ medida.valor }}</td>
+                                        <td class="bg-warning bg-opacity-25 text-center fw-bold">{{ medida.tolerancia }}</td>
+                                    </tr>
+                                    {% endfor %}
+                                </tbody>
+                            </table>
+                            {% else %}
+                            <div class="p-3 text-muted small">Nenhuma medida cadastrada</div>
+                            {% endif %}
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Anotações -->
+    <div class="row mt-4">
+        <div class="col-12">
+            <h6 class="fw-bold"><i class="fas fa-pencil-alt me-2"></i>ANOTAÇÕES</h6>
+            <div class="dotted-line"></div>
+            <div class="dotted-line"></div>
+            <div class="dotted-line"></div>
+            <div class="dotted-line"></div>
+        </div>
+    </div>
+
+    <!-- Rodapé de Assinaturas -->
+    <div class="row mt-4">
+        <div class="col-12">
+            <table class="signature-footer">
+                <tr>
+                    <td style="width: 30%;">OPERADOR: __________________________</td>
+                    <td style="width: 25%;">DATA: ____ / ____ / ____</td>
+                    <td style="width: 20%;">REVISÃO: __________</td>
+                    <td style="width: 25%;">APROVADO: ____________________</td>
+                </tr>
+            </table>
+        </div>
+    </div>
 </div>
 {% endblock %}

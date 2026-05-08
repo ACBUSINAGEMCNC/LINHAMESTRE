@@ -2,133 +2,244 @@
 
 {% block title %}{{ folha.titulo_completo }} - Visualizar{% endblock %}
 
+{% block extra_css %}
+<style>
+    .folha-processo-container .card-header {
+        font-weight: bold;
+        text-transform: uppercase;
+    }
+
+    .header-azul { background-color: #0020f1 !important; color: white !important; }
+    .header-verde { background-color: #007f30 !important; color: white !important; }
+    .header-preto { background-color: #1a1a1a !important; color: white !important; }
+    .header-amarelo { background-color: #ffc107 !important; color: black !important; }
+    .header-vermelho { background-color: #d31e1e !important; color: white !important; }
+
+    .main-process-title {
+        background-color: #ffc107 !important;
+        color: black !important;
+        text-align: center;
+        padding: 10px;
+        font-weight: bold;
+        text-transform: uppercase;
+        font-size: 1.5rem;
+        margin-bottom: 20px;
+        border: 2px solid #000;
+    }
+
+    .dotted-line {
+        border-bottom: 1px dotted #888;
+        height: 30px;
+        margin-bottom: 5px;
+        width: 100%;
+    }
+
+    @media screen {
+        .folha-processo-container {
+            background-color: white;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 0 15px rgba(0,0,0,0.1);
+            max-width: 1100px;
+            margin: 20px auto;
+        }
+    }
+
+    @media print {
+        .folha-processo-container {
+            padding: 0;
+            margin: 0;
+            width: 100%;
+        }
+        .container {
+            max-width: 100% !important;
+            width: 100% !important;
+        }
+    }
+</style>
+{% endblock %}
+
 {% block content %}
-<div class="container-fluid mt-4">
-    <!-- Cabeçalho -->
+<div class="folha-processo-container container-fluid">
+    <!-- Botões de Ação (não aparecem na impressão) -->
+    <div class="row mb-3 no-print">
+        <div class="col-12 d-flex justify-content-end gap-2">
+            <div class="btn-group" role="group">
+                <button type="button" class="btn btn-success" onclick="abrirModalImpressao()">
+                    <i class="fas fa-print"></i> Imprimir
+                </button>
+                <button type="button" class="btn btn-success dropdown-toggle dropdown-toggle-split" data-bs-toggle="dropdown">
+                    <span class="visually-hidden">Toggle Dropdown</span>
+                </button>
+                <ul class="dropdown-menu">
+                    <li><a class="dropdown-item" href="#" onclick="imprimirFolha()"><i class="fas fa-file-alt me-2"></i>Apenas Folha</a></li>
+                    <li><a class="dropdown-item" href="#" onclick="abrirModalImpressao()"><i class="fas fa-cog me-2"></i>Opções Avançadas</a></li>
+                </ul>
+            </div>
+            {% if folha.item and folha.item.desenho_path %}
+            <a class="btn btn-outline-success" href="{{ get_file_url(folha.item.desenho_path) }}" target="_blank">
+                <i class="fas fa-drafting-compass"></i> Desenho
+            </a>
+            {% endif %}
+            <a href="{{ url_for('novas_folhas_processo.editar_serra', folha_id=folha.id) }}" class="btn btn-outline-dark">
+                <i class="fas fa-edit"></i> Editar
+            </a>
+            <a href="{{ url_for('auditoria.auditoria_entidade', entidade_tipo='NovaFolhaProcesso', entidade_id=folha.id) }}" class="btn btn-outline-dark">
+                <i class="fas fa-clipboard-check"></i> Auditoria
+            </a>
+            <a href="{{ url_for('novas_folhas_processo.listar_folhas') }}" class="btn btn-outline-dark">
+                <i class="fas fa-list"></i> Voltar
+            </a>
+        </div>
+    </div>
+
+    <!-- Título Principal -->
+    <div class="main-process-title">
+        FOLHA DE PROCESSO - SERRA
+    </div>
+
+    <!-- Seção de Máquina e Peça -->
     <div class="row mb-4">
-        <div class="col-12">
-            <div class="card bg-info text-white">
-                <div class="card-body">
-                    <div class="d-flex align-items-center justify-content-between">
-                        <div class="d-flex align-items-center">
-                            {% if folha.maquina.imagem_path %}
-                            <img src="{{ folha.maquina.imagem_path }}" alt="Máquina" class="rounded me-3" style="max-height: 80px; max-width: 80px;">
-                            {% else %}
-                            <i class="fas fa-saw-blade fa-4x me-3"></i>
-                            {% endif %}
-                            <div>
-                                <h3 class="mb-1">{{ folha.titulo_completo }}</h3>
-                                <p class="mb-0">
-                                    <i class="fas fa-tag me-1"></i>Categoria: {{ folha.categoria_maquina.title() }} | 
-                                    <i class="fas fa-calendar me-1"></i>Criado: {{ folha.data_criacao.strftime('%d/%m/%Y') }}
-                                </p>
-                            </div>
-                        </div>
-                        <div>
-                            <div class="btn-group me-2" role="group">
-                                <button type="button" class="btn btn-light" onclick="abrirModalImpressao()">
-                                    <i class="fas fa-print"></i> Imprimir
-                                </button>
-                                <button type="button" class="btn btn-outline-light dropdown-toggle dropdown-toggle-split" data-bs-toggle="dropdown">
-                                    <span class="visually-hidden">Toggle Dropdown</span>
-                                </button>
-                                <ul class="dropdown-menu">
-                                    <li><a class="dropdown-item" href="#" onclick="imprimirFolha()"><i class="fas fa-file-alt me-2"></i>Apenas Folha</a></li>
-                                    <li><a class="dropdown-item" href="#" onclick="abrirModalImpressao()"><i class="fas fa-cog me-2"></i>Opções Avançadas</a></li>
-                                    {% if folha.item and folha.item.desenho_path %}
-                                    <li><hr class="dropdown-divider"></li>
-                                    <li><a class="dropdown-item" href="{{ get_file_url(folha.item.desenho_path) }}" target="_blank"><i class="fas fa-drafting-compass me-2"></i>Ver Desenho Técnico</a></li>
-                                    {% endif %}
-                                </ul>
-                            </div>
-                            <a href="{{ url_for('auditoria.auditoria_entidade', entidade_tipo='NovaFolhaProcesso', entidade_id=folha.id) }}" class="btn btn-outline-light me-2">
-                                <i class="fas fa-clipboard-check"></i> Auditoria
-                            </a>
-                            <a href="{{ url_for('novas_folhas_processo.editar_serra', folha_id=folha.id) }}" class="btn btn-outline-light me-2">
-                                <i class="fas fa-edit"></i> Editar
-                            </a>
-                            <a href="{{ url_for('novas_folhas_processo.listar_folhas') }}" class="btn btn-outline-light">
-                                <i class="fas fa-list"></i> Voltar
-                            </a>
-                        </div>
+        <!-- Máquina Info -->
+        <div class="col-8 border-end">
+            <div class="d-flex align-items-start">
+                {% if folha.maquina.imagem_path %}
+                <img src="{{ folha.maquina.imagem_path }}" alt="Máquina" class="rounded me-3 border" style="max-height: 120px; max-width: 150px; object-fit: contain;">
+                {% else %}
+                <div class="rounded me-3 border bg-light d-flex align-items-center justify-content-center" style="width: 150px; height: 120px;">
+                    <i class="fas fa-saw fa-3x text-muted"></i>
+                </div>
+                {% endif %}
+                <div class="mt-2">
+                    <h4 class="mb-3 fw-bold">{{ folha.titulo_completo }}</h4>
+                    <div class="mb-2">
+                        <i class="fas fa-tag me-2 text-dark"></i><strong>Categoria:</strong> {{ folha.categoria_maquina.title() }}
                     </div>
+                    <div>
+                        <i class="fas fa-calendar me-2 text-dark"></i><strong>Criado:</strong> {{ folha.data_criacao.strftime('%d/%m/%Y') }}
+                    </div>
+                </div>
+            </div>
+        </div>
+        <!-- Peça Info -->
+        <div class="col-4">
+            <div class="d-flex align-items-start justify-content-between">
+                {% if folha.item and folha.item.imagem_path %}
+                <img src="{{ folha.item.imagem_path }}" alt="Peça" class="rounded me-3 border" style="max-height: 100px; max-width: 100px; object-fit: contain;">
+                {% else %}
+                <div class="rounded me-3 border bg-light d-flex align-items-center justify-content-center" style="width: 100px; height: 100px;">
+                    <i class="fas fa-box fa-2x text-muted"></i>
+                </div>
+                {% endif %}
+                <div class="text-end">
+                    {% if folha.item.codigo_acb %}
+                    <div class="h6 fw-bold mb-2">{{ folha.item.codigo_acb }}</div>
+                    {% endif %}
+                    {% if folha.item.nome %}
+                    <div class="small text-muted">{{ folha.item.nome }}</div>
+                    {% endif %}
                 </div>
             </div>
         </div>
     </div>
 
     <div class="row">
-        <!-- Informações do Corte -->
-        <div class="col-lg-8">
-            <div class="card">
-                <div class="card-header bg-primary text-white">
-                    <h5 class="mb-0"><i class="fas fa-cut me-2"></i>Informações do Corte</h5>
+        <!-- Coluna Esquerda -->
+        <div class="col-lg-4">
+            <!-- Informações do Corte -->
+            <div class="card mb-3">
+                <div class="card-header header-azul">
+                    <h6 class="mb-0"><i class="fas fa-cut me-2"></i>INFORMAÇÕES DO CORTE</h6>
                 </div>
                 <div class="card-body">
                     {% if folha_serra %}
-                    <div class="row mb-3">
-                        <div class="col-md-6">
-                            <strong><i class="fas fa-ruler me-1"></i>Tamanho do Corte:</strong><br>
-                            {{ folha_serra.tamanho_corte or 'Não informado' }}
-                        </div>
-                        <div class="col-md-6">
-                            <strong><i class="fas fa-circle me-1"></i>Diâmetro do Material:</strong><br>
-                            {{ folha_serra.diametro_material or '?' }}mm
-                        </div>
+                    <div class="mb-2">
+                        <strong>Tamanho:</strong> {{ folha_serra.tamanho_corte or 'Não informado' }}
                     </div>
-                    <div class="row mb-3">
-                        <div class="col-12">
-                            <strong><i class="fas fa-cube me-1"></i>Tipo de Material:</strong><br>
-                            {{ folha_serra.tipo_material or 'Não informado' }}
-                        </div>
+                    <div class="mb-2">
+                        <strong>Diâmetro:</strong> {{ folha_serra.diametro_material or '?' }}mm
                     </div>
-                    {% if folha_serra.como_cortar %}
-                    <div class="row mb-3">
-                        <div class="col-12">
-                            <strong><i class="fas fa-tools me-1"></i>Como Cortar:</strong><br>
-                            <div class="bg-light p-3 rounded border">
-                                {{ folha_serra.como_cortar|nl2br }}
-                            </div>
-                        </div>
+                    <div class="mb-0">
+                        <strong>Material:</strong> {{ folha_serra.tipo_material or 'Não informado' }}
                     </div>
-                    {% endif %}
-                    {% if folha_serra.observacoes %}
-                    <div class="row">
-                        <div class="col-12">
-                            <strong><i class="fas fa-sticky-note me-1"></i>Observações:</strong><br>
-                            <div class="bg-warning bg-opacity-10 p-3 rounded border">
-                                {{ folha_serra.observacoes|nl2br }}
-                            </div>
-                        </div>
-                    </div>
-                    {% endif %}
                     {% else %}
-                    <p class="text-muted">Nenhuma informação de corte cadastrada.</p>
+                    <div class="text-muted small">Nenhuma informação de corte</div>
+                    {% endif %}
+                </div>
+            </div>
+
+            <!-- Observações -->
+            <div class="card mb-3">
+                <div class="card-header header-preto">
+                    <h6 class="mb-0"><i class="fas fa-comment-dots me-2"></i>OBSERVAÇÕES</h6>
+                </div>
+                <div class="card-body">
+                    {% if folha_serra and folha_serra.observacoes %}
+                        <div class="small">{{ folha_serra.observacoes|nl2br }}</div>
+                    {% else %}
+                        <div class="text-muted small">Nenhuma observação</div>
                     {% endif %}
                 </div>
             </div>
         </div>
 
-        <!-- Imagem da Peça Bruta -->
-        <div class="col-lg-4">
-            {% if folha_serra and folha_serra.imagem_peca_bruta %}
-            <div class="card">
-                <div class="card-header bg-success text-white">
-                    <h5 class="mb-0"><i class="fas fa-image me-2"></i>Peça Bruta</h5>
+        <!-- Coluna Direita -->
+        <div class="col-lg-8">
+            <!-- Imagem da Peça Bruta -->
+            <div class="card mb-3">
+                <div class="card-header header-amarelo">
+                    <h6 class="mb-0 text-dark"><i class="fas fa-camera me-2"></i>PEÇA BRUTA</h6>
                 </div>
                 <div class="card-body text-center">
-                    <img src="{{ get_file_url(folha_serra.imagem_peca_bruta) }}" 
-                         alt="Peça Bruta" class="img-fluid rounded border">
+                    {% if folha_serra and folha_serra.imagem_peca_bruta %}
+                        <img src="{{ get_file_url(folha_serra.imagem_peca_bruta) }}" alt="Peça Bruta" class="img-fluid rounded border" style="max-height: 400px;">
+                    {% else %}
+                        <div class="text-muted py-5">
+                            <i class="fas fa-image fa-3x mb-2"></i>
+                            <div>Sem imagem da peça bruta</div>
+                        </div>
+                    {% endif %}
                 </div>
             </div>
-            {% else %}
-            <div class="card">
-                <div class="card-body text-center text-muted">
-                    <i class="fas fa-image fa-3x mb-3"></i>
-                    <p>Nenhuma imagem da peça bruta</p>
+
+            <!-- Instruções de Corte -->
+            <div class="card mb-3">
+                <div class="card-header header-verde">
+                    <h6 class="mb-0"><i class="fas fa-tools me-2"></i>COMO CORTAR</h6>
+                </div>
+                <div class="card-body">
+                    {% if folha_serra and folha_serra.como_cortar %}
+                        <div class="small">{{ folha_serra.como_cortar|nl2br }}</div>
+                    {% else %}
+                        <div class="text-muted small">Nenhuma instrução cadastrada</div>
+                    {% endif %}
                 </div>
             </div>
-            {% endif %}
+        </div>
+    </div>
+
+    <!-- Anotações -->
+    <div class="row mt-4">
+        <div class="col-12">
+            <h6 class="fw-bold"><i class="fas fa-pencil-alt me-2"></i>ANOTAÇÕES</h6>
+            <div class="dotted-line"></div>
+            <div class="dotted-line"></div>
+            <div class="dotted-line"></div>
+            <div class="dotted-line"></div>
+        </div>
+    </div>
+
+    <!-- Rodapé de Assinaturas -->
+    <div class="row mt-4">
+        <div class="col-12">
+            <table class="signature-footer">
+                <tr>
+                    <td style="width: 30%;">OPERADOR: __________________________</td>
+                    <td style="width: 25%;">DATA: ____ / ____ / ____</td>
+                    <td style="width: 20%;">REVISÃO: __________</td>
+                    <td style="width: 25%;">APROVADO: ____________________</td>
+                </tr>
+            </table>
         </div>
     </div>
 </div>
@@ -223,29 +334,5 @@ function executarImpressaoAvancada() {
         window.open(desenhoPath, '_blank');
     }
 }
-
-// Botão flutuante de impressão melhorado
-$(document).ready(function() {
-    // Remover botão flutuante antigo se existir
-    $('.position-fixed .btn-lg.rounded-circle').parent().remove();
-    
-    // Adicionar novo botão flutuante com dropdown
-    $('body').append(`
-        <div class="position-fixed bottom-0 end-0 p-3" style="z-index: 999;">
-            <div class="btn-group dropup">
-                <button type="button" class="btn btn-success btn-lg rounded-circle shadow" onclick="imprimirFolha()" title="Impressão rápida">
-                    <i class="fas fa-print"></i>
-                </button>
-                <button type="button" class="btn btn-success btn-lg dropdown-toggle dropdown-toggle-split rounded-circle shadow ms-1" data-bs-toggle="dropdown" title="Opções de impressão">
-                    <span class="visually-hidden">Toggle Dropdown</span>
-                </button>
-                <ul class="dropdown-menu">
-                    <li><a class="dropdown-item" href="#" onclick="imprimirFolha()"><i class="fas fa-print me-2"></i>Impressão Rápida</a></li>
-                    <li><a class="dropdown-item" href="#" onclick="abrirModalImpressao()"><i class="fas fa-cog me-2"></i>Opções Avançadas</a></li>
-                </ul>
-            </div>
-        </div>
-    `);
-});
 </script>
 {% endblock %}
