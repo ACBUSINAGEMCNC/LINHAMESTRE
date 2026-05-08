@@ -92,28 +92,33 @@
     <!-- Seção de Máquina e Peça -->
     <div class="row mb-4">
         <!-- Máquina Info -->
-        <div class="col-8 border-end">
+        <div class="col-7 border-end">
             <div class="d-flex align-items-start">
                 {% if folha.maquina.imagem_path %}
-                <img src="{{ folha.maquina.imagem_path }}" alt="Máquina" class="rounded me-3 border" style="max-height: 120px; max-width: 150px; object-fit: contain;">
+                <img src="{{ folha.maquina.imagem_path }}" alt="Máquina" class="rounded me-3 border" style="max-height: 110px; max-width: 140px; object-fit: contain;">
                 {% else %}
-                <div class="rounded me-3 border bg-light d-flex align-items-center justify-content-center" style="width: 150px; height: 120px;">
+                <div class="rounded me-3 border bg-light d-flex align-items-center justify-content-center" style="width: 140px; height: 110px;">
                     <i class="fas fa-tools fa-3x text-muted"></i>
                 </div>
                 {% endif %}
-                <div class="mt-2">
-                    <h4 class="mb-3 fw-bold">{{ folha.titulo_completo }}</h4>
-                    <div class="mb-2">
+                <div class="mt-1">
+                    <h5 class="mb-2 fw-bold">{{ folha.titulo_completo }}</h5>
+                    <div class="small mb-1">
                         <i class="fas fa-tag me-2 text-dark"></i><strong>Categoria:</strong> {{ folha.categoria_maquina.title() }}
                     </div>
-                    <div>
+                    <div class="small mb-1">
                         <i class="fas fa-calendar me-2 text-dark"></i><strong>Criado:</strong> {{ folha.data_criacao.strftime('%d/%m/%Y') }}
                     </div>
+                    {% if ultima_os %}
+                    <div class="small text-primary fw-bold">
+                        <i class="fas fa-check-circle me-2"></i>Última OS: {{ ultima_os.numero }} ({{ ultima_os.data_finalizacao.strftime('%d/%m/%Y') }})
+                    </div>
+                    {% endif %}
                 </div>
             </div>
         </div>
         <!-- Peça Info -->
-        <div class="col-4">
+        <div class="col-5">
             <div class="d-flex align-items-start justify-content-between">
                 {% if folha.item and folha.item.imagem_path %}
                 <img src="{{ folha.item.imagem_path }}" alt="Peça" class="rounded me-3 border" style="max-height: 100px; max-width: 100px; object-fit: contain;">
@@ -122,12 +127,23 @@
                     <i class="fas fa-box fa-2x text-muted"></i>
                 </div>
                 {% endif %}
-                <div class="text-end">
+                <div class="text-end overflow-hidden">
                     {% if folha.item.codigo_acb %}
-                    <div class="h6 fw-bold mb-2">{{ folha.item.codigo_acb }}</div>
+                    <div class="h6 fw-bold mb-1">{{ folha.item.codigo_acb }}</div>
                     {% endif %}
                     {% if folha.item.nome %}
-                    <div class="small text-muted">{{ folha.item.nome }}</div>
+                    <div class="small text-muted mb-2" style="font-size: 0.75rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">{{ folha.item.nome }}</div>
+                    {% endif %}
+
+                    {% if itens_trabalho %}
+                    <div class="border-top pt-1 text-start">
+                        <div class="fw-bold" style="font-size: 0.65rem; text-transform: uppercase;">Tempos e Serviços:</div>
+                        {% for it in itens_trabalho %}
+                        <div style="font-size: 0.65rem;">
+                            {{ it.trabalho.nome }}: Setup <strong>{{ it.tempo_setup_formatado }}</strong> / Peça <strong>{{ it.tempo_peca_formatado }}</strong>
+                        </div>
+                        {% endfor %}
+                    </div>
                     {% endif %}
                 </div>
             </div>
@@ -170,7 +186,7 @@
                 <div class="card-header header-preto">
                     <h6 class="mb-0"><i class="fas fa-comment-dots me-2"></i>OBSERVAÇÕES</h6>
                 </div>
-                <div class="card-body">
+                <div class="card-body observations-area">
                     {% if folha_manual and folha_manual.observacoes %}
                         <div class="small">{{ folha_manual.observacoes|nl2br }}</div>
                     {% else %}

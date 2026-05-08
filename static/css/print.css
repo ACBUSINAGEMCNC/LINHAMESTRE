@@ -25,11 +25,16 @@
     print-color-adjust: exact !important;
   }
 
+  @page {
+    margin: 10mm;
+    size: A4;
+  }
+
   .container,
   .container-fluid {
     width: 100% !important;
     max-width: 100% !important;
-    padding: 0 5mm !important;
+    padding: 0 !important;
   }
 
   /* Cartões para folha de processo */
@@ -75,6 +80,14 @@
     height: 25px;
     margin-bottom: 5px;
     width: 100%;
+  }
+
+  .observations-area {
+    min-height: 120px !important;
+  }
+
+  .no-print-pdf {
+    display: none !important;
   }
 
   /* Rodapé de assinaturas */

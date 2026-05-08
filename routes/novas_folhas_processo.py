@@ -2,7 +2,8 @@ from flask import Blueprint, render_template, request, redirect, url_for, flash,
 from models import (db, Usuario, Maquina, Castanha, GabaritoRosca, GabaritoCentroUsinagem,
                    NovaFolhaProcesso, FolhaProcessoSerra, FolhaProcessoTornoCNC, 
                    FolhaProcessoCentroUsinagem, FolhaProcessoManualAcabamento,
-                   FerramentaTorno, FerramentaCentro, MedidaCritica, ImagemPecaProcesso, ImagemProcessoGeral, Item)
+                   FerramentaTorno, FerramentaCentro, MedidaCritica, ImagemPecaProcesso, ImagemProcessoGeral,
+                   Item, ItemTrabalho, OrdemServico, RegistroMensal, PedidoOrdemServico, Pedido)
 from utils import validate_form_data, save_uploaded_file, get_file_url
 from datetime import datetime
 import json
@@ -88,10 +89,41 @@ def visualizar_folha(folha_id):
     folha = NovaFolhaProcesso.query.get_or_404(folha_id)
     categoria = (folha.categoria_maquina or '').strip().lower().replace('_', ' ')
     
+    # Dados adicionais solicitados pelo usuário
+    itens_trabalho = []
+    ultima_os = None
+
+    if folha.item_id:
+        # Buscar tempos e serviços cadastrados para o item
+        itens_trabalho = ItemTrabalho.query.filter_by(item_id=folha.item_id).all()
+
+        # Buscar a última OS finalizada para este item
+        ultima_os_finalizada = (OrdemServico.query
+            .join(RegistroMensal)
+            .join(PedidoOrdemServico)
+            .join(Pedido)
+            .filter(Pedido.item_id == folha.item_id)
+            .order_by(RegistroMensal.data_finalizacao.desc())
+            .first())
+
+        if ultima_os_finalizada:
+            registro = RegistroMensal.query.filter_by(ordem_servico_id=ultima_os_finalizada.id).first()
+            ultima_os = {
+                'numero': ultima_os_finalizada.numero,
+                'data_finalizacao': registro.data_finalizacao
+            }
+
+    params = {
+        'folha': folha,
+        'itens_trabalho': itens_trabalho,
+        'ultima_os': ultima_os,
+        'get_file_url': get_file_url
+    }
+
     if categoria == 'serra':
         folha_especifica = FolhaProcessoSerra.query.filter_by(nova_folha_id=folha_id).first()
         return render_template('novas_folhas_processo/visualizar_serra.html', 
-                             folha=folha, folha_serra=folha_especifica)
+                             folha_serra=folha_especifica, **params)
     elif categoria == 'torno cnc':
         folha_especifica = FolhaProcessoTornoCNC.query.filter_by(nova_folha_id=folha_id).first()
         ferramentas = FerramentaTorno.query.filter_by(folha_torno_id=folha_especifica.id).all() if folha_especifica else []
@@ -99,8 +131,8 @@ def visualizar_folha(folha_id):
         imagens_peca = ImagemPecaProcesso.query.filter_by(folha_tipo='torno', folha_id=folha_especifica.id).all() if folha_especifica else []
         
         return render_template('novas_folhas_processo/visualizar_torno_cnc.html', 
-                             folha=folha, folha_torno=folha_especifica,
-                             ferramentas=ferramentas, medidas=medidas, imagens_peca=imagens_peca)
+                             folha_torno=folha_especifica,
+                             ferramentas=ferramentas, medidas=medidas, imagens_peca=imagens_peca, **params)
     elif categoria == 'centro de usinagem':
         folha_especifica = FolhaProcessoCentroUsinagem.query.filter_by(nova_folha_id=folha_id).first()
         ferramentas = FerramentaCentro.query.filter_by(folha_centro_id=folha_especifica.id).all() if folha_especifica else []
@@ -108,12 +140,12 @@ def visualizar_folha(folha_id):
         imagens_peca = ImagemPecaProcesso.query.filter_by(folha_tipo='centro', folha_id=folha_especifica.id).all() if folha_especifica else []
         
         return render_template('novas_folhas_processo/visualizar_centro_usinagem.html', 
-                             folha=folha, folha_centro=folha_especifica,
-                             ferramentas=ferramentas, medidas=medidas, imagens_peca=imagens_peca)
+                             folha_centro=folha_especifica,
+                             ferramentas=ferramentas, medidas=medidas, imagens_peca=imagens_peca, **params)
     else:
         folha_especifica = FolhaProcessoManualAcabamento.query.filter_by(nova_folha_id=folha_id).first()
         return render_template('novas_folhas_processo/visualizar_manual_acabamento.html', 
-                             folha=folha, folha_manual=folha_especifica)
+                             folha_manual=folha_especifica, **params)
 
 # ==================== ROTAS DE EDIÇÃO POR CATEGORIA ====================
 
