@@ -392,13 +392,12 @@
                 $('#btnCancelar').prop('disabled', true);
                 $('#btnCloseBackup').prop('disabled', true);
                 
-                // Simular progresso das etapas
-                let progress = 0;
+                // Simular progresso das etapas com tempos mais realistas
                 const steps = [
-                    { id: 'step1', label: 'Copiando banco de dados...', percent: 25 },
-                    { id: 'step2', label: 'Copiando uploads locais...', percent: 50 },
-                    { id: 'step3', label: 'Baixando Supabase Storage...', percent: 75 },
-                    { id: 'step4', label: 'Compactando arquivos...', percent: 95 }
+                    { id: 'step1', label: 'Copiando banco de dados...', percent: 15, duration: 3000 },
+                    { id: 'step2', label: 'Copiando uploads locais...', percent: 30, duration: 5000 },
+                    { id: 'step3', label: 'Baixando Supabase Storage... (pode demorar)', percent: 85, duration: 30000 }, // 30 segundos
+                    { id: 'step4', label: 'Compactando arquivos...', percent: 95, duration: 8000 }
                 ];
                 
                 let currentStep = 0;
@@ -421,10 +420,16 @@
                         $('#progressBar').css('width', step.percent + '%').attr('aria-valuenow', step.percent);
                         $('#progressPercent').text(step.percent + '%');
                         $('#progressLabel').text(step.label);
-                        $('#progressMessage').text(step.label);
+                        
+                        // Mensagem especial para Supabase Storage
+                        if (step.id === 'step3') {
+                            $('#progressMessage').html('<strong>Baixando arquivos do Supabase Storage...</strong><br><small>Esta etapa pode demorar vários minutos dependendo da quantidade de arquivos.</small>');
+                        } else {
+                            $('#progressMessage').text(step.label);
+                        }
                         
                         currentStep++;
-                        setTimeout(updateProgress, 2000); // 2 segundos por etapa
+                        setTimeout(updateProgress, step.duration);
                     } else {
                         // Marcar última etapa como concluída
                         $(`#${steps[steps.length-1].id} i`).removeClass('fa-spinner fa-spin text-primary')
@@ -439,7 +444,7 @@
                         // Submeter formulário após animação
                         setTimeout(() => {
                             $(e.target)[0].submit();
-                        }, 1000);
+                        }, 2000);
                     }
                 }
                 
