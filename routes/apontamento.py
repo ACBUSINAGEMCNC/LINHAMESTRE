@@ -43,18 +43,21 @@ def to_brt_iso(dt):
         return dt.isoformat()
 
 
-def _query_apontamento_aberto(os_id, item_id, trab_id, tipo_acao):
-    return (
-        ApontamentoProducao.query.filter(
-            ApontamentoProducao.ordem_servico_id == os_id,
-            ApontamentoProducao.item_id == item_id,
-            ApontamentoProducao.trabalho_id == trab_id,
-            ApontamentoProducao.tipo_acao == tipo_acao,
-            ApontamentoProducao.data_fim.is_(None)
-        )
-        .order_by(ApontamentoProducao.data_hora.desc())
-        .first()
+def _query_apontamento_aberto(os_id, item_id, trab_id, tipo_acao, usuario_id=None):
+    """
+    Busca apontamento aberto para uma combinação OS/item/trabalho/tipo_acao.
+    Se usuario_id for fornecido, filtra também pelo operador (útil para múltiplos operadores no mesmo item/trabalho).
+    """
+    query = ApontamentoProducao.query.filter(
+        ApontamentoProducao.ordem_servico_id == os_id,
+        ApontamentoProducao.item_id == item_id,
+        ApontamentoProducao.trabalho_id == trab_id,
+        ApontamentoProducao.tipo_acao == tipo_acao,
+        ApontamentoProducao.data_fim.is_(None)
     )
+    if usuario_id is not None:
+        query = query.filter(ApontamentoProducao.usuario_id == usuario_id)
+    return query.order_by(ApontamentoProducao.data_hora.desc()).first()
 
 
 def _buscar_ultima_quantidade(os_id, item_id, trab_id):
@@ -2343,19 +2346,12 @@ def registrar_apontamento():
                 })
 
         if tipo_acao == 'fim_setup':
-            # Deve existir um início de setup aberto para este item/trabalho
-            ap_setup = ap_setup_aberto
+            # Deve existir um início de setup aberto DESTE OPERADOR para este item/trabalho
+            ap_setup = _query_apontamento_aberto(ordem_servico_id, item_id, trabalho_id, 'inicio_setup', usuario.id)
             if not ap_setup:
                 return jsonify({
                     'success': False,
-                    'message': 'Não é possível finalizar setup sem ter iniciado setup para este item/trabalho.'
-                })
-            # Somente o mesmo operador pode finalizar
-            if ap_setup.usuario_id != usuario.id:
-                op = Usuario.query.get(ap_setup.usuario_id)
-                return jsonify({
-                    'success': False,
-                    'message': f'Apenas o operador que iniciou o setup ({op.nome}) pode finalizá-lo.'
+                    'message': 'Não é possível finalizar o setup: você não possui setup em andamento para este item/trabalho.'
                 })
 
         if tipo_acao == 'inicio_producao':
@@ -2373,13 +2369,10 @@ def registrar_apontamento():
                 })
 
         if tipo_acao == 'pausa':
-            # Deve existir uma produção em andamento para esta combinação
-            ap_prod = ap_prod_aberto
+            # Deve existir uma produção em andamento DESTE OPERADOR para esta combinação
+            ap_prod = _query_apontamento_aberto(ordem_servico_id, item_id, trabalho_id, 'inicio_producao', usuario.id)
             if not ap_prod:
-                return jsonify({'success': False, 'message': 'Não é possível pausar: não há produção em andamento para este item/trabalho.'})
-            if ap_prod.usuario_id != usuario.id:
-                op = Usuario.query.get(ap_prod.usuario_id)
-                return jsonify({'success': False, 'message': f'Apenas o operador que iniciou a produção ({op.nome}) pode pausá-la.'})
+                return jsonify({'success': False, 'message': 'Não é possível pausar: você não possui produção em andamento para este item/trabalho.'})
 
         if tipo_acao == 'stop':
             # Pode parar produção em andamento, pausa aberta, ou setup em andamento para este par
@@ -2387,9 +2380,11 @@ def registrar_apontamento():
             ap_pausa = ap_pausa_aberta
             ap_setup = ap_setup_aberto
 
+            # Se não encontrou apontamento para o item/trabalho especificado, busca qualquer apontamento ativo do operador nesta OS
             if not ap_prod and not ap_pausa and not ap_setup:
                 ap_operador_os = _buscar_apontamento_ativo_operador_na_os(usuario.id, ordem_servico_id)
                 if ap_operador_os:
+                    # Atualiza para o item/trabalho do apontamento encontrado
                     item_id = ap_operador_os.item_id
                     trabalho_id = ap_operador_os.trabalho_id
                     if ap_operador_os.tipo_acao == 'inicio_producao':
@@ -2406,19 +2401,17 @@ def registrar_apontamento():
                 return jsonify({'success': False, 'message': 'Não é possível aplicar STOP: não há apontamento ativo (produção/pausa/setup) para este item/trabalho.'})
 
             # Validar operador que abriu o apontamento ativo
+            # CORREÇÃO: Cada operador pode parar apenas seus próprios apontamentos
             ap_base = ap_prod or ap_pausa or ap_setup
             if ap_base and ap_base.usuario_id != usuario.id:
                 op = Usuario.query.get(ap_base.usuario_id)
                 return jsonify({'success': False, 'message': f'Apenas o operador que iniciou ({op.nome}) pode aplicar STOP.'})
 
         if tipo_acao == 'fim_producao':
-            # Deve existir uma produção em andamento para esta combinação
-            ap_prod = ap_prod_aberto
+            # Deve existir uma produção em andamento DESTE OPERADOR para esta combinação
+            ap_prod = _query_apontamento_aberto(ordem_servico_id, item_id, trabalho_id, 'inicio_producao', usuario.id)
             if not ap_prod:
-                return jsonify({'success': False, 'message': 'Não é possível finalizar: não há produção em andamento para este item/trabalho.'})
-            if ap_prod.usuario_id != usuario.id:
-                op = Usuario.query.get(ap_prod.usuario_id)
-                return jsonify({'success': False, 'message': f'Apenas o operador que iniciou a produção ({op.nome}) pode finalizá-la.'})
+                return jsonify({'success': False, 'message': 'Não é possível finalizar: você não possui produção em andamento para este item/trabalho.'})
         
         # Validar se a OS existe
         ordem = OrdemServico.query.get(ordem_servico_id)
