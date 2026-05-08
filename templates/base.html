@@ -75,7 +75,7 @@
                             <li><a class="dropdown-item" href="/materiais">Materiais</a></li>
                             <li><a class="dropdown-item" href="/trabalhos">Trabalhos</a></li>
                             <li><a class="dropdown-item" href="/itens">Itens</a></li>
-                            {% if acesso_valores_itens or usuario_admin_master or usuario_nivel == 'admin' %}
+                            {% if acesso_valores_itens or usuario_admin_master %}
                             <li><a class="dropdown-item ps-4" href="{{ url_for('itens.listar_valores_itens') }}">Valores dos Itens</a></li>
                             <li><a class="dropdown-item ps-4" href="{{ url_for('itens.exportar_planilha_valores_itens') }}">Exportar Valores dos Itens</a></li>
                             {% endif %}
