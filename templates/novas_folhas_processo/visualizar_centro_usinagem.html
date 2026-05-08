@@ -113,9 +113,9 @@
         <div class="col-7 border-end">
             <div class="d-flex align-items-start">
                 {% if folha.maquina.imagem_path %}
-                <img src="{{ folha.maquina.imagem_path }}" alt="Máquina" class="rounded me-3 border" style="max-height: 110px; max-width: 140px; object-fit: contain;">
+                <img src="{{ folha.maquina.imagem_path }}" alt="Máquina" class="rounded me-3 border" style="max-height: 160px; max-width: 200px; object-fit: contain;">
                 {% else %}
-                <div class="rounded me-3 border bg-light d-flex align-items-center justify-content-center" style="width: 140px; height: 110px;">
+                <div class="rounded me-3 border bg-light d-flex align-items-center justify-content-center" style="width: 200px; height: 160px;">
                     <i class="fas fa-industry fa-3x text-muted"></i>
                 </div>
                 {% endif %}
@@ -137,51 +137,65 @@
         </div>
         <!-- Peça Info -->
         <div class="col-5">
-            <div class="d-flex align-items-start justify-content-between">
+            <div class="d-flex align-items-start">
                 {% if folha.item and folha.item.imagem_path %}
-                <img src="{{ folha.item.imagem_path }}" alt="Peça" class="rounded me-3 border" style="max-height: 100px; max-width: 100px; object-fit: contain;">
+                <img src="{{ folha.item.imagem_path }}" alt="Peça" class="rounded me-3 border" style="max-height: 160px; max-width: 160px; object-fit: contain;">
                 {% else %}
-                <div class="rounded me-3 border bg-light d-flex align-items-center justify-content-center" style="width: 100px; height: 100px;">
+                <div class="rounded me-3 border bg-light d-flex align-items-center justify-content-center" style="width: 160px; height: 160px;">
                     <i class="fas fa-box fa-2x text-muted"></i>
                 </div>
                 {% endif %}
-                <div class="text-end overflow-hidden">
+                <div class="mt-1">
                     {% if folha.item.codigo_acb %}
-                    <div class="h6 fw-bold mb-1">{{ folha.item.codigo_acb }}</div>
+                    <div class="small text-muted mb-1" style="font-size: 0.75rem;">{{ folha.item.codigo_acb }}</div>
                     {% endif %}
                     {% if folha.item.nome %}
-                    <div class="small text-muted mb-2" style="font-size: 0.75rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">{{ folha.item.nome }}</div>
-                    {% endif %}
-
-                    {% if itens_trabalho %}
-                    <div class="mt-2">
-                        <div class="fw-bold text-center bg-light border py-1 mb-1" style="font-size: 0.65rem; text-transform: uppercase;">Tempos e Serviços</div>
-                        <table class="times-table">
-                            <thead>
-                                <tr>
-                                    <th class="text-start">Serviço</th>
-                                    <th>Setup</th>
-                                    <th>Peça</th>
-                                </tr>
-                            </thead>
-                            <tbody>
-                                {% for it in itens_trabalho %}
-                                <tr>
-                                    <td class="text-start fw-bold">{{ it.trabalho.nome }}</td>
-                                    <td>{{ it.tempo_setup_formatado }}</td>
-                                    <td>{{ it.tempo_peca_formatado }}</td>
-                                </tr>
-                                {% endfor %}
-                            </tbody>
-                        </table>
-                    </div>
+                    <div class="fw-bold mb-2" style="font-size: 1.5rem; line-height: 1.2;">{{ folha.item.nome }}</div>
                     {% endif %}
                 </div>
             </div>
+        </div>
+    </div>
 
+    <!-- Tempos e Serviços (linha separada para melhor layout com muitas tarefas) -->
+    {% if itens_trabalho %}
+    <div class="row mb-4">
+        <div class="col-12">
+            <div class="card">
+                <div class="card-header header-amarelo">
+                    <h6 class="mb-0 text-dark"><i class="fas fa-clock me-2"></i>TEMPOS E SERVIÇOS</h6>
+                </div>
+                <div class="card-body">
+                    <table class="times-table">
+                        <thead>
+                            <tr>
+                                <th class="text-start">Serviço</th>
+                                <th>Setup</th>
+                                <th>Peça</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for it in itens_trabalho %}
+                            <tr>
+                                <td class="text-start fw-bold">{{ it.trabalho.nome }}</td>
+                                <td>{{ it.tempo_setup_formatado }}</td>
+                                <td>{{ it.tempo_peca_formatado }}</td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+    {% endif %}
+
+    <div class="row">
+        <!-- Coluna Esquerda -->
+        <div class="col-lg-4">
             <!-- Imagens de Peças -->
             {% if imagens_peca %}
-            <div class="card mt-3">
+            <div class="card mb-3">
                 <div class="card-header header-verde">
                     <h6 class="mb-0"><i class="fas fa-images me-2"></i>IMAGENS DE PEÇAS ({{ imagens_peca|length }})</h6>
                 </div>
@@ -190,7 +204,7 @@
                         {% for imagem in imagens_peca %}
                         <div class="col-4">
                             <div class="text-center border rounded p-1">
-                                <img src="{{ get_file_url(imagem.imagem) }}" alt="Peça" class="img-fluid rounded mb-1" style="max-height: 150px;">
+                                <img src="{{ get_file_url(imagem.imagem) }}" alt="Peça" class="img-fluid rounded mb-1" style="max-height: 200px;">
                                 {% if imagem.observacao %}
                                 <div class="small text-muted" style="font-size: 0.7rem;">{{ imagem.observacao }}</div>
                                 {% endif %}
@@ -275,7 +289,7 @@
                             {% if folha_centro.imagem_gabarito_montado %}
                             <div class="col-6">
                                 <div class="text-center border rounded p-1">
-                                    <img src="{{ get_file_url(folha_centro.imagem_gabarito_montado) }}" alt="Gabarito Montado" class="img-fluid rounded mb-1" style="max-height: 250px;">
+                                    <img src="{{ get_file_url(folha_centro.imagem_gabarito_montado) }}" alt="Gabarito Montado" class="img-fluid rounded mb-1" style="max-height: 500px;">
                                     <div class="small fw-bold">Gabarito Montado</div>
                                 </div>
                             </div>
@@ -283,7 +297,7 @@
                             {% if folha_centro.imagem_zeramento %}
                             <div class="col-6">
                                 <div class="text-center border rounded p-1">
-                                    <img src="{{ get_file_url(folha_centro.imagem_zeramento) }}" alt="Zeramento" class="img-fluid rounded mb-1" style="max-height: 250px;">
+                                    <img src="{{ get_file_url(folha_centro.imagem_zeramento) }}" alt="Zeramento" class="img-fluid rounded mb-1" style="max-height: 500px;">
                                     <div class="small fw-bold">Zeramento</div>
                                 </div>
                             </div>

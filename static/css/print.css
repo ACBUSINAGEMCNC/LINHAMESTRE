@@ -85,6 +85,44 @@
     object-fit: contain;
   }
 
+  /* Imagens de máquina e peça no cabeçalho */
+  .folha-processo-container .row.mb-4 .col-7 img,
+  .folha-processo-container .row.mb-4 .col-5 img {
+    max-height: 100px !important;
+    max-width: 130px !important;
+  }
+
+  /* Imagens do processo (torre, peça fixa, gabarito, etc) - otimizado para caber em 1 página */
+  .folha-processo-container .col-lg-8 img,
+  .folha-processo-container .card-body img {
+    max-height: 200px !important;
+    width: auto !important;
+    object-fit: contain !important;
+  }
+
+  /* Forçar imagens com classe img-fluid */
+  .folha-processo-container img.img-fluid {
+    max-height: 200px !important;
+    width: auto !important;
+  }
+
+  /* Compactar espaçamentos nas folhas de processo */
+  .folha-processo-container .row {
+    margin-bottom: 3px !important;
+  }
+
+  .folha-processo-container .mb-4 {
+    margin-bottom: 4px !important;
+  }
+
+  .folha-processo-container .mb-3 {
+    margin-bottom: 3px !important;
+  }
+
+  .folha-processo-container .mb-2 {
+    margin-bottom: 2px !important;
+  }
+
   /* Dotted lines para anotações - Compactar */
   .dotted-line {
     border-bottom: 1px dotted #888 !important;
