@@ -3,6 +3,7 @@
 @media print {
   /* Ocultar elementos de navegação, botões e itens de ação */
   .no-print,
+  .no-print-pdf,
   .btn,
   .navbar,
   nav,
@@ -10,24 +11,26 @@
   .card-footer,
   .btn-group,
   .alert,
-  .toast-container {
+  .toast-container,
+  .d-print-none {
     display: none !important;
   }
 
-  /* Ajustar layout geral */
+  /* Ajustar layout geral para caber em 1 página A4 */
   body {
     background: #fff !important;
     color: #000 !important;
-    font-size: 10pt;
-    margin: 0;
-    padding: 0;
+    font-size: 8pt !important;
+    margin: 0 !important;
+    padding: 0 !important;
     -webkit-print-color-adjust: exact !important;
     print-color-adjust: exact !important;
+    line-height: 1.1 !important;
   }
 
   @page {
-    margin: 10mm;
-    size: A4;
+    margin: 5mm !important;
+    size: A4 portrait;
   }
 
   .container,
@@ -35,20 +38,26 @@
     width: 100% !important;
     max-width: 100% !important;
     padding: 0 !important;
+    margin: 0 !important;
   }
 
-  /* Cartões para folha de processo */
+  /* Cartões para folha de processo - Compactar ao máximo */
   .folha-processo-container .card {
     border: 1px solid #000 !important;
-    margin-bottom: 10px !important;
+    margin-bottom: 4px !important;
     page-break-inside: avoid;
-    border-radius: 4px !important;
+    border-radius: 2px !important;
     overflow: hidden;
   }
 
+  .folha-processo-container .card-body {
+    padding: 4px !important;
+  }
+
   .folha-processo-container .card-header {
-    padding: 4px 8px !important;
+    padding: 2px 6px !important;
     font-weight: bold !important;
+    font-size: 8pt !important;
     color: #fff !important;
     -webkit-print-color-adjust: exact !important;
     print-color-adjust: exact !important;
@@ -58,60 +67,61 @@
   .folha-processo-container .fas,
   .folha-processo-container .fa {
     display: inline-block !important;
-    margin-right: 5px;
+    margin-right: 3px;
+    font-size: 7pt;
   }
 
-  /* Cores específicas dos cabeçalhos da imagem */
+  /* Cores específicas dos cabeçalhos */
   .header-azul { background-color: #0020f1 !important; color: white !important; }
   .header-verde { background-color: #007f30 !important; color: white !important; }
   .header-preto { background-color: #1a1a1a !important; color: white !important; }
   .header-amarelo { background-color: #ffc107 !important; color: black !important; }
   .header-vermelho { background-color: #d31e1e !important; color: white !important; }
 
-  /* Ajustar imagens */
+  /* Ajustar imagens para não estourarem a página */
   img {
-    max-width: 100%;
-    height: auto;
+    max-height: 80px !important;
+    width: auto !important;
+    object-fit: contain;
   }
 
-  /* Dotted lines para anotações */
+  /* Dotted lines para anotações - Compactar */
   .dotted-line {
     border-bottom: 1px dotted #888 !important;
-    height: 25px;
-    margin-bottom: 5px;
+    height: 18px !important;
+    margin-bottom: 2px !important;
     width: 100%;
-  }
-
-  /* Improved Times Table for Print */
-  .times-table th {
-    background-color: #eee !important;
-    border: 1px solid #000 !important;
-    color: #000 !important;
-  }
-  .times-table td {
-    border: 1px solid #000 !important;
   }
 
   .observations-area {
-    min-height: 120px !important;
+    min-height: 60px !important;
   }
 
-  .no-print-pdf,
-  .row.no-print-pdf {
-    display: none !important;
+  /* Improved Times Table for Print - Compact */
+  .times-table {
+    margin-top: 2px !important;
+  }
+  .times-table th, .times-table td {
+    padding: 1px 3px !important;
+    font-size: 7pt !important;
+    border: 1px solid #000 !important;
+  }
+  .times-table th {
+    background-color: #eee !important;
+    color: #000 !important;
   }
 
-  /* Rodapé de assinaturas */
+  /* Rodapé de assinaturas - Compactar */
   .signature-footer {
     width: 100%;
     border-collapse: collapse;
-    margin-top: 15px;
+    margin-top: 8px !important;
   }
   .signature-footer td {
     border: 1px solid #aaa !important;
-    padding: 5px;
-    height: 35px;
-    font-size: 8pt;
+    padding: 3px !important;
+    height: 25px !important;
+    font-size: 7pt !important;
     vertical-align: bottom;
     text-transform: uppercase;
   }
@@ -122,42 +132,61 @@
     display: none !important;
   }
 
-  body:not(.folha-processo-container) .bg-primary,
-  body:not(.folha-processo-container) .bg-success,
-  body:not(.folha-processo-container) .bg-warning,
-  body:not(.folha-processo-container) .bg-info,
-  body:not(.folha-processo-container) .bg-danger {
-    background: transparent !important;
-  }
-
-  /* Evitar quebras ruins */
-  .row, .col, [class^="col-"] {
-    page-break-inside: avoid;
-  }
-
-  /* Forçar o título principal amarelo */
+  /* Forçar o título principal amarelo - Compactar */
   .main-process-title {
     background-color: #ffc107 !important;
     color: black !important;
     text-align: center;
-    padding: 10px;
+    padding: 5px !important;
     font-weight: bold;
     text-transform: uppercase;
-    font-size: 16pt;
-    margin-bottom: 15px;
+    font-size: 12pt !important;
+    margin-bottom: 8px !important;
     border: 2px solid #000 !important;
   }
 
   /* Fix for bootstrap rows/cols in print */
   .row {
     display: flex !important;
-    flex-wrap: wrap !important;
+    flex-wrap: nowrap !important; /* Prevent wrapping in header if possible */
+    margin-left: -2px !important;
+    margin-right: -2px !important;
   }
-  .col-4 { width: 33.333333% !important; flex: 0 0 auto !important; }
-  .col-5 { width: 41.666667% !important; flex: 0 0 auto !important; }
-  .col-6 { width: 50% !important; flex: 0 0 auto !important; }
-  .col-7 { width: 58.333333% !important; flex: 0 0 auto !important; }
-  .col-8 { width: 66.666667% !important; flex: 0 0 auto !important; }
-  .col-lg-4 { width: 33.333333% !important; flex: 0 0 auto !important; }
-  .col-lg-8 { width: 66.666667% !important; flex: 0 0 auto !important; }
+
+  .row > * {
+    padding-left: 2px !important;
+    padding-right: 2px !important;
+  }
+
+  .col-4 { width: 33.333333% !important; flex: 0 0 33.333333% !important; max-width: 33.333333% !important; }
+  .col-5 { width: 41.666667% !important; flex: 0 0 41.666667% !important; max-width: 41.666667% !important; }
+  .col-6 { width: 50% !important; flex: 0 0 50% !important; max-width: 50% !important; }
+  .col-7 { width: 58.333333% !important; flex: 0 0 58.333333% !important; max-width: 58.333333% !important; }
+  .col-8 { width: 66.666667% !important; flex: 0 0 66.666667% !important; max-width: 66.666667% !important; }
+  .col-12 { width: 100% !important; flex: 0 0 100% !important; max-width: 100% !important; }
+  .col-lg-4 { width: 33.333333% !important; flex: 0 0 33.333333% !important; max-width: 33.333333% !important; }
+  .col-lg-8 { width: 66.666667% !important; flex: 0 0 66.666667% !important; max-width: 66.666667% !important; }
+
+  /* Evitar quebras de página dentro de seções importantes */
+  .card, .row, .main-process-title, .signature-footer {
+    page-break-inside: avoid !important;
+  }
+
+  /* Specific header fixes */
+  .border-end { border-right: 1px solid #dee2e6 !important; }
+
+  /* Mover as regras de ocultação para o final para garantir que vençam o .row { display: flex !important } */
+  .no-print,
+  .no-print-pdf,
+  .btn,
+  .navbar,
+  nav,
+  footer,
+  .card-footer,
+  .btn-group,
+  .alert,
+  .toast-container,
+  .d-print-none {
+    display: none !important;
+  }
 }

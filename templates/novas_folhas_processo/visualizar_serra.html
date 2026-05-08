@@ -82,18 +82,9 @@
     <!-- Botões de Ação (não aparecem na impressão) -->
     <div class="row mb-3 no-print">
         <div class="col-12 d-flex justify-content-end gap-2">
-            <div class="btn-group" role="group">
-                <button type="button" class="btn btn-success" onclick="abrirModalImpressao()">
-                    <i class="fas fa-print"></i> Imprimir
-                </button>
-                <button type="button" class="btn btn-success dropdown-toggle dropdown-toggle-split" data-bs-toggle="dropdown">
-                    <span class="visually-hidden">Toggle Dropdown</span>
-                </button>
-                <ul class="dropdown-menu">
-                    <li><a class="dropdown-item" href="#" onclick="imprimirFolha()"><i class="fas fa-file-alt me-2"></i>Apenas Folha</a></li>
-                    <li><a class="dropdown-item" href="#" onclick="abrirModalImpressao()"><i class="fas fa-cog me-2"></i>Opções Avançadas</a></li>
-                </ul>
-            </div>
+            <button type="button" class="btn btn-success" onclick="window.print()">
+                <i class="fas fa-print"></i> Imprimir
+            </button>
             {% if folha.item and folha.item.desenho_path %}
             <a class="btn btn-outline-success" href="{{ get_file_url(folha.item.desenho_path) }}" target="_blank">
                 <i class="fas fa-drafting-compass"></i> Desenho
@@ -290,96 +281,4 @@
         </div>
     </div>
 </div>
-
-<!-- Modal de Impressão Avançada -->
-<div class="modal fade" id="modalImpressao" tabindex="-1">
-    <div class="modal-dialog">
-        <div class="modal-content">
-            <div class="modal-header">
-                <h5 class="modal-title"><i class="fas fa-print me-2"></i>Opções de Impressão</h5>
-                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
-            </div>
-            <div class="modal-body">
-                <div class="mb-3">
-                    <h6><i class="fas fa-file-alt me-2"></i>Conteúdo da Impressão</h6>
-                    <div class="form-check">
-                        <input class="form-check-input" type="checkbox" id="incluirFolha" checked>
-                        <label class="form-check-label" for="incluirFolha">
-                            <strong>Folha de Processo</strong> - Documento principal
-                        </label>
-                    </div>
-                    {% if folha.item and folha.item.desenho_path %}
-                    <div class="form-check">
-                        <input class="form-check-input" type="checkbox" id="incluirDesenho">
-                        <label class="form-check-label" for="incluirDesenho">
-                            <strong>Desenho Técnico</strong> - Anexar desenho do item
-                        </label>
-                    </div>
-                    {% endif %}
-                </div>
-                
-                <div class="mb-3">
-                    <h6><i class="fas fa-cog me-2"></i>Configurações</h6>
-                    <div class="form-check">
-                        <input class="form-check-input" type="checkbox" id="abrirNovaAba" checked>
-                        <label class="form-check-label" for="abrirNovaAba">
-                            Abrir em nova aba para impressão
-                        </label>
-                    </div>
-                </div>
-            </div>
-            <div class="modal-footer">
-                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
-                <button type="button" class="btn btn-success" onclick="executarImpressaoAvancada()">
-                    <i class="fas fa-print me-1"></i>Imprimir
-                </button>
-            </div>
-        </div>
-    </div>
-</div>
-{% endblock %}
-
-{% block scripts %}
-<script>
-// Função para imprimir a folha simples
-function imprimirFolha() {
-    window.print();
-}
-
-// Função para abrir modal de impressão
-function abrirModalImpressao() {
-    new bootstrap.Modal(document.getElementById('modalImpressao')).show();
-}
-
-// Função para executar impressão avançada
-function executarImpressaoAvancada() {
-    const incluirFolha = document.getElementById('incluirFolha').checked;
-    const incluirDesenho = document.getElementById('incluirDesenho')?.checked || false;
-    const abrirNovaAba = document.getElementById('abrirNovaAba').checked;
-    
-    // Fechar modal
-    bootstrap.Modal.getInstance(document.getElementById('modalImpressao')).hide();
-    
-    // Preparar impressão
-    if (incluirFolha) {
-        if (abrirNovaAba) {
-            // Abrir em nova aba com parâmetros
-            const params = new URLSearchParams();
-            if (incluirDesenho) params.append('incluir_desenho', '1');
-            
-            const url = window.location.href + (window.location.href.includes('?') ? '&' : '?') + params.toString();
-            window.open(url, '_blank');
-        } else {
-            // Imprimir na mesma aba
-            window.print();
-        }
-    }
-    
-    // Abrir desenho técnico se solicitado
-    const desenhoPath = '{{ get_file_url(folha.item.desenho_path) if folha.item and folha.item.desenho_path else "" }}';
-    if (incluirDesenho && !incluirFolha && desenhoPath) {
-        window.open(desenhoPath, '_blank');
-    }
-}
-</script>
 {% endblock %}
