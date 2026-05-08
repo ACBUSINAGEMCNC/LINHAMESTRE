@@ -1364,7 +1364,7 @@ def imprimir_desenho_item(item_id):
 def aprovar_desenho_item(item_id):
     item = Item.query.get_or_404(item_id)
     usuario = getattr(g, 'usuario', None)
-    if not usuario or getattr(usuario, 'nivel_acesso', None) != 'admin':
+    if not usuario or (getattr(usuario, 'nivel_acesso', None) != 'admin' and not getattr(usuario, 'acesso_cadastros', False)):
         flash('Você não tem permissão para aprovar o desenho.', 'danger')
         return redirect(url_for('itens.visualizar_item', item_id=item.id))
 
@@ -1384,7 +1384,7 @@ def aprovar_desenho_item(item_id):
 def desaprovar_desenho_item(item_id):
     item = Item.query.get_or_404(item_id)
     usuario = getattr(g, 'usuario', None)
-    if not usuario or getattr(usuario, 'nivel_acesso', None) != 'admin':
+    if not usuario or (getattr(usuario, 'nivel_acesso', None) != 'admin' and not getattr(usuario, 'acesso_cadastros', False)):
         flash('Você não tem permissão para remover aprovação do desenho.', 'danger')
         return redirect(url_for('itens.visualizar_item', item_id=item.id))
 

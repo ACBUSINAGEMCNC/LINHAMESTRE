@@ -214,51 +214,8 @@ def listar_operadores():
 
 @apontamento_bp.route('/dashboard')
 def dashboard():
-    """Dashboard de apontamentos (ORM)"""
-    try:
-        # Status ativos (exclui finalizados), com relações carregadas
-        status_list_raw = (
-            StatusProducaoOS.query.options(
-                joinedload(StatusProducaoOS.ordem_servico),
-                joinedload(StatusProducaoOS.operador_atual),
-                joinedload(StatusProducaoOS.trabalho_atual),
-                joinedload(StatusProducaoOS.item_atual)
-            )
-            .filter(StatusProducaoOS.status_atual != 'Finalizado')
-            .order_by(StatusProducaoOS.inicio_acao.desc())
-            .all()
-        )
-
-        status_list = []
-        for status in status_list_raw:
-            estado_real = _obter_estado_real_os(status.ordem_servico_id)
-            _aplicar_estado_real_status(status, estado_real)
-            if estado_real['status_atual'] in ['Setup em andamento', 'Produção em andamento', 'Pausado']:
-                status_list.append(status)
-
-        # Últimos apontamentos com OS e operador
-        ultimos_apontamentos = (
-            ApontamentoProducao.query.options(
-                joinedload(ApontamentoProducao.ordem_servico),
-                joinedload(ApontamentoProducao.usuario)
-            )
-            .order_by(ApontamentoProducao.data_hora.desc())
-            .limit(10)
-            .all()
-        )
-
-        # Listas Kanban ativas para filtros no dashboard
-        listas_kanban = KanbanLista.query.filter_by(ativa=True).order_by(KanbanLista.ordem).all()
-
-        return render_template(
-            'apontamento/dashboard.html',
-            status_ativos=status_list,
-            ultimos_apontamentos=ultimos_apontamentos,
-            listas_kanban=listas_kanban
-        )
-    except Exception as e:
-        flash(f'Erro ao carregar dashboard: {e}', 'error')
-        return render_template('apontamento/dashboard.html', status_ativos=[], ultimos_apontamentos=[], listas_kanban=[])
+    """Dashboard antigo descontinuado - redireciona para o novo dashboard timeline"""
+    return redirect(url_for('dashboard_apontamentos.index'))
 
 @apontamento_bp.route('/operadores/gerar-codigo/<int:usuario_id>', methods=['POST'])
 def gerar_codigo_operador(usuario_id):
