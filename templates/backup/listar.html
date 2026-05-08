@@ -193,23 +193,70 @@
     </div>
 
     <!-- Modal para criar backup -->
-    <div class="modal fade" id="criarBackupModal" tabindex="-1" aria-labelledby="criarBackupModalLabel" aria-hidden="true">
+    <div class="modal fade" id="criarBackupModal" tabindex="-1" aria-labelledby="criarBackupModalLabel" aria-hidden="true" data-bs-backdrop="static">
         <div class="modal-dialog">
             <div class="modal-content">
                 <div class="modal-header">
                     <h5 class="modal-title" id="criarBackupModalLabel">Criar Novo Backup</h5>
-                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Fechar"></button>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Fechar" id="btnCloseBackup"></button>
                 </div>
-                <form action="{{ url_for('backup.criar_backup') }}" method="post">
+                <form id="formCriarBackup" action="{{ url_for('backup.criar_backup') }}" method="post">
                     <div class="modal-body">
-                        <div class="mb-3">
+                        <div class="mb-3" id="descricaoContainer">
                             <label for="descricao" class="form-label">Descrição</label>
                             <textarea class="form-control" id="descricao" name="descricao" rows="3" placeholder="Descreva o motivo deste backup..."></textarea>
+                            <small class="text-muted">Ex: Backup antes da atualização, Backup mensal, etc.</small>
+                        </div>
+                        
+                        <!-- Área de progresso (inicialmente oculta) -->
+                        <div id="backupProgress" style="display: none;">
+                            <div class="alert alert-info mb-3">
+                                <i class="fas fa-info-circle"></i> <strong>Criando backup...</strong>
+                                <p class="mb-0 mt-2" id="progressMessage">Iniciando processo de backup...</p>
+                            </div>
+                            
+                            <div class="mb-3">
+                                <div class="d-flex justify-content-between mb-1">
+                                    <span id="progressLabel">Preparando...</span>
+                                    <span id="progressPercent">0%</span>
+                                </div>
+                                <div class="progress" style="height: 25px;">
+                                    <div class="progress-bar progress-bar-striped progress-bar-animated" 
+                                         role="progressbar" 
+                                         id="progressBar"
+                                         style="width: 0%"
+                                         aria-valuenow="0" 
+                                         aria-valuemin="0" 
+                                         aria-valuemax="100">
+                                    </div>
+                                </div>
+                            </div>
+                            
+                            <div class="list-group small">
+                                <div class="list-group-item d-flex align-items-center" id="step1">
+                                    <i class="fas fa-circle text-secondary me-2"></i>
+                                    <span>Backup do banco de dados</span>
+                                </div>
+                                <div class="list-group-item d-flex align-items-center" id="step2">
+                                    <i class="fas fa-circle text-secondary me-2"></i>
+                                    <span>Backup de uploads locais</span>
+                                </div>
+                                <div class="list-group-item d-flex align-items-center" id="step3">
+                                    <i class="fas fa-circle text-secondary me-2"></i>
+                                    <span>Backup do Supabase Storage</span>
+                                </div>
+                                <div class="list-group-item d-flex align-items-center" id="step4">
+                                    <i class="fas fa-circle text-secondary me-2"></i>
+                                    <span>Compactando arquivos</span>
+                                </div>
+                            </div>
                         </div>
                     </div>
                     <div class="modal-footer">
-                        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
-                        <button type="submit" class="btn btn-success">Criar Backup</button>
+                        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal" id="btnCancelar">Cancelar</button>
+                        <button type="submit" class="btn btn-success" id="btnCriarBackup">
+                            <i class="fas fa-save"></i> Criar Backup
+                        </button>
                     </div>
                 </form>
             </div>
@@ -334,6 +381,72 @@
                 modal.show();
             });
 
+            // Controle de progresso do backup
+            $('#formCriarBackup').on('submit', function(e) {
+                e.preventDefault();
+                
+                // Ocultar formulário e mostrar progresso
+                $('#descricaoContainer').hide();
+                $('#backupProgress').show();
+                $('#btnCriarBackup').prop('disabled', true).html('<i class="fas fa-spinner fa-spin"></i> Criando...');
+                $('#btnCancelar').prop('disabled', true);
+                $('#btnCloseBackup').prop('disabled', true);
+                
+                // Simular progresso das etapas
+                let progress = 0;
+                const steps = [
+                    { id: 'step1', label: 'Copiando banco de dados...', percent: 25 },
+                    { id: 'step2', label: 'Copiando uploads locais...', percent: 50 },
+                    { id: 'step3', label: 'Baixando Supabase Storage...', percent: 75 },
+                    { id: 'step4', label: 'Compactando arquivos...', percent: 95 }
+                ];
+                
+                let currentStep = 0;
+                
+                function updateProgress() {
+                    if (currentStep < steps.length) {
+                        const step = steps[currentStep];
+                        
+                        // Marcar etapa anterior como concluída
+                        if (currentStep > 0) {
+                            $(`#${steps[currentStep-1].id} i`).removeClass('fa-circle text-secondary fa-spinner fa-spin text-primary')
+                                .addClass('fa-check-circle text-success');
+                        }
+                        
+                        // Marcar etapa atual como em progresso
+                        $(`#${step.id} i`).removeClass('fa-circle text-secondary')
+                            .addClass('fa-spinner fa-spin text-primary');
+                        
+                        // Atualizar barra de progresso
+                        $('#progressBar').css('width', step.percent + '%').attr('aria-valuenow', step.percent);
+                        $('#progressPercent').text(step.percent + '%');
+                        $('#progressLabel').text(step.label);
+                        $('#progressMessage').text(step.label);
+                        
+                        currentStep++;
+                        setTimeout(updateProgress, 2000); // 2 segundos por etapa
+                    } else {
+                        // Marcar última etapa como concluída
+                        $(`#${steps[steps.length-1].id} i`).removeClass('fa-spinner fa-spin text-primary')
+                            .addClass('fa-check-circle text-success');
+                        
+                        // Finalizar
+                        $('#progressBar').css('width', '100%').attr('aria-valuenow', 100);
+                        $('#progressPercent').text('100%');
+                        $('#progressLabel').text('Finalizando...');
+                        $('#progressMessage').text('Registrando backup no sistema...');
+                        
+                        // Submeter formulário após animação
+                        setTimeout(() => {
+                            $(e.target)[0].submit();
+                        }, 1000);
+                    }
+                }
+                
+                // Iniciar progresso
+                setTimeout(updateProgress, 500);
+            });
+            
             // Submissões com fechamento suave e prevenção de múltiplos cliques
             $('#formRestaurar').on('submit', function() {
                 $('#btnConfirmarRestaurar').prop('disabled', true).html('<i class="fas fa-spinner fa-spin"></i> Restaurando...');
