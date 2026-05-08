@@ -27,6 +27,24 @@
         border: 2px solid #000;
     }
 
+    .times-table {
+        font-size: 0.7rem;
+        width: 100%;
+        border-collapse: collapse;
+        margin-top: 5px;
+    }
+    .times-table th, .times-table td {
+        border: 1px solid #ddd;
+        padding: 2px 4px;
+        text-align: center;
+    }
+    .times-table th {
+        background-color: #f8f9fa;
+        font-weight: bold;
+        text-transform: uppercase;
+        font-size: 0.6rem;
+    }
+
     .dotted-line {
         border-bottom: 1px dotted #888;
         height: 30px;
@@ -145,13 +163,26 @@
                     {% endif %}
 
                     {% if itens_trabalho %}
-                    <div class="border-top pt-1 text-start">
-                        <div class="fw-bold" style="font-size: 0.65rem; text-transform: uppercase;">Tempos e Serviços:</div>
-                        {% for it in itens_trabalho %}
-                        <div style="font-size: 0.65rem;">
-                            {{ it.trabalho.nome }}: Setup <strong>{{ it.tempo_setup_formatado }}</strong> / Peça <strong>{{ it.tempo_peca_formatado }}</strong>
-                        </div>
-                        {% endfor %}
+                    <div class="mt-2">
+                        <div class="fw-bold text-center bg-light border py-1 mb-1" style="font-size: 0.65rem; text-transform: uppercase;">Tempos e Serviços</div>
+                        <table class="times-table">
+                            <thead>
+                                <tr>
+                                    <th class="text-start">Serviço</th>
+                                    <th>Setup</th>
+                                    <th>Peça</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for it in itens_trabalho %}
+                                <tr>
+                                    <td class="text-start fw-bold">{{ it.trabalho.nome }}</td>
+                                    <td>{{ it.tempo_setup_formatado }}</td>
+                                    <td>{{ it.tempo_peca_formatado }}</td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
                     </div>
                     {% endif %}
                 </div>

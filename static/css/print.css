@@ -82,11 +82,22 @@
     width: 100%;
   }
 
+  /* Improved Times Table for Print */
+  .times-table th {
+    background-color: #eee !important;
+    border: 1px solid #000 !important;
+    color: #000 !important;
+  }
+  .times-table td {
+    border: 1px solid #000 !important;
+  }
+
   .observations-area {
     min-height: 120px !important;
   }
 
-  .no-print-pdf {
+  .no-print-pdf,
+  .row.no-print-pdf {
     display: none !important;
   }
 
@@ -134,6 +145,19 @@
     text-transform: uppercase;
     font-size: 16pt;
     margin-bottom: 15px;
-    border: 1px solid #000;
+    border: 2px solid #000 !important;
   }
+
+  /* Fix for bootstrap rows/cols in print */
+  .row {
+    display: flex !important;
+    flex-wrap: wrap !important;
+  }
+  .col-4 { width: 33.333333% !important; flex: 0 0 auto !important; }
+  .col-5 { width: 41.666667% !important; flex: 0 0 auto !important; }
+  .col-6 { width: 50% !important; flex: 0 0 auto !important; }
+  .col-7 { width: 58.333333% !important; flex: 0 0 auto !important; }
+  .col-8 { width: 66.666667% !important; flex: 0 0 auto !important; }
+  .col-lg-4 { width: 33.333333% !important; flex: 0 0 auto !important; }
+  .col-lg-8 { width: 66.666667% !important; flex: 0 0 auto !important; }
 }
