@@ -1272,7 +1272,7 @@ def full_data():
             'listas': [_serialize_lista(l) for l in listas],
             'cartoes': cartoes,
             'apontamentos': [_serialize_apontamento(a) for a in apontamentos],
-            'timestamp': datetime.now().isoformat()
+            'timestamp': local_now_naive().isoformat()
         })
         
     except Exception as e:
@@ -1341,7 +1341,7 @@ def sync():
             'deleted_cards': deleted_cards,
             'new_cards': new_cards,
             'new_apontamentos': [_serialize_apontamento(a) for a in new_apontamentos],
-            'timestamp': datetime.now().isoformat()
+            'timestamp': local_now_naive().isoformat()
         })
         
     except Exception as e:
