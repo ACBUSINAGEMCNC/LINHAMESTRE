@@ -128,19 +128,17 @@
         color: #2c3e50;
     }
     
-    .timeline-detail-panel {
+    .hover-card {
+        position: fixed;
         background: white;
         border-radius: 8px;
         padding: 15px;
-        margin-bottom: 20px;
-        box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        box-shadow: 0 4px 12px rgba(0,0,0,0.18);
         border-left: 4px solid #007bff;
-        display: block;
-    }
-
-    .timeline-detail-panel.empty {
-        border-left-color: #6c757d;
-        color: #6c757d;
+        z-index: 9999;
+        min-width: 300px;
+        max-width: 420px;
+        display: none;
     }
 
     .lista-os-panel {
@@ -319,9 +317,6 @@
     </div>
 
     <div class="timeline-container" id="resumoGeralContainer" style="display: none;"></div>
-    <div class="timeline-detail-panel empty" id="timelineDetailPanel">
-        Clique em um segmento da timeline para ver as informações da OS, item, quantidade e operador.
-    </div>
     
     <div id="timelineContainer">
         <!-- Timelines serão inseridas aqui via JavaScript -->
@@ -333,6 +328,7 @@
     </div>
 </div>
 
+<div class="hover-card" id="hoverCard"></div>
 <div class="loading-overlay" id="loadingOverlay">
     <div class="spinner-border text-light" role="status" style="width: 3rem; height: 3rem;">
         <span class="visually-hidden">Carregando...</span>
@@ -343,11 +339,11 @@
 {% block extra_js %}
 <script>
 let currentDate = new Date();
-let timelineDetailPanel = null;
+let hoverCard = null;
 let timelineDetailTimer = null;
 
 document.addEventListener('DOMContentLoaded', function() {
-    timelineDetailPanel = document.getElementById('timelineDetailPanel');
+    hoverCard = document.getElementById('hoverCard');
     
     // Inicializar data de hoje
     updateDateInput();
@@ -578,13 +574,13 @@ function renderSegmentos(container, timeline) {
         segDiv.style.width = `${width}%`;
         segDiv.style.position = 'absolute';
         
-        segDiv.addEventListener('click', () => showTimelineDetails(segmento));
+        segDiv.addEventListener('click', (e) => showTimelineDetails(e, segmento));
         
         container.appendChild(segDiv);
     });
 }
 
-function showTimelineDetails(segmento) {
+function showTimelineDetails(e, segmento) {
     if (!segmento.detalhes) return;
     
     const det = segmento.detalhes;
@@ -617,8 +613,7 @@ function showTimelineDetails(segmento) {
         `;
     }
     
-    timelineDetailPanel.classList.remove('empty');
-    timelineDetailPanel.innerHTML = `
+    hoverCard.innerHTML = `
         <div class="hover-card-header">
             <div class="hover-card-status" style="background: ${statusColors[segmento.status]}"></div>
             <div class="hover-card-title">${statusLabels[segmento.status]}</div>
@@ -663,14 +658,40 @@ function showTimelineDetails(segmento) {
             </div>
         </div>
     `;
+    posicionarHoverCard(e);
+    hoverCard.style.display = 'block';
 
     if (timelineDetailTimer) {
         clearTimeout(timelineDetailTimer);
     }
     timelineDetailTimer = setTimeout(() => {
-        timelineDetailPanel.classList.add('empty');
-        timelineDetailPanel.innerHTML = 'Clique em um segmento da timeline para ver as informações da OS, item, quantidade e operador.';
-    }, 10000);
+        hoverCard.style.display = 'none';
+    }, 8000);
+}
+
+function posicionarHoverCard(e) {
+    const margin = 12;
+    const offset = 16;
+    const cardWidth = hoverCard.offsetWidth || 320;
+    const cardHeight = hoverCard.offsetHeight || 260;
+    let left = e.clientX + offset;
+    let top = e.clientY + offset;
+
+    if (left + cardWidth + margin > window.innerWidth) {
+        left = e.clientX - cardWidth - offset;
+    }
+    if (top + cardHeight + margin > window.innerHeight) {
+        top = e.clientY - cardHeight - offset;
+    }
+    if (left < margin) {
+        left = margin;
+    }
+    if (top < margin) {
+        top = margin;
+    }
+
+    hoverCard.style.left = `${left}px`;
+    hoverCard.style.top = `${top}px`;
 }
 
 function formatarTempo(minutos) {
