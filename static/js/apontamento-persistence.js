@@ -932,8 +932,69 @@ function atualizarQuantidadesPorTrabalho(ordemId, ativosLista) {
         }
     }
 
-    // Persistir no formato novo (por trabalho)
-    // exibir um placeholder. Por ora, não alterar o conteúdo existente.
+    // Obter cache atual e localStorage
+    const LS_KEY = 'qpt_cache_v2';
+    let ls = {};
+    try { ls = JSON.parse(localStorage.getItem(LS_KEY) || '{}'); } catch {}
+    const current = store[ordemId];
+    
+    // Atualizar cache com dados dos ativos (se houver)
+    if (Array.isArray(ativosLista) && ativosLista.length > 0) {
+        current.enabled = true;
+        ativosLista.forEach(a => {
+            if (!a || !a.trabalho_id) return;
+            const trabKey = String(a.trabalho_id);
+            const trabLabel = (a.trabalho_nome || '').replace(/\s*\([^)]*\)\s*$/, '').trim() || `Trabalho #${trabKey}`;
+            const qty = Number.isFinite(Number(a.quantidade_atual)) ? Number(a.quantidade_atual) : '-';
+            current.items[trabKey] = { trab: trabLabel, qty };
+        });
+        // Salvar no localStorage
+        try {
+            ls[String(ordemId)] = current.items;
+            localStorage.setItem(LS_KEY, JSON.stringify(ls));
+        } catch {}
+    } else if (ls[String(ordemId)]) {
+        // Restaurar do localStorage se não houver ativos
+        current.enabled = true;
+        current.items = ls[String(ordemId)] || {};
+    }
+    
+    // Renderizar no DOM
+    const listaContainer = container.querySelector('.qpt-list');
+    const ultimaQtdBadge = container.querySelector('.ultima-qtd');
+    
+    if (current.enabled && Object.keys(current.items).length > 0) {
+        // Renderizar lista de trabalhos
+        const items = Object.values(current.items);
+        const htmlItems = items.map(item => {
+            const qtyDisplay = item.qty === '-' ? '-' : item.qty;
+            return `<li class="qpt-item"><span class="qpt-label">${item.trab}</span><span class="badge rounded-pill bg-secondary qpt-qty">${qtyDisplay}</span></li>`;
+        }).join('');
+        
+        if (listaContainer) {
+            listaContainer.innerHTML = htmlItems;
+        }
+        
+        // Atualizar badge com última quantidade (maior valor)
+        if (ultimaQtdBadge) {
+            const maxQty = items.reduce((max, item) => {
+                const qty = Number(item.qty);
+                return Number.isFinite(qty) && qty > max ? qty : max;
+            }, 0);
+            ultimaQtdBadge.textContent = maxQty > 0 ? maxQty : '-';
+        }
+    } else {
+        // Sem dados - mostrar placeholder
+        if (listaContainer) {
+            listaContainer.innerHTML = '<li class="qpt-item"><span class="qpt-label">-</span><span class="badge rounded-pill bg-secondary qpt-qty">-</span></li>';
+        }
+        if (ultimaQtdBadge) {
+            ultimaQtdBadge.textContent = '-';
+        }
+    }
+    
+    // Atualizar timestamp de render
+    window.__qptRenderLast[ordemId] = Date.now();
 
     // Fallback inteligente: buscar últimas quantidades por trabalho na API de detalhes
     // quando não houver ativos e não houver cache para esta OS.
