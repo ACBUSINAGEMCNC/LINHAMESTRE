@@ -288,6 +288,18 @@ def configurar():
     # Buscar todas as listas
     listas = KanbanLista.query.filter_by(ativa=True).order_by(KanbanLista.ordem).all()
     
+    # Obter listas visíveis atuais
+    import json
+    listas_visiveis = []
+    if usuario.preferencias:
+        try:
+            prefs = json.loads(usuario.preferencias)
+            if 'dashboard_apontamentos' in prefs and 'listas_visiveis' in prefs['dashboard_apontamentos']:
+                listas_visiveis = prefs['dashboard_apontamentos']['listas_visiveis']
+        except:
+            pass
+    
     return render_template('dashboard_apontamentos/configurar.html',
                          listas=listas,
+                         listas_visiveis=listas_visiveis,
                          usuario=usuario)

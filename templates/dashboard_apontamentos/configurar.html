@@ -25,12 +25,6 @@
                 </p>
                 
                 <div class="list-group mb-3">
-                    {% set prefs = {} %}
-                    {% if usuario.preferencias %}
-                        {% set prefs = usuario.preferencias|from_json %}
-                    {% endif %}
-                    {% set listas_visiveis = prefs.get('dashboard_apontamentos', {}).get('listas_visiveis', []) %}
-                    
                     {% for lista in listas %}
                     <label class="list-group-item">
                         <input class="form-check-input me-2" type="checkbox" name="listas_visiveis" value="{{ lista.id }}" 
