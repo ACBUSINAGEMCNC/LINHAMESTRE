@@ -890,6 +890,7 @@ class Usuario(db.Model):
     pode_finalizar_os = db.Column(db.Boolean, default=False)
     pode_gerenciar_apontamentos = db.Column(db.Boolean, default=False)  # Permissão para gerenciar apontamentos ativos
     codigo_operador = db.Column(db.String(4), unique=True, nullable=True)  # Código de 4 dígitos para apontamentos
+    preferencias = db.Column(db.Text, nullable=True)  # JSON com preferências do usuário (dashboard, etc)
     data_criacao = db.Column(db.DateTime, default=datetime.utcnow)
     ultimo_acesso = db.Column(db.DateTime)
     # Relação removida para evitar conflito

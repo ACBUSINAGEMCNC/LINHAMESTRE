@@ -74,6 +74,17 @@ try:
         END $$;
         """,
         
+        # 1b. Coluna preferencias para configurações do usuário
+        """
+        DO $$ 
+        BEGIN 
+            IF NOT EXISTS (SELECT 1 FROM information_schema.columns 
+                          WHERE table_name = 'usuario' AND column_name = 'preferencias') THEN
+                ALTER TABLE usuario ADD COLUMN preferencias TEXT;
+            END IF;
+        END $$;
+        """,
+        
         # 2. Tabela apontamento_producao (sem foreign keys por enquanto)
         """
         CREATE TABLE IF NOT EXISTS apontamento_producao (
