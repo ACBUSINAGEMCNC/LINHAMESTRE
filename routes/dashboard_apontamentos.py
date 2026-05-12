@@ -4,7 +4,7 @@ Mostra linha do tempo de apontamentos por lista Kanban
 """
 
 from flask import Blueprint, render_template, jsonify, request, session, redirect, url_for, flash
-from models import db, ApontamentoProducao, KanbanLista, OrdemServico, Item, Trabalho, Usuario, PedidoOrdemServico, Pedido
+from models import db, ApontamentoProducao, KanbanLista, OrdemServico, Item, Trabalho, Usuario, PedidoOrdemServico, Pedido, ItemTrabalho
 from sqlalchemy.orm import joinedload
 from datetime import datetime, timedelta
 import logging
@@ -167,6 +167,62 @@ def _calcular_resumo_dia(timeline):
     return resumo
 
 
+def _get_primeira_os_atual_lista(lista):
+    ordem = OrdemServico.query.options(
+        joinedload(OrdemServico.pedidos)
+            .joinedload(PedidoOrdemServico.pedido)
+            .joinedload(Pedido.cliente),
+        joinedload(OrdemServico.pedidos)
+            .joinedload(PedidoOrdemServico.pedido)
+            .joinedload(Pedido.item)
+            .joinedload(Item.trabalhos)
+            .joinedload(ItemTrabalho.trabalho)
+    ).filter_by(status=lista.nome).order_by(OrdemServico.posicao.asc(), OrdemServico.id.asc()).first()
+
+    if not ordem:
+        return None
+
+    pedido = None
+    for pedido_os in ordem.pedidos or []:
+        if pedido_os.pedido:
+            pedido = pedido_os.pedido
+            break
+
+    item = pedido.item if pedido and pedido.item else None
+    cliente = pedido.cliente if pedido and pedido.cliente else None
+    pecas_total = pedido.quantidade if pedido else 0
+    tempo_previsto_seg = 0
+    servicos = []
+
+    if item:
+        for item_trabalho in item.trabalhos or []:
+            trabalho = item_trabalho.trabalho
+            tempo_peca = item_trabalho.tempo_real or item_trabalho.tempo_peca or 0
+            tempo_setup = item_trabalho.tempo_setup or 0
+            tempo_servico = tempo_setup + (tempo_peca * (pecas_total or 0))
+            tempo_previsto_seg += tempo_servico
+            if trabalho:
+                servicos.append(trabalho.nome)
+
+    return {
+        'os_numero': ordem.numero or str(ordem.id),
+        'item_codigo': item.codigo_acb if item else 'N/A',
+        'item_nome': item.nome if item else (pedido.nome_item if pedido else 'N/A'),
+        'cliente': cliente.nome if cliente else 'N/A',
+        'servico': ', '.join(servicos[:3]) if servicos else 'N/A',
+        'pecas_feitas': 0,
+        'pecas_total': pecas_total or 0,
+        'tempo_decorrido_min': 0,
+        'tempo_previsto_min': int(tempo_previsto_seg / 60) if tempo_previsto_seg else 0,
+        'media_min_peca': 0,
+        'previsao_termino': None,
+        'operador': 'N/A',
+        'motivo_parada': None,
+        'posicao': ordem.posicao,
+        'status_kanban': ordem.status
+    }
+
+
 @dashboard_apontamentos_bp.route('/')
 def index():
     """Página principal do dashboard de apontamentos"""
@@ -245,7 +301,8 @@ def timeline():
                 'lista_nome': lista.nome,
                 'lista_cor': lista.cor,
                 'timeline': timeline_lista,
-                'resumo_dia': resumo
+                'resumo_dia': resumo,
+                'primeira_os_atual': _get_primeira_os_atual_lista(lista)
             })
         
         return jsonify({
