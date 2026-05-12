@@ -8,10 +8,22 @@ from models import db, ApontamentoProducao, KanbanLista, OrdemServico, Item, Tra
 from sqlalchemy.orm import joinedload
 from datetime import datetime, timedelta
 import logging
+import json
 
 logger = logging.getLogger(__name__)
 
 dashboard_apontamentos_bp = Blueprint('dashboard_apontamentos', __name__, url_prefix='/dashboard/apontamentos')
+
+
+def _get_dashboard_listas_visiveis(usuario):
+    if not usuario or not getattr(usuario, 'preferencias', None):
+        return []
+    try:
+        prefs = json.loads(usuario.preferencias)
+        listas = prefs.get('dashboard_apontamentos', {}).get('listas_visiveis', [])
+        return [int(lista_id) for lista_id in listas if str(lista_id).isdigit()]
+    except Exception:
+        return []
 
 
 def _calcular_timeline_lista(lista_id, data_inicio, data_fim):
@@ -60,7 +72,7 @@ def _calcular_timeline_lista(lista_id, data_inicio, data_fim):
             else:
                 status = 'parada'
         elif apontamento.tipo_acao == 'inicio_setup':
-            status = 'producao'  # Setup conta como produção
+            status = 'setup'
         else:
             status = 'stop'
         
@@ -130,6 +142,7 @@ def _calcular_resumo_dia(timeline):
     """Calcula resumo do dia com tempos por status"""
     resumo = {
         'tempo_producao_min': 0,
+        'tempo_setup_min': 0,
         'tempo_parado_min': 0,
         'tempo_stop_min': 0,
         'tempo_manutencao_min': 0
@@ -142,6 +155,8 @@ def _calcular_resumo_dia(timeline):
         
         if segmento['status'] == 'producao':
             resumo['tempo_producao_min'] += duracao_min
+        elif segmento['status'] == 'setup':
+            resumo['tempo_setup_min'] += duracao_min
         elif segmento['status'] == 'parada':
             resumo['tempo_parado_min'] += duracao_min
         elif segmento['status'] == 'manutencao':
@@ -171,17 +186,9 @@ def index():
     listas = KanbanLista.query.filter_by(ativa=True).order_by(KanbanLista.ordem).all()
     
     # Filtrar por preferências do usuário (se configurado)
-    import json
-    listas_visiveis = None
-    if usuario.preferencias:
-        try:
-            prefs = json.loads(usuario.preferencias)
-            if 'dashboard_apontamentos' in prefs and 'listas_visiveis' in prefs['dashboard_apontamentos']:
-                listas_visiveis = prefs['dashboard_apontamentos']['listas_visiveis']
-                if listas_visiveis:
-                    listas = [l for l in listas if l.id in listas_visiveis]
-        except:
-            pass
+    listas_visiveis = _get_dashboard_listas_visiveis(usuario)
+    if listas_visiveis:
+        listas = [l for l in listas if l.id in listas_visiveis]
     
     return render_template('dashboard_apontamentos/index.html', 
                          listas=listas,
@@ -198,6 +205,7 @@ def timeline():
         # Parâmetros
         data_str = request.args.get('data', datetime.now().strftime('%Y-%m-%d'))
         listas_ids = request.args.get('listas', '')  # IDs separados por vírgula
+        usuario = Usuario.query.get(session['usuario_id'])
         
         # Parse da data
         data = datetime.strptime(data_str, '%Y-%m-%d')
@@ -208,12 +216,20 @@ def timeline():
         if listas_ids:
             lista_ids = [int(id.strip()) for id in listas_ids.split(',') if id.strip()]
         else:
-            # Se não especificou, pegar todas as listas ativas
+            # Se não especificou, pegar listas configuradas pelo usuário; se vazio, todas as listas ativas
             listas = KanbanLista.query.filter_by(ativa=True).all()
-            lista_ids = [lista.id for lista in listas]
+            listas_visiveis = _get_dashboard_listas_visiveis(usuario)
+            lista_ids = listas_visiveis if listas_visiveis else [lista.id for lista in listas]
         
         # Calcular timeline para cada lista
         resultado = []
+        resumo_geral = {
+            'tempo_producao_min': 0,
+            'tempo_setup_min': 0,
+            'tempo_parado_min': 0,
+            'tempo_stop_min': 0,
+            'tempo_manutencao_min': 0
+        }
         for lista_id in lista_ids:
             lista = KanbanLista.query.get(lista_id)
             if not lista:
@@ -221,6 +237,8 @@ def timeline():
             
             timeline_lista = _calcular_timeline_lista(lista_id, data_inicio, data_fim)
             resumo = _calcular_resumo_dia(timeline_lista)
+            for chave in resumo_geral:
+                resumo_geral[chave] += resumo.get(chave, 0)
             
             resultado.append({
                 'lista_id': lista.id,
@@ -233,7 +251,8 @@ def timeline():
         return jsonify({
             'success': True,
             'data': data_str,
-            'listas': resultado
+            'listas': resultado,
+            'resumo_geral': resumo_geral
         })
         
     except Exception as e:
@@ -262,7 +281,6 @@ def configurar():
             listas_selecionadas = request.form.getlist('listas_visiveis')
             
             # Carregar preferências atuais ou criar novo dict
-            import json
             preferencias = {}
             if usuario.preferencias:
                 try:
@@ -289,15 +307,7 @@ def configurar():
     listas = KanbanLista.query.filter_by(ativa=True).order_by(KanbanLista.ordem).all()
     
     # Obter listas visíveis atuais
-    import json
-    listas_visiveis = []
-    if usuario.preferencias:
-        try:
-            prefs = json.loads(usuario.preferencias)
-            if 'dashboard_apontamentos' in prefs and 'listas_visiveis' in prefs['dashboard_apontamentos']:
-                listas_visiveis = prefs['dashboard_apontamentos']['listas_visiveis']
-        except:
-            pass
+    listas_visiveis = _get_dashboard_listas_visiveis(usuario)
     
     return render_template('dashboard_apontamentos/configurar.html',
                          listas=listas,
