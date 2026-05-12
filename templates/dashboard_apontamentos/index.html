@@ -142,6 +142,32 @@
         border-left-color: #6c757d;
         color: #6c757d;
     }
+
+    .lista-os-panel {
+        margin-top: 15px;
+        padding: 12px 15px;
+        background: #f8f9fa;
+        border-radius: 8px;
+        border-left: 4px solid #007bff;
+    }
+
+    .lista-os-panel.empty {
+        border-left-color: #adb5bd;
+        color: #6c757d;
+    }
+
+    .lista-os-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+        gap: 8px 16px;
+        font-size: 0.875rem;
+    }
+
+    .lista-os-title {
+        font-weight: 700;
+        color: #2c3e50;
+        margin-bottom: 8px;
+    }
     
     .hover-card-header {
         display: flex;
@@ -318,6 +344,7 @@
 <script>
 let currentDate = new Date();
 let timelineDetailPanel = null;
+let timelineDetailTimer = null;
 
 document.addEventListener('DOMContentLoaded', function() {
     timelineDetailPanel = document.getElementById('timelineDetailPanel');
@@ -457,6 +484,7 @@ function renderTimeline(listas) {
 function createListaTimeline(lista) {
     const div = document.createElement('div');
     div.className = 'timeline-container';
+    const primeiroSegmentoComDetalhes = (lista.timeline || []).find(segmento => segmento.detalhes);
     
     div.innerHTML = `
         <div class="timeline-header">
@@ -474,6 +502,8 @@ function createListaTimeline(lista) {
             <span>18:00</span>
             <span>23:59</span>
         </div>
+
+        ${renderListaOsPanel(primeiroSegmentoComDetalhes)}
     `;
     
     // Renderizar segmentos da timeline
@@ -481,6 +511,49 @@ function createListaTimeline(lista) {
     renderSegmentos(timelineBar, lista.timeline);
     
     return div;
+}
+
+function renderListaOsPanel(segmento) {
+    if (!segmento || !segmento.detalhes) {
+        return `
+            <div class="lista-os-panel empty">
+                Nenhuma OS com apontamento encontrada nesta lista para o dia selecionado.
+            </div>
+        `;
+    }
+
+    const det = segmento.detalhes;
+    const inicio = new Date(segmento.inicio);
+    const fim = new Date(segmento.fim);
+    const statusLabels = {
+        'producao': 'Produção',
+        'setup': 'Setup',
+        'parada': 'Parado',
+        'manutencao': 'Manutenção',
+        'stop': 'Stop'
+    };
+    const previsao = det.previsao_termino
+        ? new Date(det.previsao_termino).toLocaleTimeString('pt-BR', {hour: '2-digit', minute: '2-digit'})
+        : 'Sem previsão';
+
+    return `
+        <div class="lista-os-panel">
+            <div class="lista-os-title">OS atual da lista: #${det.os_numero} - ${det.item_codigo}</div>
+            <div class="lista-os-grid">
+                <div><strong>Status:</strong> ${statusLabels[segmento.status] || segmento.status}</div>
+                <div><strong>Item:</strong> ${det.item_nome || det.item_codigo}</div>
+                <div><strong>Cliente:</strong> ${det.cliente}</div>
+                <div><strong>Serviço:</strong> ${det.servico}</div>
+                <div><strong>Qtd:</strong> ${det.pecas_feitas}/${det.pecas_total} pçs</div>
+                <div><strong>Tempo apontado:</strong> ${formatarTempo(det.tempo_decorrido_min || 0)}</div>
+                <div><strong>Média:</strong> ${det.media_min_peca || 0} min/peça</div>
+                <div><strong>Previsão:</strong> ${previsao}</div>
+                <div><strong>Início:</strong> ${inicio.toLocaleTimeString('pt-BR', {hour: '2-digit', minute: '2-digit'})}</div>
+                <div><strong>Fim/Atual:</strong> ${fim.toLocaleTimeString('pt-BR', {hour: '2-digit', minute: '2-digit'})}</div>
+                <div><strong>Operador:</strong> ${det.operador}</div>
+            </div>
+        </div>
+    `;
 }
 
 function renderSegmentos(container, timeline) {
@@ -590,7 +663,14 @@ function showTimelineDetails(segmento) {
             </div>
         </div>
     `;
-    
+
+    if (timelineDetailTimer) {
+        clearTimeout(timelineDetailTimer);
+    }
+    timelineDetailTimer = setTimeout(() => {
+        timelineDetailPanel.classList.add('empty');
+        timelineDetailPanel.innerHTML = 'Clique em um segmento da timeline para ver as informações da OS, item, quantidade e operador.';
+    }, 10000);
 }
 
 function formatarTempo(minutos) {
