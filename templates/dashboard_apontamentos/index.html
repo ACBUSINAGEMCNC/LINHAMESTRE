@@ -65,6 +65,10 @@
         background: linear-gradient(135deg, #dc3545 0%, #c82333 100%);
     }
     
+    .timeline-segment.setup {
+        background: linear-gradient(135deg, #007bff 0%, #0056b3 100%);
+    }
+    
     .timeline-segment.stop {
         background: linear-gradient(135deg, #6c757d 0%, #5a6268 100%);
     }
@@ -103,6 +107,7 @@
     }
     
     .resumo-icon.producao { background: #28a745; color: white; }
+    .resumo-icon.setup { background: #007bff; color: white; }
     .resumo-icon.parada { background: #ffc107; color: white; }
     .resumo-icon.manutencao { background: #dc3545; color: white; }
     .resumo-icon.stop { background: #6c757d; color: white; }
@@ -124,7 +129,7 @@
     }
     
     .hover-card {
-        position: fixed;
+        position: absolute;
         background: white;
         border-radius: 8px;
         padding: 15px;
@@ -134,6 +139,8 @@
         max-width: 400px;
         display: none;
         pointer-events: none;
+        transform: translate(-50%, -100%);
+        margin-top: -10px;
     }
     
     .hover-card-header {
@@ -492,6 +499,7 @@ function showHoverCard(e, segmento) {
     const det = segmento.detalhes;
     const statusColors = {
         'producao': '#28a745',
+        'setup': '#007bff',
         'parada': '#ffc107',
         'manutencao': '#dc3545',
         'stop': '#6c757d'
@@ -499,9 +507,10 @@ function showHoverCard(e, segmento) {
     
     const statusLabels = {
         'producao': '🟢 EM PRODUÇÃO',
+        'setup': '🔵 SETUP',
         'parada': '🟡 PARADO',
         'manutencao': '🔴 MANUTENÇÃO',
-        'stop': '🔵 SEM APONTAMENTO'
+        'stop': '⚫ SEM APONTAMENTO'
     };
     
     const progresso = det.pecas_total > 0 ? (det.pecas_feitas / det.pecas_total * 100) : 0;
@@ -574,20 +583,27 @@ function hideHoverCard() {
 function moveHoverCard(e) {
     const cardWidth = 300;
     const cardHeight = hoverCard.offsetHeight;
+    const offset = 20;
     
-    let left = e.pageX + 15;
-    let top = e.pageY + 15;
+    // Posicionar acima do cursor por padrão
+    let left = e.clientX;
+    let top = e.clientY - cardHeight - offset;
     
-    // Ajustar se sair da tela
-    if (left + cardWidth > window.innerWidth) {
-        left = e.pageX - cardWidth - 15;
+    // Ajustar horizontalmente se sair da tela
+    if (left + cardWidth/2 > window.innerWidth) {
+        left = window.innerWidth - cardWidth/2 - 10;
     }
-    if (top + cardHeight > window.innerHeight + window.scrollY) {
-        top = e.pageY - cardHeight - 15;
+    if (left - cardWidth/2 < 0) {
+        left = cardWidth/2 + 10;
+    }
+    
+    // Se não couber acima, posicionar abaixo
+    if (top < window.scrollY) {
+        top = e.clientY + offset;
     }
     
     hoverCard.style.left = `${left}px`;
-    hoverCard.style.top = `${top}px`;
+    hoverCard.style.top = `${top + window.scrollY}px`;
 }
 
 function formatarTempo(minutos) {

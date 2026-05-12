@@ -170,6 +170,19 @@ def index():
     # Buscar todas as listas Kanban ativas
     listas = KanbanLista.query.filter_by(ativa=True).order_by(KanbanLista.ordem).all()
     
+    # Filtrar por preferências do usuário (se configurado)
+    import json
+    listas_visiveis = None
+    if usuario.preferencias:
+        try:
+            prefs = json.loads(usuario.preferencias)
+            if 'dashboard_apontamentos' in prefs and 'listas_visiveis' in prefs['dashboard_apontamentos']:
+                listas_visiveis = prefs['dashboard_apontamentos']['listas_visiveis']
+                if listas_visiveis:
+                    listas = [l for l in listas if l.id in listas_visiveis]
+        except:
+            pass
+    
     return render_template('dashboard_apontamentos/index.html', 
                          listas=listas,
                          usuario=usuario)
@@ -244,10 +257,33 @@ def configurar():
         return redirect(url_for('kanban.index'))
     
     if request.method == 'POST':
-        # Salvar configuração de listas visíveis
-        # TODO: Implementar salvamento de preferências por usuário
-        flash('Configuração salva com sucesso!', 'success')
-        return redirect(url_for('dashboard_apontamentos.index'))
+        try:
+            # Obter listas selecionadas do formulário
+            listas_selecionadas = request.form.getlist('listas_visiveis')
+            
+            # Carregar preferências atuais ou criar novo dict
+            import json
+            preferencias = {}
+            if usuario.preferencias:
+                try:
+                    preferencias = json.loads(usuario.preferencias)
+                except:
+                    preferencias = {}
+            
+            # Atualizar preferências de dashboard
+            preferencias['dashboard_apontamentos'] = {
+                'listas_visiveis': [int(lid) for lid in listas_selecionadas if lid.isdigit()]
+            }
+            
+            # Salvar no banco
+            usuario.preferencias = json.dumps(preferencias)
+            db.session.commit()
+            
+            flash('Configuração salva com sucesso!', 'success')
+            return redirect(url_for('dashboard_apontamentos.index'))
+        except Exception as e:
+            flash(f'Erro ao salvar configuração: {str(e)}', 'danger')
+            return redirect(url_for('dashboard_apontamentos.configurar'))
     
     # Buscar todas as listas
     listas = KanbanLista.query.filter_by(ativa=True).order_by(KanbanLista.ordem).all()
