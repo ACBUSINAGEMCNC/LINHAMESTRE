@@ -185,8 +185,31 @@ def _tempo_label_segundos(segundos):
     return f"{minutos}m"
 
 
+def _get_resumo_os_fila(ordem):
+    if not ordem:
+        return None
+
+    pedido = None
+    for pedido_os in ordem.pedidos or []:
+        if pedido_os.pedido:
+            pedido = pedido_os.pedido
+            break
+
+    item = pedido.item if pedido and pedido.item else None
+    cliente = pedido.cliente if pedido and pedido.cliente else None
+
+    return {
+        'os_numero': ordem.numero or str(ordem.id),
+        'item_codigo': item.codigo_acb if item else 'N/A',
+        'item_nome': item.nome if item else (pedido.nome_item if pedido else 'N/A'),
+        'cliente': cliente.nome if cliente else 'N/A',
+        'pecas_total': _to_int(pedido.quantidade if pedido else 0, 0),
+        'posicao': ordem.posicao
+    }
+
+
 def _get_primeira_os_atual_lista(lista):
-    ordem = OrdemServico.query.options(
+    ordens_fila = OrdemServico.query.options(
         joinedload(OrdemServico.pedidos)
             .joinedload(PedidoOrdemServico.pedido)
             .joinedload(Pedido.cliente),
@@ -195,7 +218,9 @@ def _get_primeira_os_atual_lista(lista):
             .joinedload(Pedido.item)
             .joinedload(Item.trabalhos)
             .joinedload(ItemTrabalho.trabalho)
-    ).filter_by(status=lista.nome).order_by(OrdemServico.posicao.asc(), OrdemServico.id.asc()).first()
+    ).filter_by(status=lista.nome).order_by(OrdemServico.posicao.asc(), OrdemServico.id.asc()).limit(2).all()
+    ordem = ordens_fila[0] if ordens_fila else None
+    segunda_ordem = ordens_fila[1] if len(ordens_fila) > 1 else None
 
     if not ordem:
         return None
@@ -254,6 +279,11 @@ def _get_primeira_os_atual_lista(lista):
     progresso_total = min(100, round((tempo_apontado_seg / tempo_previsto_seg) * 100, 1)) if tempo_previsto_seg > 0 else 0
     segundos_por_turno = 8 * 3600
     turnos_restantes = round(tempo_restante_seg / segundos_por_turno, 1) if segundos_por_turno else 0
+    ultimo_apontamento = ApontamentoProducao.query.options(
+        joinedload(ApontamentoProducao.trabalho)
+    ).filter(
+        ApontamentoProducao.ordem_servico_id == ordem.id
+    ).order_by(ApontamentoProducao.data_hora.desc(), ApontamentoProducao.id.desc()).first()
 
     return {
         'os_numero': ordem.numero or str(ordem.id),
@@ -276,6 +306,9 @@ def _get_primeira_os_atual_lista(lista):
         'previsao_termino': None,
         'operador': 'N/A',
         'motivo_parada': None,
+        'ultima_quantidade_apontada': _to_int(ultimo_apontamento.quantidade, 0) if ultimo_apontamento else 0,
+        'ultimo_servico_apontado': ultimo_apontamento.trabalho.nome if ultimo_apontamento and ultimo_apontamento.trabalho else 'Sem apontamento',
+        'segunda_os_fila': _get_resumo_os_fila(segunda_ordem),
         'posicao': ordem.posicao,
         'status_kanban': ordem.status
     }
