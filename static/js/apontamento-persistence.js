@@ -996,13 +996,18 @@ function atualizarQuantidadesPorTrabalho(ordemId, ativosLista) {
     // Atualizar timestamp de render
     window.__qptRenderLast[ordemId] = Date.now();
 
-    // Fallback inteligente: buscar últimas quantidades por trabalho na API de detalhes
-    // quando não houver ativos e não houver cache para esta OS.
+    // Buscar últimas quantidades por trabalho na API para manter a informação gravada
+    // mesmo após recarregar a página ou quando o cache local estiver desatualizado.
     try {
-        const hasAny = current && current.items && Object.keys(current.items).length > 0;
-        const proximoDaViewport = cardProximoDaViewport(ordemId);
-        if (!hasAny && proximoDaViewport && !window.__qptFetching[ordemId]) {
+        const itemsAtuais = current && current.items ? Object.values(current.items) : [];
+        const hasAny = itemsAtuais.length > 0;
+        const hasOnlyInvalidQty = hasAny && itemsAtuais.every(item => item && (item.qty === '-' || item.qty === null || item.qty === undefined));
+        window.__qptFetchLast = window.__qptFetchLast || {};
+        const lastFetchTs = window.__qptFetchLast[ordemId] || 0;
+        const podeBuscarBanco = !lastFetchTs || (Date.now() - lastFetchTs) > 15000;
+        if ((!hasAny || hasOnlyInvalidQty) && podeBuscarBanco && !window.__qptFetching[ordemId]) {
             window.__qptFetching[ordemId] = true;
+            window.__qptFetchLast[ordemId] = Date.now();
             fetch(`/apontamento/quantidades-por-trabalho/${ordemId}`)
                 .then(r => r.ok ? r.json() : Promise.reject(new Error(`HTTP ${r.status}`)))
                 .then(det => {
