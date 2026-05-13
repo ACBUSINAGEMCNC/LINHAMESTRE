@@ -169,10 +169,32 @@
 
     .lista-os-main {
         display: grid;
-        grid-template-columns: 1fr auto;
+        grid-template-columns: 78px 1fr auto;
         gap: 12px;
-        align-items: end;
+        align-items: center;
         margin-bottom: 12px;
+    }
+
+    .lista-os-img {
+        width: 72px;
+        height: 72px;
+        object-fit: cover;
+        border-radius: 10px;
+        border: 1px solid #dee2e6;
+        background: white;
+    }
+
+    .lista-os-img-placeholder {
+        width: 72px;
+        height: 72px;
+        border-radius: 10px;
+        border: 1px dashed #adb5bd;
+        background: #fff;
+        color: #adb5bd;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 1.4rem;
     }
 
     .lista-os-item-label,
@@ -266,6 +288,30 @@
     .servico-progress-time {
         color: #6c757d;
         white-space: nowrap;
+    }
+
+    .lista-os-details {
+        display: none;
+        margin-top: 10px;
+    }
+
+    .lista-os-details.show {
+        display: block;
+    }
+
+    .lista-os-toggle {
+        border: none;
+        background: #e7f1ff;
+        color: #0d6efd;
+        border-radius: 999px;
+        padding: 6px 12px;
+        font-weight: 700;
+        font-size: 0.82rem;
+        margin-top: 6px;
+    }
+
+    .lista-os-toggle:hover {
+        background: #d0e5ff;
     }
     
     .hover-card-header {
@@ -651,6 +697,10 @@ function renderListaOsPanel(osAtual) {
     }
 
     const progresso = Math.max(0, Math.min(100, Number(osAtual.progresso_percent || 0)));
+    const detailsId = `lista-os-details-${String(osAtual.os_numero || '').replace(/[^a-zA-Z0-9_-]/g, '-')}-${String(osAtual.status_kanban || '').replace(/[^a-zA-Z0-9_-]/g, '-')}`;
+    const imagemHtml = osAtual.item_imagem_path
+        ? `<img src="${osAtual.item_imagem_path}" class="lista-os-img" alt="Imagem do item" onerror="this.outerHTML='<div class=&quot;lista-os-img-placeholder&quot;><i class=&quot;fas fa-image&quot;></i></div>'">`
+        : `<div class="lista-os-img-placeholder"><i class="fas fa-image"></i></div>`;
     const servicosHtml = (osAtual.servicos_detalhes || []).map(servico => {
         const progressoServico = Math.max(0, Math.min(100, Number(servico.progresso_percent || 0)));
         return `
@@ -671,6 +721,7 @@ function renderListaOsPanel(osAtual) {
         <div class="lista-os-panel">
             <div class="lista-os-title">Primeiro card da fila: ${osAtual.os_numero} - ${osAtual.item_codigo}</div>
             <div class="lista-os-main">
+                <div>${imagemHtml}</div>
                 <div>
                     <div class="lista-os-item-label">Item</div>
                     <div class="lista-os-item-value">${osAtual.item_nome || osAtual.item_codigo}</div>
@@ -685,34 +736,44 @@ function renderListaOsPanel(osAtual) {
                 <div><strong>Status Kanban:</strong> ${osAtual.status_kanban}</div>
                 <div><strong>Posição:</strong> ${osAtual.posicao}</div>
             </div>
-            <div class="lista-os-metrics">
-                <div class="lista-os-metric">
-                    <div class="lista-os-metric-label">Previsto</div>
-                    <div class="lista-os-metric-value">${osAtual.tempo_previsto_label}</div>
+            <button type="button" class="lista-os-toggle" onclick="toggleListaOsDetails('${detailsId}', this)">Ver detalhes</button>
+            <div class="lista-os-details" id="${detailsId}">
+                <div class="lista-os-metrics">
+                    <div class="lista-os-metric">
+                        <div class="lista-os-metric-label">Previsto</div>
+                        <div class="lista-os-metric-value">${osAtual.tempo_previsto_label}</div>
+                    </div>
+                    <div class="lista-os-metric">
+                        <div class="lista-os-metric-label">Já apontado</div>
+                        <div class="lista-os-metric-value">${osAtual.tempo_apontado_label}</div>
+                    </div>
+                    <div class="lista-os-metric">
+                        <div class="lista-os-metric-label">Faltante</div>
+                        <div class="lista-os-metric-value">${osAtual.tempo_restante_label}</div>
+                    </div>
+                    <div class="lista-os-metric">
+                        <div class="lista-os-metric-label">Turnos faltantes</div>
+                        <div class="lista-os-metric-value">${osAtual.turnos_restantes}</div>
+                    </div>
                 </div>
-                <div class="lista-os-metric">
-                    <div class="lista-os-metric-label">Já apontado</div>
-                    <div class="lista-os-metric-value">${osAtual.tempo_apontado_label}</div>
+                <div class="servico-progress-head">
+                    <span class="servico-progress-name">Progresso geral</span>
+                    <span class="servico-progress-time">${progresso}%</span>
                 </div>
-                <div class="lista-os-metric">
-                    <div class="lista-os-metric-label">Faltante</div>
-                    <div class="lista-os-metric-value">${osAtual.tempo_restante_label}</div>
+                <div class="lista-progress">
+                    <div class="lista-progress-fill" style="width: ${progresso}%"></div>
                 </div>
-                <div class="lista-os-metric">
-                    <div class="lista-os-metric-label">Turnos faltantes</div>
-                    <div class="lista-os-metric-value">${osAtual.turnos_restantes}</div>
-                </div>
+                ${servicosHtml ? `<div class="servicos-progress">${servicosHtml}</div>` : ''}
             </div>
-            <div class="servico-progress-head">
-                <span class="servico-progress-name">Progresso geral</span>
-                <span class="servico-progress-time">${progresso}%</span>
-            </div>
-            <div class="lista-progress">
-                <div class="lista-progress-fill" style="width: ${progresso}%"></div>
-            </div>
-            ${servicosHtml ? `<div class="servicos-progress">${servicosHtml}</div>` : ''}
         </div>
     `;
+}
+
+function toggleListaOsDetails(detailsId, button) {
+    const details = document.getElementById(detailsId);
+    if (!details) return;
+    const aberto = details.classList.toggle('show');
+    button.textContent = aberto ? 'Ocultar detalhes' : 'Ver detalhes';
 }
 
 function renderSegmentos(container, timeline) {

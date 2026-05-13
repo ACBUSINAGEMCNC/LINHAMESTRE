@@ -259,6 +259,7 @@ def _get_primeira_os_atual_lista(lista):
         'os_numero': ordem.numero or str(ordem.id),
         'item_codigo': item.codigo_acb if item else 'N/A',
         'item_nome': item.nome if item else (pedido.nome_item if pedido else 'N/A'),
+        'item_imagem_path': item.imagem_path if item else None,
         'cliente': cliente.nome if cliente else 'N/A',
         'servico': ', '.join(servicos[:3]) if servicos else 'N/A',
         'pecas_feitas': 0,
