@@ -83,7 +83,7 @@
 
     .tv-card {
         background: rgba(15, 23, 42, .9);
-        border: 4px solid var(--status-color, #38bdf8);
+        border: 6px solid var(--status-color, #38bdf8);
         border-radius: 16px;
         box-shadow: 0 18px 40px rgba(0,0,0,.28), 0 0 22px var(--status-glow, rgba(56, 189, 248, .35));
         padding: 12px;
@@ -402,9 +402,10 @@ function atualizarRelogioTv() {
 const statusColorsTv = {
     producao: '#28a745',
     setup: '#007bff',
-    parada: '#ffc107',
+    parada: '#dc3545',
     manutencao: '#dc3545',
-    stop: '#6c757d'
+    stop: '#6c757d',
+    sem_apontamento: '#6c757d'
 };
 
 const statusLabelsTv = {
@@ -412,7 +413,8 @@ const statusLabelsTv = {
     setup: 'Setup',
     parada: 'Parada',
     manutencao: 'Manutenção',
-    stop: 'Stop'
+    stop: 'Stop',
+    sem_apontamento: 'Sem apontamento'
 };
 
 function getStatusAtualTimeline(timeline) {
@@ -422,7 +424,7 @@ function getStatusAtualTimeline(timeline) {
         const inicio = new Date(segmento.inicio);
         const fim = new Date(segmento.fim);
         return agora >= inicio && agora <= fim;
-    }) || itens[itens.length - 1];
+    });
 }
 
 function renderMiniTimelineTv(timeline) {
@@ -497,8 +499,8 @@ function renderCardTv(lista) {
 
     const progresso = Math.max(0, Math.min(100, Number(os.progresso_percent || 0)));
     const statusAtual = getStatusAtualTimeline(lista.timeline);
-    const statusColor = statusColorsTv[statusAtual?.status] || lista.lista_cor || '#38bdf8';
-    const statusLabel = statusLabelsTv[statusAtual?.status] || 'Sem apontamento';
+    const statusColor = statusColorsTv[statusAtual?.status || 'sem_apontamento'];
+    const statusLabel = statusLabelsTv[statusAtual?.status || 'sem_apontamento'];
     const segundaOs = os.segunda_os_fila;
     const segundaOsHtml = segundaOs
         ? `<strong>2ª OS:</strong> ${segundaOs.os_numero} - ${segundaOs.item_codigo || segundaOs.item_nome} | Qtd: ${segundaOs.pecas_total || 0}`
