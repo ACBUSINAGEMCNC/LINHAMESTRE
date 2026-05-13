@@ -167,6 +167,24 @@ def _calcular_resumo_dia(timeline):
     return resumo
 
 
+def _to_int(value, default=0):
+    try:
+        if value is None:
+            return default
+        return int(value)
+    except Exception:
+        return default
+
+
+def _tempo_label_segundos(segundos):
+    total = max(0, _to_int(segundos, 0))
+    horas = total // 3600
+    minutos = (total % 3600) // 60
+    if horas > 0:
+        return f"{horas}h {minutos:02d}m"
+    return f"{minutos}m"
+
+
 def _get_primeira_os_atual_lista(lista):
     ordem = OrdemServico.query.options(
         joinedload(OrdemServico.pedidos)
@@ -190,19 +208,52 @@ def _get_primeira_os_atual_lista(lista):
 
     item = pedido.item if pedido and pedido.item else None
     cliente = pedido.cliente if pedido and pedido.cliente else None
-    pecas_total = pedido.quantidade if pedido else 0
+    pecas_total = _to_int(pedido.quantidade if pedido else 0, 0)
     tempo_previsto_seg = 0
+    tempo_apontado_seg = 0
     servicos = []
+    servicos_detalhes = []
+    apontado_rows = db.session.query(
+        ApontamentoProducao.trabalho_id,
+        db.func.coalesce(db.func.sum(ApontamentoProducao.tempo_decorrido), 0)
+    ).filter(
+        ApontamentoProducao.ordem_servico_id == ordem.id
+    ).group_by(ApontamentoProducao.trabalho_id).all()
+    apontado_por_trabalho = {
+        int(trabalho_id): _to_int(tempo_total, 0)
+        for trabalho_id, tempo_total in apontado_rows
+        if trabalho_id is not None
+    }
 
     if item:
         for item_trabalho in item.trabalhos or []:
             trabalho = item_trabalho.trabalho
-            tempo_peca = item_trabalho.tempo_real or item_trabalho.tempo_peca or 0
-            tempo_setup = item_trabalho.tempo_setup or 0
+            tempo_peca = _to_int(item_trabalho.tempo_real or item_trabalho.tempo_peca, 0)
+            tempo_setup = _to_int(item_trabalho.tempo_setup, 0)
             tempo_servico = tempo_setup + (tempo_peca * (pecas_total or 0))
+            tempo_apontado_servico = apontado_por_trabalho.get(item_trabalho.trabalho_id, 0)
+            tempo_restante_servico = max(0, tempo_servico - tempo_apontado_servico)
+            progresso_servico = min(100, round((tempo_apontado_servico / tempo_servico) * 100, 1)) if tempo_servico > 0 else 0
             tempo_previsto_seg += tempo_servico
+            tempo_apontado_seg += tempo_apontado_servico
             if trabalho:
                 servicos.append(trabalho.nome)
+                servicos_detalhes.append({
+                    'id': item_trabalho.trabalho_id,
+                    'nome': trabalho.nome,
+                    'tempo_previsto_seg': tempo_servico,
+                    'tempo_apontado_seg': tempo_apontado_servico,
+                    'tempo_restante_seg': tempo_restante_servico,
+                    'tempo_previsto_label': _tempo_label_segundos(tempo_servico),
+                    'tempo_apontado_label': _tempo_label_segundos(tempo_apontado_servico),
+                    'tempo_restante_label': _tempo_label_segundos(tempo_restante_servico),
+                    'progresso_percent': progresso_servico
+                })
+
+    tempo_restante_seg = max(0, tempo_previsto_seg - tempo_apontado_seg)
+    progresso_total = min(100, round((tempo_apontado_seg / tempo_previsto_seg) * 100, 1)) if tempo_previsto_seg > 0 else 0
+    segundos_por_turno = 8 * 3600
+    turnos_restantes = round(tempo_restante_seg / segundos_por_turno, 1) if segundos_por_turno else 0
 
     return {
         'os_numero': ordem.numero or str(ordem.id),
@@ -212,8 +263,14 @@ def _get_primeira_os_atual_lista(lista):
         'servico': ', '.join(servicos[:3]) if servicos else 'N/A',
         'pecas_feitas': 0,
         'pecas_total': pecas_total or 0,
-        'tempo_decorrido_min': 0,
+        'tempo_decorrido_min': int(tempo_apontado_seg / 60) if tempo_apontado_seg else 0,
         'tempo_previsto_min': int(tempo_previsto_seg / 60) if tempo_previsto_seg else 0,
+        'tempo_previsto_label': _tempo_label_segundos(tempo_previsto_seg),
+        'tempo_apontado_label': _tempo_label_segundos(tempo_apontado_seg),
+        'tempo_restante_label': _tempo_label_segundos(tempo_restante_seg),
+        'turnos_restantes': turnos_restantes,
+        'progresso_percent': progresso_total,
+        'servicos_detalhes': servicos_detalhes,
         'media_min_peca': 0,
         'previsao_termino': None,
         'operador': 'N/A',

@@ -166,6 +166,107 @@
         color: #2c3e50;
         margin-bottom: 8px;
     }
+
+    .lista-os-main {
+        display: grid;
+        grid-template-columns: 1fr auto;
+        gap: 12px;
+        align-items: end;
+        margin-bottom: 12px;
+    }
+
+    .lista-os-item-label,
+    .lista-os-qtd-label {
+        font-size: 0.75rem;
+        color: #6c757d;
+        font-weight: 600;
+        text-transform: uppercase;
+    }
+
+    .lista-os-item-value {
+        font-size: 1.35rem;
+        font-weight: 800;
+        color: #1f2d3d;
+        line-height: 1.15;
+    }
+
+    .lista-os-qtd-value {
+        font-size: 1.6rem;
+        font-weight: 800;
+        color: #0d6efd;
+        line-height: 1;
+        white-space: nowrap;
+    }
+
+    .lista-os-metrics {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+        gap: 8px;
+        margin: 12px 0;
+    }
+
+    .lista-os-metric {
+        background: white;
+        border: 1px solid #e9ecef;
+        border-radius: 8px;
+        padding: 8px 10px;
+    }
+
+    .lista-os-metric-label {
+        font-size: 0.72rem;
+        color: #6c757d;
+        font-weight: 600;
+    }
+
+    .lista-os-metric-value {
+        font-size: 1rem;
+        color: #2c3e50;
+        font-weight: 800;
+    }
+
+    .lista-progress {
+        height: 12px;
+        background: #e9ecef;
+        border-radius: 999px;
+        overflow: hidden;
+    }
+
+    .lista-progress-fill {
+        height: 100%;
+        background: linear-gradient(135deg, #0d6efd 0%, #20c997 100%);
+        border-radius: 999px;
+    }
+
+    .servicos-progress {
+        display: grid;
+        gap: 8px;
+        margin-top: 12px;
+    }
+
+    .servico-progress-row {
+        background: white;
+        border: 1px solid #e9ecef;
+        border-radius: 8px;
+        padding: 8px 10px;
+    }
+
+    .servico-progress-head {
+        display: flex;
+        justify-content: space-between;
+        gap: 10px;
+        font-size: 0.8rem;
+        margin-bottom: 5px;
+    }
+
+    .servico-progress-name {
+        color: #2c3e50;
+        font-weight: 700;
+    }
+
+    .servico-progress-time {
+        color: #6c757d;
+        white-space: nowrap;
+    }
     
     .hover-card-header {
         display: flex;
@@ -549,18 +650,67 @@ function renderListaOsPanel(osAtual) {
         `;
     }
 
+    const progresso = Math.max(0, Math.min(100, Number(osAtual.progresso_percent || 0)));
+    const servicosHtml = (osAtual.servicos_detalhes || []).map(servico => {
+        const progressoServico = Math.max(0, Math.min(100, Number(servico.progresso_percent || 0)));
+        return `
+            <div class="servico-progress-row">
+                <div class="servico-progress-head">
+                    <span class="servico-progress-name">${servico.nome}</span>
+                    <span class="servico-progress-time">${servico.tempo_apontado_label} / ${servico.tempo_previsto_label} (${progressoServico}%)</span>
+                </div>
+                <div class="lista-progress">
+                    <div class="lista-progress-fill" style="width: ${progressoServico}%"></div>
+                </div>
+                <div class="servico-progress-time mt-1">Falta: ${servico.tempo_restante_label}</div>
+            </div>
+        `;
+    }).join('');
+
     return `
         <div class="lista-os-panel">
             <div class="lista-os-title">Primeiro card da fila: ${osAtual.os_numero} - ${osAtual.item_codigo}</div>
+            <div class="lista-os-main">
+                <div>
+                    <div class="lista-os-item-label">Item</div>
+                    <div class="lista-os-item-value">${osAtual.item_nome || osAtual.item_codigo}</div>
+                </div>
+                <div>
+                    <div class="lista-os-qtd-label">Qtd</div>
+                    <div class="lista-os-qtd-value">${osAtual.pecas_total} pçs</div>
+                </div>
+            </div>
             <div class="lista-os-grid">
+                <div><strong>Cliente:</strong> ${osAtual.cliente}</div>
                 <div><strong>Status Kanban:</strong> ${osAtual.status_kanban}</div>
                 <div><strong>Posição:</strong> ${osAtual.posicao}</div>
-                <div><strong>Item:</strong> ${osAtual.item_nome || osAtual.item_codigo}</div>
-                <div><strong>Cliente:</strong> ${osAtual.cliente}</div>
-                <div><strong>Serviço:</strong> ${osAtual.servico}</div>
-                <div><strong>Qtd:</strong> ${osAtual.pecas_total} pçs</div>
-                <div><strong>Tempo previsto:</strong> ${formatarTempo(osAtual.tempo_previsto_min || 0)}</div>
             </div>
+            <div class="lista-os-metrics">
+                <div class="lista-os-metric">
+                    <div class="lista-os-metric-label">Previsto</div>
+                    <div class="lista-os-metric-value">${osAtual.tempo_previsto_label}</div>
+                </div>
+                <div class="lista-os-metric">
+                    <div class="lista-os-metric-label">Já apontado</div>
+                    <div class="lista-os-metric-value">${osAtual.tempo_apontado_label}</div>
+                </div>
+                <div class="lista-os-metric">
+                    <div class="lista-os-metric-label">Faltante</div>
+                    <div class="lista-os-metric-value">${osAtual.tempo_restante_label}</div>
+                </div>
+                <div class="lista-os-metric">
+                    <div class="lista-os-metric-label">Turnos faltantes</div>
+                    <div class="lista-os-metric-value">${osAtual.turnos_restantes}</div>
+                </div>
+            </div>
+            <div class="servico-progress-head">
+                <span class="servico-progress-name">Progresso geral</span>
+                <span class="servico-progress-time">${progresso}%</span>
+            </div>
+            <div class="lista-progress">
+                <div class="lista-progress-fill" style="width: ${progresso}%"></div>
+            </div>
+            ${servicosHtml ? `<div class="servicos-progress">${servicosHtml}</div>` : ''}
         </div>
     `;
 }
