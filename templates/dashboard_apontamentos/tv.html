@@ -183,7 +183,7 @@
 
     .tv-metrics {
         display: grid;
-        grid-template-columns: repeat(5, 1fr);
+        grid-template-columns: repeat(4, 1fr);
         gap: 8px;
     }
 
@@ -224,6 +224,18 @@
         color: #cbd5e1;
         font-size: .83rem;
         padding: 7px 9px;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+    }
+
+    .tv-last-service {
+        background: rgba(30, 41, 59, .65);
+        border: 1px solid rgba(148, 163, 184, .14);
+        border-radius: 10px;
+        color: #cbd5e1;
+        font-size: .82rem;
+        padding: 6px 9px;
         white-space: nowrap;
         overflow: hidden;
         text-overflow: ellipsis;
@@ -503,11 +515,8 @@ function renderCardTv(lista) {
                     <div class="tv-metric-label">Últ. qtd</div>
                     <div class="tv-metric-value">${os.ultima_quantidade_apontada || 0}</div>
                 </div>
-                <div class="tv-metric" title="${os.ultimo_servico_apontado || 'Sem apontamento'}">
-                    <div class="tv-metric-label">Últ. serv.</div>
-                    <div class="tv-metric-value">${os.ultimo_servico_apontado || 'Sem apontamento'}</div>
-                </div>
             </div>
+            <div class="tv-last-service" title="${os.ultimo_servico_apontado || 'Sem apontamento'}"><strong>Últ. serviço:</strong> ${os.ultimo_servico_apontado || 'Sem apontamento'}</div>
             ${renderMiniTimelineTv(lista.timeline)}
             <div class="tv-next-os" title="${segundaOs ? segundaOs.item_nome : 'Sem OS próxima na fila'}">${segundaOsHtml}</div>
         </div>
