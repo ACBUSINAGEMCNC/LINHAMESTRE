@@ -84,7 +84,7 @@
     .tv-card {
         background: rgba(15, 23, 42, .9);
         border: 1px solid rgba(148, 163, 184, .28);
-        border-left: 6px solid #38bdf8;
+        border-left: 8px solid var(--status-color, #38bdf8);
         border-radius: 16px;
         box-shadow: 0 18px 40px rgba(0,0,0,.28);
         padding: 12px;
@@ -94,16 +94,8 @@
         gap: 10px;
     }
 
-    .tv-card.warning {
-        border-left-color: #f59e0b;
-    }
-
-    .tv-card.success {
-        border-left-color: #22c55e;
-    }
-
     .tv-card.empty {
-        border-left-color: #64748b;
+        --status-color: #64748b;
         opacity: .8;
     }
 
@@ -214,25 +206,74 @@
         font-weight: 900;
     }
 
-    .tv-progress {
-        height: 12px;
-        background: rgba(51, 65, 85, .95);
-        border-radius: 999px;
-        overflow: hidden;
-    }
-
-    .tv-progress-fill {
-        height: 100%;
-        background: linear-gradient(90deg, #0ea5e9, #22c55e);
-        border-radius: 999px;
-    }
-
     .tv-next-step {
         color: #cbd5e1;
         font-size: .83rem;
         white-space: nowrap;
         overflow: hidden;
         text-overflow: ellipsis;
+    }
+
+    .tv-mini-timeline {
+        position: relative;
+        height: 34px;
+        background: rgba(15, 23, 42, .95);
+        border: 1px solid rgba(148, 163, 184, .26);
+        border-radius: 10px;
+        overflow: hidden;
+    }
+
+    .tv-mini-segment {
+        position: absolute;
+        top: 0;
+        height: 100%;
+        min-width: 2px;
+        border-right: 1px solid rgba(255,255,255,.28);
+    }
+
+    .tv-mini-segment.producao {
+        background: linear-gradient(135deg, #28a745 0%, #20c997 100%);
+    }
+
+    .tv-mini-segment.parada {
+        background: linear-gradient(135deg, #ffc107 0%, #ffb300 100%);
+    }
+
+    .tv-mini-segment.manutencao {
+        background: linear-gradient(135deg, #dc3545 0%, #c82333 100%);
+    }
+
+    .tv-mini-segment.setup {
+        background: linear-gradient(135deg, #007bff 0%, #0056b3 100%);
+    }
+
+    .tv-mini-segment.stop {
+        background: linear-gradient(135deg, #6c757d 0%, #5a6268 100%);
+    }
+
+    .tv-now-marker {
+        position: absolute;
+        top: 0;
+        bottom: 0;
+        width: 2px;
+        background: #fff;
+        box-shadow: 0 0 8px rgba(255,255,255,.9);
+        z-index: 3;
+    }
+
+    .tv-hour-scale {
+        position: relative;
+        height: 18px;
+        color: #94a3b8;
+        font-size: .58rem;
+        font-weight: 800;
+    }
+
+    .tv-hour-mark {
+        position: absolute;
+        top: 0;
+        transform: translateX(-50%);
+        white-space: nowrap;
     }
 
     .tv-loading,
@@ -285,13 +326,52 @@ function atualizarRelogioTv() {
     document.getElementById('tvClock').textContent = new Date().toLocaleTimeString('pt-BR', {hour: '2-digit', minute: '2-digit'});
 }
 
-function statusCardClass(os) {
-    if (!os) return 'empty';
-    const restante = Number(os.turnos_restantes || 0);
-    const progresso = Number(os.progresso_percent || 0);
-    if (progresso >= 80) return 'success';
-    if (restante <= 1 && restante > 0) return 'warning';
-    return '';
+const statusColorsTv = {
+    producao: '#28a745',
+    setup: '#007bff',
+    parada: '#ffc107',
+    manutencao: '#dc3545',
+    stop: '#6c757d'
+};
+
+function getStatusAtualTimeline(timeline) {
+    const agora = new Date();
+    const itens = timeline || [];
+    return itens.find(segmento => {
+        const inicio = new Date(segmento.inicio);
+        const fim = new Date(segmento.fim);
+        return agora >= inicio && agora <= fim;
+    }) || itens[itens.length - 1];
+}
+
+function renderMiniTimelineTv(timeline) {
+    const diaMinutos = 24 * 60;
+    const segmentos = (timeline || []).map(segmento => {
+        const inicio = new Date(segmento.inicio);
+        const fim = new Date(segmento.fim);
+        const inicioMin = Math.max(0, inicio.getHours() * 60 + inicio.getMinutes());
+        const fimMin = Math.min(diaMinutos, fim.getHours() * 60 + fim.getMinutes());
+        const duracaoMin = Math.max(1, fimMin - inicioMin);
+        const left = (inicioMin / diaMinutos) * 100;
+        const width = (duracaoMin / diaMinutos) * 100;
+        return `<div class="tv-mini-segment ${segmento.status}" style="left: ${left}%; width: ${width}%"></div>`;
+    }).join('');
+
+    const agora = new Date();
+    const agoraMin = agora.getHours() * 60 + agora.getMinutes();
+    const nowLeft = (agoraMin / diaMinutos) * 100;
+    const horas = Array.from({length: 25}, (_, hora) => {
+        const left = (hora * 60 / diaMinutos) * 100;
+        return `<span class="tv-hour-mark" style="left: ${left}%">${String(hora).padStart(2, '0')}</span>`;
+    }).join('');
+
+    return `
+        <div class="tv-mini-timeline">
+            ${segmentos}
+            <div class="tv-now-marker" style="left: ${nowLeft}%"></div>
+        </div>
+        <div class="tv-hour-scale">${horas}</div>
+    `;
 }
 
 function renderImagemTv(os) {
@@ -318,9 +398,11 @@ function renderCardTv(lista) {
     const progresso = Math.max(0, Math.min(100, Number(os.progresso_percent || 0)));
     const servicos = os.servicos_detalhes || [];
     const proximoServico = servicos.find(s => Number(s.tempo_restante_seg || 0) > 0) || servicos[0];
+    const statusAtual = getStatusAtualTimeline(lista.timeline);
+    const statusColor = statusColorsTv[statusAtual?.status] || lista.lista_cor || '#38bdf8';
 
     return `
-        <div class="tv-card ${statusCardClass(os)}">
+        <div class="tv-card" style="--status-color: ${statusColor}">
             <div class="tv-card-head">
                 <div class="tv-lista" title="${lista.lista_nome}">${lista.lista_nome}</div>
                 <div class="tv-percent">${progresso}%</div>
@@ -347,9 +429,7 @@ function renderCardTv(lista) {
                     <div class="tv-metric-value">${os.turnos_restantes || 0}</div>
                 </div>
             </div>
-            <div class="tv-progress">
-                <div class="tv-progress-fill" style="width: ${progresso}%"></div>
-            </div>
+            ${renderMiniTimelineTv(lista.timeline)}
             <div class="tv-next-step"><strong>Próx:</strong> ${proximoServico ? proximoServico.nome : 'Sem etapa cadastrada'}</div>
         </div>
     `;
