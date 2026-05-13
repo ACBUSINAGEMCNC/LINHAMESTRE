@@ -309,6 +309,15 @@ def index():
                          usuario=usuario)
 
 
+@dashboard_apontamentos_bp.route('/tv')
+def tv():
+    if 'usuario_id' not in session:
+        flash('Por favor, faça login para acessar esta página', 'warning')
+        return redirect(url_for('auth.login'))
+
+    return render_template('dashboard_apontamentos/tv.html')
+
+
 @dashboard_apontamentos_bp.route('/timeline')
 def timeline():
     """API: Retorna dados da timeline de apontamentos"""

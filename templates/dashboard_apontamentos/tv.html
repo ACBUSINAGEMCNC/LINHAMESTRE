@@ -1,0 +1,402 @@
+{% extends "base.html" %}
+
+{% block title %}Dashboard TV - Produção{% endblock %}
+
+{% block extra_css %}
+<style>
+    body {
+        background: #0f172a;
+        color: #e5e7eb;
+    }
+
+    .tv-page {
+        min-height: calc(100vh - 56px);
+        padding: 18px;
+        background: radial-gradient(circle at top left, #1e3a8a 0, #0f172a 38%, #020617 100%);
+    }
+
+    .tv-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        gap: 16px;
+        margin-bottom: 16px;
+    }
+
+    .tv-title {
+        font-size: 1.9rem;
+        font-weight: 900;
+        letter-spacing: .02em;
+    }
+
+    .tv-subtitle {
+        color: #94a3b8;
+        font-size: .95rem;
+    }
+
+    .tv-actions {
+        display: flex;
+        gap: 8px;
+        align-items: center;
+    }
+
+    .tv-clock {
+        font-size: 1.55rem;
+        font-weight: 800;
+        color: #fff;
+        min-width: 92px;
+        text-align: right;
+    }
+
+    .tv-summary {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+        gap: 10px;
+        margin-bottom: 16px;
+    }
+
+    .tv-summary-card {
+        background: rgba(15, 23, 42, .78);
+        border: 1px solid rgba(148, 163, 184, .25);
+        border-radius: 14px;
+        padding: 10px 14px;
+    }
+
+    .tv-summary-label {
+        color: #94a3b8;
+        font-size: .78rem;
+        text-transform: uppercase;
+        font-weight: 700;
+    }
+
+    .tv-summary-value {
+        color: #f8fafc;
+        font-size: 1.35rem;
+        font-weight: 900;
+    }
+
+    .tv-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(285px, 1fr));
+        gap: 14px;
+    }
+
+    .tv-card {
+        background: rgba(15, 23, 42, .9);
+        border: 1px solid rgba(148, 163, 184, .28);
+        border-left: 6px solid #38bdf8;
+        border-radius: 16px;
+        box-shadow: 0 18px 40px rgba(0,0,0,.28);
+        padding: 12px;
+        min-height: 238px;
+        display: flex;
+        flex-direction: column;
+        gap: 10px;
+    }
+
+    .tv-card.warning {
+        border-left-color: #f59e0b;
+    }
+
+    .tv-card.success {
+        border-left-color: #22c55e;
+    }
+
+    .tv-card.empty {
+        border-left-color: #64748b;
+        opacity: .8;
+    }
+
+    .tv-card-head {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        gap: 8px;
+        border-bottom: 1px solid rgba(148, 163, 184, .18);
+        padding-bottom: 8px;
+    }
+
+    .tv-lista {
+        font-size: 1.05rem;
+        font-weight: 900;
+        color: #f8fafc;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+    }
+
+    .tv-percent {
+        background: #0ea5e9;
+        color: #fff;
+        border-radius: 999px;
+        padding: 4px 10px;
+        font-size: .82rem;
+        font-weight: 900;
+    }
+
+    .tv-main {
+        display: grid;
+        grid-template-columns: 82px 1fr;
+        gap: 12px;
+        align-items: center;
+    }
+
+    .tv-img {
+        width: 82px;
+        height: 82px;
+        object-fit: cover;
+        border-radius: 14px;
+        background: #fff;
+        border: 1px solid rgba(255,255,255,.18);
+    }
+
+    .tv-img-placeholder {
+        width: 82px;
+        height: 82px;
+        border-radius: 14px;
+        border: 1px dashed rgba(148, 163, 184, .5);
+        color: #64748b;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 1.5rem;
+    }
+
+    .tv-os {
+        color: #38bdf8;
+        font-weight: 900;
+        font-size: .95rem;
+    }
+
+    .tv-item {
+        color: #f8fafc;
+        font-size: 1.2rem;
+        font-weight: 900;
+        line-height: 1.15;
+        margin: 2px 0;
+        display: -webkit-box;
+        line-clamp: 2;
+        -webkit-line-clamp: 2;
+        -webkit-box-orient: vertical;
+        overflow: hidden;
+    }
+
+    .tv-client {
+        color: #cbd5e1;
+        font-size: .85rem;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+    }
+
+    .tv-metrics {
+        display: grid;
+        grid-template-columns: repeat(3, 1fr);
+        gap: 8px;
+    }
+
+    .tv-metric {
+        background: rgba(30, 41, 59, .8);
+        border-radius: 10px;
+        padding: 7px 8px;
+    }
+
+    .tv-metric-label {
+        color: #94a3b8;
+        font-size: .68rem;
+        font-weight: 800;
+        text-transform: uppercase;
+    }
+
+    .tv-metric-value {
+        color: #f8fafc;
+        font-size: 1rem;
+        font-weight: 900;
+    }
+
+    .tv-progress {
+        height: 12px;
+        background: rgba(51, 65, 85, .95);
+        border-radius: 999px;
+        overflow: hidden;
+    }
+
+    .tv-progress-fill {
+        height: 100%;
+        background: linear-gradient(90deg, #0ea5e9, #22c55e);
+        border-radius: 999px;
+    }
+
+    .tv-next-step {
+        color: #cbd5e1;
+        font-size: .83rem;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+    }
+
+    .tv-loading,
+    .tv-error {
+        text-align: center;
+        padding: 60px 20px;
+        color: #cbd5e1;
+        font-size: 1.2rem;
+    }
+
+    @media (min-width: 1600px) {
+        .tv-grid {
+            grid-template-columns: repeat(4, 1fr);
+        }
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="tv-page">
+    <div class="tv-header">
+        <div>
+            <div class="tv-title"><i class="fas fa-tv"></i> Dashboard Produção TV</div>
+            <div class="tv-subtitle">Primeiro card atual de cada lista do Kanban</div>
+        </div>
+        <div class="tv-actions">
+            <a href="{{ url_for('dashboard_apontamentos.index') }}" class="btn btn-outline-light btn-sm">
+                <i class="fas fa-arrow-left"></i> Voltar
+            </a>
+            <button class="btn btn-primary btn-sm" id="btnFullscreen">
+                <i class="fas fa-expand"></i> Tela cheia
+            </button>
+            <button class="btn btn-success btn-sm" id="btnRefreshTv">
+                <i class="fas fa-sync-alt"></i>
+            </button>
+            <div class="tv-clock" id="tvClock">--:--</div>
+        </div>
+    </div>
+
+    <div class="tv-summary" id="tvSummary"></div>
+    <div class="tv-grid" id="tvGrid">
+        <div class="tv-loading"><i class="fas fa-spinner fa-spin"></i> Carregando painel TV...</div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+function atualizarRelogioTv() {
+    document.getElementById('tvClock').textContent = new Date().toLocaleTimeString('pt-BR', {hour: '2-digit', minute: '2-digit'});
+}
+
+function statusCardClass(os) {
+    if (!os) return 'empty';
+    const restante = Number(os.turnos_restantes || 0);
+    const progresso = Number(os.progresso_percent || 0);
+    if (progresso >= 80) return 'success';
+    if (restante <= 1 && restante > 0) return 'warning';
+    return '';
+}
+
+function renderImagemTv(os) {
+    if (os && os.item_imagem_path) {
+        return `<img src="${os.item_imagem_path}" class="tv-img" alt="Imagem do item" onerror="this.outerHTML='<div class=&quot;tv-img-placeholder&quot;><i class=&quot;fas fa-image&quot;></i></div>'">`;
+    }
+    return `<div class="tv-img-placeholder"><i class="fas fa-image"></i></div>`;
+}
+
+function renderCardTv(lista) {
+    const os = lista.primeira_os_atual;
+    if (!os) {
+        return `
+            <div class="tv-card empty">
+                <div class="tv-card-head">
+                    <div class="tv-lista">${lista.lista_nome}</div>
+                    <div class="tv-percent">Vazio</div>
+                </div>
+                <div class="tv-loading">Nenhuma OS na fila atual</div>
+            </div>
+        `;
+    }
+
+    const progresso = Math.max(0, Math.min(100, Number(os.progresso_percent || 0)));
+    const servicos = os.servicos_detalhes || [];
+    const proximoServico = servicos.find(s => Number(s.tempo_restante_seg || 0) > 0) || servicos[0];
+
+    return `
+        <div class="tv-card ${statusCardClass(os)}">
+            <div class="tv-card-head">
+                <div class="tv-lista" title="${lista.lista_nome}">${lista.lista_nome}</div>
+                <div class="tv-percent">${progresso}%</div>
+            </div>
+            <div class="tv-main">
+                ${renderImagemTv(os)}
+                <div>
+                    <div class="tv-os">${os.os_numero}</div>
+                    <div class="tv-item" title="${os.item_nome || os.item_codigo}">${os.item_nome || os.item_codigo}</div>
+                    <div class="tv-client">${os.cliente || 'Cliente não informado'}</div>
+                </div>
+            </div>
+            <div class="tv-metrics">
+                <div class="tv-metric">
+                    <div class="tv-metric-label">Qtd</div>
+                    <div class="tv-metric-value">${os.pecas_total || 0}</div>
+                </div>
+                <div class="tv-metric">
+                    <div class="tv-metric-label">Falta</div>
+                    <div class="tv-metric-value">${os.tempo_restante_label || '0m'}</div>
+                </div>
+                <div class="tv-metric">
+                    <div class="tv-metric-label">Turnos</div>
+                    <div class="tv-metric-value">${os.turnos_restantes || 0}</div>
+                </div>
+            </div>
+            <div class="tv-progress">
+                <div class="tv-progress-fill" style="width: ${progresso}%"></div>
+            </div>
+            <div class="tv-next-step"><strong>Próx:</strong> ${proximoServico ? proximoServico.nome : 'Sem etapa cadastrada'}</div>
+        </div>
+    `;
+}
+
+function renderResumoTv(listas) {
+    const totalListas = listas.length;
+    const comOs = listas.filter(l => l.primeira_os_atual).length;
+    const criticas = listas.filter(l => l.primeira_os_atual && Number(l.primeira_os_atual.turnos_restantes || 0) <= 1 && Number(l.primeira_os_atual.turnos_restantes || 0) > 0).length;
+    const concluidas = listas.filter(l => l.primeira_os_atual && Number(l.primeira_os_atual.progresso_percent || 0) >= 80).length;
+
+    document.getElementById('tvSummary').innerHTML = `
+        <div class="tv-summary-card"><div class="tv-summary-label">Listas</div><div class="tv-summary-value">${totalListas}</div></div>
+        <div class="tv-summary-card"><div class="tv-summary-label">Com OS</div><div class="tv-summary-value">${comOs}</div></div>
+        <div class="tv-summary-card"><div class="tv-summary-label">Atenção</div><div class="tv-summary-value">${criticas}</div></div>
+        <div class="tv-summary-card"><div class="tv-summary-label">Acima de 80%</div><div class="tv-summary-value">${concluidas}</div></div>
+        <div class="tv-summary-card"><div class="tv-summary-label">Atualizado</div><div class="tv-summary-value">${new Date().toLocaleTimeString('pt-BR', {hour: '2-digit', minute: '2-digit'})}</div></div>
+    `;
+}
+
+function carregarTv() {
+    fetch('{{ url_for("dashboard_apontamentos.timeline") }}')
+        .then(response => response.json())
+        .then(data => {
+            if (!data.success) throw new Error(data.message || 'Erro ao carregar dados');
+            const listas = data.listas || [];
+            renderResumoTv(listas);
+            document.getElementById('tvGrid').innerHTML = listas.map(renderCardTv).join('');
+        })
+        .catch(error => {
+            document.getElementById('tvGrid').innerHTML = `<div class="tv-error"><i class="fas fa-exclamation-triangle"></i> ${error.message}</div>`;
+        });
+}
+
+document.addEventListener('DOMContentLoaded', function() {
+    atualizarRelogioTv();
+    carregarTv();
+    setInterval(atualizarRelogioTv, 1000);
+    setInterval(carregarTv, 30000);
+    document.getElementById('btnRefreshTv').addEventListener('click', carregarTv);
+    document.getElementById('btnFullscreen').addEventListener('click', function() {
+        if (!document.fullscreenElement) {
+            document.documentElement.requestFullscreen().catch(() => null);
+        } else {
+            document.exitFullscreen().catch(() => null);
+        }
+    });
+});
+</script>
+{% endblock %}
