@@ -263,7 +263,7 @@
 
     .tv-hour-scale {
         position: relative;
-        height: 18px;
+        height: 24px;
         color: #94a3b8;
         font-size: .58rem;
         font-weight: 800;
@@ -271,9 +271,44 @@
 
     .tv-hour-mark {
         position: absolute;
-        top: 0;
+        top: 8px;
         transform: translateX(-50%);
         white-space: nowrap;
+    }
+
+    .tv-hour-mark::before {
+        content: '';
+        position: absolute;
+        left: 50%;
+        top: -8px;
+        width: 1px;
+        height: 6px;
+        background: rgba(148, 163, 184, .75);
+        transform: translateX(-50%);
+    }
+
+    .tv-hour-mark.featured {
+        color: #fff;
+        font-size: .68rem;
+        text-shadow: 0 0 8px rgba(255,255,255,.55);
+    }
+
+    .tv-hour-mark.featured::before {
+        height: 10px;
+        top: -11px;
+        width: 2px;
+        background: #fff;
+        box-shadow: 0 0 8px rgba(255,255,255,.85);
+    }
+
+    .tv-hour-mark.morning {
+        color: #facc15;
+        font-size: .76rem;
+    }
+
+    .tv-hour-mark.morning::before {
+        background: #facc15;
+        box-shadow: 0 0 10px rgba(250,204,21,.95);
     }
 
     .tv-loading,
@@ -360,9 +395,28 @@ function renderMiniTimelineTv(timeline) {
     const agora = new Date();
     const agoraMin = agora.getHours() * 60 + agora.getMinutes();
     const nowLeft = (agoraMin / diaMinutos) * 100;
-    const horas = Array.from({length: 25}, (_, hora) => {
-        const left = (hora * 60 / diaMinutos) * 100;
-        return `<span class="tv-hour-mark" style="left: ${left}%">${String(hora).padStart(2, '0')}</span>`;
+    const marcas = [
+        {min: 180, label: '03h', featured: true},
+        {min: 480, label: '08h', featured: true, morning: true},
+        {min: 720, label: '12h', featured: true},
+        {min: 810, label: '13:30', featured: true},
+        {min: 1080, label: '18h', featured: true},
+        {min: 0, label: '00h'},
+        {min: 120, label: '02h'},
+        {min: 240, label: '04h'},
+        {min: 360, label: '06h'},
+        {min: 600, label: '10h'},
+        {min: 840, label: '14h'},
+        {min: 960, label: '16h'},
+        {min: 1200, label: '20h'},
+        {min: 1320, label: '22h'},
+        {min: 1440, label: '24h'}
+    ].sort((a, b) => a.min - b.min);
+
+    const horas = marcas.map(marca => {
+        const left = (marca.min / diaMinutos) * 100;
+        const classes = ['tv-hour-mark', marca.featured ? 'featured' : '', marca.morning ? 'morning' : ''].filter(Boolean).join(' ');
+        return `<span class="${classes}" style="left: ${left}%">${marca.label}</span>`;
     }).join('');
 
     return `
