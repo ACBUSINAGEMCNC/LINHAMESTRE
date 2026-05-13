@@ -498,9 +498,9 @@ function renderCardTv(lista) {
     }
 
     const progresso = Math.max(0, Math.min(100, Number(os.progresso_percent || 0)));
-    const statusAtual = getStatusAtualTimeline(lista.timeline);
-    const statusColor = statusColorsTv[statusAtual?.status || 'sem_apontamento'];
-    const statusLabel = statusLabelsTv[statusAtual?.status || 'sem_apontamento'];
+    const statusBackend = os.status_atual_apontamento || 'sem_apontamento';
+    const statusColor = statusColorsTv[statusBackend];
+    const statusLabel = statusLabelsTv[statusBackend];
     const segundaOs = os.segunda_os_fila;
     const segundaOsHtml = segundaOs
         ? `<strong>2ª OS:</strong> ${segundaOs.os_numero} - ${segundaOs.item_codigo || segundaOs.item_nome} | Qtd: ${segundaOs.pecas_total || 0}`

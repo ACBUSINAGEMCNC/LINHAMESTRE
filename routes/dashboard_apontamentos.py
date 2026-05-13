@@ -208,6 +208,23 @@ def _get_resumo_os_fila(ordem):
     }
 
 
+def _status_apontamento(apontamento):
+    if not apontamento:
+        return None
+    if apontamento.tipo_acao == 'inicio_producao':
+        return 'producao'
+    if apontamento.tipo_acao == 'inicio_setup':
+        return 'setup'
+    if apontamento.tipo_acao == 'pausa':
+        motivo = (apontamento.motivo_parada or '').lower()
+        if 'manutencao' in motivo or 'manutenção' in motivo:
+            return 'manutencao'
+        return 'parada'
+    if apontamento.tipo_acao == 'stop':
+        return 'stop'
+    return None
+
+
 def _get_primeira_os_atual_lista(lista):
     ordens_fila = OrdemServico.query.options(
         joinedload(OrdemServico.pedidos)
@@ -284,6 +301,12 @@ def _get_primeira_os_atual_lista(lista):
     ).filter(
         ApontamentoProducao.ordem_servico_id == ordem.id
     ).order_by(ApontamentoProducao.data_hora.desc(), ApontamentoProducao.id.desc()).first()
+    apontamento_aberto = ApontamentoProducao.query.filter(
+        ApontamentoProducao.ordem_servico_id == ordem.id,
+        ApontamentoProducao.lista_kanban == lista.nome,
+        ApontamentoProducao.data_fim.is_(None),
+        ApontamentoProducao.tipo_acao.in_(['inicio_setup', 'inicio_producao', 'pausa', 'stop'])
+    ).order_by(ApontamentoProducao.data_hora.desc(), ApontamentoProducao.id.desc()).first()
 
     return {
         'os_numero': ordem.numero or str(ordem.id),
@@ -308,6 +331,7 @@ def _get_primeira_os_atual_lista(lista):
         'motivo_parada': None,
         'ultima_quantidade_apontada': _to_int(ultimo_apontamento.quantidade, 0) if ultimo_apontamento else 0,
         'ultimo_servico_apontado': ultimo_apontamento.trabalho.nome if ultimo_apontamento and ultimo_apontamento.trabalho else 'Sem apontamento',
+        'status_atual_apontamento': _status_apontamento(apontamento_aberto),
         'segunda_os_fila': _get_resumo_os_fila(segunda_ordem),
         'posicao': ordem.posicao,
         'status_kanban': ordem.status
