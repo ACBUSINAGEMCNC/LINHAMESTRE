@@ -92,6 +92,14 @@ def _classe_descendente_ids(classe):
     return encontrados
 
 
+def _localizacao_estoque_pecas(estoque_item):
+    if estoque_item.estante and estoque_item.secao and estoque_item.linha and estoque_item.coluna:
+        secao = ['A', 'B', 'C', 'D'][estoque_item.secao - 1] if 1 <= estoque_item.secao <= 4 else estoque_item.secao
+        return f"{estoque_item.estante}-{secao}-{(estoque_item.linha - 1) * 12 + estoque_item.coluna}"
+    partes = [estoque_item.prateleira, estoque_item.posicao]
+    return ' / '.join([parte for parte in partes if parte])
+
+
 def _parse_valor_item(raw):
     # Se já for número, retorna diretamente
     if isinstance(raw, (int, float)):
@@ -476,6 +484,72 @@ def alternar_classe_item(classe_id):
     db.session.commit()
     flash('Status da classe atualizado com sucesso!', 'success')
     return redirect(url_for('itens.listar_classes_itens'))
+
+
+@itens.route('/itens/imprimir')
+def imprimir_itens():
+    modo = (request.args.get('modo') or 'estoque').strip().lower()
+    if modo not in ('estoque', 'valores'):
+        modo = 'estoque'
+
+    pode_ver_valores = _usuario_pode_ver_valores()
+    mostrar_valores = modo == 'valores'
+    if mostrar_valores and not pode_ver_valores:
+        flash('Você não tem permissão para imprimir itens com valores.', 'danger')
+        return redirect(url_for('itens.imprimir_itens', modo='estoque'))
+
+    classes_item = _classes_item_ordenadas(apenas_ativas=False)
+    classe_id = request.args.get('classe_id', type=int)
+    classe_selecionada = ItemClasse.query.get(classe_id) if classe_id else None
+
+    query = Item.query.options(
+        selectinload(Item.classe),
+        selectinload(Item.estoque_pecas),
+    )
+    if classe_selecionada:
+        ids_classes = {classe_selecionada.id}
+        ids_classes.update(_classe_descendente_ids(classe_selecionada))
+        query = query.filter(Item.item_classe_id.in_(ids_classes))
+
+    itens_relatorio = query.order_by(Item.nome.asc()).all()
+    linhas = []
+    total_estoque = 0
+    total_valor = 0.0
+    for item in itens_relatorio:
+        estoque_total = sum((estoque.quantidade or 0) for estoque in item.estoque_pecas)
+        localizacoes = sorted(
+            set(
+                localizacao for localizacao in (
+                    _localizacao_estoque_pecas(estoque) for estoque in item.estoque_pecas
+                )
+                if localizacao
+            )
+        )
+        valor_unitario = float(item.valor_item or 0)
+        valor_total = valor_unitario * estoque_total
+        total_estoque += estoque_total
+        total_valor += valor_total
+        linhas.append({
+            'item': item,
+            'estoque_total': estoque_total,
+            'localizacoes': ', '.join(localizacoes) or '-',
+            'valor_unitario': valor_unitario,
+            'valor_total': valor_total,
+        })
+
+    return render_template(
+        'itens/imprimir.html',
+        linhas=linhas,
+        classes_item=classes_item,
+        classe_selecionada=classe_selecionada,
+        classe_id=classe_id,
+        modo=modo,
+        mostrar_valores=mostrar_valores,
+        pode_ver_valores=pode_ver_valores,
+        total_estoque=total_estoque,
+        total_valor=total_valor,
+        gerado_em=datetime.now(),
+    )
 
 
 @itens.route('/itens/valores')

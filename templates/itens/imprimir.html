@@ -1,0 +1,136 @@
+{% extends 'base.html' %}
+
+{% block title %}Impressão de Itens - ACB Usinagem CNC{% endblock %}
+
+{% block content %}
+<style>
+    .print-header { border-bottom: 2px solid #212529; margin-bottom: 1rem; padding-bottom: 0.75rem; }
+    .report-table th, .report-table td { font-size: 0.9rem; vertical-align: middle; }
+    @media print {
+        .no-print, nav, .navbar, .sidebar, footer { display: none !important; }
+        body { background: #fff !important; }
+        .container, .container-fluid { max-width: 100% !important; width: 100% !important; }
+        .card { border: none !important; box-shadow: none !important; }
+        .card-body { padding: 0 !important; }
+        .report-table th, .report-table td { font-size: 11px; padding: 4px 6px; }
+        .print-header h1 { font-size: 20px; }
+    }
+</style>
+
+<div class="no-print d-flex justify-content-between align-items-center mb-4">
+    <div>
+        <h1 class="mb-1">Impressão de Itens</h1>
+        <div class="text-muted">Relatório filtrado por classe, com modo de estoque ou valores.</div>
+    </div>
+    <div class="btn-group">
+        <a href="{{ url_for('itens.listar_itens') }}" class="btn btn-secondary">
+            <i class="fas fa-arrow-left"></i> Voltar
+        </a>
+        <button type="button" class="btn btn-primary" onclick="window.print()">
+            <i class="fas fa-print"></i> Imprimir
+        </button>
+    </div>
+</div>
+
+<div class="card no-print mb-4">
+    <div class="card-body">
+        <form method="GET" action="{{ url_for('itens.imprimir_itens') }}" class="row g-3 align-items-end">
+            <div class="col-md-5">
+                <label for="classe_id" class="form-label">Classe</label>
+                <select class="form-select" id="classe_id" name="classe_id">
+                    <option value="">Todas as classes</option>
+                    {% for classe in classes_item %}
+                    <option value="{{ classe.id }}" {% if classe_id == classe.id %}selected{% endif %}>{{ classe.caminho }}</option>
+                    {% endfor %}
+                </select>
+                <div class="form-text">Ao escolher uma classe, entram também todas as subclasses dela.</div>
+            </div>
+            <div class="col-md-4">
+                <label for="modo" class="form-label">Modo</label>
+                <select class="form-select" id="modo" name="modo">
+                    <option value="estoque" {% if modo == 'estoque' %}selected{% endif %}>Sem valores, com estoque</option>
+                    {% if pode_ver_valores %}
+                    <option value="valores" {% if modo == 'valores' %}selected{% endif %}>Com valores</option>
+                    {% endif %}
+                </select>
+                {% if not pode_ver_valores %}
+                <div class="form-text text-warning">Seu usuário não tem permissão para imprimir valores.</div>
+                {% endif %}
+            </div>
+            <div class="col-md-3">
+                <button type="submit" class="btn btn-success w-100">
+                    <i class="fas fa-filter"></i> Gerar relatório
+                </button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<div class="card">
+    <div class="card-body">
+        <div class="print-header d-flex justify-content-between align-items-start">
+            <div>
+                <h1 class="mb-1">Relatório de Itens</h1>
+                <div><strong>Modo:</strong> {% if mostrar_valores %}Com valores{% else %}Sem valores, com estoque{% endif %}</div>
+                <div><strong>Classe:</strong> {% if classe_selecionada %}{{ classe_selecionada.caminho }}{% else %}Todas{% endif %}</div>
+            </div>
+            <div class="text-end">
+                <div><strong>Gerado em:</strong> {{ gerado_em.strftime('%d/%m/%Y %H:%M') }}</div>
+                <div><strong>Total de itens:</strong> {{ linhas|length }}</div>
+            </div>
+        </div>
+
+        <div class="table-responsive">
+            <table class="table table-bordered table-striped report-table">
+                <thead class="table-dark">
+                    <tr>
+                        <th>Código ACB</th>
+                        <th>Item</th>
+                        <th>Classe</th>
+                        <th>Tipo</th>
+                        <th class="text-end">Estoque</th>
+                        <th>Localização</th>
+                        {% if mostrar_valores %}
+                        <th class="text-end">Valor Unit.</th>
+                        <th class="text-end">Valor Estoque</th>
+                        {% endif %}
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for linha in linhas %}
+                    <tr>
+                        <td>{{ linha.item.codigo_acb or '-' }}</td>
+                        <td>{{ linha.item.nome }}</td>
+                        <td>{% if linha.item.classe %}{{ linha.item.classe.caminho }}{% else %}-{% endif %}</td>
+                        <td>
+                            {% if linha.item.eh_composto %}Composto{% elif linha.item.tipo_item == 'montagem' %}Montagem{% else %}Produção{% endif %}
+                        </td>
+                        <td class="text-end">{{ linha.estoque_total }}</td>
+                        <td>{{ linha.localizacoes }}</td>
+                        {% if mostrar_valores %}
+                        <td class="text-end">R$ {{ '%.2f'|format(linha.valor_unitario or 0) }}</td>
+                        <td class="text-end">R$ {{ '%.2f'|format(linha.valor_total or 0) }}</td>
+                        {% endif %}
+                    </tr>
+                    {% else %}
+                    <tr>
+                        <td colspan="{% if mostrar_valores %}8{% else %}6{% endif %}" class="text-center text-muted py-4">Nenhum item encontrado para o filtro selecionado.</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+                <tfoot>
+                    <tr>
+                        <th colspan="4" class="text-end">Totais</th>
+                        <th class="text-end">{{ total_estoque }}</th>
+                        <th></th>
+                        {% if mostrar_valores %}
+                        <th></th>
+                        <th class="text-end">R$ {{ '%.2f'|format(total_valor or 0) }}</th>
+                        {% endif %}
+                    </tr>
+                </tfoot>
+            </table>
+        </div>
+    </div>
+</div>
+{% endblock %}

@@ -18,6 +18,9 @@
                 <a href="{{ url_for('itens.listar_classes_itens') }}" class="btn btn-outline-primary">
                     <i class="fas fa-tags"></i> Classes
                 </a>
+                <a href="{{ url_for('itens.imprimir_itens') }}" class="btn btn-outline-secondary">
+                    <i class="fas fa-print"></i> Imprimir
+                </a>
                 {% if acesso_valores_itens or usuario_admin_master %}
                 <a href="{{ url_for('itens.listar_valores_itens') }}" class="btn btn-outline-dark">
                     <i class="fas fa-dollar-sign"></i> Valores dos Itens
