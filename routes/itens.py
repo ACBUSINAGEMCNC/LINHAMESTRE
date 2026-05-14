@@ -46,6 +46,15 @@ def _classes_item_ordenadas(apenas_ativas=True):
     return sorted(classes, key=lambda classe: classe.caminho.lower())
 
 
+def _arvore_classes_item(classes):
+    por_pai = {}
+    for classe in classes:
+        por_pai.setdefault(classe.parent_id, []).append(classe)
+    for grupo in por_pai.values():
+        grupo.sort(key=lambda classe: (classe.ordem or 0, classe.nome.lower()))
+    return por_pai.get(None, [])
+
+
 def _parse_item_classe_id(form):
     raw = (form.get('item_classe_id') or '').strip()
     if not raw:
@@ -408,7 +417,8 @@ def listar_classes_itens():
 
     classes = _classes_item_ordenadas(apenas_ativas=False)
     classes_ativas = [classe for classe in classes if classe.ativa]
-    return render_template('itens/classes.html', classes=classes, classes_ativas=classes_ativas)
+    categorias_raiz = _arvore_classes_item(classes)
+    return render_template('itens/classes.html', classes=classes, classes_ativas=classes_ativas, categorias_raiz=categorias_raiz)
 
 
 @itens.route('/itens/classes/<int:classe_id>/editar', methods=['POST'])
@@ -429,8 +439,8 @@ def editar_classe_item(classe_id):
         except ValueError:
             parent_id = None
 
-    if parent_id == classe.id:
-        flash('A classe não pode ser subclasse dela mesma.', 'danger')
+    if parent_id == classe.id or (parent_id and parent_id in _classe_descendente_ids(classe)):
+        flash('A categoria não pode ser filha dela mesma ou de uma própria filha.', 'danger')
         return redirect(url_for('itens.listar_classes_itens'))
 
     try:

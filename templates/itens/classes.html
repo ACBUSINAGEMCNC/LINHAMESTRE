@@ -1,48 +1,69 @@
-{% extends 'base.html' %}
+﻿{% extends 'base.html' %}
 
-{% block title %}Classes de Itens - ACB Usinagem CNC{% endblock %}
+{% block title %}Categorias de Itens - ACB Usinagem CNC{% endblock %}
 
 {% block content %}
+<style>
+    .category-tree { font-size: 0.95rem; }
+    .category-node { border-left: 1px dashed #dee2e6; margin-left: 0.9rem; padding-left: 0.9rem; }
+    .category-row { background: #fff; border: 1px solid #e9ecef; border-radius: 0.5rem; padding: 0.55rem; margin-bottom: 0.5rem; }
+    .category-row:hover { background: #f8f9fa; }
+    .category-children { margin-top: 0.45rem; }
+    .category-toggle { width: 1.75rem; }
+    .folder-icon { color: #d39e00; }
+    .inactive-category { opacity: 0.6; }
+</style>
+
 <div class="d-flex justify-content-between align-items-center mb-4">
     <div>
-        <h1 class="mb-1">Classes de Itens</h1>
-        <div class="text-muted">Cadastre classes e subclasses para facilitar a localização dos itens.</div>
+        <h1 class="mb-1">Categorias de Itens</h1>
+        <div class="text-muted">Cadastro hier&aacute;rquico em &Aacute;rvore usando relacionamento pai-filho, sem limite de profundidade.</div>
     </div>
     <a href="{{ url_for('itens.listar_itens') }}" class="btn btn-secondary">
         <i class="fas fa-arrow-left"></i> Voltar para Itens
     </a>
 </div>
 
+<div class="alert alert-info">
+    <strong>A categoria aceita qualquer profundidade.</strong>
+    Crie n&iacute;veis como Pe&ccedil;as Agr&iacute;colas &rarr; John Deere &rarr; Plantadeira &rarr; Linha 1200 &rarr; Chassi &rarr; Mancal, sem alterar o sistema.
+</div>
+
 <div class="row g-4">
     <div class="col-lg-4">
-        <div class="card">
+        <div class="card mb-4">
             <div class="card-header bg-primary text-white">
-                <strong>Nova classe/subclasse</strong>
+                <strong>Criar categoria raiz</strong>
             </div>
             <div class="card-body">
                 <form method="POST" action="{{ url_for('itens.listar_classes_itens') }}">
+                    <input type="hidden" name="parent_id" value="">
                     <div class="mb-3">
                         <label for="nome" class="form-label">Nome</label>
-                        <input type="text" class="form-control" id="nome" name="nome" placeholder="Ex.: Peças Agrícolas" required>
-                    </div>
-                    <div class="mb-3">
-                        <label for="parent_id" class="form-label">Classe pai</label>
-                        <select class="form-select" id="parent_id" name="parent_id">
-                            <option value="">Sem classe pai</option>
-                            {% for classe in classes_ativas %}
-                            <option value="{{ classe.id }}">{{ classe.caminho }}</option>
-                            {% endfor %}
-                        </select>
-                        <div class="form-text">Deixe vazio para criar uma classe principal.</div>
+                        <input type="text" class="form-control" id="nome" name="nome" placeholder="Ex.: Pe&ccedil;as Agr&iacute;colas" required>
                     </div>
                     <div class="mb-3">
                         <label for="ordem" class="form-label">Ordem</label>
                         <input type="number" class="form-control" id="ordem" name="ordem" value="0">
                     </div>
                     <button type="submit" class="btn btn-success w-100">
-                        <i class="fas fa-save"></i> Salvar classe
+                        <i class="fas fa-plus"></i> Criar categoria raiz
                     </button>
                 </form>
+            </div>
+        </div>
+
+        <div class="card">
+            <div class="card-header">
+                <strong>Mover categoria</strong>
+            </div>
+            <div class="card-body">
+                <div class="small text-muted mb-2">Ao editar uma categoria, selecione qualquer outra categoria como pai. Deixe vazio para transformar em raiz.</div>
+                <div class="small">
+                    <i class="fas fa-folder folder-icon"></i> Pasta/categoria<br>
+                    <i class="fas fa-plus text-success"></i> Criar filho<br>
+                    <i class="fas fa-save text-primary"></i> Renomear ou mover
+                </div>
             </div>
         </div>
     </div>
@@ -50,78 +71,103 @@
     <div class="col-lg-8">
         <div class="card">
             <div class="card-header d-flex justify-content-between align-items-center">
-                <strong>Classes cadastradas</strong>
+                <strong>&Aacute;rvore de categorias</strong>
                 <span class="badge bg-secondary">{{ classes|length }}</span>
             </div>
-            <div class="card-body">
-                <div class="table-responsive">
-                    <table class="table table-striped align-middle">
-                        <thead>
-                            <tr>
-                                <th>Caminho</th>
-                                <th>Status</th>
-                                <th style="width: 340px;">Editar</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            {% for classe in classes %}
-                            <tr>
-                                <td>
-                                    <div class="fw-semibold">{{ classe.caminho }}</div>
-                                    {% if classe.parent %}
-                                    <small class="text-muted">Pai: {{ classe.parent.caminho }}</small>
-                                    {% else %}
-                                    <small class="text-muted">Classe principal</small>
-                                    {% endif %}
-                                </td>
-                                <td>
+            <div class="card-body category-tree">
+                {% macro render_categoria(classe) %}
+                <div class="category-node" id="categoria-{{ classe.id }}">
+                    <div class="category-row {% if not classe.ativa %}inactive-category{% endif %}">
+                        <div class="d-flex align-items-start gap-2">
+                            <button class="btn btn-sm btn-outline-secondary category-toggle" type="button" data-bs-toggle="collapse" data-bs-target="#filhos-{{ classe.id }}" aria-expanded="true">
+                                {% if classe.subclasses %}<i class="fas fa-caret-down"></i>{% else %}<i class="fas fa-minus"></i>{% endif %}
+                            </button>
+                            <div class="flex-grow-1">
+                                <div class="d-flex align-items-center flex-wrap gap-2 mb-2">
+                                    <i class="fas fa-folder folder-icon"></i>
+                                    <strong>{{ classe.nome }}</strong>
                                     {% if classe.ativa %}
                                     <span class="badge bg-success">Ativa</span>
                                     {% else %}
                                     <span class="badge bg-secondary">Inativa</span>
                                     {% endif %}
-                                </td>
-                                <td>
-                                    <form method="POST" action="{{ url_for('itens.editar_classe_item', classe_id=classe.id) }}" class="row g-2 mb-2">
-                                        <div class="col-12">
-                                            <input type="text" class="form-control form-control-sm" name="nome" value="{{ classe.nome }}" required>
-                                        </div>
-                                        <div class="col-8">
-                                            <select class="form-select form-select-sm" name="parent_id">
-                                                <option value="">Sem classe pai</option>
-                                                {% for opcao in classes_ativas %}
-                                                    {% if opcao.id != classe.id %}
-                                                    <option value="{{ opcao.id }}" {% if classe.parent_id == opcao.id %}selected{% endif %}>{{ opcao.caminho }}</option>
-                                                    {% endif %}
-                                                {% endfor %}
-                                            </select>
-                                        </div>
-                                        <div class="col-4">
-                                            <input type="number" class="form-control form-control-sm" name="ordem" value="{{ classe.ordem or 0 }}">
-                                        </div>
-                                        <div class="col-12">
-                                            <button type="submit" class="btn btn-sm btn-primary">
-                                                <i class="fas fa-save"></i> Salvar
-                                            </button>
-                                        </div>
-                                    </form>
-                                    <form method="POST" action="{{ url_for('itens.alternar_classe_item', classe_id=classe.id) }}">
-                                        <button type="submit" class="btn btn-sm {% if classe.ativa %}btn-outline-secondary{% else %}btn-outline-success{% endif %}">
-                                            {% if classe.ativa %}Desativar{% else %}Ativar{% endif %}
+                                    <small class="text-muted">{{ classe.caminho }}</small>
+                                </div>
+
+                                <form method="POST" action="{{ url_for('itens.listar_classes_itens') }}" class="row g-2 align-items-end mb-2">
+                                    <input type="hidden" name="parent_id" value="{{ classe.id }}">
+                                    <div class="col-md-7">
+                                        <label class="form-label form-label-sm">Novo n&iacute;vel dentro de {{ classe.nome }}</label>
+                                        <input type="text" class="form-control form-control-sm" name="nome" placeholder="Ex.: Plantadeira, Linha 1200, Mancal..." required>
+                                    </div>
+                                    <div class="col-md-2">
+                                        <label class="form-label form-label-sm">Ordem</label>
+                                        <input type="number" class="form-control form-control-sm" name="ordem" value="0">
+                                    </div>
+                                    <div class="col-md-3">
+                                        <button type="submit" class="btn btn-sm btn-success w-100">
+                                            <i class="fas fa-plus"></i> Filho
                                         </button>
-                                    </form>
-                                </td>
-                            </tr>
-                            {% else %}
-                            <tr>
-                                <td colspan="3" class="text-center text-muted py-4">Nenhuma classe cadastrada.</td>
-                            </tr>
-                            {% endfor %}
-                        </tbody>
-                    </table>
+                                    </div>
+                                </form>
+
+                                <form method="POST" action="{{ url_for('itens.editar_classe_item', classe_id=classe.id) }}" class="row g-2 align-items-end">
+                                    <div class="col-md-4">
+                                        <label class="form-label form-label-sm">Renomear</label>
+                                        <input type="text" class="form-control form-control-sm" name="nome" value="{{ classe.nome }}" required>
+                                    </div>
+                                    <div class="col-md-4">
+                                        <label class="form-label form-label-sm">Pai</label>
+                                        <select class="form-select form-select-sm" name="parent_id">
+                                            <option value="">Categoria raiz</option>
+                                            {% for opcao in classes_ativas %}
+                                                {% if opcao.id != classe.id %}
+                                                <option value="{{ opcao.id }}" {% if classe.parent_id == opcao.id %}selected{% endif %}>{{ opcao.caminho }}</option>
+                                                {% endif %}
+                                            {% endfor %}
+                                        </select>
+                                    </div>
+                                    <div class="col-md-2">
+                                        <label class="form-label form-label-sm">Ordem</label>
+                                        <input type="number" class="form-control form-control-sm" name="ordem" value="{{ classe.ordem or 0 }}">
+                                    </div>
+                                    <div class="col-md-2">
+                                        <button type="submit" class="btn btn-sm btn-primary w-100">
+                                            <i class="fas fa-save"></i>
+                                        </button>
+                                    </div>
+                                </form>
+
+                                <form method="POST" action="{{ url_for('itens.alternar_classe_item', classe_id=classe.id) }}" class="mt-2">
+                                    <button type="submit" class="btn btn-sm {% if classe.ativa %}btn-outline-secondary{% else %}btn-outline-success{% endif %}">
+                                        {% if classe.ativa %}Desativar{% else %}Ativar{% endif %}
+                                    </button>
+                                </form>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="collapse show category-children" id="filhos-{{ classe.id }}">
+                        {% for filha in classe.subclasses|sort(attribute='ordem') %}
+                            {{ render_categoria(filha) }}
+                        {% endfor %}
+                    </div>
                 </div>
+                {% endmacro %}
+
+                {% if categorias_raiz %}
+                    {% for classe in categorias_raiz %}
+                        {{ render_categoria(classe) }}
+                    {% endfor %}
+                {% else %}
+                    <div class="text-center text-muted py-5">
+                        <i class="fas fa-folder-open fa-2x mb-2"></i><br>
+                        Nenhuma categoria cadastrada. Crie a primeira categoria raiz ao lado.
+                    </div>
+                {% endif %}
             </div>
         </div>
     </div>
 </div>
 {% endblock %}
+
