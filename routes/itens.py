@@ -55,6 +55,19 @@ def _arvore_classes_item(classes):
     return por_pai.get(None, [])
 
 
+def _classes_item_payload(classes):
+    return [
+        {
+            'id': classe.id,
+            'nome': classe.nome,
+            'parent_id': classe.parent_id,
+            'caminho': classe.caminho,
+            'ordem': classe.ordem or 0,
+        }
+        for classe in classes
+    ]
+
+
 def _parse_item_classe_id(form):
     raw = (form.get('item_classe_id') or '').strip()
     if not raw:
@@ -855,7 +868,7 @@ def novo_item():
                 flash(error, 'danger')
             materiais = Material.query.all()
             trabalhos = Trabalho.query.all()
-            return render_template('itens/novo.html', materiais=materiais, trabalhos=trabalhos, item=None, classes_item=classes_item, pode_ver_valores=pode_ver_valores)
+            return render_template('itens/novo.html', materiais=materiais, trabalhos=trabalhos, item=None, classes_item=classes_item, classes_item_payload=_classes_item_payload(classes_item), pode_ver_valores=pode_ver_valores)
         
         nome = request.form['nome']
         
@@ -865,7 +878,7 @@ def novo_item():
             flash('Já existe um item com este nome!', 'danger')
             materiais = Material.query.all()
             trabalhos = Trabalho.query.all()
-            return render_template('itens/novo.html', materiais=materiais, trabalhos=trabalhos, item=None, classes_item=classes_item, pode_ver_valores=pode_ver_valores)
+            return render_template('itens/novo.html', materiais=materiais, trabalhos=trabalhos, item=None, classes_item=classes_item, classes_item_payload=_classes_item_payload(classes_item), pode_ver_valores=pode_ver_valores)
         
         # Gerar código ACB automaticamente
         novo_codigo = generate_next_code(Item, "ACB", "codigo_acb")
@@ -904,7 +917,7 @@ def novo_item():
                 flash(str(e), 'danger')
                 materiais = Material.query.all()
                 trabalhos = Trabalho.query.all()
-                return render_template('itens/novo.html', materiais=materiais, trabalhos=trabalhos, item=None, classes_item=classes_item, pode_ver_valores=pode_ver_valores)
+                return render_template('itens/novo.html', materiais=materiais, trabalhos=trabalhos, item=None, classes_item=classes_item, classes_item_payload=_classes_item_payload(classes_item), pode_ver_valores=pode_ver_valores)
 
         if item.tipo_item == 'montagem':
             item.eh_composto = False
@@ -917,7 +930,7 @@ def novo_item():
             flash('O peso deve ser um número válido', 'danger')
             materiais = Material.query.all()
             trabalhos = Trabalho.query.all()
-            return render_template('itens/novo.html', materiais=materiais, trabalhos=trabalhos, item=None, classes_item=classes_item, pode_ver_valores=pode_ver_valores)
+            return render_template('itens/novo.html', materiais=materiais, trabalhos=trabalhos, item=None, classes_item=classes_item, classes_item_payload=_classes_item_payload(classes_item), pode_ver_valores=pode_ver_valores)
         
         # Upload de arquivos
         if 'desenho_tecnico' in request.files:
@@ -939,7 +952,7 @@ def novo_item():
                 flash('O arquivo de blank de laser deve estar no formato DXF', 'danger')
                 materiais = Material.query.all()
                 trabalhos = Trabalho.query.all()
-                return render_template('itens/novo.html', materiais=materiais, trabalhos=trabalhos, item=None, classes_item=classes_item, pode_ver_valores=pode_ver_valores)
+                return render_template('itens/novo.html', materiais=materiais, trabalhos=trabalhos, item=None, classes_item=classes_item, classes_item_payload=_classes_item_payload(classes_item), pode_ver_valores=pode_ver_valores)
         
         db.session.add(item)
         db.session.commit()
@@ -1003,7 +1016,7 @@ def novo_item():
     tipo_item_default = (request.args.get('tipo_item') or 'producao').strip().lower()
     if tipo_item_default not in ('producao', 'montagem'):
         tipo_item_default = 'producao'
-    return render_template('itens/novo.html', materiais=materiais, trabalhos=trabalhos, item=None, classes_item=classes_item, tipo_item_default=tipo_item_default, pode_ver_valores=_usuario_pode_ver_valores())
+    return render_template('itens/novo.html', materiais=materiais, trabalhos=trabalhos, item=None, classes_item=classes_item, classes_item_payload=_classes_item_payload(classes_item), tipo_item_default=tipo_item_default, pode_ver_valores=_usuario_pode_ver_valores())
 
 @itens.route('/itens/editar/<int:item_id>', methods=['GET', 'POST'])
 def editar_item(item_id):
@@ -1041,7 +1054,7 @@ def editar_item(item_id):
         if errors:
             for error in errors:
                 flash(error, 'danger')
-            return render_template('itens/editar.html', item=item, materiais=materiais, trabalhos=trabalhos, classes_item=classes_item, pode_ver_valores=pode_ver_valores, item_materiais=item_materiais, item_trabalhos=item_trabalhos)
+            return render_template('itens/editar.html', item=item, materiais=materiais, trabalhos=trabalhos, classes_item=classes_item, classes_item_payload=_classes_item_payload(classes_item), pode_ver_valores=pode_ver_valores, item_materiais=item_materiais, item_trabalhos=item_trabalhos)
         
         nome = request.form['nome']
         
@@ -1049,7 +1062,7 @@ def editar_item(item_id):
         item_existente = Item.query.filter(Item.nome == nome, Item.id != item_id).first()
         if item_existente:
             flash('Já existe um item com este nome!', 'danger')
-            return render_template('itens/editar.html', item=item, materiais=materiais, trabalhos=trabalhos, classes_item=classes_item, pode_ver_valores=pode_ver_valores, item_materiais=item_materiais, item_trabalhos=item_trabalhos)
+            return render_template('itens/editar.html', item=item, materiais=materiais, trabalhos=trabalhos, classes_item=classes_item, classes_item_payload=_classes_item_payload(classes_item), pode_ver_valores=pode_ver_valores, item_materiais=item_materiais, item_trabalhos=item_trabalhos)
         
         tipo_item = (request.form.get('tipo_item', item.tipo_item or 'producao') or 'producao').strip().lower()
         categoria_montagem = (request.form.get('categoria_montagem') or '').strip() or None
@@ -1080,7 +1093,7 @@ def editar_item(item_id):
                 _apply_campos_financeiros(item, request.form)
             except ValueError as e:
                 flash(str(e), 'danger')
-                return render_template('itens/editar.html', item=item, materiais=materiais, trabalhos=trabalhos, classes_item=classes_item, pode_ver_valores=pode_ver_valores, item_materiais=item_materiais, item_trabalhos=item_trabalhos)
+                return render_template('itens/editar.html', item=item, materiais=materiais, trabalhos=trabalhos, classes_item=classes_item, classes_item_payload=_classes_item_payload(classes_item), pode_ver_valores=pode_ver_valores, item_materiais=item_materiais, item_trabalhos=item_trabalhos)
         
         # Validar e converter o peso
         try:
@@ -1088,7 +1101,7 @@ def editar_item(item_id):
             item.peso = float(peso) if peso else 0
         except ValueError:
             flash('O peso deve ser um número válido', 'danger')
-            return render_template('itens/editar.html', item=item, materiais=materiais, trabalhos=trabalhos, classes_item=classes_item, pode_ver_valores=pode_ver_valores, item_materiais=item_materiais, item_trabalhos=item_trabalhos)
+            return render_template('itens/editar.html', item=item, materiais=materiais, trabalhos=trabalhos, classes_item=classes_item, classes_item_payload=_classes_item_payload(classes_item), pode_ver_valores=pode_ver_valores, item_materiais=item_materiais, item_trabalhos=item_trabalhos)
         
         # Upload de arquivos
         if 'desenho_tecnico' in request.files and request.files['desenho_tecnico'].filename:
@@ -1108,7 +1121,7 @@ def editar_item(item_id):
                 item.blank_laser = save_file(blank_laser_file, 'blank_laser')
             else:
                 flash('O arquivo de blank de laser deve estar no formato DXF', 'danger')
-                return render_template('itens/editar.html', item=item, materiais=materiais, trabalhos=trabalhos, classes_item=classes_item, pode_ver_valores=pode_ver_valores, item_materiais=item_materiais, item_trabalhos=item_trabalhos)
+                return render_template('itens/editar.html', item=item, materiais=materiais, trabalhos=trabalhos, classes_item=classes_item, classes_item_payload=_classes_item_payload(classes_item), pode_ver_valores=pode_ver_valores, item_materiais=item_materiais, item_trabalhos=item_trabalhos)
 
         if getattr(item, 'criado_via_importacao_estoque', False):
             item.criado_via_importacao_estoque = False
@@ -1184,7 +1197,7 @@ def editar_item(item_id):
                           item=item, 
                           materiais=materiais, 
                           trabalhos=trabalhos,
-                          classes_item=classes_item,
+                          classes_item=classes_item, classes_item_payload=_classes_item_payload(classes_item),
                           pode_ver_valores=pode_ver_valores,
                           item_materiais=item_materiais,
                           item_trabalhos=item_trabalhos)

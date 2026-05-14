@@ -75,19 +75,15 @@
 
                     <div class="row mb-3">
                         <div class="col-md-12">
-                            <label for="item_classe_id" class="form-label">Classificação do Item</label>
-                            <div class="input-group">
-                                <select class="form-select select2" id="item_classe_id" name="item_classe_id">
-                                    <option value="">Sem classificação</option>
-                                    {% for classe in classes_item or [] %}
-                                    <option value="{{ classe.id }}">{{ classe.caminho }}</option>
-                                    {% endfor %}
-                                </select>
-                                <a href="{{ url_for('itens.listar_classes_itens') }}" class="btn btn-outline-primary" target="_blank">
-                                    <i class="fas fa-tags"></i> Classes
+                            <label class="form-label">Classificação do Item</label>
+                            <input type="hidden" id="item_classe_id" name="item_classe_id" value="">
+                            <div id="itemClasseProgressivo" class="border rounded p-3 bg-light" data-selected=""></div>
+                            <div class="d-flex justify-content-between align-items-center mt-2">
+                                <div class="form-text">Opcional. Selecione um nível para liberar o próximo. O item será salvo na última categoria escolhida.</div>
+                                <a href="{{ url_for('itens.listar_classes_itens') }}" class="btn btn-sm btn-outline-primary" target="_blank">
+                                    <i class="fas fa-tags"></i> Gerenciar classes
                                 </a>
                             </div>
-                            <div class="form-text">Opcional. Use para localizar e filtrar itens por classe ou subclasse.</div>
                         </div>
                     </div>
 
@@ -988,6 +984,119 @@
                     preview.innerHTML = '';
                 }
             };
+
+
+            const classesItem = {{ classes_item_payload|default([])|tojson }};
+            const classeContainer = document.getElementById('itemClasseProgressivo');
+            const classeHidden = document.getElementById('item_classe_id');
+
+            function filhosDaCategoria(parentId) {
+                return classesItem
+                    .filter(function(classe) {
+                        if (parentId === null) {
+                            return classe.parent_id === null;
+                        }
+                        return classe.parent_id === parentId;
+                    })
+                    .sort(function(a, b) {
+                        if ((a.ordem || 0) !== (b.ordem || 0)) {
+                            return (a.ordem || 0) - (b.ordem || 0);
+                        }
+                        return a.nome.localeCompare(b.nome);
+                    });
+            }
+
+            function caminhoAteCategoria(categoriaId) {
+                const porId = {};
+                classesItem.forEach(function(classe) { porId[classe.id] = classe; });
+                const caminho = [];
+                let atual = porId[Number(categoriaId)];
+                const visitados = new Set();
+                while (atual && !visitados.has(atual.id)) {
+                    visitados.add(atual.id);
+                    caminho.unshift(atual.id);
+                    atual = atual.parent_id ? porId[atual.parent_id] : null;
+                }
+                return caminho;
+            }
+
+            function criarSelectNivel(parentId, selecionadoId, nivel) {
+                const filhos = filhosDaCategoria(parentId);
+                if (!filhos.length) {
+                    return null;
+                }
+                const wrapper = document.createElement('div');
+                wrapper.className = 'mb-2 item-classe-nivel';
+                wrapper.dataset.nivel = nivel;
+
+                const label = document.createElement('label');
+                label.className = 'form-label form-label-sm mb-1';
+                label.textContent = nivel === 0 ? 'Classe principal' : 'Proximo nivel';
+
+                const select = document.createElement('select');
+                select.className = 'form-select form-select-sm';
+                select.innerHTML = '<option value="">Selecione</option>';
+                filhos.forEach(function(classe) {
+                    const option = document.createElement('option');
+                    option.value = classe.id;
+                    option.textContent = classe.nome;
+                    if (selecionadoId && Number(selecionadoId) === classe.id) {
+                        option.selected = true;
+                    }
+                    select.appendChild(option);
+                });
+
+                select.addEventListener('change', function() {
+                    const valor = this.value;
+                    const proximos = classeContainer.querySelectorAll('.item-classe-nivel');
+                    proximos.forEach(function(el) {
+                        if (Number(el.dataset.nivel) > nivel) {
+                            el.remove();
+                        }
+                    });
+                    classeHidden.value = valor || (nivel > 0 ? classeContainer.querySelector('[data-nivel="' + (nivel - 1) + '"] select').value : '');
+                    if (valor) {
+                        const proximo = criarSelectNivel(Number(valor), null, nivel + 1);
+                        if (proximo) {
+                            classeContainer.appendChild(proximo);
+                        }
+                    }
+                });
+
+                wrapper.appendChild(label);
+                wrapper.appendChild(select);
+                return wrapper;
+            }
+
+            function montarClassificacaoProgressiva() {
+                if (!classeContainer || !classeHidden) {
+                    return;
+                }
+                classeContainer.innerHTML = '';
+                const selecionado = classeContainer.dataset.selected || '';
+                const caminho = selecionado ? caminhoAteCategoria(selecionado) : [];
+                let parentId = null;
+                let nivel = 0;
+
+                do {
+                    const selecionadoNivel = caminho[nivel] || null;
+                    const selectNivel = criarSelectNivel(parentId, selecionadoNivel, nivel);
+                    if (!selectNivel) {
+                        break;
+                    }
+                    classeContainer.appendChild(selectNivel);
+                    parentId = selecionadoNivel;
+                    nivel += 1;
+                } while (parentId);
+
+                classeHidden.value = selecionado || '';
+                if (!classesItem.length) {
+                    classeContainer.innerHTML = '<div class="text-muted small">Nenhuma categoria ativa cadastrada.</div>';
+                }
+            }
+
+            montarClassificacaoProgressiva();
+
         });
     </script>
 </body>
