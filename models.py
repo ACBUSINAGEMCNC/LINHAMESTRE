@@ -306,6 +306,32 @@ class CotacaoItemPedidoMontagem(db.Model):
     def __repr__(self):
         return f'<CotacaoItemPedidoMontagem {self.id}>'
     
+class ItemClasse(db.Model):
+    __tablename__ = 'item_classe'
+
+    id = db.Column(db.Integer, primary_key=True)
+    nome = db.Column(db.String(120), nullable=False)
+    parent_id = db.Column(db.Integer, db.ForeignKey('item_classe.id'), nullable=True)
+    ativa = db.Column(db.Boolean, default=True)
+    ordem = db.Column(db.Integer, default=0)
+    data_criacao = db.Column(db.DateTime, default=datetime.utcnow)
+    parent = relationship('ItemClasse', remote_side=[id], backref='subclasses', lazy=True)
+
+    @property
+    def caminho(self):
+        partes = []
+        atual = self
+        visitados = set()
+        while atual and atual.id not in visitados:
+            visitados.add(atual.id)
+            partes.append(atual.nome)
+            atual = atual.parent
+        return ' > '.join(reversed(partes))
+
+    def __repr__(self):
+        return f'<ItemClasse {self.nome}>'
+
+
 class Item(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     nome = db.Column(db.String(100), nullable=False, unique=True)
@@ -323,6 +349,7 @@ class Item(db.Model):
     instrucoes_trabalho = db.Column(db.String(255))
     tipo_item = db.Column(db.String(20), default='producao')
     categoria_montagem = db.Column(db.String(50))
+    item_classe_id = db.Column(db.Integer, db.ForeignKey('item_classe.id'), nullable=True)
     tamanho_peca = db.Column(db.String(100))
     tempera = db.Column(db.Boolean, default=False)
     tipo_tempera = db.Column(db.String(50))
@@ -344,6 +371,7 @@ class Item(db.Model):
     data_criacao = db.Column(db.DateTime, default=datetime.utcnow)
     materiais = relationship('ItemMaterial', backref='item', lazy=True, cascade="all, delete-orphan")
     trabalhos = relationship('ItemTrabalho', backref='item', lazy=True, cascade="all, delete-orphan")
+    classe = relationship('ItemClasse', backref='itens', lazy=True)
     pedidos = relationship('Pedido', backref='item', lazy=True)
     arquivos_cnc = relationship('ArquivoCNC', backref='item', lazy=True, cascade="all, delete-orphan")
     # Relacionamentos para item composto

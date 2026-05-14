@@ -15,6 +15,9 @@
                 <a href="/itens/composto/novo" class="btn btn-primary">
                     <i class="fas fa-layer-group"></i> Item Composto
                 </a>
+                <a href="{{ url_for('itens.listar_classes_itens') }}" class="btn btn-outline-primary">
+                    <i class="fas fa-tags"></i> Classes
+                </a>
                 {% if acesso_valores_itens or usuario_admin_master %}
                 <a href="{{ url_for('itens.listar_valores_itens') }}" class="btn btn-outline-dark">
                     <i class="fas fa-dollar-sign"></i> Valores dos Itens
@@ -36,6 +39,7 @@
                                 <th>Valor</th>
                                 {% endif %}
                                 <th>Tipo</th>
+                                <th>Classe</th>
                                 <th>Materiais/Componentes</th>
                                 <th>Trabalhos</th>
                                 <th>Desenho</th>
@@ -81,6 +85,13 @@
                                         <span class="badge bg-secondary">
                                             <i class="fas fa-cube"></i> Simples
                                         </span>
+                                    {% endif %}
+                                </td>
+                                <td>
+                                    {% if item.classe %}
+                                        <span class="badge bg-info text-dark">{{ item.classe.caminho }}</span>
+                                    {% else %}
+                                        <span class="text-muted">-</span>
                                     {% endif %}
                                 </td>
                                 <td>

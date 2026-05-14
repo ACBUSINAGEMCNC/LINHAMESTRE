@@ -368,6 +368,18 @@ def verificar_inicializar_banco():
                 return
             logger.warning(f"Erro ao migrar colunas tipo_item/categoria_montagem: {str(col_err)}")
 
+        try:
+            from migrations.add_item_classe import migrate_postgres as migrate_item_classe_postgres
+            if migrate_item_classe_postgres():
+                logger.info("Tabela item_classe e coluna item_classe_id verificadas/adicionadas com sucesso.")
+            else:
+                logger.warning("Falha ao verificar/adicionar estrutura de classes de item.")
+        except Exception as col_err:
+            if _is_max_connections_error(col_err):
+                logger.warning("Supabase sem conexões disponíveis (Max client connections reached). Pulando demais migrações de startup.")
+                return
+            logger.warning(f"Erro ao migrar estrutura de classes de item: {str(col_err)}")
+
         # Executar migração para adicionar coluna comprimento_mm em item_composto
         try:
             from migrations.add_comprimento_mm_item_composto import migrate_postgres as migrate_composto_mm_postgres
@@ -567,6 +579,16 @@ def verificar_inicializar_banco():
                             logger.info("Colunas tipo_item/categoria_montagem adicionadas com sucesso à tabela item.")
                         else:
                             logger.warning("Falha ao adicionar colunas tipo_item/categoria_montagem à tabela item.")
+
+                    cursor.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='item_classe';")
+                    has_item_classe_table = cursor.fetchone() is not None
+                    if (not has_item_classe_table) or 'item_classe_id' not in item_columns:
+                        logger.info("Estrutura de classes de item não encontrada. Executando migração...")
+                        from migrations.add_item_classe import migrate_sqlite as migrate_item_classe_sqlite
+                        if migrate_item_classe_sqlite():
+                            logger.info("Estrutura de classes de item criada/verificada com sucesso.")
+                        else:
+                            logger.warning("Falha ao criar/verificar estrutura de classes de item.")
 
                     # Tabelas/coluna de pedido de montagem
                     cursor.execute("PRAGMA table_info(pedido)")

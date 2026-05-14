@@ -1,0 +1,127 @@
+{% extends 'base.html' %}
+
+{% block title %}Classes de Itens - ACB Usinagem CNC{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <div>
+        <h1 class="mb-1">Classes de Itens</h1>
+        <div class="text-muted">Cadastre classes e subclasses para facilitar a localização dos itens.</div>
+    </div>
+    <a href="{{ url_for('itens.listar_itens') }}" class="btn btn-secondary">
+        <i class="fas fa-arrow-left"></i> Voltar para Itens
+    </a>
+</div>
+
+<div class="row g-4">
+    <div class="col-lg-4">
+        <div class="card">
+            <div class="card-header bg-primary text-white">
+                <strong>Nova classe/subclasse</strong>
+            </div>
+            <div class="card-body">
+                <form method="POST" action="{{ url_for('itens.listar_classes_itens') }}">
+                    <div class="mb-3">
+                        <label for="nome" class="form-label">Nome</label>
+                        <input type="text" class="form-control" id="nome" name="nome" placeholder="Ex.: Peças Agrícolas" required>
+                    </div>
+                    <div class="mb-3">
+                        <label for="parent_id" class="form-label">Classe pai</label>
+                        <select class="form-select" id="parent_id" name="parent_id">
+                            <option value="">Sem classe pai</option>
+                            {% for classe in classes_ativas %}
+                            <option value="{{ classe.id }}">{{ classe.caminho }}</option>
+                            {% endfor %}
+                        </select>
+                        <div class="form-text">Deixe vazio para criar uma classe principal.</div>
+                    </div>
+                    <div class="mb-3">
+                        <label for="ordem" class="form-label">Ordem</label>
+                        <input type="number" class="form-control" id="ordem" name="ordem" value="0">
+                    </div>
+                    <button type="submit" class="btn btn-success w-100">
+                        <i class="fas fa-save"></i> Salvar classe
+                    </button>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <div class="col-lg-8">
+        <div class="card">
+            <div class="card-header d-flex justify-content-between align-items-center">
+                <strong>Classes cadastradas</strong>
+                <span class="badge bg-secondary">{{ classes|length }}</span>
+            </div>
+            <div class="card-body">
+                <div class="table-responsive">
+                    <table class="table table-striped align-middle">
+                        <thead>
+                            <tr>
+                                <th>Caminho</th>
+                                <th>Status</th>
+                                <th style="width: 340px;">Editar</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for classe in classes %}
+                            <tr>
+                                <td>
+                                    <div class="fw-semibold">{{ classe.caminho }}</div>
+                                    {% if classe.parent %}
+                                    <small class="text-muted">Pai: {{ classe.parent.caminho }}</small>
+                                    {% else %}
+                                    <small class="text-muted">Classe principal</small>
+                                    {% endif %}
+                                </td>
+                                <td>
+                                    {% if classe.ativa %}
+                                    <span class="badge bg-success">Ativa</span>
+                                    {% else %}
+                                    <span class="badge bg-secondary">Inativa</span>
+                                    {% endif %}
+                                </td>
+                                <td>
+                                    <form method="POST" action="{{ url_for('itens.editar_classe_item', classe_id=classe.id) }}" class="row g-2 mb-2">
+                                        <div class="col-12">
+                                            <input type="text" class="form-control form-control-sm" name="nome" value="{{ classe.nome }}" required>
+                                        </div>
+                                        <div class="col-8">
+                                            <select class="form-select form-select-sm" name="parent_id">
+                                                <option value="">Sem classe pai</option>
+                                                {% for opcao in classes_ativas %}
+                                                    {% if opcao.id != classe.id %}
+                                                    <option value="{{ opcao.id }}" {% if classe.parent_id == opcao.id %}selected{% endif %}>{{ opcao.caminho }}</option>
+                                                    {% endif %}
+                                                {% endfor %}
+                                            </select>
+                                        </div>
+                                        <div class="col-4">
+                                            <input type="number" class="form-control form-control-sm" name="ordem" value="{{ classe.ordem or 0 }}">
+                                        </div>
+                                        <div class="col-12">
+                                            <button type="submit" class="btn btn-sm btn-primary">
+                                                <i class="fas fa-save"></i> Salvar
+                                            </button>
+                                        </div>
+                                    </form>
+                                    <form method="POST" action="{{ url_for('itens.alternar_classe_item', classe_id=classe.id) }}">
+                                        <button type="submit" class="btn btn-sm {% if classe.ativa %}btn-outline-secondary{% else %}btn-outline-success{% endif %}">
+                                            {% if classe.ativa %}Desativar{% else %}Ativar{% endif %}
+                                        </button>
+                                    </form>
+                                </td>
+                            </tr>
+                            {% else %}
+                            <tr>
+                                <td colspan="3" class="text-center text-muted py-4">Nenhuma classe cadastrada.</td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

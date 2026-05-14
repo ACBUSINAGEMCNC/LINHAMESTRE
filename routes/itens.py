@@ -8,7 +8,7 @@ import uuid
 from datetime import datetime
 from decimal import Decimal, InvalidOperation
 import requests
-from models import db, Item, Material, Trabalho, ItemMaterial, ItemTrabalho, Pedido, ArquivoCNC, ItemComposto, EstoquePecas
+from models import db, Item, Material, Trabalho, ItemMaterial, ItemTrabalho, Pedido, ArquivoCNC, ItemComposto, EstoquePecas, ItemClasse
 from utils import validate_form_data, save_file, generate_next_code, parse_json_field
 from flask import current_app, g
 from sqlalchemy import func
@@ -36,6 +36,38 @@ def _usuario_pode_ver_valores(usuario=None):
     if (getattr(usuario, 'email', '') or '').strip().lower() == ADMIN_MASTER_EMAIL and getattr(usuario, 'nivel_acesso', None) == 'admin':
         return True
     return bool(getattr(usuario, 'acesso_valores_itens', False))
+
+
+def _classes_item_ordenadas(apenas_ativas=True):
+    query = ItemClasse.query
+    if apenas_ativas:
+        query = query.filter_by(ativa=True)
+    classes = query.order_by(ItemClasse.ordem.asc(), ItemClasse.nome.asc()).all()
+    return sorted(classes, key=lambda classe: classe.caminho.lower())
+
+
+def _parse_item_classe_id(form):
+    raw = (form.get('item_classe_id') or '').strip()
+    if not raw:
+        return None
+    try:
+        classe_id = int(raw)
+    except ValueError:
+        return None
+    classe = ItemClasse.query.filter_by(id=classe_id, ativa=True).first()
+    return classe.id if classe else None
+
+
+def _classe_descendente_ids(classe):
+    encontrados = set()
+    pendentes = list(classe.subclasses or [])
+    while pendentes:
+        atual = pendentes.pop()
+        if atual.id in encontrados:
+            continue
+        encontrados.add(atual.id)
+        pendentes.extend(list(atual.subclasses or []))
+    return encontrados
 
 
 def _parse_valor_item(raw):
@@ -341,8 +373,86 @@ def listar_itens():
     itens = Item.query.options(
         selectinload(Item.materiais),
         selectinload(Item.trabalhos),
+        selectinload(Item.classe),
     ).all()
     return render_template('itens/listar.html', itens=itens)
+
+
+@itens.route('/itens/classes', methods=['GET', 'POST'])
+def listar_classes_itens():
+    if request.method == 'POST':
+        nome = (request.form.get('nome') or '').strip()
+        parent_raw = (request.form.get('parent_id') or '').strip()
+        ordem_raw = (request.form.get('ordem') or '').strip()
+        if not nome:
+            flash('Informe o nome da classe.', 'danger')
+            return redirect(url_for('itens.listar_classes_itens'))
+
+        parent_id = None
+        if parent_raw:
+            try:
+                parent_id = int(parent_raw)
+            except ValueError:
+                parent_id = None
+
+        try:
+            ordem = int(ordem_raw) if ordem_raw else 0
+        except ValueError:
+            ordem = 0
+
+        classe = ItemClasse(nome=nome, parent_id=parent_id, ordem=ordem, ativa=True)
+        db.session.add(classe)
+        db.session.commit()
+        flash('Classe cadastrada com sucesso!', 'success')
+        return redirect(url_for('itens.listar_classes_itens'))
+
+    classes = _classes_item_ordenadas(apenas_ativas=False)
+    classes_ativas = [classe for classe in classes if classe.ativa]
+    return render_template('itens/classes.html', classes=classes, classes_ativas=classes_ativas)
+
+
+@itens.route('/itens/classes/<int:classe_id>/editar', methods=['POST'])
+def editar_classe_item(classe_id):
+    classe = ItemClasse.query.get_or_404(classe_id)
+    nome = (request.form.get('nome') or '').strip()
+    parent_raw = (request.form.get('parent_id') or '').strip()
+    ordem_raw = (request.form.get('ordem') or '').strip()
+
+    if not nome:
+        flash('Informe o nome da classe.', 'danger')
+        return redirect(url_for('itens.listar_classes_itens'))
+
+    parent_id = None
+    if parent_raw:
+        try:
+            parent_id = int(parent_raw)
+        except ValueError:
+            parent_id = None
+
+    if parent_id == classe.id:
+        flash('A classe não pode ser subclasse dela mesma.', 'danger')
+        return redirect(url_for('itens.listar_classes_itens'))
+
+    try:
+        ordem = int(ordem_raw) if ordem_raw else 0
+    except ValueError:
+        ordem = 0
+
+    classe.nome = nome
+    classe.parent_id = parent_id
+    classe.ordem = ordem
+    db.session.commit()
+    flash('Classe atualizada com sucesso!', 'success')
+    return redirect(url_for('itens.listar_classes_itens'))
+
+
+@itens.route('/itens/classes/<int:classe_id>/alternar', methods=['POST'])
+def alternar_classe_item(classe_id):
+    classe = ItemClasse.query.get_or_404(classe_id)
+    classe.ativa = not classe.ativa
+    db.session.commit()
+    flash('Status da classe atualizado com sucesso!', 'success')
+    return redirect(url_for('itens.listar_classes_itens'))
 
 
 @itens.route('/itens/valores')
@@ -727,6 +837,7 @@ def novo_item():
     """Rota para cadastrar um novo item"""
     if request.method == 'POST':
         pode_ver_valores = _usuario_pode_ver_valores()
+        classes_item = _classes_item_ordenadas()
         # Validação de dados
         errors = validate_form_data(request.form, ['nome'])
         if errors:
@@ -734,7 +845,7 @@ def novo_item():
                 flash(error, 'danger')
             materiais = Material.query.all()
             trabalhos = Trabalho.query.all()
-            return render_template('itens/novo.html', materiais=materiais, trabalhos=trabalhos, item=None, pode_ver_valores=pode_ver_valores)
+            return render_template('itens/novo.html', materiais=materiais, trabalhos=trabalhos, item=None, classes_item=classes_item, pode_ver_valores=pode_ver_valores)
         
         nome = request.form['nome']
         
@@ -744,13 +855,14 @@ def novo_item():
             flash('Já existe um item com este nome!', 'danger')
             materiais = Material.query.all()
             trabalhos = Trabalho.query.all()
-            return render_template('itens/novo.html', materiais=materiais, trabalhos=trabalhos, item=None, pode_ver_valores=pode_ver_valores)
+            return render_template('itens/novo.html', materiais=materiais, trabalhos=trabalhos, item=None, classes_item=classes_item, pode_ver_valores=pode_ver_valores)
         
         # Gerar código ACB automaticamente
         novo_codigo = generate_next_code(Item, "ACB", "codigo_acb")
         
         tipo_item = (request.form.get('tipo_item', 'producao') or 'producao').strip().lower()
         categoria_montagem = (request.form.get('categoria_montagem') or '').strip() or None
+        item_classe_id = _parse_item_classe_id(request.form)
 
         # Criar o item
         item = Item(
@@ -758,6 +870,7 @@ def novo_item():
             codigo_acb=novo_codigo,
             tipo_item=tipo_item,
             categoria_montagem=categoria_montagem,
+            item_classe_id=item_classe_id,
             tipo_bruto=request.form.get('tipo_bruto', ''),
             material_laser=request.form.get('material_laser', ''),
             espessura_laser=request.form.get('espessura_laser', ''),
@@ -781,7 +894,7 @@ def novo_item():
                 flash(str(e), 'danger')
                 materiais = Material.query.all()
                 trabalhos = Trabalho.query.all()
-                return render_template('itens/novo.html', materiais=materiais, trabalhos=trabalhos, item=None, pode_ver_valores=pode_ver_valores)
+                return render_template('itens/novo.html', materiais=materiais, trabalhos=trabalhos, item=None, classes_item=classes_item, pode_ver_valores=pode_ver_valores)
 
         if item.tipo_item == 'montagem':
             item.eh_composto = False
@@ -794,7 +907,7 @@ def novo_item():
             flash('O peso deve ser um número válido', 'danger')
             materiais = Material.query.all()
             trabalhos = Trabalho.query.all()
-            return render_template('itens/novo.html', materiais=materiais, trabalhos=trabalhos, item=None, pode_ver_valores=pode_ver_valores)
+            return render_template('itens/novo.html', materiais=materiais, trabalhos=trabalhos, item=None, classes_item=classes_item, pode_ver_valores=pode_ver_valores)
         
         # Upload de arquivos
         if 'desenho_tecnico' in request.files:
@@ -816,7 +929,7 @@ def novo_item():
                 flash('O arquivo de blank de laser deve estar no formato DXF', 'danger')
                 materiais = Material.query.all()
                 trabalhos = Trabalho.query.all()
-                return render_template('itens/novo.html', materiais=materiais, trabalhos=trabalhos, item=None, pode_ver_valores=pode_ver_valores)
+                return render_template('itens/novo.html', materiais=materiais, trabalhos=trabalhos, item=None, classes_item=classes_item, pode_ver_valores=pode_ver_valores)
         
         db.session.add(item)
         db.session.commit()
@@ -876,10 +989,11 @@ def novo_item():
     
     materiais = Material.query.all()
     trabalhos = Trabalho.query.all()
+    classes_item = _classes_item_ordenadas()
     tipo_item_default = (request.args.get('tipo_item') or 'producao').strip().lower()
     if tipo_item_default not in ('producao', 'montagem'):
         tipo_item_default = 'producao'
-    return render_template('itens/novo.html', materiais=materiais, trabalhos=trabalhos, item=None, tipo_item_default=tipo_item_default, pode_ver_valores=_usuario_pode_ver_valores())
+    return render_template('itens/novo.html', materiais=materiais, trabalhos=trabalhos, item=None, classes_item=classes_item, tipo_item_default=tipo_item_default, pode_ver_valores=_usuario_pode_ver_valores())
 
 @itens.route('/itens/editar/<int:item_id>', methods=['GET', 'POST'])
 def editar_item(item_id):
@@ -887,6 +1001,7 @@ def editar_item(item_id):
     item = Item.query.get_or_404(item_id)
     materiais = Material.query.all()
     trabalhos = Trabalho.query.all()
+    classes_item = _classes_item_ordenadas()
     pode_ver_valores = _usuario_pode_ver_valores()
 
     item_materiais = []
@@ -916,7 +1031,7 @@ def editar_item(item_id):
         if errors:
             for error in errors:
                 flash(error, 'danger')
-            return render_template('itens/editar.html', item=item, materiais=materiais, trabalhos=trabalhos, pode_ver_valores=pode_ver_valores, item_materiais=item_materiais, item_trabalhos=item_trabalhos)
+            return render_template('itens/editar.html', item=item, materiais=materiais, trabalhos=trabalhos, classes_item=classes_item, pode_ver_valores=pode_ver_valores, item_materiais=item_materiais, item_trabalhos=item_trabalhos)
         
         nome = request.form['nome']
         
@@ -924,15 +1039,17 @@ def editar_item(item_id):
         item_existente = Item.query.filter(Item.nome == nome, Item.id != item_id).first()
         if item_existente:
             flash('Já existe um item com este nome!', 'danger')
-            return render_template('itens/editar.html', item=item, materiais=materiais, trabalhos=trabalhos, pode_ver_valores=pode_ver_valores, item_materiais=item_materiais, item_trabalhos=item_trabalhos)
+            return render_template('itens/editar.html', item=item, materiais=materiais, trabalhos=trabalhos, classes_item=classes_item, pode_ver_valores=pode_ver_valores, item_materiais=item_materiais, item_trabalhos=item_trabalhos)
         
         tipo_item = (request.form.get('tipo_item', item.tipo_item or 'producao') or 'producao').strip().lower()
         categoria_montagem = (request.form.get('categoria_montagem') or '').strip() or None
+        item_classe_id = _parse_item_classe_id(request.form)
 
         # Atualizar dados do item
         item.nome = nome
         item.tipo_item = tipo_item
         item.categoria_montagem = categoria_montagem
+        item.item_classe_id = item_classe_id
         item.tipo_bruto = request.form.get('tipo_bruto', '')
         item.material_laser = request.form.get('material_laser', '')
         item.espessura_laser = request.form.get('espessura_laser', '')
@@ -953,7 +1070,7 @@ def editar_item(item_id):
                 _apply_campos_financeiros(item, request.form)
             except ValueError as e:
                 flash(str(e), 'danger')
-                return render_template('itens/editar.html', item=item, materiais=materiais, trabalhos=trabalhos, pode_ver_valores=pode_ver_valores, item_materiais=item_materiais, item_trabalhos=item_trabalhos)
+                return render_template('itens/editar.html', item=item, materiais=materiais, trabalhos=trabalhos, classes_item=classes_item, pode_ver_valores=pode_ver_valores, item_materiais=item_materiais, item_trabalhos=item_trabalhos)
         
         # Validar e converter o peso
         try:
@@ -961,7 +1078,7 @@ def editar_item(item_id):
             item.peso = float(peso) if peso else 0
         except ValueError:
             flash('O peso deve ser um número válido', 'danger')
-            return render_template('itens/editar.html', item=item, materiais=materiais, trabalhos=trabalhos, pode_ver_valores=pode_ver_valores, item_materiais=item_materiais, item_trabalhos=item_trabalhos)
+            return render_template('itens/editar.html', item=item, materiais=materiais, trabalhos=trabalhos, classes_item=classes_item, pode_ver_valores=pode_ver_valores, item_materiais=item_materiais, item_trabalhos=item_trabalhos)
         
         # Upload de arquivos
         if 'desenho_tecnico' in request.files and request.files['desenho_tecnico'].filename:
@@ -981,7 +1098,7 @@ def editar_item(item_id):
                 item.blank_laser = save_file(blank_laser_file, 'blank_laser')
             else:
                 flash('O arquivo de blank de laser deve estar no formato DXF', 'danger')
-                return render_template('itens/editar.html', item=item, materiais=materiais, trabalhos=trabalhos, pode_ver_valores=pode_ver_valores, item_materiais=item_materiais, item_trabalhos=item_trabalhos)
+                return render_template('itens/editar.html', item=item, materiais=materiais, trabalhos=trabalhos, classes_item=classes_item, pode_ver_valores=pode_ver_valores, item_materiais=item_materiais, item_trabalhos=item_trabalhos)
 
         if getattr(item, 'criado_via_importacao_estoque', False):
             item.criado_via_importacao_estoque = False
@@ -1057,6 +1174,7 @@ def editar_item(item_id):
                           item=item, 
                           materiais=materiais, 
                           trabalhos=trabalhos,
+                          classes_item=classes_item,
                           pode_ver_valores=pode_ver_valores,
                           item_materiais=item_materiais,
                           item_trabalhos=item_trabalhos)
