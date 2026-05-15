@@ -18,6 +18,7 @@
         .report-table th, .report-table td { font-size: 11px; padding: 4px 6px; }
         .print-header h1 { font-size: 20px; }
         .item-imagem-print { max-width: 40px; max-height: 40px; object-fit: cover; }
+        .table-dark th { background-color: #212529 !important; color: #fff !important; border-color: #212529 !important; }
     }
 </style>
 
@@ -213,7 +214,8 @@
                 </tbody>
                 <tfoot>
                     <tr>
-                        <th colspan="{% if col_codigo %}1{% else %}0{% endif %}{% if incluir_imagem %}+1{% endif %}{% if col_nome %}+1{% endif %}{% if col_classe %}+1{% endif %}{% if col_tipo %}+1{% endif %}" class="text-end">Totais</th>
+                        {% set colspan_totais = (1 if col_codigo else 0) + (1 if incluir_imagem else 0) + (1 if col_nome else 0) + (1 if col_classe else 0) + (1 if col_tipo else 0) %}
+                        <th colspan="{{ colspan_totais }}" class="text-end">Totais</th>
                         {% if col_estoque %}<th class="text-end">{{ total_estoque }}</th>{% endif %}
                         {% if col_localizacao %}<th></th>{% endif %}
                         {% if mostrar_valores %}
