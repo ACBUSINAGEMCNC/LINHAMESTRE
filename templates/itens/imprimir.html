@@ -9,6 +9,7 @@
     .colunas-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); gap: 8px; }
     .colunas-grid label { font-size: 0.85rem; }
     .item-checkbox { width: 18px; height: 18px; cursor: pointer; }
+    .report-table thead th { background-color: #212529 !important; color: #fff !important; border-color: #212529 !important; }
     @media print {
         .no-print, nav, .navbar, .sidebar, footer { display: none !important; }
         body { background: #fff !important; }
@@ -18,7 +19,7 @@
         .report-table th, .report-table td { font-size: 11px; padding: 4px 6px; }
         .print-header h1 { font-size: 20px; }
         .item-imagem-print { max-width: 40px; max-height: 40px; object-fit: cover; }
-        .table-dark th { background-color: #212529 !important; color: #fff !important; border-color: #212529 !important; }
+        .report-table thead th { background-color: #212529 !important; color: #fff !important; border-color: #212529 !important; -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }
     }
 </style>
 
