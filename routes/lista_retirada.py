@@ -117,11 +117,18 @@ def historico():
 @lista_retirada_bp.route('/estoque-pecas/lista-retirada')
 def visualizar(lista_id=None):
     """Visualiza ou cria nova lista de retirada"""
+    print(f"[DEBUG] visualizar chamado com lista_id={lista_id}")
     pode_ver_valores = _usuario_pode_ver_valores()
     
     # Se não tem ID, pega a última lista em rascunho do usuário ou cria nova
     if not lista_id:
         usuario_id = session.get('usuario_id')
+        print(f"[DEBUG] usuario_id da session: {usuario_id}")
+        
+        if not usuario_id:
+            flash('Você precisa estar logado para criar listas de retirada.', 'danger')
+            return redirect(url_for('auth.login'))
+        
         lista = (
             ListaRetirada.query
             .filter_by(status='rascunho', criado_por_id=usuario_id)
@@ -129,16 +136,26 @@ def visualizar(lista_id=None):
             .first()
         )
         
+        print(f"[DEBUG] Lista em rascunho encontrada: {lista.id if lista else None}")
+        
         if not lista:
             # Criar nova lista
+            print(f"[DEBUG] Criando nova lista de retirada")
             lista = ListaRetirada(
                 numero=_gerar_numero_lista(),
                 status='rascunho',
                 criado_por_id=usuario_id
             )
             db.session.add(lista)
-            db.session.commit()
-            flash('Nova lista de retirada criada.', 'success')
+            try:
+                db.session.commit()
+                print(f"[DEBUG] Nova lista criada com ID={lista.id}")
+                flash('Nova lista de retirada criada.', 'success')
+            except Exception as e:
+                print(f"[DEBUG] Erro ao criar lista: {str(e)}")
+                db.session.rollback()
+                flash(f'Erro ao criar lista: {str(e)}', 'danger')
+                return redirect(url_for('estoque_pecas.index'))
     else:
         lista = ListaRetirada.query.get_or_404(lista_id)
     
@@ -220,6 +237,9 @@ def nova(lista_id=None):
 @lista_retirada_bp.route('/estoque-pecas/lista-retirada/<int:lista_id>/atualizar', methods=['POST'])
 def atualizar_dados(lista_id):
     """Atualiza dados da lista (referência, responsável, observação)"""
+    print(f"[DEBUG] atualizar_dados chamado para lista_id={lista_id}")
+    print(f"[DEBUG] Form data: {dict(request.form)}")
+    
     lista = ListaRetirada.query.get_or_404(lista_id)
     
     if lista.status == 'baixada':
@@ -230,8 +250,17 @@ def atualizar_dados(lista_id):
     lista.responsavel = request.form.get('responsavel', '').strip()
     lista.observacao = request.form.get('observacao', '').strip()
     
-    db.session.commit()
-    flash('Dados da lista atualizados.', 'success')
+    print(f"[DEBUG] Dados a salvar: referencia={lista.referencia}, responsavel={lista.responsavel}, observacao={lista.observacao}")
+    
+    try:
+        db.session.commit()
+        print(f"[DEBUG] Commit realizado com sucesso")
+        flash('Dados da lista atualizados.', 'success')
+    except Exception as e:
+        print(f"[DEBUG] Erro no commit: {str(e)}")
+        db.session.rollback()
+        flash(f'Erro ao salvar dados: {str(e)}', 'danger')
+    
     return redirect(url_for('lista_retirada.visualizar', lista_id=lista_id))
 
 
