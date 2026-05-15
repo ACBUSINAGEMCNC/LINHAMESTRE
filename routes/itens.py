@@ -400,12 +400,29 @@ def _require_valores_access():
 @itens.route('/itens')
 def listar_itens():
     """Rota para listar todos os itens"""
-    itens = Item.query.options(
+    classe_id = request.args.get('classe_id', type=int)
+    classe_selecionada = ItemClasse.query.get(classe_id) if classe_id else None
+
+    query = Item.query.options(
         selectinload(Item.materiais),
         selectinload(Item.trabalhos),
         selectinload(Item.classe),
-    ).all()
-    return render_template('itens/listar.html', itens=itens)
+    )
+    if classe_selecionada:
+        ids_classes = {classe_selecionada.id}
+        ids_classes.update(_classe_descendente_ids(classe_selecionada))
+        query = query.filter(Item.item_classe_id.in_(ids_classes))
+
+    itens = query.all()
+    classes_item = _classes_item_ordenadas(apenas_ativas=False)
+    return render_template(
+        'itens/listar.html',
+        itens=itens,
+        classes_item=classes_item,
+        classes_item_payload=_classes_item_payload(classes_item),
+        classe_selecionada=classe_selecionada,
+        classe_id=classe_id,
+    )
 
 
 @itens.route('/itens/classes', methods=['GET', 'POST'])
@@ -537,10 +554,30 @@ def imprimir_itens():
             'valor_total': valor_total,
         })
 
+    item_ids_selecionados = request.args.getlist('item_ids')
+    if item_ids_selecionados:
+        try:
+            item_ids_selecionados = [int(i) for i in item_ids_selecionados]
+        except ValueError:
+            item_ids_selecionados = [linha['item'].id for linha in linhas]
+    else:
+        item_ids_selecionados = [linha['item'].id for linha in linhas]
+
+    incluir_imagem = request.args.get('incluir_imagem') == 'on'
+    col_codigo = request.args.get('col_codigo') == 'on'
+    col_nome = request.args.get('col_nome') == 'on'
+    col_classe = request.args.get('col_classe') == 'on'
+    col_tipo = request.args.get('col_tipo') == 'on'
+    col_estoque = request.args.get('col_estoque') == 'on'
+    col_localizacao = request.args.get('col_localizacao') == 'on'
+    col_valor_unit = request.args.get('col_valor_unit') == 'on'
+    col_valor_total = request.args.get('col_valor_total') == 'on'
+
     return render_template(
         'itens/imprimir.html',
         linhas=linhas,
         classes_item=classes_item,
+        classes_item_payload=_classes_item_payload(classes_item),
         classe_selecionada=classe_selecionada,
         classe_id=classe_id,
         modo=modo,
@@ -549,6 +586,16 @@ def imprimir_itens():
         total_estoque=total_estoque,
         total_valor=total_valor,
         gerado_em=datetime.now(),
+        itens_selecionados=item_ids_selecionados,
+        incluir_imagem=incluir_imagem,
+        col_codigo=col_codigo,
+        col_nome=col_nome,
+        col_classe=col_classe,
+        col_tipo=col_tipo,
+        col_estoque=col_estoque,
+        col_localizacao=col_localizacao,
+        col_valor_unit=col_valor_unit,
+        col_valor_total=col_valor_total,
     )
 
 

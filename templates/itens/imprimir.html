@@ -6,6 +6,9 @@
 <style>
     .print-header { border-bottom: 2px solid #212529; margin-bottom: 1rem; padding-bottom: 0.75rem; }
     .report-table th, .report-table td { font-size: 0.9rem; vertical-align: middle; }
+    .colunas-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); gap: 8px; }
+    .colunas-grid label { font-size: 0.85rem; }
+    .item-checkbox { width: 18px; height: 18px; cursor: pointer; }
     @media print {
         .no-print, nav, .navbar, .sidebar, footer { display: none !important; }
         body { background: #fff !important; }
@@ -14,13 +17,14 @@
         .card-body { padding: 0 !important; }
         .report-table th, .report-table td { font-size: 11px; padding: 4px 6px; }
         .print-header h1 { font-size: 20px; }
+        .item-imagem-print { max-width: 40px; max-height: 40px; object-fit: cover; }
     }
 </style>
 
 <div class="no-print d-flex justify-content-between align-items-center mb-4">
     <div>
         <h1 class="mb-1">Impressão de Itens</h1>
-        <div class="text-muted">Relatório filtrado por classe, com modo de estoque ou valores.</div>
+        <div class="text-muted">Relatório filtrado por classe, com seleção de colunas e itens.</div>
     </div>
     <div class="btn-group">
         <a href="{{ url_for('itens.listar_itens') }}" class="btn btn-secondary">
@@ -34,35 +38,110 @@
 
 <div class="card no-print mb-4">
     <div class="card-body">
-        <form method="GET" action="{{ url_for('itens.imprimir_itens') }}" class="row g-3 align-items-end">
-            <div class="col-md-5">
-                <label for="classe_id" class="form-label">Classe</label>
-                <select class="form-select" id="classe_id" name="classe_id">
-                    <option value="">Todas as classes</option>
-                    {% for classe in classes_item %}
-                    <option value="{{ classe.id }}" {% if classe_id == classe.id %}selected{% endif %}>{{ classe.caminho }}</option>
-                    {% endfor %}
-                </select>
-                <div class="form-text">Ao escolher uma classe, entram também todas as subclasses dela.</div>
-            </div>
-            <div class="col-md-4">
-                <label for="modo" class="form-label">Modo</label>
-                <select class="form-select" id="modo" name="modo">
-                    <option value="estoque" {% if modo == 'estoque' %}selected{% endif %}>Sem valores, com estoque</option>
-                    {% if pode_ver_valores %}
-                    <option value="valores" {% if modo == 'valores' %}selected{% endif %}>Com valores</option>
+        <form method="GET" action="{{ url_for('itens.imprimir_itens') }}" id="formFiltro">
+            <div class="row g-3 mb-3">
+                <div class="col-md-4">
+                    <label class="form-label">Classe</label>
+                    <input type="hidden" id="classe_id" name="classe_id" value="{{ classe_id or '' }}">
+                    <div id="itemClasseProgressivo" class="border rounded p-3 bg-light" data-selected="{{ classe_id or '' }}"></div>
+                    <div class="form-text">Opcional. Selecione um nível para liberar o próximo. Inclui subclasses.</div>
+                </div>
+                <div class="col-md-4">
+                    <label for="modo" class="form-label">Modo</label>
+                    <select class="form-select" id="modo" name="modo">
+                        <option value="estoque" {% if modo == 'estoque' %}selected{% endif %}>Sem valores, com estoque</option>
+                        {% if pode_ver_valores %}
+                        <option value="valores" {% if modo == 'valores' %}selected{% endif %}>Com valores</option>
+                        {% endif %}
+                    </select>
+                    {% if not pode_ver_valores %}
+                    <div class="form-text text-warning">Seu usuário não tem permissão para imprimir valores.</div>
                     {% endif %}
-                </select>
-                {% if not pode_ver_valores %}
-                <div class="form-text text-warning">Seu usuário não tem permissão para imprimir valores.</div>
-                {% endif %}
+                </div>
+                <div class="col-md-4">
+                    <label class="form-label">Opções</label>
+                    <div class="form-check">
+                        <input class="form-check-input" type="checkbox" id="incluir_imagem" name="incluir_imagem" {% if incluir_imagem %}checked{% endif %}>
+                        <label class="form-check-label" for="incluir_imagem">
+                            Incluir imagem do item
+                        </label>
+                    </div>
+                </div>
             </div>
-            <div class="col-md-3">
-                <button type="submit" class="btn btn-success w-100">
-                    <i class="fas fa-filter"></i> Gerar relatório
-                </button>
+
+            <div class="row g-3 mb-3">
+                <div class="col-12">
+                    <label class="form-label fw-bold">Colunas a incluir</label>
+                    <div class="colunas-grid mt-2">
+                        <div class="form-check">
+                            <input class="form-check-input coluna-checkbox" type="checkbox" name="col_codigo" id="col_codigo" {% if col_codigo %}checked{% endif %}>
+                            <label class="form-check-label" for="col_codigo">Código ACB</label>
+                        </div>
+                        <div class="form-check">
+                            <input class="form-check-input coluna-checkbox" type="checkbox" name="col_nome" id="col_nome" {% if col_nome %}checked{% endif %}>
+                            <label class="form-check-label" for="col_nome">Nome do item</label>
+                        </div>
+                        <div class="form-check">
+                            <input class="form-check-input coluna-checkbox" type="checkbox" name="col_classe" id="col_classe" {% if col_classe %}checked{% endif %}>
+                            <label class="form-check-label" for="col_classe">Classe</label>
+                        </div>
+                        <div class="form-check">
+                            <input class="form-check-input coluna-checkbox" type="checkbox" name="col_tipo" id="col_tipo" {% if col_tipo %}checked{% endif %}>
+                            <label class="form-check-label" for="col_tipo">Tipo</label>
+                        </div>
+                        <div class="form-check">
+                            <input class="form-check-input coluna-checkbox" type="checkbox" name="col_estoque" id="col_estoque" {% if col_estoque %}checked{% endif %}>
+                            <label class="form-check-label" for="col_estoque">Estoque</label>
+                        </div>
+                        <div class="form-check">
+                            <input class="form-check-input coluna-checkbox" type="checkbox" name="col_localizacao" id="col_localizacao" {% if col_localizacao %}checked{% endif %}>
+                            <label class="form-check-label" for="col_localizacao">Localização</label>
+                        </div>
+                        {% if pode_ver_valores %}
+                        <div class="form-check">
+                            <input class="form-check-input coluna-checkbox" type="checkbox" name="col_valor_unit" id="col_valor_unit" {% if col_valor_unit %}checked{% endif %}>
+                            <label class="form-check-label" for="col_valor_unit">Valor Unit.</label>
+                        </div>
+                        <div class="form-check">
+                            <input class="form-check-input coluna-checkbox" type="checkbox" name="col_valor_total" id="col_valor_total" {% if col_valor_total %}checked{% endif %}>
+                            <label class="form-check-label" for="col_valor_total">Valor Estoque</label>
+                        </div>
+                        {% endif %}
+                    </div>
+                </div>
+            </div>
+
+            <div class="row">
+                <div class="col-md-6">
+                    <button type="button" class="btn btn-outline-secondary w-100" onclick="marcarTodosItens()">
+                        <i class="fas fa-check-double"></i> Marcar/desmarcar todos os itens
+                    </button>
+                </div>
+                <div class="col-md-6">
+                    <button type="submit" class="btn btn-success w-100">
+                        <i class="fas fa-filter"></i> Gerar relatório
+                    </button>
+                </div>
             </div>
         </form>
+    </div>
+</div>
+
+<div class="card no-print mb-4" id="selecaoItensCard">
+    <div class="card-body">
+        <h6 class="mb-3">Seleção de itens (marque os itens que deseja incluir)</h6>
+        <div class="row" id="selecaoItens">
+            {% for linha in linhas %}
+            <div class="col-md-6 col-lg-4 mb-2">
+                <div class="form-check">
+                    <input class="form-check-input item-checkbox" type="checkbox" name="item_ids" id="item_{{ linha.item.id }}" value="{{ linha.item.id }}" checked>
+                    <label class="form-check-label" for="item_{{ linha.item.id }}">
+                        {{ linha.item.codigo_acb or '-' }} - {{ linha.item.nome }}
+                    </label>
+                </div>
+            </div>
+            {% endfor %}
+        </div>
     </div>
 </div>
 
@@ -84,48 +163,62 @@
             <table class="table table-bordered table-striped report-table">
                 <thead class="table-dark">
                     <tr>
-                        <th>Código ACB</th>
-                        <th>Item</th>
-                        <th>Classe</th>
-                        <th>Tipo</th>
-                        <th class="text-end">Estoque</th>
-                        <th>Localização</th>
+                        {% if col_codigo %}<th>Código ACB</th>{% endif %}
+                        {% if incluir_imagem %}<th>Imagem</th>{% endif %}
+                        {% if col_nome %}<th>Item</th>{% endif %}
+                        {% if col_classe %}<th>Classe</th>{% endif %}
+                        {% if col_tipo %}<th>Tipo</th>{% endif %}
+                        {% if col_estoque %}<th class="text-end">Estoque</th>{% endif %}
+                        {% if col_localizacao %}<th>Localização</th>{% endif %}
                         {% if mostrar_valores %}
-                        <th class="text-end">Valor Unit.</th>
-                        <th class="text-end">Valor Estoque</th>
+                            {% if col_valor_unit %}<th class="text-end">Valor Unit.</th>{% endif %}
+                            {% if col_valor_total %}<th class="text-end">Valor Estoque</th>{% endif %}
                         {% endif %}
                     </tr>
                 </thead>
                 <tbody>
                     {% for linha in linhas %}
+                    {% if linha.item.id in itens_selecionados %}
                     <tr>
-                        <td>{{ linha.item.codigo_acb or '-' }}</td>
-                        <td>{{ linha.item.nome }}</td>
-                        <td>{% if linha.item.classe %}{{ linha.item.classe.caminho }}{% else %}-{% endif %}</td>
+                        {% if col_codigo %}<td>{{ linha.item.codigo_acb or '-' }}</td>{% endif %}
+                        {% if incluir_imagem %}
+                        <td>
+                            {% if linha.item.imagem %}
+                                <img src="{{ linha.item.imagem_path }}" alt="{{ linha.item.nome }}" class="item-imagem-print">
+                            {% else %}
+                                <span class="text-muted">-</span>
+                            {% endif %}
+                        </td>
+                        {% endif %}
+                        {% if col_nome %}<td>{{ linha.item.nome }}</td>{% endif %}
+                        {% if col_classe %}<td>{% if linha.item.classe %}{{ linha.item.classe.caminho }}{% else %}-{% endif %}</td>{% endif %}
+                        {% if col_tipo %}
                         <td>
                             {% if linha.item.eh_composto %}Composto{% elif linha.item.tipo_item == 'montagem' %}Montagem{% else %}Produção{% endif %}
                         </td>
-                        <td class="text-end">{{ linha.estoque_total }}</td>
-                        <td>{{ linha.localizacoes }}</td>
+                        {% endif %}
+                        {% if col_estoque %}<td class="text-end">{{ linha.estoque_total }}</td>{% endif %}
+                        {% if col_localizacao %}<td>{{ linha.localizacoes }}</td>{% endif %}
                         {% if mostrar_valores %}
-                        <td class="text-end">R$ {{ '%.2f'|format(linha.valor_unitario or 0) }}</td>
-                        <td class="text-end">R$ {{ '%.2f'|format(linha.valor_total or 0) }}</td>
+                            {% if col_valor_unit %}<td class="text-end">R$ {{ '%.2f'|format(linha.valor_unitario or 0) }}</td>{% endif %}
+                            {% if col_valor_total %}<td class="text-end">R$ {{ '%.2f'|format(linha.valor_total or 0) }}</td>{% endif %}
                         {% endif %}
                     </tr>
+                    {% endif %}
                     {% else %}
                     <tr>
-                        <td colspan="{% if mostrar_valores %}8{% else %}6{% endif %}" class="text-center text-muted py-4">Nenhum item encontrado para o filtro selecionado.</td>
+                        <td colspan="8" class="text-center text-muted py-4">Nenhum item encontrado para o filtro selecionado.</td>
                     </tr>
                     {% endfor %}
                 </tbody>
                 <tfoot>
                     <tr>
-                        <th colspan="4" class="text-end">Totais</th>
-                        <th class="text-end">{{ total_estoque }}</th>
-                        <th></th>
+                        <th colspan="{% if col_codigo %}1{% else %}0{% endif %}{% if incluir_imagem %}+1{% endif %}{% if col_nome %}+1{% endif %}{% if col_classe %}+1{% endif %}{% if col_tipo %}+1{% endif %}" class="text-end">Totais</th>
+                        {% if col_estoque %}<th class="text-end">{{ total_estoque }}</th>{% endif %}
+                        {% if col_localizacao %}<th></th>{% endif %}
                         {% if mostrar_valores %}
-                        <th></th>
-                        <th class="text-end">R$ {{ '%.2f'|format(total_valor or 0) }}</th>
+                            {% if col_valor_unit %}<th></th>{% endif %}
+                            {% if col_valor_total %}<th class="text-end">R$ {{ '%.2f'|format(total_valor or 0) }}</th>{% endif %}
                         {% endif %}
                     </tr>
                 </tfoot>
@@ -133,4 +226,125 @@
         </div>
     </div>
 </div>
+
+<script>
+    const classesItem = {{ classes_item_payload|default([])|tojson }};
+    const classeContainer = document.getElementById('itemClasseProgressivo');
+    const classeHidden = document.getElementById('classe_id');
+
+    function filhosDaCategoria(parentId) {
+        return classesItem
+            .filter(function(classe) {
+                if (parentId === null) {
+                    return classe.parent_id === null;
+                }
+                return classe.parent_id === parentId;
+            })
+            .sort(function(a, b) {
+                if ((a.ordem || 0) !== (b.ordem || 0)) {
+                    return (a.ordem || 0) - (b.ordem || 0);
+                }
+                return a.nome.localeCompare(b.nome);
+            });
+    }
+
+    function caminhoAteCategoria(categoriaId) {
+        const porId = {};
+        classesItem.forEach(function(classe) { porId[classe.id] = classe; });
+        const caminho = [];
+        let atual = porId[Number(categoriaId)];
+        const visitados = new Set();
+        while (atual && !visitados.has(atual.id)) {
+            visitados.add(atual.id);
+            caminho.unshift(atual.id);
+            atual = atual.parent_id ? porId[atual.parent_id] : null;
+        }
+        return caminho;
+    }
+
+    function criarSelectNivel(parentId, selecionadoId, nivel) {
+        const filhos = filhosDaCategoria(parentId);
+        if (!filhos.length) {
+            return null;
+        }
+        const wrapper = document.createElement('div');
+        wrapper.className = 'mb-2 item-classe-nivel';
+        wrapper.dataset.nivel = nivel;
+
+        const label = document.createElement('label');
+        label.className = 'form-label form-label-sm mb-1';
+        label.textContent = nivel === 0 ? 'Classe principal' : 'Proximo nivel';
+
+        const select = document.createElement('select');
+        select.className = 'form-select form-select-sm';
+        select.innerHTML = '<option value="">Selecione</option>';
+        filhos.forEach(function(classe) {
+            const option = document.createElement('option');
+            option.value = classe.id;
+            option.textContent = classe.nome;
+            if (selecionadoId && Number(selecionadoId) === classe.id) {
+                option.selected = true;
+            }
+            select.appendChild(option);
+        });
+
+        select.addEventListener('change', function() {
+            const valor = this.value;
+            const proximos = classeContainer.querySelectorAll('.item-classe-nivel');
+            proximos.forEach(function(el) {
+                if (Number(el.dataset.nivel) > nivel) {
+                    el.remove();
+                }
+            });
+            classeHidden.value = valor || (nivel > 0 ? classeContainer.querySelector('[data-nivel="' + (nivel - 1) + '"] select').value : '');
+            if (valor) {
+                const proximo = criarSelectNivel(Number(valor), null, nivel + 1);
+                if (proximo) {
+                    classeContainer.appendChild(proximo);
+                }
+            }
+        });
+
+        wrapper.appendChild(label);
+        wrapper.appendChild(select);
+        return wrapper;
+    }
+
+    function montarClassificacaoProgressiva() {
+        if (!classeContainer || !classeHidden) {
+            return;
+        }
+        classeContainer.innerHTML = '';
+        const selecionado = classeContainer.dataset.selected || '';
+        const caminho = selecionado ? caminhoAteCategoria(selecionado) : [];
+        let parentId = null;
+        let nivel = 0;
+
+        do {
+            const selecionadoNivel = caminho[nivel] || null;
+            const selectNivel = criarSelectNivel(parentId, selecionadoNivel, nivel);
+            if (!selectNivel) {
+                break;
+            }
+            classeContainer.appendChild(selectNivel);
+            parentId = selecionadoNivel;
+            nivel += 1;
+        } while (parentId);
+
+        classeHidden.value = selecionado || '';
+        if (!classesItem.length) {
+            classeContainer.innerHTML = '<div class="text-muted small">Nenhuma categoria ativa cadastrada.</div>';
+        }
+    }
+
+    function marcarTodosItens() {
+        const checkboxes = document.querySelectorAll('.item-checkbox');
+        const allChecked = Array.from(checkboxes).every(cb => cb.checked);
+        checkboxes.forEach(function(cb) {
+            cb.checked = !allChecked;
+        });
+    }
+
+    montarClassificacaoProgressiva();
+</script>
 {% endblock %}
