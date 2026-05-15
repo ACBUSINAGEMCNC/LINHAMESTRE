@@ -518,6 +518,7 @@ def imprimir_itens():
     classes_item = _classes_item_ordenadas(apenas_ativas=False)
     classe_id = request.args.get('classe_id', type=int)
     classe_selecionada = ItemClasse.query.get(classe_id) if classe_id else None
+    somente_estoque = request.args.get('somente_estoque') == 'on'
 
     query = Item.query.options(
         selectinload(Item.classe),
@@ -534,6 +535,8 @@ def imprimir_itens():
     total_valor = 0.0
     for item in itens_relatorio:
         estoque_total = sum((estoque.quantidade or 0) for estoque in item.estoque_pecas)
+        if somente_estoque and estoque_total <= 0:
+            continue
         localizacoes = sorted(
             set(
                 localizacao for localizacao in (
@@ -596,6 +599,7 @@ def imprimir_itens():
         col_localizacao=col_localizacao,
         col_valor_unit=col_valor_unit,
         col_valor_total=col_valor_total,
+        somente_estoque=somente_estoque,
     )
 
 

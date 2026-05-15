@@ -64,10 +64,16 @@
                 </div>
                 <div class="col-md-4">
                     <label class="form-label">Opções</label>
-                    <div class="form-check">
+                    <div class="form-check mb-2">
                         <input class="form-check-input" type="checkbox" id="incluir_imagem" name="incluir_imagem" {% if incluir_imagem %}checked{% endif %}>
                         <label class="form-check-label" for="incluir_imagem">
                             Incluir imagem do item
+                        </label>
+                    </div>
+                    <div class="form-check">
+                        <input class="form-check-input" type="checkbox" id="somente_estoque" name="somente_estoque" {% if somente_estoque %}checked{% endif %}>
+                        <label class="form-check-label" for="somente_estoque">
+                            Somente peças com estoque > 0
                         </label>
                     </div>
                 </div>
@@ -151,11 +157,23 @@
 
 <div class="card">
     <div class="card-body">
+        <div class="no-print mb-3">
+            <div class="row">
+                <div class="col-md-6">
+                    <input type="search" id="searchInput" class="form-control form-control-sm" placeholder="Pesquisar por código, nome ou classe..." aria-controls="reportTable">
+                </div>
+                <div class="col-md-6 text-end">
+                    <span id="filteredCount" class="text-muted small"></span>
+                </div>
+            </div>
+        </div>
+
         <div class="print-header d-flex justify-content-between align-items-start">
             <div>
                 <h1 class="mb-1">Relatório de Itens</h1>
                 <div><strong>Modo:</strong> {% if mostrar_valores %}Com valores{% else %}Sem valores, com estoque{% endif %}</div>
                 <div><strong>Classe:</strong> {% if classe_selecionada %}{{ classe_selecionada.caminho }}{% else %}Todas{% endif %}</div>
+                {% if somente_estoque %}<div><strong>Filtro:</strong> Somente peças com estoque > 0</div>{% endif %}
             </div>
             <div class="text-end">
                 <div><strong>Gerado em:</strong> {{ gerado_em.strftime('%d/%m/%Y %H:%M') }}</div>
@@ -164,7 +182,7 @@
         </div>
 
         <div class="table-responsive">
-            <table class="table table-bordered table-striped report-table">
+            <table class="table table-bordered table-striped report-table" id="reportTable">
                 <thead class="thead-custom">
                     <tr>
                         {% if col_codigo %}<th style="background-color: #212529 !important; color: #ffffff !important;">Código ACB</th>{% endif %}
@@ -347,6 +365,30 @@
         const allChecked = Array.from(checkboxes).every(cb => cb.checked);
         checkboxes.forEach(function(cb) {
             cb.checked = !allChecked;
+        });
+    }
+
+    // Função de pesquisa
+    const searchInput = document.getElementById('searchInput');
+    const reportTable = document.getElementById('reportTable');
+    const filteredCount = document.getElementById('filteredCount');
+
+    if (searchInput && reportTable) {
+        searchInput.addEventListener('input', function() {
+            const searchTerm = this.value.toLowerCase();
+            const rows = reportTable.querySelectorAll('tbody tr');
+            let visibleCount = 0;
+
+            rows.forEach(function(row) {
+                const text = row.textContent.toLowerCase();
+                const isMatch = text.includes(searchTerm);
+                row.style.display = isMatch ? '' : 'none';
+                if (isMatch) visibleCount++;
+            });
+
+            if (filteredCount) {
+                filteredCount.textContent = visibleCount + ' de ' + rows.length + ' itens';
+            }
         });
     }
 
