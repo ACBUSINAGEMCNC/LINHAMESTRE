@@ -612,24 +612,34 @@ $(document).ready(function() {
         });
     });
     {% endif %}
-    
-    // ========== MODAL BUSCAR ITEM ==========
+});
+
+// ========== MODAL BUSCAR ITEM (FORA DO DOCUMENT.READY) ==========
+$(document).ready(function() {
+    console.log('Modal script carregado');
     let itemSelecionadoId = null;
     
     // Filtros do modal
     function aplicarFiltrosModal() {
+        console.log('Aplicando filtros...');
         const busca = $('#modalBusca').val().toLowerCase();
         const classe = $('#modalClasse').val().toLowerCase();
         const apenasEstoque = $('#modalFiltroEstoque').is(':checked');
         const apenasComValor = $('#modalFiltroComValor').is(':checked');
         
+        console.log('Filtros:', {busca, classe, apenasEstoque, apenasComValor});
+        
+        let totalCards = 0;
+        let cardsVisiveis = 0;
+        
         $('.item-card-modal').each(function() {
+            totalCards++;
             const $card = $(this);
-            const codigo = $card.data('codigo').toLowerCase();
-            const nome = $card.data('nome').toLowerCase();
-            const classeItem = $card.data('classe').toLowerCase();
-            const estoque = parseFloat($card.data('estoque'));
-            const valor = parseFloat($card.data('valor'));
+            const codigo = ($card.data('codigo') || '').toString().toLowerCase();
+            const nome = ($card.data('nome') || '').toString().toLowerCase();
+            const classeItem = ($card.data('classe') || '').toString().toLowerCase();
+            const estoque = parseFloat($card.data('estoque')) || 0;
+            const valor = parseFloat($card.data('valor')) || 0;
             
             let mostrar = true;
             
@@ -653,12 +663,28 @@ $(document).ready(function() {
                 mostrar = false;
             }
             
+            if (mostrar) cardsVisiveis++;
             $card.toggle(mostrar);
         });
+        
+        console.log('Cards:', totalCards, 'Visíveis:', cardsVisiveis);
     }
     
-    $('#modalBusca, #modalClasse').on('input change', aplicarFiltrosModal);
-    $('#modalFiltroEstoque, #modalFiltroComValor').on('change', aplicarFiltrosModal);
+    // Registrar eventos
+    $('#modalBusca').on('input', function() {
+        console.log('Input busca:', $(this).val());
+        aplicarFiltrosModal();
+    });
+    
+    $('#modalClasse').on('change', function() {
+        console.log('Classe mudou:', $(this).val());
+        aplicarFiltrosModal();
+    });
+    
+    $('#modalFiltroEstoque, #modalFiltroComValor').on('change', function() {
+        console.log('Filtro mudou:', $(this).attr('id'), $(this).is(':checked'));
+        aplicarFiltrosModal();
+    });
     
     // Hover nos cards
     $('.item-card-modal').hover(
@@ -667,15 +693,24 @@ $(document).ready(function() {
     );
     
     // Selecionar item
-    $(document).on('click', '.btn-selecionar-item', function() {
+    $(document).on('click', '.btn-selecionar-item', function(e) {
+        e.preventDefault();
+        e.stopPropagation();
+        
+        console.log('Botão selecionar clicado!');
         const itemId = $(this).data('item-id');
         const $card = $(this).closest('.item-card-modal');
+        
+        console.log('Item ID:', itemId);
+        console.log('Card encontrado:', $card.length);
         
         itemSelecionadoId = itemId;
         const codigo = $card.data('codigo');
         const nome = $card.data('nome');
-        const valor = parseFloat($card.data('valor'));
-        const estoque = parseFloat($card.data('estoque'));
+        const valor = parseFloat($card.data('valor')) || 0;
+        const estoque = parseFloat($card.data('estoque')) || 0;
+        
+        console.log('Dados do item:', {codigo, nome, valor, estoque});
         
         // Preencher modal de adição
         $('#modalValor').val(valor.toFixed(2));
@@ -696,9 +731,11 @@ $(document).ready(function() {
         
         $('#itemSelecionadoInfo').html(html);
         
+        console.log('Fechando modal de busca...');
         // Fechar modal de busca e abrir modal de adição
         $('#modalBuscarItem').modal('hide');
         setTimeout(function() {
+            console.log('Abrindo modal de adição...');
             $('#modalAdicionarItem').modal('show');
         }, 300);
     });
@@ -720,8 +757,12 @@ $(document).ready(function() {
             return;
         }
         
+        // Pegar orcamento_id da URL atual
+        const urlParts = window.location.pathname.split('/');
+        const orcamentoId = urlParts[urlParts.indexOf('orcamentos') + 1];
+        
         $.ajax({
-            url: '{{ url_for("orcamentos.adicionar_item", orcamento_id=orcamento.id) }}',
+            url: '/orcamentos/' + orcamentoId + '/itens/adicionar',
             method: 'POST',
             data: {
                 item_id: itemSelecionadoId,
