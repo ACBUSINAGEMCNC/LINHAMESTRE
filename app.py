@@ -1086,6 +1086,7 @@ def create_app():
     from routes.lista_retirada import lista_retirada_bp
     from routes.diagnostico import diagnostico_bp
     from routes.dashboard_apontamentos import dashboard_apontamentos_bp
+    from routes.orcamentos import orcamentos_bp
     
     app.register_blueprint(clientes)
     app.register_blueprint(materiais)
@@ -1100,6 +1101,7 @@ def create_app():
     app.register_blueprint(arquivos)
     app.register_blueprint(estoque_pecas)
     app.register_blueprint(lista_retirada_bp)
+    app.register_blueprint(orcamentos_bp)
     app.register_blueprint(auth)
     app.register_blueprint(backup)
     app.register_blueprint(main)
