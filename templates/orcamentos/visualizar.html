@@ -1,0 +1,270 @@
+{% extends "base.html" %}
+
+{% block title %}Orçamento {{ orcamento.numero }} - Sistema{% endblock %}
+
+{% block extra_css %}
+<style>
+    @media print {
+        .no-print { display: none !important; }
+        body { background: white; }
+        .card { border: 1px solid #000 !important; box-shadow: none !important; }
+        .badge { border: 1px solid #000 !important; }
+    }
+    
+    .orcamento-header {
+        background: linear-gradient(135deg, #0d6efd 0%, #0b5ed7 100%);
+        color: white;
+        padding: 2rem;
+        border-radius: 10px 10px 0 0;
+    }
+    
+    .item-thumb {
+        width: 60px;
+        height: 60px;
+        object-fit: cover;
+        border-radius: 8px;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="container-fluid py-4">
+    <!-- Botões de ação (não imprime) -->
+    <div class="no-print mb-4">
+        <div class="d-flex justify-content-between align-items-center">
+            <div>
+                <a href="{{ url_for('orcamentos.index') }}" class="btn btn-outline-secondary">
+                    <i class="fas fa-arrow-left me-2"></i>Voltar
+                </a>
+                {% if orcamento.status in ['rascunho', 'enviado', 'rejeitado'] %}
+                <a href="{{ url_for('orcamentos.editar', orcamento_id=orcamento.id) }}" class="btn btn-outline-primary">
+                    <i class="fas fa-edit me-2"></i>Editar
+                </a>
+                {% endif %}
+            </div>
+            <div>
+                <form method="POST" action="{{ url_for('orcamentos.duplicar', orcamento_id=orcamento.id) }}" class="d-inline">
+                    <button type="submit" class="btn btn-outline-secondary">
+                        <i class="fas fa-copy me-2"></i>Duplicar
+                    </button>
+                </form>
+                
+                <button type="button" onclick="window.print()" class="btn btn-primary">
+                    <i class="fas fa-print me-2"></i>Imprimir
+                </button>
+                
+                {% if orcamento.status == 'rascunho' %}
+                <form method="POST" action="{{ url_for('orcamentos.mudar_status', orcamento_id=orcamento.id) }}" class="d-inline">
+                    <input type="hidden" name="status" value="enviado">
+                    <button type="submit" class="btn btn-info">
+                        <i class="fas fa-paper-plane me-2"></i>Marcar como Enviado
+                    </button>
+                </form>
+                {% endif %}
+                
+                {% if orcamento.status == 'enviado' and pode_aprovar %}
+                <form method="POST" action="{{ url_for('orcamentos.mudar_status', orcamento_id=orcamento.id) }}" class="d-inline">
+                    <input type="hidden" name="status" value="aprovado">
+                    <button type="submit" class="btn btn-success">
+                        <i class="fas fa-check me-2"></i>Aprovar
+                    </button>
+                </form>
+                <form method="POST" action="{{ url_for('orcamentos.mudar_status', orcamento_id=orcamento.id) }}" class="d-inline">
+                    <input type="hidden" name="status" value="rejeitado">
+                    <button type="submit" class="btn btn-danger">
+                        <i class="fas fa-times me-2"></i>Rejeitar
+                    </button>
+                </form>
+                {% endif %}
+                
+                {% if orcamento.status == 'aprovado' %}
+                <form method="POST" action="{{ url_for('orcamentos.gerar_lista_retirada', orcamento_id=orcamento.id) }}" class="d-inline">
+                    <button type="submit" class="btn btn-success">
+                        <i class="fas fa-boxes me-2"></i>Gerar Lista de Retirada
+                    </button>
+                </form>
+                {% endif %}
+                
+                {% if orcamento.status in ['rascunho', 'rejeitado'] %}
+                <form method="POST" action="{{ url_for('orcamentos.excluir', orcamento_id=orcamento.id) }}" class="d-inline" 
+                      onsubmit="return confirm('Tem certeza que deseja excluir este orçamento?')">
+                    <button type="submit" class="btn btn-outline-danger">
+                        <i class="fas fa-trash me-2"></i>Excluir
+                    </button>
+                </form>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+
+    {% with messages = get_flashed_messages(with_categories=true) %}
+    {% if messages %}
+    <div class="no-print">
+        {% for category, message in messages %}
+        <div class="alert alert-{{ category }} alert-dismissible fade show" role="alert">
+            {{ message }}
+            <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+        </div>
+        {% endfor %}
+    </div>
+    {% endif %}
+    {% endwith %}
+
+    <!-- Orçamento -->
+    <div class="card">
+        <div class="orcamento-header">
+            <div class="row">
+                <div class="col-md-6">
+                    <h1 class="mb-0">ORÇAMENTO</h1>
+                    <h3>{{ orcamento.numero }}</h3>
+                </div>
+                <div class="col-md-6 text-md-end">
+                    <h4>AC BUSINAGEM CNC</h4>
+                    <p class="mb-0">Usinagem de Precisão</p>
+                </div>
+            </div>
+        </div>
+
+        <div class="card-body">
+            <!-- Informações do Cliente e Orçamento -->
+            <div class="row mb-4">
+                <div class="col-md-6">
+                    <h5 class="border-bottom pb-2 mb-3">Cliente</h5>
+                    <p class="mb-1"><strong>{{ orcamento.nome_cliente_display }}</strong></p>
+                    {% if orcamento.cliente_email %}
+                    <p class="mb-1"><i class="fas fa-envelope me-2"></i>{{ orcamento.cliente_email }}</p>
+                    {% endif %}
+                    {% if orcamento.cliente_telefone %}
+                    <p class="mb-1"><i class="fas fa-phone me-2"></i>{{ orcamento.cliente_telefone }}</p>
+                    {% endif %}
+                    {% if orcamento.cliente_cnpj_cpf %}
+                    <p class="mb-1"><i class="fas fa-id-card me-2"></i>{{ orcamento.cliente_cnpj_cpf }}</p>
+                    {% endif %}
+                    {% if orcamento.cliente_endereco %}
+                    <p class="mb-1"><i class="fas fa-map-marker-alt me-2"></i>{{ orcamento.cliente_endereco }}</p>
+                    {% endif %}
+                </div>
+                <div class="col-md-6">
+                    <h5 class="border-bottom pb-2 mb-3">Informações do Orçamento</h5>
+                    <p class="mb-1"><strong>Data:</strong> {{ orcamento.criado_em.strftime('%d/%m/%Y') if orcamento.criado_em else '-' }}</p>
+                    {% if orcamento.data_validade %}
+                    <p class="mb-1"><strong>Validade:</strong> {{ orcamento.data_validade.strftime('%d/%m/%Y') }}</p>
+                    {% endif %}
+                    <p class="mb-1"><strong>Status:</strong> 
+                        <span class="badge 
+                            {% if orcamento.status == 'rascunho' %}bg-secondary
+                            {% elif orcamento.status == 'enviado' %}bg-info
+                            {% elif orcamento.status == 'aprovado' %}bg-success
+                            {% elif orcamento.status == 'rejeitado' %}bg-danger
+                            {% elif orcamento.status == 'convertido' %}bg-primary
+                            {% else %}bg-dark{% endif %}">
+                            {{ orcamento.status|upper }}
+                        </span>
+                    </p>
+                    {% if orcamento.prazo_entrega %}
+                    <p class="mb-1"><strong>Prazo de Entrega:</strong> {{ orcamento.prazo_entrega }}</p>
+                    {% endif %}
+                </div>
+            </div>
+
+            <!-- Tabela de Itens -->
+            <h5 class="border-bottom pb-2 mb-3">Itens</h5>
+            <div class="table-responsive">
+                <table class="table table-bordered">
+                    <thead class="table-light">
+                        <tr>
+                            <th style="width: 80px;">Imagem</th>
+                            <th>Código</th>
+                            <th>Descrição</th>
+                            <th class="text-center">Qtd</th>
+                            {% if pode_ver_valores %}
+                            <th class="text-end">Vlr Unit.</th>
+                            <th class="text-center">Desc %</th>
+                            <th class="text-end">Total</th>
+                            {% endif %}
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for item in orcamento.itens %}
+                        <tr>
+                            <td class="text-center">
+                                {% if item.item.imagem_path %}
+                                <img src="{{ get_file_url(item.item.imagem_path) }}" class="item-thumb" alt="{{ item.item.nome }}">
+                                {% else %}
+                                <div class="item-thumb bg-light d-flex align-items-center justify-content-center mx-auto">
+                                    <i class="fas fa-image text-muted"></i>
+                                </div>
+                                {% endif %}
+                            </td>
+                            <td><strong>{{ item.item.codigo_acb }}</strong></td>
+                            <td>
+                                {{ item.descricao_display }}
+                                {% if item.observacao %}
+                                <br><small class="text-muted">{{ item.observacao }}</small>
+                                {% endif %}
+                            </td>
+                            <td class="text-center">{{ item.quantidade }}</td>
+                            {% if pode_ver_valores %}
+                            <td class="text-end">R$ {{ "{:,.2f}".format(item.valor_unitario|float) }}</td>
+                            <td class="text-center">{{ item.desconto_percentual|default(0) }}%</td>
+                            <td class="text-end"><strong>R$ {{ "{:,.2f}".format(item.valor_total|float) }}</strong></td>
+                            {% endif %}
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                    {% if pode_ver_valores %}
+                    <tfoot>
+                        <tr class="table-light">
+                            <td colspan="6" class="text-end"><strong>Subtotal:</strong></td>
+                            <td class="text-end"><strong>R$ {{ "{:,.2f}".format(orcamento.total_itens|float) }}</strong></td>
+                        </tr>
+                        {% if orcamento.desconto_valor and orcamento.desconto_valor > 0 %}
+                        <tr class="table-light">
+                            <td colspan="6" class="text-end"><strong>Desconto:</strong></td>
+                            <td class="text-end"><strong>- R$ {{ "{:,.2f}".format(orcamento.desconto_valor|float) }}</strong></td>
+                        </tr>
+                        {% endif %}
+                        <tr class="table-primary">
+                            <td colspan="6" class="text-end"><strong>TOTAL:</strong></td>
+                            <td class="text-end"><h4 class="mb-0">R$ {{ "{:,.2f}".format(orcamento.total_final|float) }}</h4></td>
+                        </tr>
+                    </tfoot>
+                    {% endif %}
+                </table>
+            </div>
+
+            <!-- Condições e Observações -->
+            <div class="row mt-4">
+                {% if orcamento.condicoes_pagamento %}
+                <div class="col-md-6">
+                    <h6 class="border-bottom pb-2 mb-2">Condições de Pagamento</h6>
+                    <p class="small">{{ orcamento.condicoes_pagamento }}</p>
+                </div>
+                {% endif %}
+                {% if orcamento.observacoes %}
+                <div class="col-md-6">
+                    <h6 class="border-bottom pb-2 mb-2">Observações</h6>
+                    <p class="small">{{ orcamento.observacoes }}</p>
+                </div>
+                {% endif %}
+            </div>
+
+            <!-- Informações de Auditoria -->
+            <div class="mt-4 pt-3 border-top small text-muted">
+                <div class="row">
+                    <div class="col-md-6">
+                        {% if orcamento.criado_por %}
+                        <p class="mb-1"><strong>Criado por:</strong> {{ orcamento.criado_por.nome }} em {{ orcamento.criado_em.strftime('%d/%m/%Y %H:%M') if orcamento.criado_em else '-' }}</p>
+                        {% endif %}
+                    </div>
+                    <div class="col-md-6">
+                        {% if orcamento.aprovado_por %}
+                        <p class="mb-1"><strong>Aprovado por:</strong> {{ orcamento.aprovado_por.nome }} em {{ orcamento.aprovado_em.strftime('%d/%m/%Y %H:%M') if orcamento.aprovado_em else '-' }}</p>
+                        {% endif %}
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

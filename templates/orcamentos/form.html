@@ -1,0 +1,479 @@
+{% extends "base.html" %}
+
+{% block title %}{{ 'Editar' if orcamento else 'Novo' }} Orçamento - Sistema{% endblock %}
+
+{% block extra_css %}
+<link href="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/css/select2.min.css" rel="stylesheet" />
+<link href="https://cdn.jsdelivr.net/npm/select2-bootstrap-5-theme@1.3.0/dist/select2-bootstrap-5-theme.min.css" rel="stylesheet" />
+<style>
+    .item-row {
+        transition: background-color 0.2s;
+    }
+    
+    .item-row:hover {
+        background-color: #f8f9fa;
+    }
+    
+    .item-thumb {
+        width: 50px;
+        height: 50px;
+        object-fit: cover;
+        border-radius: 8px;
+    }
+    
+    .estoque-badge {
+        font-size: 0.75rem;
+        padding: 0.25rem 0.5rem;
+    }
+    
+    .valor-editavel {
+        cursor: pointer;
+        border-bottom: 1px dashed #6c757d;
+    }
+    
+    .valor-editavel:hover {
+        background-color: #fff3cd;
+    }
+    
+    .select2-container--bootstrap-5 .select2-selection {
+        min-height: calc(2.5rem + 2px);
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="container-fluid py-4">
+    <!-- Cabeçalho -->
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <div>
+            <h2>
+                <i class="fas fa-file-invoice-dollar me-2"></i>
+                {{ orcamento.numero if orcamento else 'Novo Orçamento' }}
+            </h2>
+            {% if orcamento %}
+            <span class="badge 
+                {% if orcamento.status == 'rascunho' %}bg-secondary
+                {% elif orcamento.status == 'enviado' %}bg-info
+                {% elif orcamento.status == 'aprovado' %}bg-success
+                {% elif orcamento.status == 'rejeitado' %}bg-danger
+                {% elif orcamento.status == 'convertido' %}bg-primary
+                {% else %}bg-dark{% endif %}">
+                {{ orcamento.status|upper }}
+            </span>
+            {% endif %}
+        </div>
+        <div>
+            <a href="{{ url_for('orcamentos.index') }}" class="btn btn-outline-secondary">
+                <i class="fas fa-arrow-left me-2"></i>Voltar
+            </a>
+            {% if orcamento %}
+            <a href="{{ url_for('orcamentos.visualizar', orcamento_id=orcamento.id) }}" class="btn btn-outline-primary">
+                <i class="fas fa-eye me-2"></i>Visualizar
+            </a>
+            {% endif %}
+        </div>
+    </div>
+
+    {% with messages = get_flashed_messages(with_categories=true) %}
+    {% if messages %}
+        {% for category, message in messages %}
+        <div class="alert alert-{{ category }} alert-dismissible fade show" role="alert">
+            {{ message }}
+            <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+        </div>
+        {% endfor %}
+    {% endif %}
+    {% endwith %}
+
+    <form method="POST" id="formOrcamento">
+        <div class="row g-4">
+            <!-- Coluna 1: Cliente -->
+            <div class="col-lg-4">
+                <div class="card mb-4">
+                    <div class="card-header">
+                        <h5 class="mb-0"><i class="fas fa-user me-2"></i>Cliente</h5>
+                    </div>
+                    <div class="card-body">
+                        <div class="mb-3">
+                            <div class="form-check">
+                                <input class="form-check-input" type="radio" name="tipo_cliente" id="clienteCadastrado" 
+                                       value="cadastrado" {% if not orcamento or orcamento.cliente_id %}checked{% endif %}>
+                                <label class="form-check-label" for="clienteCadastrado">
+                                    Cliente Cadastrado
+                                </label>
+                            </div>
+                            <div class="form-check">
+                                <input class="form-check-input" type="radio" name="tipo_cliente" id="clienteNovo" 
+                                       value="novo" {% if orcamento and not orcamento.cliente_id %}checked{% endif %}>
+                                <label class="form-check-label" for="clienteNovo">
+                                    Cliente Novo
+                                </label>
+                            </div>
+                        </div>
+
+                        <div id="divClienteCadastrado" {% if orcamento and not orcamento.cliente_id %}style="display:none"{% endif %}>
+                            <label class="form-label">Selecionar Cliente</label>
+                            <select name="cliente_id" id="selectCliente" class="form-select">
+                                <option value="">Selecione...</option>
+                                {% for cliente in clientes %}
+                                <option value="{{ cliente.id }}" 
+                                    {% if orcamento and orcamento.cliente_id == cliente.id %}selected{% endif %}>
+                                    {{ cliente.nome }}
+                                </option>
+                                {% endfor %}
+                            </select>
+                        </div>
+
+                        <div id="divClienteNovo" {% if not orcamento or orcamento.cliente_id %}style="display:none"{% endif %}>
+                            <div class="mb-3">
+                                <label class="form-label">Nome *</label>
+                                <input type="text" name="cliente_nome" class="form-control" 
+                                       value="{{ orcamento.cliente_nome if orcamento else '' }}">
+                            </div>
+                            <div class="mb-3">
+                                <label class="form-label">Email</label>
+                                <input type="email" name="cliente_email" class="form-control" 
+                                       value="{{ orcamento.cliente_email if orcamento else '' }}">
+                            </div>
+                            <div class="mb-3">
+                                <label class="form-label">Telefone</label>
+                                <input type="text" name="cliente_telefone" class="form-control" 
+                                       value="{{ orcamento.cliente_telefone if orcamento else '' }}">
+                            </div>
+                            <div class="mb-3">
+                                <label class="form-label">CNPJ/CPF</label>
+                                <input type="text" name="cliente_cnpj_cpf" class="form-control" 
+                                       value="{{ orcamento.cliente_cnpj_cpf if orcamento else '' }}">
+                            </div>
+                            <div class="mb-3">
+                                <label class="form-label">Endereço</label>
+                                <textarea name="cliente_endereco" class="form-control" rows="2">{{ orcamento.cliente_endereco if orcamento else '' }}</textarea>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Dados do Orçamento -->
+                <div class="card">
+                    <div class="card-header">
+                        <h5 class="mb-0"><i class="fas fa-file-alt me-2"></i>Dados do Orçamento</h5>
+                    </div>
+                    <div class="card-body">
+                        <div class="mb-3">
+                            <label class="form-label">Validade (dias)</label>
+                            <input type="number" name="validade_dias" class="form-control" 
+                                   value="{{ orcamento.validade_dias if orcamento else 30 }}" min="1">
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label">Condições de Pagamento</label>
+                            <textarea name="condicoes_pagamento" class="form-control" rows="2">{{ orcamento.condicoes_pagamento if orcamento else '' }}</textarea>
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label">Prazo de Entrega</label>
+                            <input type="text" name="prazo_entrega" class="form-control" 
+                                   value="{{ orcamento.prazo_entrega if orcamento else '' }}" 
+                                   placeholder="Ex: 15 dias úteis">
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label">Observações</label>
+                            <textarea name="observacoes" class="form-control" rows="3">{{ orcamento.observacoes if orcamento else '' }}</textarea>
+                        </div>
+                        <button type="submit" class="btn btn-primary w-100">
+                            <i class="fas fa-save me-2"></i>Salvar Dados
+                        </button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Coluna 2: Adicionar Itens -->
+            {% if orcamento %}
+            <div class="col-lg-4">
+                <div class="card">
+                    <div class="card-header">
+                        <h5 class="mb-0"><i class="fas fa-plus-circle me-2"></i>Adicionar Itens</h5>
+                    </div>
+                    <div class="card-body">
+                        <div class="mb-3">
+                            <label class="form-label">Buscar Item</label>
+                            <select id="selectItem" class="form-select">
+                                <option value="">Digite código ou nome...</option>
+                                {% for item in itens_disponiveis %}
+                                {% set estoque_total = item.estoque_pecas|sum(attribute='quantidade')|default(0) %}
+                                <option value="{{ item.id }}" 
+                                        data-codigo="{{ item.codigo_acb }}"
+                                        data-nome="{{ item.nome }}"
+                                        data-valor="{{ item.valor_item|default(0) }}"
+                                        data-estoque="{{ estoque_total }}"
+                                        data-imagem="{{ get_file_url(item.imagem_path) if item.imagem_path else '' }}">
+                                    {{ item.codigo_acb }} - {{ item.nome }} (Est: {{ estoque_total }})
+                                </option>
+                                {% endfor %}
+                            </select>
+                        </div>
+
+                        <div class="mb-3">
+                            <div class="form-check">
+                                <input class="form-check-input" type="checkbox" id="filtroEstoque">
+                                <label class="form-check-label" for="filtroEstoque">
+                                    Mostrar apenas itens com estoque
+                                </label>
+                            </div>
+                        </div>
+
+                        <div class="row g-2 mb-3">
+                            <div class="col-6">
+                                <label class="form-label">Quantidade</label>
+                                <input type="number" id="inputQuantidade" class="form-control" value="1" min="0.001" step="0.001">
+                            </div>
+                            <div class="col-6">
+                                <label class="form-label">Valor Unit.</label>
+                                <input type="number" id="inputValor" class="form-control" value="0" min="0" step="0.01">
+                            </div>
+                        </div>
+
+                        <div class="mb-3">
+                            <label class="form-label">Desconto %</label>
+                            <input type="number" id="inputDesconto" class="form-control" value="0" min="0" max="100" step="0.01">
+                        </div>
+
+                        <div class="mb-3">
+                            <label class="form-label">Observação</label>
+                            <input type="text" id="inputObservacao" class="form-control">
+                        </div>
+
+                        <button type="button" id="btnAdicionarItem" class="btn btn-success w-100">
+                            <i class="fas fa-plus me-2"></i>Adicionar Item
+                        </button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Coluna 3: Itens do Orçamento -->
+            <div class="col-lg-4">
+                <div class="card">
+                    <div class="card-header d-flex justify-content-between align-items-center">
+                        <h5 class="mb-0"><i class="fas fa-list me-2"></i>Itens</h5>
+                        <span class="badge bg-primary">{{ orcamento.itens|length }}</span>
+                    </div>
+                    <div class="card-body p-0" style="max-height: 600px; overflow-y: auto;">
+                        <div id="listaItens">
+                            {% if orcamento.itens %}
+                                {% for item in orcamento.itens %}
+                                <div class="item-row p-3 border-bottom" data-item-id="{{ item.id }}">
+                                    <div class="d-flex gap-2">
+                                        {% if item.item.imagem_path %}
+                                        <img src="{{ get_file_url(item.item.imagem_path) }}" class="item-thumb" alt="{{ item.item.nome }}">
+                                        {% else %}
+                                        <div class="item-thumb bg-light d-flex align-items-center justify-content-center">
+                                            <i class="fas fa-image text-muted"></i>
+                                        </div>
+                                        {% endif %}
+                                        <div class="flex-grow-1">
+                                            <strong>{{ item.item.codigo_acb }}</strong>
+                                            <div class="small text-muted">{{ item.item.nome }}</div>
+                                            <div class="mt-2">
+                                                <span class="badge estoque-badge 
+                                                    {% if item.tem_estoque %}bg-success
+                                                    {% elif item.quantidade_estoque > 0 %}bg-warning
+                                                    {% else %}bg-danger{% endif %}">
+                                                    Est: {{ item.quantidade_estoque }}
+                                                </span>
+                                            </div>
+                                            <div class="mt-2 small">
+                                                <div>Qtd: <span class="valor-editavel" data-field="quantidade">{{ item.quantidade }}</span></div>
+                                                <div>Vlr Unit: R$ <span class="valor-editavel" data-field="valor_unitario">{{ "{:.2f}".format(item.valor_unitario|float) }}</span></div>
+                                                <div>Desc: <span class="valor-editavel" data-field="desconto_percentual">{{ item.desconto_percentual|default(0) }}</span>%</div>
+                                                <div class="fw-bold text-primary">Total: R$ {{ "{:.2f}".format(item.valor_total|float) }}</div>
+                                            </div>
+                                        </div>
+                                        <div>
+                                            <button type="button" class="btn btn-sm btn-outline-danger btn-remover-item" data-item-id="{{ item.id }}">
+                                                <i class="fas fa-trash"></i>
+                                            </button>
+                                        </div>
+                                    </div>
+                                </div>
+                                {% endfor %}
+                            {% else %}
+                            <div class="p-4 text-center text-muted">
+                                <i class="fas fa-inbox fa-3x mb-3"></i>
+                                <p>Nenhum item adicionado</p>
+                            </div>
+                            {% endif %}
+                        </div>
+                    </div>
+                    {% if orcamento.itens %}
+                    <div class="card-footer bg-light">
+                        <div class="d-flex justify-content-between align-items-center">
+                            <strong>TOTAL:</strong>
+                            <h4 class="mb-0 text-primary" id="totalOrcamento">
+                                R$ {{ "{:,.2f}".format(orcamento.total_final|float) }}
+                            </h4>
+                        </div>
+                    </div>
+                    {% endif %}
+                </div>
+            </div>
+            {% endif %}
+        </div>
+    </form>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/js/select2.min.js"></script>
+<script>
+$(document).ready(function() {
+    // Toggle tipo de cliente
+    $('input[name="tipo_cliente"]').on('change', function() {
+        if ($(this).val() === 'cadastrado') {
+            $('#divClienteCadastrado').show();
+            $('#divClienteNovo').hide();
+        } else {
+            $('#divClienteCadastrado').hide();
+            $('#divClienteNovo').show();
+        }
+    });
+
+    {% if orcamento %}
+    // Inicializar Select2
+    $('#selectCliente').select2({
+        theme: 'bootstrap-5',
+        placeholder: 'Selecione um cliente'
+    });
+
+    $('#selectItem').select2({
+        theme: 'bootstrap-5',
+        placeholder: 'Digite código ou nome',
+        templateResult: formatItem,
+        templateSelection: formatSelection
+    });
+
+    function formatItem(item) {
+        if (!item.id) return item.text;
+        
+        const $item = $(item.element);
+        const codigo = $item.data('codigo');
+        const nome = $item.data('nome');
+        const estoque = $item.data('estoque');
+        
+        return $('<span><strong>' + codigo + '</strong> - ' + nome + ' <small class="text-muted">(Est: ' + estoque + ')</small></span>');
+    }
+
+    function formatSelection(item) {
+        if (!item.id) return item.text;
+        const $item = $(item.element);
+        return $item.data('codigo') + ' - ' + $item.data('nome');
+    }
+
+    // Filtro de estoque
+    $('#filtroEstoque').on('change', function() {
+        const mostrarApenasComEstoque = $(this).is(':checked');
+        $('#selectItem option').each(function() {
+            const estoque = $(this).data('estoque');
+            if (mostrarApenasComEstoque && estoque <= 0) {
+                $(this).hide();
+            } else {
+                $(this).show();
+            }
+        });
+        $('#selectItem').val('').trigger('change');
+    });
+
+    // Ao selecionar item, preencher valor
+    $('#selectItem').on('change', function() {
+        const $selected = $(this).find(':selected');
+        const valor = $selected.data('valor') || 0;
+        $('#inputValor').val(parseFloat(valor).toFixed(2));
+    });
+
+    // Adicionar item
+    $('#btnAdicionarItem').on('click', function() {
+        const itemId = $('#selectItem').val();
+        const quantidade = parseFloat($('#inputQuantidade').val());
+        const valorUnitario = parseFloat($('#inputValor').val());
+        const descontoPercentual = parseFloat($('#inputDesconto').val()) || 0;
+        const observacao = $('#inputObservacao').val();
+
+        if (!itemId || !quantidade || !valorUnitario) {
+            alert('Selecione o item, quantidade e valor!');
+            return;
+        }
+
+        $.ajax({
+            url: '{{ url_for("orcamentos.adicionar_item", orcamento_id=orcamento.id) }}',
+            method: 'POST',
+            data: {
+                item_id: itemId,
+                quantidade: quantidade,
+                valor_unitario: valorUnitario,
+                desconto_percentual: descontoPercentual,
+                observacao: observacao
+            },
+            success: function(response) {
+                if (response.success) {
+                    location.reload();
+                } else {
+                    alert(response.message || 'Erro ao adicionar item');
+                }
+            },
+            error: function(xhr) {
+                alert('Erro: ' + (xhr.responseJSON?.message || 'Erro de comunicação'));
+            }
+        });
+    });
+
+    // Remover item
+    $(document).on('click', '.btn-remover-item', function() {
+        if (!confirm('Remover este item?')) return;
+        
+        const itemId = $(this).data('item-id');
+        
+        $.ajax({
+            url: '{{ url_for("orcamentos.remover_item", orcamento_id=orcamento.id, item_id=0) }}'.replace('/0', '/' + itemId),
+            method: 'POST',
+            success: function(response) {
+                if (response.success) {
+                    location.reload();
+                } else {
+                    alert(response.message || 'Erro ao remover item');
+                }
+            },
+            error: function(xhr) {
+                alert('Erro: ' + (xhr.responseJSON?.message || 'Erro de comunicação'));
+            }
+        });
+    });
+
+    // Edição inline de valores
+    $(document).on('click', '.valor-editavel', function() {
+        const $span = $(this);
+        const field = $span.data('field');
+        const valorAtual = $span.text().replace(',', '.');
+        const itemId = $span.closest('.item-row').data('item-id');
+        
+        const novoValor = prompt('Novo valor para ' + field + ':', valorAtual);
+        if (novoValor === null || novoValor === '') return;
+        
+        const data = {};
+        data[field] = parseFloat(novoValor);
+        
+        $.ajax({
+            url: '{{ url_for("orcamentos.atualizar_item", orcamento_id=orcamento.id, item_id=0) }}'.replace('/0', '/' + itemId),
+            method: 'POST',
+            contentType: 'application/json',
+            data: JSON.stringify(data),
+            success: function(response) {
+                if (response.success) {
+                    location.reload();
+                } else {
+                    alert(response.message || 'Erro ao atualizar');
+                }
+            },
+            error: function(xhr) {
+                alert('Erro: ' + (xhr.responseJSON?.message || 'Erro de comunicação'));
+            }
+        });
+    });
+    {% endif %}
+});
+</script>
+{% endblock %}
