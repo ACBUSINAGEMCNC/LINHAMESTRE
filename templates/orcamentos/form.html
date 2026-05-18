@@ -617,6 +617,13 @@ $(document).ready(function() {
 // ========== MODAL BUSCAR ITEM (FORA DO DOCUMENT.READY) ==========
 $(document).ready(function() {
     console.log('Modal script carregado');
+    console.log('Total de cards no modal:', $('.item-card-modal').length);
+    
+    // Verificar se há itens
+    if ($('.item-card-modal').length === 0) {
+        console.error('ERRO: Nenhum item encontrado no modal! Verifique se itens_disponiveis está sendo passado na rota.');
+    }
+    
     let itemSelecionadoId = null;
     
     // Filtros do modal
