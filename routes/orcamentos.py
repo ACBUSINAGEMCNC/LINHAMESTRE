@@ -163,10 +163,17 @@ def novo():
     # GET
     clientes = Cliente.query.order_by(Cliente.nome).all()
     
+    # Buscar itens disponíveis para o modal
+    itens_disponiveis = Item.query.options(
+        selectinload(Item.estoque_pecas),
+        selectinload(Item.classe)
+    ).order_by(Item.codigo_acb).all()
+    
     return render_template(
         'orcamentos/form.html',
         orcamento=None,
         clientes=clientes,
+        itens_disponiveis=itens_disponiveis,
         pode_ver_valores=pode_ver_valores
     )
 
