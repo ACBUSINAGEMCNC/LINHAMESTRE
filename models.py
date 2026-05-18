@@ -1475,3 +1475,132 @@ class ImagemProcessoGeral(db.Model):
     
     # Relacionamento
     folha_manual = db.relationship('FolhaProcessoManualAcabamento', backref='imagens_processo')
+
+
+# ============================================================================
+# MÓDULO DE ORÇAMENTOS
+# ============================================================================
+
+class Orcamento(db.Model):
+    """Orçamento de venda com itens e valores"""
+    __tablename__ = 'orcamento'
+    
+    id = db.Column(db.Integer, primary_key=True)
+    numero = db.Column(db.String(20), unique=True, nullable=False)  # ORC-YYYY-NNNN
+    
+    # Cliente (pode ser cadastrado ou não)
+    cliente_id = db.Column(db.Integer, db.ForeignKey('cliente.id'))
+    cliente_nome = db.Column(db.String(200))  # Para clientes não cadastrados
+    cliente_email = db.Column(db.String(200))
+    cliente_telefone = db.Column(db.String(50))
+    cliente_cnpj_cpf = db.Column(db.String(20))
+    cliente_endereco = db.Column(db.Text)
+    
+    # Status e validade
+    status = db.Column(db.String(20), default='rascunho')  # rascunho, enviado, aprovado, rejeitado, convertido
+    validade_dias = db.Column(db.Integer, default=30)
+    data_validade = db.Column(db.DateTime)
+    
+    # Informações comerciais
+    observacoes = db.Column(db.Text)
+    condicoes_pagamento = db.Column(db.Text)
+    prazo_entrega = db.Column(db.String(200))
+    
+    # Totais
+    total_itens = db.Column(db.Numeric(10, 2), default=0)
+    desconto_percentual = db.Column(db.Numeric(5, 2), default=0)
+    desconto_valor = db.Column(db.Numeric(10, 2), default=0)
+    total_final = db.Column(db.Numeric(10, 2), default=0)
+    
+    # Auditoria
+    criado_por_id = db.Column(db.Integer, db.ForeignKey('usuario.id'))
+    criado_em = db.Column(db.DateTime, default=local_now_naive)
+    atualizado_em = db.Column(db.DateTime, default=local_now_naive, onupdate=local_now_naive)
+    aprovado_em = db.Column(db.DateTime)
+    aprovado_por_id = db.Column(db.Integer, db.ForeignKey('usuario.id'))
+    
+    # Relacionamentos
+    cliente = db.relationship('Cliente', backref='orcamentos')
+    itens = db.relationship('OrcamentoItem', backref='orcamento', lazy=True, cascade='all, delete-orphan', order_by='OrcamentoItem.ordem')
+    criado_por = db.relationship('Usuario', foreign_keys=[criado_por_id], backref='orcamentos_criados')
+    aprovado_por = db.relationship('Usuario', foreign_keys=[aprovado_por_id], backref='orcamentos_aprovados')
+    
+    def __repr__(self):
+        return f'<Orcamento {self.numero}>'
+    
+    @property
+    def nome_cliente_display(self):
+        """Retorna nome do cliente (cadastrado ou não)"""
+        if self.cliente:
+            return self.cliente.nome
+        return self.cliente_nome or 'Cliente não informado'
+    
+    def calcular_totais(self):
+        """Recalcula os totais do orçamento"""
+        self.total_itens = sum(item.valor_total or 0 for item in self.itens)
+        
+        if self.desconto_percentual:
+            self.desconto_valor = (self.total_itens * self.desconto_percentual) / 100
+        
+        self.total_final = self.total_itens - (self.desconto_valor or 0)
+    
+    def atualizar_data_validade(self):
+        """Atualiza data de validade baseada em validade_dias"""
+        if self.validade_dias:
+            self.data_validade = local_now_naive() + timedelta(days=self.validade_dias)
+
+
+class OrcamentoItem(db.Model):
+    """Item de um orçamento"""
+    __tablename__ = 'orcamento_item'
+    
+    id = db.Column(db.Integer, primary_key=True)
+    orcamento_id = db.Column(db.Integer, db.ForeignKey('orcamento.id'), nullable=False)
+    item_id = db.Column(db.Integer, db.ForeignKey('item.id'), nullable=False)
+    
+    # Descrição pode ser customizada
+    descricao_customizada = db.Column(db.Text)
+    
+    # Quantidades e valores
+    quantidade = db.Column(db.Numeric(10, 3), nullable=False, default=1)
+    valor_unitario = db.Column(db.Numeric(10, 2), nullable=False)
+    desconto_percentual = db.Column(db.Numeric(5, 2), default=0)
+    valor_total = db.Column(db.Numeric(10, 2))
+    
+    # Informações de estoque (calculadas, não persistidas sempre)
+    tem_estoque = db.Column(db.Boolean, default=False)
+    quantidade_estoque = db.Column(db.Numeric(10, 3), default=0)
+    
+    # Observação e ordem
+    observacao = db.Column(db.Text)
+    ordem = db.Column(db.Integer, default=0)
+    
+    # Relacionamentos
+    item = db.relationship('Item', backref='orcamento_itens')
+    
+    def __repr__(self):
+        return f'<OrcamentoItem {self.item_id} - Qtd: {self.quantidade}>'
+    
+    @property
+    def descricao_display(self):
+        """Retorna descrição customizada ou nome do item"""
+        if self.descricao_customizada:
+            return self.descricao_customizada
+        return self.item.nome if self.item else ''
+    
+    def calcular_valor_total(self):
+        """Calcula valor total do item"""
+        subtotal = (self.quantidade or 0) * (self.valor_unitario or 0)
+        
+        if self.desconto_percentual:
+            desconto = (subtotal * self.desconto_percentual) / 100
+            self.valor_total = subtotal - desconto
+        else:
+            self.valor_total = subtotal
+    
+    def atualizar_estoque(self):
+        """Atualiza informações de estoque do item"""
+        if self.item:
+            estoque_total = sum((e.quantidade or 0) for e in self.item.estoque_pecas)
+            self.quantidade_estoque = estoque_total
+            self.tem_estoque = estoque_total >= (self.quantidade or 0)

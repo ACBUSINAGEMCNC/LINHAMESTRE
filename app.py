@@ -200,6 +200,17 @@ def verificar_inicializar_banco():
                 return
             logger.warning(f"Erro ao criar tabelas lista_retirada: {str(col_err)}")
         
+        # Criar tabelas de orçamento
+        try:
+            from migrations.add_orcamento_tables import migrate_postgres as migrate_orcamento_pg
+            migrate_orcamento_pg()
+            logger.info("Tabelas orcamento criadas/verificadas (Supabase).")
+        except Exception as col_err:
+            if _is_max_connections_error(col_err):
+                logger.warning("Supabase sem conexões disponíveis (Max client connections reached). Pulando migração orcamento.")
+                return
+            logger.warning(f"Erro ao criar tabelas orcamento: {str(col_err)}")
+        
         # Criar índices na tabela Item para melhorar performance
         try:
             from migrations.add_item_indexes import migrate_postgres as migrate_item_indexes_pg
@@ -680,6 +691,18 @@ def verificar_inicializar_banco():
                             logger.warning("Falha ao verificar/adicionar campos valor_item/acesso_valores_itens.")
                     except Exception as e:
                         logger.warning(f"Erro ao verificar/migrar campos valor_item/acesso_valores_itens: {str(e)}")
+                    
+                    # Criar tabelas de orçamento
+                    try:
+                        cursor.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='orcamento';")
+                        has_orcamento = cursor.fetchone() is not None
+                        if not has_orcamento:
+                            logger.info("Tabelas de orçamento não encontradas. Executando migração...")
+                            from migrations.add_orcamento_tables import migrate_sqlite as migrate_orcamento_sqlite
+                            migrate_orcamento_sqlite()
+                            logger.info("Tabelas de orçamento criadas com sucesso.")
+                    except Exception as e:
+                        logger.warning(f"Erro ao verificar/criar tabelas de orçamento: {str(e)}")
                 except Exception as col_err:
                     logger.warning(f"Erro ao verificar/adicionar coluna tipo_bruto na tabela item: {str(col_err)}")
             except Exception as col_err:
