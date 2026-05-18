@@ -1,18 +1,25 @@
 """
 Migration para criar tabelas do módulo de Orçamentos
 """
-from sqlalchemy import text
+import os
+import logging
+from sqlalchemy import create_engine, text
+
+logger = logging.getLogger(__name__)
 
 
 def migrate_postgres():
     """Cria tabelas de orçamento para PostgreSQL/Supabase"""
-    from app import create_app
-    from models import db
+    database_url = os.getenv('DATABASE_URL')
+    if not database_url:
+        logger.warning("DATABASE_URL não encontrada, pulando migração orçamento.")
+        return False
     
-    app = create_app()
-    with app.app_context():
+    engine = create_engine(database_url)
+    
+    with engine.begin() as conn:
         # Tabela orcamento
-        db.session.execute(text("""
+        conn.execute(text("""
             CREATE TABLE IF NOT EXISTS orcamento (
                 id SERIAL PRIMARY KEY,
                 numero VARCHAR(20) UNIQUE NOT NULL,
@@ -51,7 +58,7 @@ def migrate_postgres():
         """))
         
         # Tabela orcamento_item
-        db.session.execute(text("""
+        conn.execute(text("""
             CREATE TABLE IF NOT EXISTS orcamento_item (
                 id SERIAL PRIMARY KEY,
                 orcamento_id INTEGER NOT NULL REFERENCES orcamento(id) ON DELETE CASCADE,
@@ -77,35 +84,38 @@ def migrate_postgres():
         """))
         
         # Índices
-        db.session.execute(text("""
+        conn.execute(text("""
             CREATE INDEX IF NOT EXISTS idx_orcamento_numero ON orcamento(numero)
         """))
         
-        db.session.execute(text("""
+        conn.execute(text("""
             CREATE INDEX IF NOT EXISTS idx_orcamento_status ON orcamento(status)
         """))
         
-        db.session.execute(text("""
+        conn.execute(text("""
             CREATE INDEX IF NOT EXISTS idx_orcamento_cliente ON orcamento(cliente_id)
         """))
         
-        db.session.execute(text("""
+        conn.execute(text("""
             CREATE INDEX IF NOT EXISTS idx_orcamento_item_orcamento ON orcamento_item(orcamento_id)
         """))
         
-        db.session.commit()
-        print("✅ Tabelas de orçamento criadas (PostgreSQL)")
+        logger.info("✅ Tabelas de orçamento criadas (PostgreSQL)")
+    
+    return True
 
 
 def migrate_sqlite():
     """Cria tabelas de orçamento para SQLite"""
-    from app import create_app
-    from models import db
+    import sqlite3
     
-    app = create_app()
-    with app.app_context():
+    db_path = os.getenv('SQLITE_DB_PATH', 'acb_usinagem.db')
+    conn = sqlite3.connect(db_path)
+    cursor = conn.cursor()
+    
+    try:
         # Tabela orcamento
-        db.session.execute(text("""
+        cursor.execute("""
             CREATE TABLE IF NOT EXISTS orcamento (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 numero VARCHAR(20) UNIQUE NOT NULL,
@@ -141,10 +151,10 @@ def migrate_sqlite():
                 aprovado_em TIMESTAMP,
                 aprovado_por_id INTEGER REFERENCES usuario(id)
             )
-        """))
+        """)
         
         # Tabela orcamento_item
-        db.session.execute(text("""
+        cursor.execute("""
             CREATE TABLE IF NOT EXISTS orcamento_item (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 orcamento_id INTEGER NOT NULL REFERENCES orcamento(id) ON DELETE CASCADE,
@@ -167,27 +177,34 @@ def migrate_sqlite():
                 observacao TEXT,
                 ordem INTEGER DEFAULT 0
             )
-        """))
+        """)
         
         # Índices
-        db.session.execute(text("""
+        cursor.execute("""
             CREATE INDEX IF NOT EXISTS idx_orcamento_numero ON orcamento(numero)
-        """))
+        """)
         
-        db.session.execute(text("""
+        cursor.execute("""
             CREATE INDEX IF NOT EXISTS idx_orcamento_status ON orcamento(status)
-        """))
+        """)
         
-        db.session.execute(text("""
+        cursor.execute("""
             CREATE INDEX IF NOT EXISTS idx_orcamento_cliente ON orcamento(cliente_id)
-        """))
+        """)
         
-        db.session.execute(text("""
+        cursor.execute("""
             CREATE INDEX IF NOT EXISTS idx_orcamento_item_orcamento ON orcamento_item(orcamento_id)
-        """))
+        """)
         
-        db.session.commit()
-        print("✅ Tabelas de orçamento criadas (SQLite)")
+        conn.commit()
+        logger.info("✅ Tabelas de orçamento criadas (SQLite)")
+        return True
+    except Exception as e:
+        logger.error(f"Erro ao criar tabelas de orçamento (SQLite): {str(e)}")
+        conn.rollback()
+        return False
+    finally:
+        conn.close()
 
 
 if __name__ == '__main__':
