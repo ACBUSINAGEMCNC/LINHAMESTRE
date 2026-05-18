@@ -158,23 +158,9 @@
                         <h5 class="mb-0"><i class="fas fa-plus-circle me-2"></i>Adicionar Itens</h5>
                     </div>
                     <div class="card-body">
-                        <div class="mb-3">
-                            <label class="form-label">Buscar Item</label>
-                            <select id="selectItem" class="form-select" style="width: 100%;">
-                                <option value="">Digite código ou nome...</option>
-                                {% for item in itens_disponiveis %}
-                                {% set estoque_total = item.estoque_pecas|sum(attribute='quantidade')|default(0) %}
-                                <option value="{{ item.id }}" 
-                                        data-codigo="{{ item.codigo_acb }}"
-                                        data-nome="{{ item.nome }}"
-                                        data-valor="{{ item.valor_item|default(0)|float }}"
-                                        data-estoque="{{ estoque_total|float }}"
-                                        data-imagem="{{ get_file_url(item.imagem_path) if item.imagem_path else '' }}">
-                                    {{ item.codigo_acb }} - {{ item.nome }}
-                                </option>
-                                {% endfor %}
-                            </select>
-                        </div>
+                        <button type="button" class="btn btn-primary w-100 mb-3" data-bs-toggle="modal" data-bs-target="#modalBuscarItem">
+                            <i class="fas fa-search me-2"></i>Buscar e Adicionar Item
+                        </button>
 
                         <div class="mb-3">
                             <div class="form-check form-switch">
@@ -185,48 +171,10 @@
                             </div>
                         </div>
                         
-                        <div id="itemPreview" class="mb-3" style="display:none;">
-                            <div class="card bg-light">
-                                <div class="card-body p-2">
-                                    <div class="d-flex gap-2 align-items-center">
-                                        <img id="previewImagem" src="" class="rounded" style="width: 60px; height: 60px; object-fit: cover;">
-                                        <div class="flex-grow-1">
-                                            <div><strong id="previewCodigo"></strong></div>
-                                            <div class="small text-muted" id="previewNome"></div>
-                                            <div class="small">
-                                                <span class="badge bg-info" id="previewEstoque"></span>
-                                                <span class="badge bg-success ms-1" id="previewValor"></span>
-                                            </div>
-                                        </div>
-                                    </div>
-                                </div>
-                            </div>
+                        <div class="alert alert-info small">
+                            <i class="fas fa-info-circle me-2"></i>
+                            Use o botão acima para buscar itens com filtros avançados
                         </div>
-
-                        <div class="row g-2 mb-3">
-                            <div class="col-6">
-                                <label class="form-label">Quantidade</label>
-                                <input type="number" id="inputQuantidade" class="form-control" value="1" min="0.001" step="0.001">
-                            </div>
-                            <div class="col-6">
-                                <label class="form-label">Valor Unit.</label>
-                                <input type="number" id="inputValor" class="form-control" value="0" min="0" step="0.01">
-                            </div>
-                        </div>
-
-                        <div class="mb-3">
-                            <label class="form-label">Desconto %</label>
-                            <input type="number" id="inputDesconto" class="form-control" value="0" min="0" max="100" step="0.01">
-                        </div>
-
-                        <div class="mb-3">
-                            <label class="form-label">Observação</label>
-                            <input type="text" id="inputObservacao" class="form-control">
-                        </div>
-
-                        <button type="button" id="btnAdicionarItem" class="btn btn-success w-100">
-                            <i class="fas fa-plus me-2"></i>Adicionar Item
-                        </button>
                     </div>
                 </div>
             </div>
@@ -300,6 +248,159 @@
             {% endif %}
         </div>
     </form>
+</div>
+
+<!-- Modal Buscar Item -->
+<div class="modal fade" id="modalBuscarItem" tabindex="-1" aria-labelledby="modalBuscarItemLabel" aria-hidden="true">
+    <div class="modal-dialog modal-xl">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="modalBuscarItemLabel">
+                    <i class="fas fa-search me-2"></i>Buscar e Adicionar Item
+                </h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <!-- Filtros -->
+                <div class="row g-3 mb-4">
+                    <div class="col-md-6">
+                        <label class="form-label">Buscar por Código ou Nome</label>
+                        <input type="text" id="modalBusca" class="form-control" placeholder="Digite para buscar...">
+                    </div>
+                    <div class="col-md-3">
+                        <label class="form-label">Classe</label>
+                        <select id="modalClasse" class="form-select">
+                            <option value="">Todas as classes</option>
+                            {% if itens_disponiveis %}
+                                {% set classes = [] %}
+                                {% for item in itens_disponiveis %}
+                                    {% if item.classe and item.classe.nome not in classes %}
+                                        {% set _ = classes.append(item.classe.nome) %}
+                                    {% endif %}
+                                {% endfor %}
+                                {% for classe in classes|sort %}
+                                <option value="{{ classe }}">{{ classe }}</option>
+                                {% endfor %}
+                            {% endif %}
+                        </select>
+                    </div>
+                    <div class="col-md-3">
+                        <label class="form-label">Filtros</label>
+                        <div class="form-check form-switch">
+                            <input class="form-check-input" type="checkbox" id="modalFiltroEstoque">
+                            <label class="form-check-label" for="modalFiltroEstoque">
+                                Apenas com estoque
+                            </label>
+                        </div>
+                        <div class="form-check form-switch">
+                            <input class="form-check-input" type="checkbox" id="modalFiltroComValor">
+                            <label class="form-check-label" for="modalFiltroComValor">
+                                Apenas com valor
+                            </label>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Lista de Itens -->
+                <div id="listaItensModal" style="max-height: 400px; overflow-y: auto;">
+                    {% if itens_disponiveis %}
+                    {% for item in itens_disponiveis %}
+                    {% set estoque_total = item.estoque_pecas|sum(attribute='quantidade')|default(0) %}
+                    <div class="item-card-modal border rounded p-3 mb-2" 
+                         data-item-id="{{ item.id }}"
+                         data-codigo="{{ item.codigo_acb }}"
+                         data-nome="{{ item.nome }}"
+                         data-classe="{{ item.classe.nome if item.classe else '' }}"
+                         data-valor="{{ item.valor_item|default(0)|float }}"
+                         data-estoque="{{ estoque_total|float }}"
+                         style="cursor: pointer; transition: all 0.2s;">
+                        <div class="d-flex gap-3 align-items-center">
+                            {% if item.imagem_path %}
+                            <img src="{{ get_file_url(item.imagem_path) }}" 
+                                 style="width: 80px; height: 80px; object-fit: cover; border-radius: 8px;">
+                            {% else %}
+                            <div style="width: 80px; height: 80px; background: #e9ecef; border-radius: 8px; display: flex; align-items: center; justify-content: center;">
+                                <i class="fas fa-image fa-2x text-muted"></i>
+                            </div>
+                            {% endif %}
+                            
+                            <div class="flex-grow-1">
+                                <h6 class="mb-1"><strong>{{ item.codigo_acb }}</strong></h6>
+                                <p class="mb-1 text-muted">{{ item.nome }}</p>
+                                <div>
+                                    {% if item.classe %}
+                                    <span class="badge bg-secondary me-1">{{ item.classe.nome }}</span>
+                                    {% endif %}
+                                    <span class="badge {% if estoque_total > 0 %}bg-success{% else %}bg-danger{% endif %} me-1">
+                                        Estoque: {{ estoque_total }}
+                                    </span>
+                                    {% if item.valor_item and item.valor_item > 0 %}
+                                    <span class="badge bg-primary">R$ {{ "{:.2f}".format(item.valor_item|float) }}</span>
+                                    {% endif %}
+                                </div>
+                            </div>
+                            
+                            <button type="button" class="btn btn-success btn-selecionar-item" data-item-id="{{ item.id }}">
+                                <i class="fas fa-check me-1"></i>Selecionar
+                            </button>
+                        </div>
+                    </div>
+                    {% endfor %}
+                    {% else %}
+                    <div class="alert alert-warning">
+                        <i class="fas fa-exclamation-triangle me-2"></i>
+                        Nenhum item disponível
+                    </div>
+                    {% endif %}
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Fechar</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Modal Adicionar Item -->
+<div class="modal fade" id="modalAdicionarItem" tabindex="-1" aria-labelledby="modalAdicionarItemLabel" aria-hidden="true">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="modalAdicionarItemLabel">
+                    <i class="fas fa-plus me-2"></i>Adicionar Item ao Orçamento
+                </h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <div id="itemSelecionadoInfo" class="mb-3"></div>
+                
+                <div class="row g-3">
+                    <div class="col-6">
+                        <label class="form-label">Quantidade *</label>
+                        <input type="number" id="modalQuantidade" class="form-control" value="1" min="0.001" step="0.001" required>
+                    </div>
+                    <div class="col-6">
+                        <label class="form-label">Valor Unitário *</label>
+                        <input type="number" id="modalValor" class="form-control" value="0" min="0" step="0.01" required>
+                    </div>
+                    <div class="col-12">
+                        <label class="form-label">Desconto %</label>
+                        <input type="number" id="modalDesconto" class="form-control" value="0" min="0" max="100" step="0.01">
+                    </div>
+                    <div class="col-12">
+                        <label class="form-label">Observação</label>
+                        <input type="text" id="modalObservacao" class="form-control">
+                    </div>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
+                <button type="button" class="btn btn-success" id="btnConfirmarAdicionar">
+                    <i class="fas fa-check me-2"></i>Adicionar
+                </button>
+            </div>
+        </div>
+    </div>
 </div>
 
 <script src="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/js/select2.min.js"></script>
@@ -511,6 +612,146 @@ $(document).ready(function() {
         });
     });
     {% endif %}
+    
+    // ========== MODAL BUSCAR ITEM ==========
+    let itemSelecionadoId = null;
+    
+    // Filtros do modal
+    function aplicarFiltrosModal() {
+        const busca = $('#modalBusca').val().toLowerCase();
+        const classe = $('#modalClasse').val().toLowerCase();
+        const apenasEstoque = $('#modalFiltroEstoque').is(':checked');
+        const apenasComValor = $('#modalFiltroComValor').is(':checked');
+        
+        $('.item-card-modal').each(function() {
+            const $card = $(this);
+            const codigo = $card.data('codigo').toLowerCase();
+            const nome = $card.data('nome').toLowerCase();
+            const classeItem = $card.data('classe').toLowerCase();
+            const estoque = parseFloat($card.data('estoque'));
+            const valor = parseFloat($card.data('valor'));
+            
+            let mostrar = true;
+            
+            // Filtro de busca
+            if (busca && !codigo.includes(busca) && !nome.includes(busca)) {
+                mostrar = false;
+            }
+            
+            // Filtro de classe
+            if (classe && classeItem !== classe) {
+                mostrar = false;
+            }
+            
+            // Filtro de estoque
+            if (apenasEstoque && estoque <= 0) {
+                mostrar = false;
+            }
+            
+            // Filtro de valor
+            if (apenasComValor && valor <= 0) {
+                mostrar = false;
+            }
+            
+            $card.toggle(mostrar);
+        });
+    }
+    
+    $('#modalBusca, #modalClasse').on('input change', aplicarFiltrosModal);
+    $('#modalFiltroEstoque, #modalFiltroComValor').on('change', aplicarFiltrosModal);
+    
+    // Hover nos cards
+    $('.item-card-modal').hover(
+        function() { $(this).css('background-color', '#f8f9fa'); },
+        function() { $(this).css('background-color', ''); }
+    );
+    
+    // Selecionar item
+    $(document).on('click', '.btn-selecionar-item', function() {
+        const itemId = $(this).data('item-id');
+        const $card = $(this).closest('.item-card-modal');
+        
+        itemSelecionadoId = itemId;
+        const codigo = $card.data('codigo');
+        const nome = $card.data('nome');
+        const valor = parseFloat($card.data('valor'));
+        const estoque = parseFloat($card.data('estoque'));
+        
+        // Preencher modal de adição
+        $('#modalValor').val(valor.toFixed(2));
+        $('#modalQuantidade').val(1);
+        $('#modalDesconto').val(0);
+        $('#modalObservacao').val('');
+        
+        // Mostrar info do item
+        const imgSrc = $card.find('img').attr('src') || '';
+        let html = '<div class="card bg-light"><div class="card-body p-2"><div class="d-flex gap-2 align-items-center">';
+        if (imgSrc) {
+            html += '<img src="' + imgSrc + '" style="width: 60px; height: 60px; object-fit: cover; border-radius: 8px;">';
+        }
+        html += '<div><strong>' + codigo + '</strong><br><small class="text-muted">' + nome + '</small><br>';
+        html += '<span class="badge bg-info">Estoque: ' + estoque + '</span> ';
+        html += '<span class="badge bg-success">R$ ' + valor.toFixed(2) + '</span>';
+        html += '</div></div></div></div>';
+        
+        $('#itemSelecionadoInfo').html(html);
+        
+        // Fechar modal de busca e abrir modal de adição
+        $('#modalBuscarItem').modal('hide');
+        setTimeout(function() {
+            $('#modalAdicionarItem').modal('show');
+        }, 300);
+    });
+    
+    // Confirmar adição
+    $('#btnConfirmarAdicionar').on('click', function() {
+        if (!itemSelecionadoId) {
+            alert('Nenhum item selecionado!');
+            return;
+        }
+        
+        const quantidade = parseFloat($('#modalQuantidade').val());
+        const valorUnitario = parseFloat($('#modalValor').val());
+        const descontoPercentual = parseFloat($('#modalDesconto').val()) || 0;
+        const observacao = $('#modalObservacao').val();
+        
+        if (!quantidade || !valorUnitario) {
+            alert('Preencha quantidade e valor!');
+            return;
+        }
+        
+        $.ajax({
+            url: '{{ url_for("orcamentos.adicionar_item", orcamento_id=orcamento.id) }}',
+            method: 'POST',
+            data: {
+                item_id: itemSelecionadoId,
+                quantidade: quantidade,
+                valor_unitario: valorUnitario,
+                desconto_percentual: descontoPercentual,
+                observacao: observacao
+            },
+            success: function(response) {
+                if (response.success) {
+                    $('#modalAdicionarItem').modal('hide');
+                    location.reload();
+                } else {
+                    alert(response.message || 'Erro ao adicionar item');
+                }
+            },
+            error: function(xhr) {
+                alert('Erro: ' + (xhr.responseJSON?.message || 'Erro de comunicação'));
+            }
+        });
+    });
+    
+    // Limpar ao fechar modal
+    $('#modalBuscarItem').on('hidden.bs.modal', function() {
+        $('#modalBusca').val('');
+        $('#modalClasse').val('');
+        $('#modalFiltroEstoque').prop('checked', false);
+        $('#modalFiltroComValor').prop('checked', false);
+        aplicarFiltrosModal();
+    });
 });
 </script>
 {% endblock %}
