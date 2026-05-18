@@ -129,41 +129,68 @@
             <!-- Informações do Cliente e Orçamento -->
             <div class="row mb-4">
                 <div class="col-md-6">
-                    <h5 class="border-bottom pb-2 mb-3">Cliente</h5>
-                    <p class="mb-1"><strong>{{ orcamento.nome_cliente_display }}</strong></p>
-                    {% if orcamento.cliente_email %}
-                    <p class="mb-1"><i class="fas fa-envelope me-2"></i>{{ orcamento.cliente_email }}</p>
-                    {% endif %}
-                    {% if orcamento.cliente_telefone %}
-                    <p class="mb-1"><i class="fas fa-phone me-2"></i>{{ orcamento.cliente_telefone }}</p>
-                    {% endif %}
-                    {% if orcamento.cliente_cnpj_cpf %}
-                    <p class="mb-1"><i class="fas fa-id-card me-2"></i>{{ orcamento.cliente_cnpj_cpf }}</p>
-                    {% endif %}
-                    {% if orcamento.cliente_endereco %}
-                    <p class="mb-1"><i class="fas fa-map-marker-alt me-2"></i>{{ orcamento.cliente_endereco }}</p>
-                    {% endif %}
+                    <h5 class="border-bottom pb-2 mb-3">Dados do Cliente</h5>
+                    <table class="table table-sm table-borderless">
+                        <tr>
+                            <td style="width: 120px;"><strong>Cliente:</strong></td>
+                            <td>{{ orcamento.nome_cliente_display }}</td>
+                        </tr>
+                        <tr>
+                            <td><strong>CNPJ/CPF:</strong></td>
+                            <td>{{ orcamento.cliente_cnpj_cpf if orcamento.cliente_cnpj_cpf else '_______________________________' }}</td>
+                        </tr>
+                        <tr>
+                            <td><strong>Telefone:</strong></td>
+                            <td>{{ orcamento.cliente_telefone if orcamento.cliente_telefone else '_______________________________' }}</td>
+                        </tr>
+                        <tr>
+                            <td><strong>Email:</strong></td>
+                            <td>{{ orcamento.cliente_email if orcamento.cliente_email else '_______________________________' }}</td>
+                        </tr>
+                        <tr>
+                            <td><strong>Endereço:</strong></td>
+                            <td>{{ orcamento.cliente_endereco if orcamento.cliente_endereco else '_______________________________' }}</td>
+                        </tr>
+                        <tr>
+                            <td><strong>Transportadora:</strong></td>
+                            <td>_______________________________</td>
+                        </tr>
+                    </table>
                 </div>
                 <div class="col-md-6">
                     <h5 class="border-bottom pb-2 mb-3">Informações do Orçamento</h5>
-                    <p class="mb-1"><strong>Data:</strong> {{ orcamento.criado_em.strftime('%d/%m/%Y') if orcamento.criado_em else '-' }}</p>
-                    {% if orcamento.data_validade %}
-                    <p class="mb-1"><strong>Validade:</strong> {{ orcamento.data_validade.strftime('%d/%m/%Y') }}</p>
-                    {% endif %}
-                    <p class="mb-1"><strong>Status:</strong> 
-                        <span class="badge 
-                            {% if orcamento.status == 'rascunho' %}bg-secondary
-                            {% elif orcamento.status == 'enviado' %}bg-info
-                            {% elif orcamento.status == 'aprovado' %}bg-success
-                            {% elif orcamento.status == 'rejeitado' %}bg-danger
-                            {% elif orcamento.status == 'convertido' %}bg-primary
-                            {% else %}bg-dark{% endif %}">
-                            {{ orcamento.status|upper }}
-                        </span>
-                    </p>
-                    {% if orcamento.prazo_entrega %}
-                    <p class="mb-1"><strong>Prazo de Entrega:</strong> {{ orcamento.prazo_entrega }}</p>
-                    {% endif %}
+                    <table class="table table-sm table-borderless">
+                        <tr>
+                            <td style="width: 140px;"><strong>Número:</strong></td>
+                            <td>{{ orcamento.numero }}</td>
+                        </tr>
+                        <tr>
+                            <td><strong>Data Emissão:</strong></td>
+                            <td>{{ orcamento.criado_em.strftime('%d/%m/%Y') if orcamento.criado_em else '-' }}</td>
+                        </tr>
+                        <tr>
+                            <td><strong>Validade:</strong></td>
+                            <td>{{ orcamento.data_validade.strftime('%d/%m/%Y') if orcamento.data_validade else '-' }}</td>
+                        </tr>
+                        <tr>
+                            <td><strong>Prazo Entrega:</strong></td>
+                            <td>{{ orcamento.prazo_entrega if orcamento.prazo_entrega else '_______________________________' }}</td>
+                        </tr>
+                        <tr>
+                            <td><strong>Status:</strong></td>
+                            <td>
+                                <span class="badge 
+                                    {% if orcamento.status == 'rascunho' %}bg-secondary
+                                    {% elif orcamento.status == 'enviado' %}bg-info
+                                    {% elif orcamento.status == 'aprovado' %}bg-success
+                                    {% elif orcamento.status == 'rejeitado' %}bg-danger
+                                    {% elif orcamento.status == 'convertido' %}bg-primary
+                                    {% else %}bg-dark{% endif %}">
+                                    {{ orcamento.status|upper }}
+                                </span>
+                            </td>
+                        </tr>
+                    </table>
                 </div>
             </div>
 

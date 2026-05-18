@@ -134,18 +134,16 @@ def novo():
             validade_dias=30
         )
         
-        # Cliente cadastrado ou novo
-        tipo_cliente = request.form.get('tipo_cliente', 'cadastrado')
-        if tipo_cliente == 'cadastrado':
-            cliente_id = request.form.get('cliente_id')
-            if cliente_id:
-                orcamento.cliente_id = int(cliente_id)
+        # Cliente - pode ser cadastrado ou apenas nome
+        cliente_id = request.form.get('cliente_id')
+        cliente_nome = request.form.get('cliente_nome', '').strip()
+        
+        if cliente_id:
+            # Cliente cadastrado selecionado
+            orcamento.cliente_id = int(cliente_id)
         else:
-            orcamento.cliente_nome = request.form.get('cliente_nome', '').strip()
-            orcamento.cliente_email = request.form.get('cliente_email', '').strip()
-            orcamento.cliente_telefone = request.form.get('cliente_telefone', '').strip()
-            orcamento.cliente_cnpj_cpf = request.form.get('cliente_cnpj_cpf', '').strip()
-            orcamento.cliente_endereco = request.form.get('cliente_endereco', '').strip()
+            # Apenas nome do cliente
+            orcamento.cliente_nome = cliente_nome
         
         # Dados do orçamento
         orcamento.validade_dias = int(request.form.get('validade_dias', 30))
@@ -193,23 +191,16 @@ def editar(orcamento_id):
             return redirect(url_for('orcamentos.visualizar', orcamento_id=orcamento_id))
         
         # Atualizar cliente
-        tipo_cliente = request.form.get('tipo_cliente', 'cadastrado')
-        if tipo_cliente == 'cadastrado':
-            cliente_id = request.form.get('cliente_id')
-            if cliente_id:
-                orcamento.cliente_id = int(cliente_id)
-                orcamento.cliente_nome = None
-                orcamento.cliente_email = None
-                orcamento.cliente_telefone = None
-                orcamento.cliente_cnpj_cpf = None
-                orcamento.cliente_endereco = None
+        cliente_id = request.form.get('cliente_id')
+        cliente_nome = request.form.get('cliente_nome', '').strip()
+        
+        if cliente_id:
+            # Cliente cadastrado selecionado
+            orcamento.cliente_id = int(cliente_id)
         else:
+            # Apenas nome do cliente
             orcamento.cliente_id = None
-            orcamento.cliente_nome = request.form.get('cliente_nome', '').strip()
-            orcamento.cliente_email = request.form.get('cliente_email', '').strip()
-            orcamento.cliente_telefone = request.form.get('cliente_telefone', '').strip()
-            orcamento.cliente_cnpj_cpf = request.form.get('cliente_cnpj_cpf', '').strip()
-            orcamento.cliente_endereco = request.form.get('cliente_endereco', '').strip()
+            orcamento.cliente_nome = cliente_nome
         
         # Atualizar dados
         orcamento.validade_dias = int(request.form.get('validade_dias', 30))

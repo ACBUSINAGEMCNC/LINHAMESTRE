@@ -95,26 +95,17 @@
                     </div>
                     <div class="card-body">
                         <div class="mb-3">
-                            <div class="form-check">
-                                <input class="form-check-input" type="radio" name="tipo_cliente" id="clienteCadastrado" 
-                                       value="cadastrado" {% if not orcamento or orcamento.cliente_id %}checked{% endif %}>
-                                <label class="form-check-label" for="clienteCadastrado">
-                                    Cliente Cadastrado
-                                </label>
-                            </div>
-                            <div class="form-check">
-                                <input class="form-check-input" type="radio" name="tipo_cliente" id="clienteNovo" 
-                                       value="novo" {% if orcamento and not orcamento.cliente_id %}checked{% endif %}>
-                                <label class="form-check-label" for="clienteNovo">
-                                    Cliente Novo
-                                </label>
-                            </div>
+                            <label class="form-label">Nome do Cliente *</label>
+                            <input type="text" name="cliente_nome" class="form-control" 
+                                   value="{{ orcamento.nome_cliente_display if orcamento else '' }}" 
+                                   placeholder="Digite o nome do cliente" required>
+                            <small class="text-muted">Pode ser cliente cadastrado ou novo</small>
                         </div>
-
-                        <div id="divClienteCadastrado" {% if orcamento and not orcamento.cliente_id %}style="display:none"{% endif %}>
-                            <label class="form-label">Selecionar Cliente</label>
+                        
+                        <div class="mb-3">
+                            <label class="form-label">Cliente Cadastrado (opcional)</label>
                             <select name="cliente_id" id="selectCliente" class="form-select">
-                                <option value="">Selecione...</option>
+                                <option value="">Selecione para autocompletar dados...</option>
                                 {% for cliente in clientes %}
                                 <option value="{{ cliente.id }}" 
                                     {% if orcamento and orcamento.cliente_id == cliente.id %}selected{% endif %}>
@@ -122,33 +113,7 @@
                                 </option>
                                 {% endfor %}
                             </select>
-                        </div>
-
-                        <div id="divClienteNovo" {% if not orcamento or orcamento.cliente_id %}style="display:none"{% endif %}>
-                            <div class="mb-3">
-                                <label class="form-label">Nome *</label>
-                                <input type="text" name="cliente_nome" class="form-control" 
-                                       value="{{ orcamento.cliente_nome if orcamento else '' }}">
-                            </div>
-                            <div class="mb-3">
-                                <label class="form-label">Email</label>
-                                <input type="email" name="cliente_email" class="form-control" 
-                                       value="{{ orcamento.cliente_email if orcamento else '' }}">
-                            </div>
-                            <div class="mb-3">
-                                <label class="form-label">Telefone</label>
-                                <input type="text" name="cliente_telefone" class="form-control" 
-                                       value="{{ orcamento.cliente_telefone if orcamento else '' }}">
-                            </div>
-                            <div class="mb-3">
-                                <label class="form-label">CNPJ/CPF</label>
-                                <input type="text" name="cliente_cnpj_cpf" class="form-control" 
-                                       value="{{ orcamento.cliente_cnpj_cpf if orcamento else '' }}">
-                            </div>
-                            <div class="mb-3">
-                                <label class="form-label">Endereço</label>
-                                <textarea name="cliente_endereco" class="form-control" rows="2">{{ orcamento.cliente_endereco if orcamento else '' }}</textarea>
-                            </div>
+                            <small class="text-muted">Selecione um cliente cadastrado para preencher automaticamente</small>
                         </div>
                     </div>
                 </div>
@@ -195,28 +160,46 @@
                     <div class="card-body">
                         <div class="mb-3">
                             <label class="form-label">Buscar Item</label>
-                            <select id="selectItem" class="form-select">
+                            <select id="selectItem" class="form-select" style="width: 100%;">
                                 <option value="">Digite código ou nome...</option>
                                 {% for item in itens_disponiveis %}
                                 {% set estoque_total = item.estoque_pecas|sum(attribute='quantidade')|default(0) %}
                                 <option value="{{ item.id }}" 
                                         data-codigo="{{ item.codigo_acb }}"
                                         data-nome="{{ item.nome }}"
-                                        data-valor="{{ item.valor_item|default(0) }}"
-                                        data-estoque="{{ estoque_total }}"
+                                        data-valor="{{ item.valor_item|default(0)|float }}"
+                                        data-estoque="{{ estoque_total|float }}"
                                         data-imagem="{{ get_file_url(item.imagem_path) if item.imagem_path else '' }}">
-                                    {{ item.codigo_acb }} - {{ item.nome }} (Est: {{ estoque_total }})
+                                    {{ item.codigo_acb }} - {{ item.nome }}
                                 </option>
                                 {% endfor %}
                             </select>
                         </div>
 
                         <div class="mb-3">
-                            <div class="form-check">
+                            <div class="form-check form-switch">
                                 <input class="form-check-input" type="checkbox" id="filtroEstoque">
                                 <label class="form-check-label" for="filtroEstoque">
-                                    Mostrar apenas itens com estoque
+                                    <i class="fas fa-filter me-1"></i>Apenas itens com estoque
                                 </label>
+                            </div>
+                        </div>
+                        
+                        <div id="itemPreview" class="mb-3" style="display:none;">
+                            <div class="card bg-light">
+                                <div class="card-body p-2">
+                                    <div class="d-flex gap-2 align-items-center">
+                                        <img id="previewImagem" src="" class="rounded" style="width: 60px; height: 60px; object-fit: cover;">
+                                        <div class="flex-grow-1">
+                                            <div><strong id="previewCodigo"></strong></div>
+                                            <div class="small text-muted" id="previewNome"></div>
+                                            <div class="small">
+                                                <span class="badge bg-info" id="previewEstoque"></span>
+                                                <span class="badge bg-success ms-1" id="previewValor"></span>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
                             </div>
                         </div>
 
@@ -337,28 +320,56 @@ $(document).ready(function() {
     // Inicializar Select2
     $('#selectCliente').select2({
         theme: 'bootstrap-5',
-        placeholder: 'Selecione um cliente'
+        placeholder: 'Selecione um cliente cadastrado'
+    });
+    
+    // Autocompletar nome ao selecionar cliente
+    $('#selectCliente').on('change', function() {
+        const selectedText = $(this).find('option:selected').text();
+        if (selectedText && selectedText !== 'Selecione para autocompletar dados...') {
+            $('input[name="cliente_nome"]').val(selectedText);
+        }
     });
 
     $('#selectItem').select2({
         theme: 'bootstrap-5',
-        placeholder: 'Digite código ou nome',
-        templateResult: formatItem,
-        templateSelection: formatSelection
+        placeholder: 'Digite código ou nome do item',
+        width: '100%',
+        templateResult: formatItemWithImage,
+        templateSelection: formatItemSelection
     });
 
-    function formatItem(item) {
+    function formatItemWithImage(item) {
         if (!item.id) return item.text;
         
         const $item = $(item.element);
         const codigo = $item.data('codigo');
         const nome = $item.data('nome');
         const estoque = $item.data('estoque');
+        const valor = $item.data('valor');
+        const imagem = $item.data('imagem');
         
-        return $('<span><strong>' + codigo + '</strong> - ' + nome + ' <small class="text-muted">(Est: ' + estoque + ')</small></span>');
+        let html = '<div class="d-flex align-items-center gap-2">';
+        
+        if (imagem) {
+            html += '<img src="' + imagem + '" style="width: 40px; height: 40px; object-fit: cover; border-radius: 4px;">';
+        } else {
+            html += '<div style="width: 40px; height: 40px; background: #e9ecef; border-radius: 4px; display: flex; align-items: center; justify-content: center;"><i class="fas fa-image text-muted"></i></div>';
+        }
+        
+        html += '<div class="flex-grow-1">';
+        html += '<div><strong>' + codigo + '</strong> - ' + nome + '</div>';
+        html += '<div class="small text-muted">';
+        html += '<span class="badge bg-info me-1">Est: ' + estoque + '</span>';
+        if (valor > 0) {
+            html += '<span class="badge bg-success">R$ ' + parseFloat(valor).toFixed(2) + '</span>';
+        }
+        html += '</div></div></div>';
+        
+        return $(html);
     }
 
-    function formatSelection(item) {
+    function formatItemSelection(item) {
         if (!item.id) return item.text;
         const $item = $(item.element);
         return $item.data('codigo') + ' - ' + $item.data('nome');
@@ -378,11 +389,37 @@ $(document).ready(function() {
         $('#selectItem').val('').trigger('change');
     });
 
-    // Ao selecionar item, preencher valor
+    // Ao selecionar item, preencher valor e mostrar preview
     $('#selectItem').on('change', function() {
         const $selected = $(this).find(':selected');
-        const valor = $selected.data('valor') || 0;
-        $('#inputValor').val(parseFloat(valor).toFixed(2));
+        const itemId = $(this).val();
+        
+        if (itemId) {
+            const codigo = $selected.data('codigo');
+            const nome = $selected.data('nome');
+            const valor = $selected.data('valor') || 0;
+            const estoque = $selected.data('estoque') || 0;
+            const imagem = $selected.data('imagem');
+            
+            // Preencher valor
+            $('#inputValor').val(parseFloat(valor).toFixed(2));
+            
+            // Mostrar preview
+            $('#previewCodigo').text(codigo);
+            $('#previewNome').text(nome);
+            $('#previewEstoque').text('Estoque: ' + estoque);
+            $('#previewValor').text('Valor: R$ ' + parseFloat(valor).toFixed(2));
+            
+            if (imagem) {
+                $('#previewImagem').attr('src', imagem).show();
+            } else {
+                $('#previewImagem').attr('src', '/static/placeholder.png').show();
+            }
+            
+            $('#itemPreview').slideDown();
+        } else {
+            $('#itemPreview').slideUp();
+        }
     });
 
     // Adicionar item
