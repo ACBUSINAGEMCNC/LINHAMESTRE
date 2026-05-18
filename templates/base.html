@@ -64,6 +64,14 @@
                     </li>
                     {% endif %}
                     
+                    {% if acesso_valores_itens or usuario_admin_master %}
+                    <li class="nav-item">
+                        <a class="nav-link" href="{{ url_for('orcamentos.index') }}">
+                            <i class="fas fa-file-invoice-dollar"></i> Orçamentos
+                        </a>
+                    </li>
+                    {% endif %}
+                    
                     {% if acesso_cadastros or acesso_valores_itens or usuario_admin_master or usuario_nivel == 'admin' %}
                     <li class="nav-item dropdown">
                         <a class="nav-link dropdown-toggle" href="#" id="cadastrosDropdown" role="button" data-bs-toggle="dropdown" aria-expanded="false">
