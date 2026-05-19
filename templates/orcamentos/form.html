@@ -775,30 +775,25 @@ if (window.jQuery) {
                     });
 
                     var contentType = (resp.headers.get('content-type') || '').toLowerCase();
-                    if (!resp.ok) {
-                        // Em caso de 404/500 geralmente vem HTML; não tentar dar JSON.parse
-                        var text = await resp.text();
-                        console.error('[ADICIONAR] HTTP', resp.status, text.slice(0, 300));
-                        alert('Erro ao adicionar item (HTTP ' + resp.status + ').');
+                    if (contentType.indexOf('application/json') !== -1) {
+                        var data = await resp.json();
+                        if (data && data.success) {
+                            var modalAdicionar = getModalInstance('modalAdicionarItem');
+                            if (modalAdicionar) modalAdicionar.hide();
+                            window.location.reload();
+                            return;
+                        }
+
+                        // Pode vir HTTP 400 com success:false (ex.: item já adicionado)
+                        console.error('[ADICIONAR] HTTP', resp.status, data);
+                        alert((data && data.message) ? data.message : 'Erro ao adicionar item');
                         return;
                     }
 
-                    if (contentType.indexOf('application/json') === -1) {
-                        var raw = await resp.text();
-                        console.error('[ADICIONAR] Resposta não-JSON:', raw.slice(0, 300));
-                        alert('Erro ao adicionar item (resposta inválida).');
-                        return;
-                    }
-
-                    var data = await resp.json();
-
-                    if (data.success) {
-                        var modalAdicionar = getModalInstance('modalAdicionarItem');
-                        if (modalAdicionar) modalAdicionar.hide();
-                        window.location.reload();
-                    } else {
-                        alert(data.message || 'Erro ao adicionar item');
-                    }
+                    // Não-JSON: geralmente HTML de erro/redirect
+                    var raw = await resp.text();
+                    console.error('[ADICIONAR] HTTP', resp.status, raw.slice(0, 300));
+                    alert('Erro ao adicionar item (HTTP ' + resp.status + ').');
                 } catch (err) {
                     console.error(err);
                     alert('Erro na comunicação.');
