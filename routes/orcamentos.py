@@ -2,9 +2,10 @@
 Rotas para o módulo de Orçamentos
 """
 from datetime import datetime, timedelta
-from flask import Blueprint, render_template, request, redirect, url_for, flash, session, jsonify
-from sqlalchemy import desc, or_
+from flask import Blueprint, render_template, request, jsonify, redirect, url_for, flash
+from flask_login import login_required, current_user
 from sqlalchemy.orm import selectinload
+from decimal import Decimal, InvalidOperation
 from models import db, Orcamento, OrcamentoItem, Cliente, Item, Usuario, EstoquePecas, ListaRetirada, ListaRetiradaItem
 from utils import get_file_url
 
@@ -282,10 +283,24 @@ def adicionar_item(orcamento_id):
         return jsonify({'success': False, 'message': 'Orçamento não pode ser editado'}), 400
     
     item_id = request.form.get('item_id', type=int)
-    quantidade = request.form.get('quantidade', type=float, default=1)
-    valor_unitario = request.form.get('valor_unitario', type=float)
-    desconto_percentual = request.form.get('desconto_percentual', type=float, default=0)
+    quantidade_raw = (request.form.get('quantidade') or '1').strip()
+    valor_unitario_raw = (request.form.get('valor_unitario') or '').strip()
+    desconto_percentual_raw = (request.form.get('desconto_percentual') or '0').strip()
     observacao = request.form.get('observacao', '').strip()
+
+    def _to_decimal(raw, default='0'):
+        raw = (raw if raw is not None else default)
+        raw = str(raw).strip().replace(',', '.')
+        if raw == '':
+            raw = default
+        return Decimal(raw)
+
+    try:
+        quantidade = _to_decimal(quantidade_raw, default='1')
+        valor_unitario = _to_decimal(valor_unitario_raw, default='0')
+        desconto_percentual = _to_decimal(desconto_percentual_raw, default='0')
+    except (InvalidOperation, ValueError):
+        return jsonify({'success': False, 'message': 'Valores inválidos'}), 400
     
     if not item_id or not valor_unitario:
         return jsonify({'success': False, 'message': 'Item e valor são obrigatórios'}), 400
