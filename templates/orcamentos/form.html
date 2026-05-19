@@ -723,6 +723,9 @@ if (window.jQuery) {
                 infoEl.innerHTML = html;
             }
 
+            // Evita warning do Bootstrap/ARIA: não manter foco dentro do modal que será ocultado
+            if (btn && typeof btn.blur === 'function') btn.blur();
+
             var modalBuscar = getModalInstance('modalBuscarItem');
             var modalAdicionar = getModalInstance('modalAdicionarItem');
             if (modalBuscar && modalAdicionar) {
@@ -765,11 +768,28 @@ if (window.jQuery) {
                 form.append('observacao', obs);
 
                 try {
-                    var resp = await fetch('/orcamentos/' + orcamentoId + '/itens/adicionar', {
+                    var resp = await fetch('/orcamentos/' + orcamentoId + '/adicionar-item', {
                         method: 'POST',
                         body: form,
                         credentials: 'same-origin'
                     });
+
+                    var contentType = (resp.headers.get('content-type') || '').toLowerCase();
+                    if (!resp.ok) {
+                        // Em caso de 404/500 geralmente vem HTML; não tentar dar JSON.parse
+                        var text = await resp.text();
+                        console.error('[ADICIONAR] HTTP', resp.status, text.slice(0, 300));
+                        alert('Erro ao adicionar item (HTTP ' + resp.status + ').');
+                        return;
+                    }
+
+                    if (contentType.indexOf('application/json') === -1) {
+                        var raw = await resp.text();
+                        console.error('[ADICIONAR] Resposta não-JSON:', raw.slice(0, 300));
+                        alert('Erro ao adicionar item (resposta inválida).');
+                        return;
+                    }
+
                     var data = await resp.json();
 
                     if (data.success) {
