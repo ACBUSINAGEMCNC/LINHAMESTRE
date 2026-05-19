@@ -2,7 +2,7 @@
 Rotas para o módulo de Orçamentos
 """
 from datetime import datetime, timedelta
-from flask import Blueprint, render_template, request, jsonify, redirect, url_for, flash
+from flask import Blueprint, render_template, request, jsonify, redirect, url_for, flash, session
 from flask_login import login_required, current_user
 from sqlalchemy.orm import selectinload
 from decimal import Decimal, InvalidOperation
