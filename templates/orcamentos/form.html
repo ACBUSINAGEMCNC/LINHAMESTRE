@@ -614,192 +614,214 @@ $(document).ready(function() {
     {% endif %}
 });
 
-// ========== MODAL BUSCAR ITEM (FORA DO DOCUMENT.READY) ==========
-$(document).ready(function() {
-    console.log('Modal script carregado');
-    console.log('Total de cards no modal:', $('.item-card-modal').length);
+// ========== MODAL BUSCAR ITEM - VERSAO SIMPLIFICADA ==========
+(function() {
+    'use strict';
     
-    // Verificar se há itens
-    if ($('.item-card-modal').length === 0) {
-        console.error('ERRO: Nenhum item encontrado no modal! Verifique se itens_disponiveis está sendo passado na rota.');
+    console.log('[MODAL] Script iniciado');
+    
+    // Aguardar jQuery estar pronto
+    if (typeof jQuery === 'undefined') {
+        console.error('[MODAL] jQuery não encontrado!');
+        return;
     }
     
-    let itemSelecionadoId = null;
-    
-    // Filtros do modal
-    function aplicarFiltrosModal() {
-        console.log('Aplicando filtros...');
-        const busca = $('#modalBusca').val().toLowerCase();
-        const classe = $('#modalClasse').val().toLowerCase();
-        const apenasEstoque = $('#modalFiltroEstoque').is(':checked');
-        const apenasComValor = $('#modalFiltroComValor').is(':checked');
+    jQuery(function($) {
+        console.log('[MODAL] jQuery ready');
+        console.log('[MODAL] Cards encontrados:', $('.item-card-modal').length);
         
-        console.log('Filtros:', {busca, classe, apenasEstoque, apenasComValor});
+        var itemSelecionadoId = null;
         
-        let totalCards = 0;
-        let cardsVisiveis = 0;
-        
-        $('.item-card-modal').each(function() {
-            totalCards++;
-            const $card = $(this);
-            const codigo = ($card.data('codigo') || '').toString().toLowerCase();
-            const nome = ($card.data('nome') || '').toString().toLowerCase();
-            const classeItem = ($card.data('classe') || '').toString().toLowerCase();
-            const estoque = parseFloat($card.data('estoque')) || 0;
-            const valor = parseFloat($card.data('valor')) || 0;
+        // FUNÇÃO: Aplicar filtros
+        window.aplicarFiltrosModal = function() {
+            var busca = $('#modalBusca').val().toLowerCase().trim();
+            var classe = $('#modalClasse').val().toLowerCase();
+            var apenasEstoque = document.getElementById('modalFiltroEstoque').checked;
+            var apenasComValor = document.getElementById('modalFiltroComValor').checked;
             
-            let mostrar = true;
+            console.log('[FILTRO] Busca:', busca, 'Classe:', classe, 'Estoque:', apenasEstoque, 'Valor:', apenasComValor);
             
-            // Filtro de busca
-            if (busca && !codigo.includes(busca) && !nome.includes(busca)) {
-                mostrar = false;
-            }
+            var cards = document.querySelectorAll('.item-card-modal');
+            var visiveis = 0;
             
-            // Filtro de classe
-            if (classe && classeItem !== classe) {
-                mostrar = false;
-            }
-            
-            // Filtro de estoque
-            if (apenasEstoque && estoque <= 0) {
-                mostrar = false;
-            }
-            
-            // Filtro de valor
-            if (apenasComValor && valor <= 0) {
-                mostrar = false;
-            }
-            
-            if (mostrar) cardsVisiveis++;
-            $card.toggle(mostrar);
-        });
-        
-        console.log('Cards:', totalCards, 'Visíveis:', cardsVisiveis);
-    }
-    
-    // Registrar eventos
-    $('#modalBusca').on('input', function() {
-        console.log('Input busca:', $(this).val());
-        aplicarFiltrosModal();
-    });
-    
-    $('#modalClasse').on('change', function() {
-        console.log('Classe mudou:', $(this).val());
-        aplicarFiltrosModal();
-    });
-    
-    $('#modalFiltroEstoque, #modalFiltroComValor').on('change', function() {
-        console.log('Filtro mudou:', $(this).attr('id'), $(this).is(':checked'));
-        aplicarFiltrosModal();
-    });
-    
-    // Hover nos cards
-    $('.item-card-modal').hover(
-        function() { $(this).css('background-color', '#f8f9fa'); },
-        function() { $(this).css('background-color', ''); }
-    );
-    
-    // Selecionar item
-    $(document).on('click', '.btn-selecionar-item', function(e) {
-        e.preventDefault();
-        e.stopPropagation();
-        
-        console.log('Botão selecionar clicado!');
-        const itemId = $(this).data('item-id');
-        const $card = $(this).closest('.item-card-modal');
-        
-        console.log('Item ID:', itemId);
-        console.log('Card encontrado:', $card.length);
-        
-        itemSelecionadoId = itemId;
-        const codigo = $card.data('codigo');
-        const nome = $card.data('nome');
-        const valor = parseFloat($card.data('valor')) || 0;
-        const estoque = parseFloat($card.data('estoque')) || 0;
-        
-        console.log('Dados do item:', {codigo, nome, valor, estoque});
-        
-        // Preencher modal de adição
-        $('#modalValor').val(valor.toFixed(2));
-        $('#modalQuantidade').val(1);
-        $('#modalDesconto').val(0);
-        $('#modalObservacao').val('');
-        
-        // Mostrar info do item
-        const imgSrc = $card.find('img').attr('src') || '';
-        let html = '<div class="card bg-light"><div class="card-body p-2"><div class="d-flex gap-2 align-items-center">';
-        if (imgSrc) {
-            html += '<img src="' + imgSrc + '" style="width: 60px; height: 60px; object-fit: cover; border-radius: 8px;">';
-        }
-        html += '<div><strong>' + codigo + '</strong><br><small class="text-muted">' + nome + '</small><br>';
-        html += '<span class="badge bg-info">Estoque: ' + estoque + '</span> ';
-        html += '<span class="badge bg-success">R$ ' + valor.toFixed(2) + '</span>';
-        html += '</div></div></div></div>';
-        
-        $('#itemSelecionadoInfo').html(html);
-        
-        console.log('Fechando modal de busca...');
-        // Fechar modal de busca e abrir modal de adição
-        $('#modalBuscarItem').modal('hide');
-        setTimeout(function() {
-            console.log('Abrindo modal de adição...');
-            $('#modalAdicionarItem').modal('show');
-        }, 300);
-    });
-    
-    // Confirmar adição
-    $('#btnConfirmarAdicionar').on('click', function() {
-        if (!itemSelecionadoId) {
-            alert('Nenhum item selecionado!');
-            return;
-        }
-        
-        const quantidade = parseFloat($('#modalQuantidade').val());
-        const valorUnitario = parseFloat($('#modalValor').val());
-        const descontoPercentual = parseFloat($('#modalDesconto').val()) || 0;
-        const observacao = $('#modalObservacao').val();
-        
-        if (!quantidade || !valorUnitario) {
-            alert('Preencha quantidade e valor!');
-            return;
-        }
-        
-        // Pegar orcamento_id da URL atual
-        const urlParts = window.location.pathname.split('/');
-        const orcamentoId = urlParts[urlParts.indexOf('orcamentos') + 1];
-        
-        $.ajax({
-            url: '/orcamentos/' + orcamentoId + '/itens/adicionar',
-            method: 'POST',
-            data: {
-                item_id: itemSelecionadoId,
-                quantidade: quantidade,
-                valor_unitario: valorUnitario,
-                desconto_percentual: descontoPercentual,
-                observacao: observacao
-            },
-            success: function(response) {
-                if (response.success) {
-                    $('#modalAdicionarItem').modal('hide');
-                    location.reload();
-                } else {
-                    alert(response.message || 'Erro ao adicionar item');
+            cards.forEach(function(card) {
+                var codigo = (card.dataset.codigo || '').toLowerCase();
+                var nome = (card.dataset.nome || '').toLowerCase();
+                var classeItem = (card.dataset.classe || '').toLowerCase();
+                var estoque = parseFloat(card.dataset.estoque) || 0;
+                var valor = parseFloat(card.dataset.valor) || 0;
+                
+                var mostrar = true;
+                
+                // Filtro de busca
+                if (busca && codigo.indexOf(busca) === -1 && nome.indexOf(busca) === -1) {
+                    mostrar = false;
                 }
-            },
-            error: function(xhr) {
-                alert('Erro: ' + (xhr.responseJSON?.message || 'Erro de comunicação'));
+                
+                // Filtro de classe
+                if (classe && classeItem !== classe) {
+                    mostrar = false;
+                }
+                
+                // Filtro de estoque
+                if (apenasEstoque && estoque <= 0) {
+                    mostrar = false;
+                }
+                
+                // Filtro de valor
+                if (apenasComValor && valor <= 0) {
+                    mostrar = false;
+                }
+                
+                card.style.display = mostrar ? '' : 'none';
+                if (mostrar) visiveis++;
+            });
+            
+            console.log('[FILTRO] Visíveis:', visiveis, 'de', cards.length);
+        };
+        
+        // EVENTOS DE FILTRO
+        $('#modalBusca').on('keyup', function() {
+            console.log('[EVENTO] Busca digitada:', this.value);
+            window.aplicarFiltrosModal();
+        });
+        
+        $('#modalClasse').on('change', function() {
+            console.log('[EVENTO] Classe alterada:', this.value);
+            window.aplicarFiltrosModal();
+        });
+        
+        $('#modalFiltroEstoque, #modalFiltroComValor').on('change', function() {
+            console.log('[EVENTO] Filtro alterado:', this.id, this.checked);
+            window.aplicarFiltrosModal();
+        });
+        
+        // SELECIONAR ITEM - delegação de evento
+        $(document).on('click', '.btn-selecionar-item', function(e) {
+            e.preventDefault();
+            e.stopPropagation();
+            
+            console.log('[SELECAO] Botão clicado');
+            
+            var $btn = $(this);
+            var $card = $btn.closest('.item-card-modal');
+            
+            itemSelecionadoId = $btn.data('item-id');
+            var codigo = $card.data('codigo');
+            var nome = $card.data('nome');
+            var valor = parseFloat($card.data('valor')) || 0;
+            var estoque = parseFloat($card.data('estoque')) || 0;
+            
+            console.log('[SELECAO] ID:', itemSelecionadoId, 'Código:', codigo);
+            
+            // Preencher campos
+            $('#modalQuantidade').val(1);
+            $('#modalValor').val(valor.toFixed(2));
+            $('#modalDesconto').val(0);
+            $('#modalObservacao').val('');
+            
+            // Mostrar info
+            var imgSrc = $card.find('img').attr('src') || '';
+            var html = '<div class="card bg-light"><div class="card-body"><div class="d-flex gap-3">';
+            if (imgSrc) {
+                html += '<img src="' + imgSrc + '" style="width:60px;height:60px;object-fit:cover;border-radius:4px;">';
+            }
+            html += '<div><strong>' + codigo + '</strong><div class="text-muted">' + nome + '</div>';
+            html += '<span class="badge bg-info">Est: ' + estoque + '</span> ';
+            html += '<span class="badge bg-success">R$ ' + valor.toFixed(2) + '</span>';
+            html += '</div></div></div></div>';
+            
+            $('#itemSelecionadoInfo').html(html);
+            
+            // Abrir modal de adição (Bootstrap 5)
+            var modalBuscarEl = document.getElementById('modalBuscarItem');
+            var modalAdicionarEl = document.getElementById('modalAdicionarItem');
+            if (window.bootstrap && modalBuscarEl && modalAdicionarEl) {
+                var modalBuscar = bootstrap.Modal.getOrCreateInstance(modalBuscarEl);
+                var modalAdicionar = bootstrap.Modal.getOrCreateInstance(modalAdicionarEl);
+                modalBuscar.hide();
+                modalAdicionar.show();
+            } else {
+                console.error('[MODAL] Bootstrap Modal API não disponível ou elementos não encontrados');
             }
         });
+        
+        // CONFIRMAR ADIÇÃO
+        $('#btnConfirmarAdicionar').on('click', function() {
+            console.log('[ADICAO] Confirmar clicado, ID:', itemSelecionadoId);
+            
+            if (!itemSelecionadoId) {
+                alert('Erro: Nenhum item selecionado!');
+                return;
+            }
+            
+            var qtd = parseFloat($('#modalQuantidade').val());
+            var val = parseFloat($('#modalValor').val());
+            var desc = parseFloat($('#modalDesconto').val()) || 0;
+            var obs = $('#modalObservacao').val();
+            
+            if (!qtd || qtd <= 0) {
+                alert('Preencha a quantidade!');
+                return;
+            }
+            if (!val || val <= 0) {
+                alert('Preencha o valor unitário!');
+                return;
+            }
+            
+            // Extrair orcamento_id da URL
+            var path = window.location.pathname;
+            var match = path.match(/\/orcamentos\/(\d+)/);
+            var orcamentoId = match ? match[1] : null;
+            
+            console.log('[ADICAO] Orcamento ID:', orcamentoId);
+            
+            if (!orcamentoId) {
+                alert('Erro: Não foi possível identificar o orçamento!');
+                return;
+            }
+            
+            // AJAX
+            $.ajax({
+                url: '/orcamentos/' + orcamentoId + '/itens/adicionar',
+                type: 'POST',
+                data: {
+                    item_id: itemSelecionadoId,
+                    quantidade: qtd,
+                    valor_unitario: val,
+                    desconto_percentual: desc,
+                    observacao: obs
+                },
+                success: function(resp) {
+                    console.log('[ADICAO] Sucesso:', resp);
+                    if (resp.success) {
+                        $('#modalAdicionarItem').modal('hide');
+                        window.location.reload();
+                    } else {
+                        alert('Erro: ' + (resp.message || 'Erro desconhecido'));
+                    }
+                },
+                error: function(xhr) {
+                    console.error('[ADICAO] Erro:', xhr);
+                    alert('Erro na comunicação: ' + (xhr.responseJSON?.message || 'Tente novamente'));
+                }
+            });
+        });
+        
+        // LIMPAR AO FECHAR (Bootstrap 5)
+        var modalBuscarEl = document.getElementById('modalBuscarItem');
+        if (modalBuscarEl) {
+            modalBuscarEl.addEventListener('hidden.bs.modal', function() {
+                $('#modalBusca').val('');
+                $('#modalClasse').val('');
+                $('#modalFiltroEstoque').prop('checked', false);
+                $('#modalFiltroComValor').prop('checked', false);
+                $('.item-card-modal').show();
+            });
+        }
+        
+        console.log('[MODAL] Todos os eventos registrados');
     });
-    
-    // Limpar ao fechar modal
-    $('#modalBuscarItem').on('hidden.bs.modal', function() {
-        $('#modalBusca').val('');
-        $('#modalClasse').val('');
-        $('#modalFiltroEstoque').prop('checked', false);
-        $('#modalFiltroComValor').prop('checked', false);
-        aplicarFiltrosModal();
-    });
-});
+})();
 </script>
 {% endblock %}
