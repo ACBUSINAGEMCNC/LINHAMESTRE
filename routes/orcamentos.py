@@ -5,6 +5,7 @@ from datetime import datetime, timedelta
 from flask import Blueprint, render_template, request, jsonify, redirect, url_for, flash, session
 from flask_login import login_required, current_user
 from sqlalchemy.orm import selectinload
+from sqlalchemy import desc
 from decimal import Decimal, InvalidOperation
 from models import db, Orcamento, OrcamentoItem, Cliente, Item, Usuario, EstoquePecas, ListaRetirada, ListaRetiradaItem
 from utils import get_file_url
@@ -229,7 +230,8 @@ def editar(orcamento_id):
     
     # Buscar itens disponíveis para adicionar
     itens_disponiveis = Item.query.options(
-        selectinload(Item.estoque_pecas)
+        selectinload(Item.estoque_pecas),
+        selectinload(Item.classe)
     ).order_by(Item.codigo_acb).all()
     
     clientes = Cliente.query.order_by(Cliente.nome).all()
@@ -391,16 +393,36 @@ def atualizar_item(orcamento_id, item_id):
     
     if not item:
         return jsonify({'success': False, 'message': 'Item não encontrado'}), 404
-    
-    # Atualizar campos
-    if 'quantidade' in request.json:
-        item.quantidade = float(request.json['quantidade'])
-    
-    if 'valor_unitario' in request.json:
-        item.valor_unitario = float(request.json['valor_unitario'])
-    
-    if 'desconto_percentual' in request.json:
-        item.desconto_percentual = float(request.json['desconto_percentual'])
+
+    payload = request.get_json(silent=True) or {}
+    if not isinstance(payload, dict) or not payload:
+        return jsonify({'success': False, 'message': 'Dados inválidos'}), 400
+
+    def _to_decimal(value):
+        if value is None:
+            raise InvalidOperation('valor vazio')
+        if isinstance(value, Decimal):
+            return value
+        return Decimal(str(value).replace(',', '.'))
+
+    # Atualizar campos (usar Decimal para manter consistência com models Numeric)
+    try:
+        if 'quantidade' in payload:
+            item.quantidade = _to_decimal(payload.get('quantidade'))
+
+        if 'valor_unitario' in payload:
+            item.valor_unitario = _to_decimal(payload.get('valor_unitario'))
+
+        if 'desconto_percentual' in payload:
+            desconto = _to_decimal(payload.get('desconto_percentual'))
+            # Normalizar desconto para faixa 0..100
+            if desconto < 0:
+                desconto = Decimal('0')
+            if desconto > 100:
+                desconto = Decimal('100')
+            item.desconto_percentual = desconto
+    except (InvalidOperation, ValueError, TypeError):
+        return jsonify({'success': False, 'message': 'Valor inválido'}), 400
     
     # Recalcular valor total do item
     item.calcular_valor_total()
