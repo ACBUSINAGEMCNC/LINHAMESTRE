@@ -240,7 +240,7 @@
                                             <div class="col-4">
                                                 <div class="text-center">
                                                     <div class="text-muted fw-bold" style="font-size: 0.8rem; letter-spacing: 0.5px;">QUANTIDADE</div>
-                                                    <span class="badge bg-white text-dark border valor-editavel w-100" data-field="quantidade" title="Clique para editar" style="font-size: 1.1rem; padding: 0.5em;">
+                                                    <span class="badge bg-white text-dark border valor-editavel w-100" data-field="quantidade" title="Clique para editar" style="font-size: 1.1rem; padding: 0.5em; cursor: pointer;" onclick="editarValor(this)">
                                                         {{ item.quantidade }} <i class="fas fa-pen text-muted" style="font-size:0.5em;"></i>
                                                     </span>
                                                 </div>
@@ -248,7 +248,7 @@
                                             <div class="col-4">
                                                 <div class="text-center">
                                                     <div class="text-muted fw-bold" style="font-size: 0.8rem; letter-spacing: 0.5px;">VALOR UNIT</div>
-                                                    <span class="badge bg-white text-dark border valor-editavel w-100" data-field="valor_unitario" title="Clique para editar" style="font-size: 1.1rem; padding: 0.5em;">
+                                                    <span class="badge bg-white text-dark border valor-editavel w-100" data-field="valor_unitario" title="Clique para editar" style="font-size: 1.1rem; padding: 0.5em; cursor: pointer;" onclick="editarValor(this)">
                                                         R$ {{ "{:.2f}".format(item.valor_unitario|float) }} <i class="fas fa-pen text-muted" style="font-size:0.5em;"></i>
                                                     </span>
                                                 </div>
@@ -256,7 +256,7 @@
                                             <div class="col-4">
                                                 <div class="text-center">
                                                     <div class="text-muted fw-bold" style="font-size: 0.8rem; letter-spacing: 0.5px;">DESCONTO</div>
-                                                    <span class="badge bg-white text-dark border valor-editavel w-100" data-field="desconto_percentual" title="Clique para editar" style="font-size: 1.1rem; padding: 0.5em;">
+                                                    <span class="badge bg-white text-dark border valor-editavel w-100" data-field="desconto_percentual" title="Clique para editar" style="font-size: 1.1rem; padding: 0.5em; cursor: pointer;" onclick="editarValor(this)">
                                                         {{ item.desconto_percentual|default(0) }}% <i class="fas fa-pen text-muted" style="font-size:0.5em;"></i>
                                                     </span>
                                                 </div>
@@ -633,6 +633,7 @@ if (window.jQuery) {
 
         // Edição inline de valores
         $(document).on('click', '.valor-editavel', function(e) {
+            alert('Clicou no badge!'); // DEBUG
             e.preventDefault();
             e.stopPropagation();
             
@@ -640,7 +641,8 @@ if (window.jQuery) {
             const field = $span.data('field');
             const itemId = $span.closest('.item-row').data('item-id');
             
-            console.log('[EDITAR] field:', field, 'itemId:', itemId);
+            console.log('[EDITAR] CLICK field:', field, 'itemId:', itemId);
+            alert('[DEBUG] field=' + field + ', itemId=' + itemId);
             
             // Pegar texto removendo o HTML do icone
             let htmlContent = $span.html();
@@ -696,6 +698,48 @@ if (window.jQuery) {
     });
 } else {
     console.warn('[ORCAMENTO] jQuery não encontrado: pulando handlers antigos (Select2/AJAX inline)');
+}
+
+// ========== FUNCAO GLOBAL PARA EDITAR VALORES ==========
+function editarValor(element) {
+    {% if orcamento %}
+    var field = element.getAttribute('data-field');
+    var itemId = element.closest('.item-row').getAttribute('data-item-id');
+    
+    var htmlContent = element.innerHTML;
+    var valorAtual = htmlContent.replace(/<i[^>]*>.*<\/i>/, '').replace('R$', '').replace('%', '').trim();
+    
+    var fieldLabels = {
+        'quantidade': 'Quantidade',
+        'valor_unitario': 'Valor Unitário (R$)',
+        'desconto_percentual': 'Desconto (%)'
+    };
+    
+    var novoValor = prompt('Novo valor para ' + fieldLabels[field] + ':', valorAtual);
+    if (novoValor === null || novoValor === '' || isNaN(parseFloat(novoValor))) {
+        return;
+    }
+    
+    var data = {};
+    data[field] = parseFloat(novoValor);
+    
+    fetch('{{ url_for("orcamentos.atualizar_item", orcamento_id=orcamento.id, item_id=0) }}'.replace('/0', '/' + itemId), {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(data)
+    })
+    .then(function(response) { return response.json(); })
+    .then(function(response) {
+        if (response.success) {
+            location.reload();
+        } else {
+            alert(response.message || 'Erro ao atualizar');
+        }
+    })
+    .catch(function(err) {
+        alert('Erro: ' + err.message);
+    });
+    {% endif %}
 }
 
 // ========== MODAL BUSCAR ITEM - JS PURO (SEM jQuery) ==========
