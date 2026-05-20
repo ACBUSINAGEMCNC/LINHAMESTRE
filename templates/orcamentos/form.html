@@ -707,14 +707,19 @@ function editarValor(element) {
     var itemRow = element.closest('.item-row');
     var itemId = itemRow ? itemRow.getAttribute('data-item-id') : null;
     
-    if (!itemId) {
-        alert('Erro: Não foi possível identificar o item');
+    alert('DEBUG - itemId do elemento: ' + itemId);
+    
+    if (!itemId || itemId === 'undefined' || itemId === 'null') {
+        alert('Erro: ID do item inválido: ' + itemId);
         return;
     }
     
     // Montar URL corretamente
     var baseUrl = '{{ url_for("orcamentos.atualizar_item", orcamento_id=orcamento.id, item_id=0) }}';
-    var url = baseUrl.replace('item_id=0', 'item_id=' + itemId).replace('/0/', '/' + itemId + '/');
+    alert('DEBUG - baseUrl: ' + baseUrl);
+    
+    var url = baseUrl.replace('/0/', '/' + itemId + '/');
+    alert('DEBUG - URL final: ' + url);
     
     var htmlContent = element.innerHTML;
     var valorAtual = htmlContent.replace(/<i[^>]*>.*<\/i>/, '').replace('R$', '').replace('%', '').trim();
