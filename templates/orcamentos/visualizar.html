@@ -27,6 +27,9 @@
         /* Bootstrap rows usam margens negativas; em impressão isso pode estourar a página */
         .row { margin-left: 0 !important; margin-right: 0 !important; }
         [class^="col-"] { padding-left: 10px !important; padding-right: 10px !important; }
+        /* Em impressão o browser pode não aplicar breakpoints md como esperado; forçar 2 colunas */
+        .col-md-6 { flex: 0 0 auto !important; width: 50% !important; max-width: 50% !important; }
+        .col-md-6.text-md-end { text-align: right !important; }
         /* Evitar recorte horizontal de tabelas responsivas */
         .table-responsive { overflow: visible !important; }
         .table-responsive > .table { margin-bottom: 0; }
