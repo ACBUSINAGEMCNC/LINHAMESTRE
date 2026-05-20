@@ -239,32 +239,32 @@
                                         <div class="row g-2">
                                             <div class="col-4">
                                                 <div class="text-center">
-                                                    <div class="text-muted" style="font-size: 0.7rem;">QUANTIDADE</div>
-                                                    <span class="badge bg-white text-dark border valor-editavel w-100" data-field="quantidade" title="Clique para editar" style="font-size: 0.85rem;">
-                                                        {{ item.quantidade }} <i class="fas fa-pen text-muted" style="font-size:0.6em;"></i>
+                                                    <div class="text-muted fw-bold" style="font-size: 0.8rem; letter-spacing: 0.5px;">QUANTIDADE</div>
+                                                    <span class="badge bg-white text-dark border valor-editavel w-100" data-field="quantidade" title="Clique para editar" style="font-size: 1.1rem; padding: 0.5em;">
+                                                        {{ item.quantidade }} <i class="fas fa-pen text-muted" style="font-size:0.5em;"></i>
                                                     </span>
                                                 </div>
                                             </div>
                                             <div class="col-4">
                                                 <div class="text-center">
-                                                    <div class="text-muted" style="font-size: 0.7rem;">VALOR UNIT</div>
-                                                    <span class="badge bg-white text-dark border valor-editavel w-100" data-field="valor_unitario" title="Clique para editar" style="font-size: 0.85rem;">
-                                                        R$ {{ "{:.2f}".format(item.valor_unitario|float) }} <i class="fas fa-pen text-muted" style="font-size:0.6em;"></i>
+                                                    <div class="text-muted fw-bold" style="font-size: 0.8rem; letter-spacing: 0.5px;">VALOR UNIT</div>
+                                                    <span class="badge bg-white text-dark border valor-editavel w-100" data-field="valor_unitario" title="Clique para editar" style="font-size: 1.1rem; padding: 0.5em;">
+                                                        R$ {{ "{:.2f}".format(item.valor_unitario|float) }} <i class="fas fa-pen text-muted" style="font-size:0.5em;"></i>
                                                     </span>
                                                 </div>
                                             </div>
                                             <div class="col-4">
                                                 <div class="text-center">
-                                                    <div class="text-muted" style="font-size: 0.7rem;">DESCONTO</div>
-                                                    <span class="badge bg-white text-dark border valor-editavel w-100" data-field="desconto_percentual" title="Clique para editar" style="font-size: 0.85rem;">
-                                                        {{ item.desconto_percentual|default(0) }}% <i class="fas fa-pen text-muted" style="font-size:0.6em;"></i>
+                                                    <div class="text-muted fw-bold" style="font-size: 0.8rem; letter-spacing: 0.5px;">DESCONTO</div>
+                                                    <span class="badge bg-white text-dark border valor-editavel w-100" data-field="desconto_percentual" title="Clique para editar" style="font-size: 1.1rem; padding: 0.5em;">
+                                                        {{ item.desconto_percentual|default(0) }}% <i class="fas fa-pen text-muted" style="font-size:0.5em;"></i>
                                                     </span>
                                                 </div>
                                             </div>
                                         </div>
                                         <div class="text-end mt-2 pt-2 border-top">
-                                            <span class="text-muted" style="font-size: 0.8rem;">Total Item:</span>
-                                            <span class="fw-bold text-primary" style="font-size: 1rem;">R$ {{ "{:.2f}".format(item.valor_total|float) }}</span>
+                                            <span class="text-muted fw-bold" style="font-size: 0.9rem;">Total Item:</span>
+                                            <span class="fw-bold text-primary" style="font-size: 1.25rem;">R$ {{ "{:.2f}".format(item.valor_total|float) }}</span>
                                         </div>
                                     </div>
                                 </div>
