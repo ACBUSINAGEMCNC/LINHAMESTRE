@@ -706,20 +706,15 @@ function editarValor(element) {
     var field = element.getAttribute('data-field');
     var itemRow = element.closest('.item-row');
     var itemId = itemRow ? itemRow.getAttribute('data-item-id') : null;
-    
-    alert('DEBUG - itemId do elemento: ' + itemId);
-    
+
     if (!itemId || itemId === 'undefined' || itemId === 'null') {
         alert('Erro: ID do item inválido: ' + itemId);
         return;
     }
-    
-    // Montar URL corretamente
+
+    // Montar URL corretamente: a rota termina com /0, então substitui o /0 final
     var baseUrl = '{{ url_for("orcamentos.atualizar_item", orcamento_id=orcamento.id, item_id=0) }}';
-    alert('DEBUG - baseUrl: ' + baseUrl);
-    
-    var url = baseUrl.replace('/0/', '/' + itemId + '/');
-    alert('DEBUG - URL final: ' + url);
+    var url = baseUrl.replace(/\/0$/, '/' + itemId);
     
     var htmlContent = element.innerHTML;
     var valorAtual = htmlContent.replace(/<i[^>]*>.*<\/i>/, '').replace('R$', '').replace('%', '').trim();
