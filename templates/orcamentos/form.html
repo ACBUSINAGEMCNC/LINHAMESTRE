@@ -28,11 +28,17 @@
     
     .valor-editavel {
         cursor: pointer;
-        border-bottom: 1px dashed #6c757d;
+        transition: all 0.2s;
     }
     
     .valor-editavel:hover {
-        background-color: #fff3cd;
+        background-color: #e3f2fd !important;
+        border-color: #2196F3 !important;
+        color: #1976D2 !important;
+    }
+    
+    .valor-editavel:hover i.fa-pen {
+        color: #2196F3 !important;
     }
     
     .select2-container--bootstrap-5 .select2-selection {
@@ -211,9 +217,24 @@
                                                 </span>
                                             </div>
                                             <div class="mt-2 small">
-                                                <div>Qtd: <span class="valor-editavel" data-field="quantidade">{{ item.quantidade }}</span></div>
-                                                <div>Vlr Unit: R$ <span class="valor-editavel" data-field="valor_unitario">{{ "{:.2f}".format(item.valor_unitario|float) }}</span></div>
-                                                <div>Desc: <span class="valor-editavel" data-field="desconto_percentual">{{ item.desconto_percentual|default(0) }}</span>%</div>
+                                                <div class="mb-1">
+                                                    <span class="text-muted">Qtd:</span> 
+                                                    <span class="badge bg-light text-dark border valor-editavel" data-field="quantidade" title="Clique para editar">
+                                                        {{ item.quantidade }} <i class="fas fa-pen text-muted ms-1" style="font-size:0.7em;"></i>
+                                                    </span>
+                                                </div>
+                                                <div class="mb-1">
+                                                    <span class="text-muted">Vlr Unit:</span> 
+                                                    <span class="badge bg-light text-dark border valor-editavel" data-field="valor_unitario" title="Clique para editar">
+                                                        R$ {{ "{:.2f}".format(item.valor_unitario|float) }} <i class="fas fa-pen text-muted ms-1" style="font-size:0.7em;"></i>
+                                                    </span>
+                                                </div>
+                                                <div class="mb-1">
+                                                    <span class="text-muted">Desc:</span> 
+                                                    <span class="badge bg-light text-dark border valor-editavel" data-field="desconto_percentual" title="Clique para editar">
+                                                        {{ item.desconto_percentual|default(0) }}% <i class="fas fa-pen text-muted ms-1" style="font-size:0.7em;"></i>
+                                                    </span>
+                                                </div>
                                                 <div class="fw-bold text-primary">Total: R$ {{ "{:.2f}".format(item.valor_total|float) }}</div>
                                             </div>
                                         </div>
@@ -418,21 +439,26 @@ if (window.jQuery) {
             }
         });
 
-        {% if orcamento %}
-        // Inicializar Select2
+        // Inicializar Select2 para cliente (sempre, tanto em novo quanto editar)
         $('#selectCliente').select2({
             theme: 'bootstrap-5',
-            placeholder: 'Selecione um cliente cadastrado'
+            placeholder: 'Selecione um cliente cadastrado',
+            allowClear: true
         });
         
-        // Autocompletar nome ao selecionar cliente
+        // Autocompletar nome ao selecionar cliente (sempre)
         $('#selectCliente').on('change', function() {
             const selectedText = $(this).find('option:selected').text();
-            if (selectedText && selectedText !== 'Selecione para autocompletar dados...') {
+            if (selectedText && selectedText !== 'Selecione para autocompletar dados...' && selectedText !== '') {
                 $('input[name="cliente_nome"]').val(selectedText);
+                // Remover required do campo nome se cliente cadastrado foi selecionado
+                $('input[name="cliente_nome"]').attr('readonly', true).addClass('bg-light');
+            } else {
+                $('input[name="cliente_nome"]').attr('readonly', false).removeClass('bg-light');
             }
         });
 
+        {% if orcamento %}
         $('#selectItem').select2({
             theme: 'bootstrap-5',
             placeholder: 'Digite código ou nome do item',
@@ -778,9 +804,17 @@ if (window.jQuery) {
                     if (contentType.indexOf('application/json') !== -1) {
                         var data = await resp.json();
                         if (data && data.success) {
+                            // Mostrar mensagem de sucesso
+                            alert('Item adicionado com sucesso!');
+                            // Fechar modal
                             var modalAdicionar = getModalInstance('modalAdicionarItem');
-                            if (modalAdicionar) modalAdicionar.hide();
-                            window.location.reload();
+                            if (modalAdicionar) {
+                                modalAdicionar.hide();
+                            }
+                            // Aguardar um momento para o modal fechar antes de recarregar
+                            setTimeout(function() {
+                                window.location.reload();
+                            }, 300);
                             return;
                         }
 
