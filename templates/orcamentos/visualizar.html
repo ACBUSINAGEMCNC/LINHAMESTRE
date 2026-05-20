@@ -4,25 +4,155 @@
 
 {% block extra_css %}
 <style>
+    :root {
+        --print-text: #111;
+        --print-muted: #555;
+        --print-border: #d6d9dd;
+        --brand: #0b5ed7;
+        --brand-dark: #084298;
+    }
+
+    @page {
+        size: A4;
+        margin: 12mm;
+    }
+
     @media print {
         .no-print { display: none !important; }
         body { background: white; }
-        .card { border: 1px solid #000 !important; box-shadow: none !important; }
-        .badge { border: 1px solid #000 !important; }
+        .container-fluid { padding: 0 !important; }
+        .card { border: 1px solid #111 !important; box-shadow: none !important; }
+        .badge { border: 1px solid #111 !important; }
+        a { text-decoration: none !important; }
+        .table { page-break-inside: auto; }
+        tr { page-break-inside: avoid; page-break-after: auto; }
+        thead { display: table-header-group; }
+        tfoot { display: table-footer-group; }
     }
-    
+
+    body {
+        color: var(--print-text);
+    }
+
+    .print-card {
+        border-radius: 10px;
+        overflow: hidden;
+    }
+
     .orcamento-header {
-        background: linear-gradient(135deg, #0d6efd 0%, #0b5ed7 100%);
+        background: linear-gradient(135deg, var(--brand) 0%, var(--brand-dark) 100%);
         color: white;
-        padding: 2rem;
-        border-radius: 10px 10px 0 0;
+        padding: 18px 20px;
     }
-    
+
+    .orcamento-header h1 {
+        font-size: 1.6rem;
+        letter-spacing: 0.5px;
+    }
+
+    .orcamento-header .orc-numero {
+        font-size: 1.05rem;
+        opacity: 0.95;
+    }
+
+    .brand-block {
+        display: flex;
+        gap: 12px;
+        align-items: center;
+        justify-content: flex-end;
+    }
+
+    .brand-logo {
+        width: 56px;
+        height: 56px;
+        object-fit: contain;
+        border-radius: 8px;
+        background: rgba(255,255,255,0.10);
+        padding: 6px;
+    }
+
+    .brand-name {
+        font-weight: 800;
+        font-size: 1.05rem;
+        line-height: 1.15;
+        margin: 0;
+    }
+
+    .brand-meta {
+        margin: 0;
+        font-size: 0.82rem;
+        opacity: 0.95;
+    }
+
+    .section-title {
+        font-size: 0.95rem;
+        text-transform: uppercase;
+        letter-spacing: 0.6px;
+        color: var(--print-text);
+        border-bottom: 2px solid var(--print-border);
+        padding-bottom: 6px;
+        margin-bottom: 10px;
+    }
+
+    .kv-table td {
+        padding: 4px 0;
+        vertical-align: top;
+    }
+
+    .kv-key {
+        width: 140px;
+        color: var(--print-muted);
+        font-weight: 700;
+        white-space: nowrap;
+    }
+
+    .kv-value {
+        color: var(--print-text);
+    }
+
+    .items-table {
+        border: 1px solid var(--print-border);
+        font-size: 0.9rem;
+    }
+
+    .items-table thead th {
+        background: #f3f5f7;
+        border-bottom: 1px solid var(--print-border);
+        font-weight: 800;
+        text-transform: uppercase;
+        letter-spacing: 0.4px;
+        font-size: 0.75rem;
+        color: #333;
+    }
+
+    .items-table th,
+    .items-table td {
+        border-color: var(--print-border) !important;
+        padding: 8px 10px;
+    }
+
     .item-thumb {
-        width: 60px;
-        height: 60px;
+        width: 52px;
+        height: 52px;
         object-fit: cover;
         border-radius: 8px;
+        border: 1px solid var(--print-border);
+    }
+
+    .totals-row {
+        background: #f7f9fc;
+    }
+
+    .grand-total {
+        background: #e7f1ff;
+    }
+
+    .company-footer {
+        margin-top: 12px;
+        padding-top: 10px;
+        border-top: 1px solid var(--print-border);
+        color: var(--print-muted);
+        font-size: 0.78rem;
     }
 </style>
 {% endblock %}
@@ -111,16 +241,22 @@
     {% endwith %}
 
     <!-- Orçamento -->
-    <div class="card">
+    <div class="card print-card">
         <div class="orcamento-header">
             <div class="row">
                 <div class="col-md-6">
-                    <h1 class="mb-0">ORÇAMENTO</h1>
-                    <h3>{{ orcamento.numero }}</h3>
+                    <h1 class="mb-1">ORÇAMENTO</h1>
+                    <div class="orc-numero">{{ orcamento.numero }}</div>
                 </div>
                 <div class="col-md-6 text-md-end">
-                    <h4>AC BUSINAGEM CNC</h4>
-                    <p class="mb-0">Usinagem de Precisão</p>
+                    <div class="brand-block">
+                        <div class="text-end">
+                            <p class="brand-name">ACB USINAGEM CNC</p>
+                            <p class="brand-meta">Usinagem de Precisão</p>
+                            <p class="brand-meta">(informe aqui CNPJ • Endereço • Telefone • Email)</p>
+                        </div>
+                        <img src="{{ url_for('static', filename='logo_acb.png') }}" class="brand-logo" alt="ACB Usinagem CNC">
+                    </div>
                 </div>
             </div>
         </div>
@@ -129,56 +265,56 @@
             <!-- Informações do Cliente e Orçamento -->
             <div class="row mb-4">
                 <div class="col-md-6">
-                    <h5 class="border-bottom pb-2 mb-3">Dados do Cliente</h5>
-                    <table class="table table-sm table-borderless">
+                    <div class="section-title">Dados do Cliente</div>
+                    <table class="table table-sm table-borderless kv-table">
                         <tr>
-                            <td style="width: 120px;"><strong>Cliente:</strong></td>
-                            <td>{{ orcamento.nome_cliente_display }}</td>
+                            <td class="kv-key">Cliente</td>
+                            <td class="kv-value">{{ orcamento.nome_cliente_display }}</td>
                         </tr>
                         <tr>
-                            <td><strong>CNPJ/CPF:</strong></td>
-                            <td>{{ orcamento.cliente_cnpj_cpf if orcamento.cliente_cnpj_cpf else '_______________________________' }}</td>
+                            <td class="kv-key">CNPJ/CPF</td>
+                            <td class="kv-value">{{ orcamento.cliente_cnpj_cpf if orcamento.cliente_cnpj_cpf else '_______________________________' }}</td>
                         </tr>
                         <tr>
-                            <td><strong>Telefone:</strong></td>
-                            <td>{{ orcamento.cliente_telefone if orcamento.cliente_telefone else '_______________________________' }}</td>
+                            <td class="kv-key">Telefone</td>
+                            <td class="kv-value">{{ orcamento.cliente_telefone if orcamento.cliente_telefone else '_______________________________' }}</td>
                         </tr>
                         <tr>
-                            <td><strong>Email:</strong></td>
-                            <td>{{ orcamento.cliente_email if orcamento.cliente_email else '_______________________________' }}</td>
+                            <td class="kv-key">Email</td>
+                            <td class="kv-value">{{ orcamento.cliente_email if orcamento.cliente_email else '_______________________________' }}</td>
                         </tr>
                         <tr>
-                            <td><strong>Endereço:</strong></td>
-                            <td>{{ orcamento.cliente_endereco if orcamento.cliente_endereco else '_______________________________' }}</td>
+                            <td class="kv-key">Endereço</td>
+                            <td class="kv-value">{{ orcamento.cliente_endereco if orcamento.cliente_endereco else '_______________________________' }}</td>
                         </tr>
                         <tr>
-                            <td><strong>Transportadora:</strong></td>
-                            <td>_______________________________</td>
+                            <td class="kv-key">Transportadora</td>
+                            <td class="kv-value">_______________________________</td>
                         </tr>
                     </table>
                 </div>
                 <div class="col-md-6">
-                    <h5 class="border-bottom pb-2 mb-3">Informações do Orçamento</h5>
-                    <table class="table table-sm table-borderless">
+                    <div class="section-title">Informações do Orçamento</div>
+                    <table class="table table-sm table-borderless kv-table">
                         <tr>
-                            <td style="width: 140px;"><strong>Número:</strong></td>
-                            <td>{{ orcamento.numero }}</td>
+                            <td class="kv-key">Número</td>
+                            <td class="kv-value">{{ orcamento.numero }}</td>
                         </tr>
                         <tr>
-                            <td><strong>Data Emissão:</strong></td>
-                            <td>{{ orcamento.criado_em.strftime('%d/%m/%Y') if orcamento.criado_em else '-' }}</td>
+                            <td class="kv-key">Data Emissão</td>
+                            <td class="kv-value">{{ orcamento.criado_em.strftime('%d/%m/%Y') if orcamento.criado_em else '-' }}</td>
                         </tr>
                         <tr>
-                            <td><strong>Validade:</strong></td>
-                            <td>{{ orcamento.data_validade.strftime('%d/%m/%Y') if orcamento.data_validade else '-' }}</td>
+                            <td class="kv-key">Validade</td>
+                            <td class="kv-value">{{ orcamento.data_validade.strftime('%d/%m/%Y') if orcamento.data_validade else '-' }}</td>
                         </tr>
                         <tr>
-                            <td><strong>Prazo Entrega:</strong></td>
-                            <td>{{ orcamento.prazo_entrega if orcamento.prazo_entrega else '_______________________________' }}</td>
+                            <td class="kv-key">Prazo Entrega</td>
+                            <td class="kv-value">{{ orcamento.prazo_entrega if orcamento.prazo_entrega else '_______________________________' }}</td>
                         </tr>
                         <tr>
-                            <td><strong>Status:</strong></td>
-                            <td>
+                            <td class="kv-key">Status</td>
+                            <td class="kv-value">
                                 <span class="badge 
                                     {% if orcamento.status == 'rascunho' %}bg-secondary
                                     {% elif orcamento.status == 'enviado' %}bg-info
@@ -195,10 +331,10 @@
             </div>
 
             <!-- Tabela de Itens -->
-            <h5 class="border-bottom pb-2 mb-3">Itens</h5>
+            <div class="section-title">Itens</div>
             <div class="table-responsive">
-                <table class="table table-bordered">
-                    <thead class="table-light">
+                <table class="table table-bordered items-table">
+                    <thead>
                         <tr>
                             <th style="width: 80px;">Imagem</th>
                             <th>Código</th>
@@ -241,23 +377,28 @@
                     </tbody>
                     {% if pode_ver_valores %}
                     <tfoot>
-                        <tr class="table-light">
+                        <tr class="totals-row">
                             <td colspan="6" class="text-end"><strong>Subtotal:</strong></td>
                             <td class="text-end"><strong>R$ {{ "{:,.2f}".format(orcamento.total_itens|float) }}</strong></td>
                         </tr>
                         {% if orcamento.desconto_valor and orcamento.desconto_valor > 0 %}
-                        <tr class="table-light">
+                        <tr class="totals-row">
                             <td colspan="6" class="text-end"><strong>Desconto:</strong></td>
                             <td class="text-end"><strong>- R$ {{ "{:,.2f}".format(orcamento.desconto_valor|float) }}</strong></td>
                         </tr>
                         {% endif %}
-                        <tr class="table-primary">
+                        <tr class="grand-total">
                             <td colspan="6" class="text-end"><strong>TOTAL:</strong></td>
                             <td class="text-end"><h4 class="mb-0">R$ {{ "{:,.2f}".format(orcamento.total_final|float) }}</h4></td>
                         </tr>
                     </tfoot>
                     {% endif %}
                 </table>
+            </div>
+
+            <div class="company-footer">
+                <div><strong>ACB Usinagem CNC</strong> • (preencher: CNPJ • Endereço • Telefone • Email • Site)</div>
+                <div>Documento gerado em {{ orcamento.criado_em.strftime('%d/%m/%Y %H:%M') if orcamento.criado_em else '-' }}</div>
             </div>
 
             <!-- Condições e Observações -->
