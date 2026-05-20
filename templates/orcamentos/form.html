@@ -632,30 +632,46 @@ if (window.jQuery) {
         });
 
         // Edição inline de valores
-        $(document).on('click', '.valor-editavel', function() {
+        $(document).on('click', '.valor-editavel', function(e) {
+            e.preventDefault();
+            e.stopPropagation();
+            
             const $span = $(this);
             const field = $span.data('field');
-            // Pegar apenas o texto do primeiro node (o numero) ignorando o icone
-            let valorAtual = $span.contents().filter(function() {
-                return this.nodeType === 3; // Text node only
-            }).text().trim().replace(',', '.');
-            
-            // Remover R$ e % se existirem
-            valorAtual = valorAtual.replace('R$', '').replace('%', '').trim();
-            
             const itemId = $span.closest('.item-row').data('item-id');
+            
+            console.log('[EDITAR] field:', field, 'itemId:', itemId);
+            
+            // Pegar texto removendo o HTML do icone
+            let htmlContent = $span.html();
+            console.log('[EDITAR] HTML:', htmlContent);
+            
+            // Remove a tag do icone e pega so o texto
+            let valorAtual = htmlContent.replace(/<i[^>]*>.*<\/i>/, '').trim();
+            console.log('[EDITAR] Valor limpo:', valorAtual);
+            
+            // Remover R$, % e converter virgula para ponto
+            valorAtual = valorAtual.replace('R$', '').replace('%', '').replace(/\./g, '').replace(',', '.').trim();
+            console.log('[EDITAR] Valor final:', valorAtual);
             
             const fieldLabels = {
                 'quantidade': 'Quantidade',
-                'valor_unitario': 'Valor Unitário',
+                'valor_unitario': 'Valor Unitário (R$)',
                 'desconto_percentual': 'Desconto (%)'
             };
             
             const novoValor = prompt('Novo valor para ' + fieldLabels[field] + ':', valorAtual);
-            if (novoValor === null || novoValor === '') return;
+            console.log('[EDITAR] Novo valor:', novoValor);
+            
+            if (novoValor === null || novoValor === '' || isNaN(parseFloat(novoValor))) {
+                console.log('[EDITAR] Valor invalido ou cancelado');
+                return;
+            }
             
             const data = {};
             data[field] = parseFloat(novoValor);
+            
+            console.log('[EDITAR] Enviando:', data);
             
             $.ajax({
                 url: '{{ url_for("orcamentos.atualizar_item", orcamento_id=orcamento.id, item_id=0) }}'.replace('/0', '/' + itemId),
@@ -663,6 +679,7 @@ if (window.jQuery) {
                 contentType: 'application/json',
                 data: JSON.stringify(data),
                 success: function(response) {
+                    console.log('[EDITAR] Sucesso:', response);
                     if (response.success) {
                         location.reload();
                     } else {
@@ -670,6 +687,7 @@ if (window.jQuery) {
                     }
                 },
                 error: function(xhr) {
+                    console.log('[EDITAR] Erro:', xhr);
                     alert('Erro: ' + (xhr.responseJSON?.message || 'Erro de comunicação'));
                 }
             });
