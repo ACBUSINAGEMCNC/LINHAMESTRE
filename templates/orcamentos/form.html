@@ -41,6 +41,29 @@
         color: #2196F3 !important;
     }
     
+    .item-row {
+        transition: all 0.2s ease;
+    }
+    
+    .item-row:hover {
+        background-color: #f8f9fa;
+        box-shadow: inset 0 0 0 1px #dee2e6;
+    }
+    
+    .item-row h6 {
+        font-size: 0.95rem;
+        letter-spacing: 0.3px;
+    }
+    
+    .item-row .badge {
+        font-weight: 500;
+        padding: 0.5em 0.8em;
+    }
+    
+    .item-row .bg-light {
+        background-color: #f1f3f4 !important;
+    }
+    
     .select2-container--bootstrap-5 .select2-selection {
         min-height: calc(2.5rem + 2px);
     }
@@ -197,51 +220,55 @@
                             {% if orcamento.itens %}
                                 {% for item in orcamento.itens %}
                                 <div class="item-row p-3 border-bottom" data-item-id="{{ item.id }}">
-                                    <div class="d-flex gap-2">
-                                        {% if item.item.imagem_path %}
-                                        <img src="{{ get_file_url(item.item.imagem_path) }}" class="item-thumb" alt="{{ item.item.nome }}">
-                                        {% else %}
-                                        <div class="item-thumb bg-light d-flex align-items-center justify-content-center">
-                                            <i class="fas fa-image text-muted"></i>
-                                        </div>
-                                        {% endif %}
-                                        <div class="flex-grow-1">
-                                            <strong>{{ item.item.codigo_acb }}</strong>
-                                            <div class="small text-muted">{{ item.item.nome }}</div>
-                                            <div class="mt-2">
-                                                <span class="badge estoque-badge 
-                                                    {% if item.tem_estoque %}bg-success
-                                                    {% elif item.quantidade_estoque > 0 %}bg-warning
-                                                    {% else %}bg-danger{% endif %}">
-                                                    Est: {{ item.quantidade_estoque }}
-                                                </span>
-                                            </div>
-                                            <div class="mt-2 small">
-                                                <div class="mb-1">
-                                                    <span class="text-muted">Qtd:</span> 
-                                                    <span class="badge bg-light text-dark border valor-editavel" data-field="quantidade" title="Clique para editar">
-                                                        {{ item.quantidade }} <i class="fas fa-pen text-muted ms-1" style="font-size:0.7em;"></i>
-                                                    </span>
-                                                </div>
-                                                <div class="mb-1">
-                                                    <span class="text-muted">Vlr Unit:</span> 
-                                                    <span class="badge bg-light text-dark border valor-editavel" data-field="valor_unitario" title="Clique para editar">
-                                                        R$ {{ "{:.2f}".format(item.valor_unitario|float) }} <i class="fas fa-pen text-muted ms-1" style="font-size:0.7em;"></i>
-                                                    </span>
-                                                </div>
-                                                <div class="mb-1">
-                                                    <span class="text-muted">Desc:</span> 
-                                                    <span class="badge bg-light text-dark border valor-editavel" data-field="desconto_percentual" title="Clique para editar">
-                                                        {{ item.desconto_percentual|default(0) }}% <i class="fas fa-pen text-muted ms-1" style="font-size:0.7em;"></i>
-                                                    </span>
-                                                </div>
-                                                <div class="fw-bold text-primary">Total: R$ {{ "{:.2f}".format(item.valor_total|float) }}</div>
-                                            </div>
-                                        </div>
+                                    <!-- Linha 1: Código e Nome -->
+                                    <div class="d-flex justify-content-between align-items-start mb-2">
                                         <div>
-                                            <button type="button" class="btn btn-sm btn-outline-danger btn-remover-item" data-item-id="{{ item.id }}">
-                                                <i class="fas fa-trash"></i>
-                                            </button>
+                                            <h6 class="mb-1 fw-bold text-dark">{{ item.item.codigo_acb }}</h6>
+                                            <p class="mb-0 text-secondary" style="font-size: 0.85rem;">{{ item.item.nome }}</p>
+                                        </div>
+                                        <button type="button" class="btn btn-sm btn-outline-danger btn-remover-item" data-item-id="{{ item.id }}" title="Remover item">
+                                            <i class="fas fa-trash-alt"></i>
+                                        </button>
+                                    </div>
+                                    
+                                    <!-- Linha 2: Estoque -->
+                                    <div class="mb-2">
+                                        <span class="badge {% if item.tem_estoque %}bg-success{% elif item.quantidade_estoque > 0 %}bg-warning text-dark{% else %}bg-danger{% endif %}" style="font-size: 0.75rem;">
+                                            <i class="fas fa-box me-1"></i>Estoque: {{ item.quantidade_estoque }}
+                                        </span>
+                                    </div>
+                                    
+                                    <!-- Linha 3: Dados Financeiros -->
+                                    <div class="bg-light rounded p-2">
+                                        <div class="row g-2">
+                                            <div class="col-4">
+                                                <div class="text-center">
+                                                    <div class="text-muted" style="font-size: 0.7rem;">QUANTIDADE</div>
+                                                    <span class="badge bg-white text-dark border valor-editavel w-100" data-field="quantidade" title="Clique para editar" style="font-size: 0.85rem;">
+                                                        {{ item.quantidade }} <i class="fas fa-pen text-muted" style="font-size:0.6em;"></i>
+                                                    </span>
+                                                </div>
+                                            </div>
+                                            <div class="col-4">
+                                                <div class="text-center">
+                                                    <div class="text-muted" style="font-size: 0.7rem;">VALOR UNIT</div>
+                                                    <span class="badge bg-white text-dark border valor-editavel w-100" data-field="valor_unitario" title="Clique para editar" style="font-size: 0.85rem;">
+                                                        R$ {{ "{:.2f}".format(item.valor_unitario|float) }} <i class="fas fa-pen text-muted" style="font-size:0.6em;"></i>
+                                                    </span>
+                                                </div>
+                                            </div>
+                                            <div class="col-4">
+                                                <div class="text-center">
+                                                    <div class="text-muted" style="font-size: 0.7rem;">DESCONTO</div>
+                                                    <span class="badge bg-white text-dark border valor-editavel w-100" data-field="desconto_percentual" title="Clique para editar" style="font-size: 0.85rem;">
+                                                        {{ item.desconto_percentual|default(0) }}% <i class="fas fa-pen text-muted" style="font-size:0.6em;"></i>
+                                                    </span>
+                                                </div>
+                                            </div>
+                                        </div>
+                                        <div class="text-end mt-2 pt-2 border-top">
+                                            <span class="text-muted" style="font-size: 0.8rem;">Total Item:</span>
+                                            <span class="fw-bold text-primary" style="font-size: 1rem;">R$ {{ "{:.2f}".format(item.valor_total|float) }}</span>
                                         </div>
                                     </div>
                                 </div>
