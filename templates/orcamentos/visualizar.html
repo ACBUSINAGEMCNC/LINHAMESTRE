@@ -24,6 +24,12 @@
         .card { border: 1px solid #111 !important; box-shadow: none !important; }
         .badge { border: 1px solid #111 !important; }
         a { text-decoration: none !important; }
+        /* Bootstrap rows usam margens negativas; em impressão isso pode estourar a página */
+        .row { margin-left: 0 !important; margin-right: 0 !important; }
+        [class^="col-"] { padding-left: 10px !important; padding-right: 10px !important; }
+        /* Evitar recorte horizontal de tabelas responsivas */
+        .table-responsive { overflow: visible !important; }
+        .table-responsive > .table { margin-bottom: 0; }
         .table { page-break-inside: auto; }
         tr { page-break-inside: avoid; page-break-after: auto; }
         thead { display: table-header-group; }
@@ -37,6 +43,7 @@
     .print-card {
         border-radius: 10px;
         overflow: hidden;
+        max-width: 100%;
     }
 
     .orcamento-header {
