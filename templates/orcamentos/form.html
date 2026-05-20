@@ -635,10 +635,23 @@ if (window.jQuery) {
         $(document).on('click', '.valor-editavel', function() {
             const $span = $(this);
             const field = $span.data('field');
-            const valorAtual = $span.text().replace(',', '.');
+            // Pegar apenas o texto do primeiro node (o numero) ignorando o icone
+            let valorAtual = $span.contents().filter(function() {
+                return this.nodeType === 3; // Text node only
+            }).text().trim().replace(',', '.');
+            
+            // Remover R$ e % se existirem
+            valorAtual = valorAtual.replace('R$', '').replace('%', '').trim();
+            
             const itemId = $span.closest('.item-row').data('item-id');
             
-            const novoValor = prompt('Novo valor para ' + field + ':', valorAtual);
+            const fieldLabels = {
+                'quantidade': 'Quantidade',
+                'valor_unitario': 'Valor Unitário',
+                'desconto_percentual': 'Desconto (%)'
+            };
+            
+            const novoValor = prompt('Novo valor para ' + fieldLabels[field] + ':', valorAtual);
             if (novoValor === null || novoValor === '') return;
             
             const data = {};
