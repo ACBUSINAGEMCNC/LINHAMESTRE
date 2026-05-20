@@ -7,7 +7,7 @@ from flask_login import login_required, current_user
 from sqlalchemy.orm import selectinload
 from sqlalchemy import desc
 from decimal import Decimal, InvalidOperation
-from models import db, Orcamento, OrcamentoItem, Cliente, Item, Usuario, EstoquePecas, ListaRetirada, ListaRetiradaItem
+from models import db, Orcamento, OrcamentoItem, Cliente, Item, Usuario, EstoquePecas, ListaRetirada, ListaRetiradaItem, Pedido, UnidadeEntrega
 from utils import get_file_url
 
 orcamentos_bp = Blueprint('orcamentos', __name__)
@@ -28,6 +28,19 @@ def _usuario_pode_ver_valores():
          and getattr(usuario, 'nivel_acesso', None) == 'admin')
         or getattr(usuario, 'acesso_valores_itens', False)
     )
+
+
+def _generate_next_pedido_code():
+    ultimo_pedido = Pedido.query.filter(
+        (Pedido.numero_pedido != None) & (~Pedido.numero_pedido.like('AUTO-%'))
+    ).order_by(Pedido.numero_pedido.desc()).first()
+    if ultimo_pedido and ultimo_pedido.numero_pedido:
+        try:
+            ultimo_numero = int(ultimo_pedido.numero_pedido.split('-')[-1])
+            return f"PED-{str(ultimo_numero + 1).zfill(5)}"
+        except Exception:
+            return "PED-00001"
+    return "PED-00001"
 
 
 def _usuario_pode_aprovar():
@@ -493,6 +506,51 @@ def mudar_status(orcamento_id):
     if novo_status == 'aprovado':
         orcamento.aprovado_em = datetime.now()
         orcamento.aprovado_por_id = session.get('usuario_id')
+
+        # Ao aprovar, gerar pedidos automaticamente (1 pedido por item do orçamento)
+        # Requisitos: cliente cadastrado e ao menos uma unidade de entrega
+        if not orcamento.cliente_id:
+            flash('Orçamento aprovado, mas não foi possível gerar Pedido: selecione um cliente cadastrado no orçamento.', 'warning')
+        else:
+            unidade = UnidadeEntrega.query.filter_by(cliente_id=orcamento.cliente_id).order_by(UnidadeEntrega.id.asc()).first()
+            if not unidade:
+                flash('Orçamento aprovado, mas não foi possível gerar Pedido: cadastre uma Unidade de Entrega para este cliente.', 'warning')
+            else:
+                # Evitar duplicidade: se já existir pedido com número_oc = número do orçamento, não recria
+                ja_existe = Pedido.query.filter_by(numero_oc=orcamento.numero).first()
+                if ja_existe:
+                    flash('Pedidos já foram gerados anteriormente para este orçamento.', 'info')
+                else:
+                    numero_interno = _generate_next_pedido_code()
+                    gerados = 0
+                    for it in (orcamento.itens or []):
+                        try:
+                            qtd = Decimal(str(it.quantidade or 0))
+                        except Exception:
+                            qtd = Decimal('0')
+                        if qtd <= 0:
+                            continue
+
+                        novo_pedido = Pedido(
+                            numero_pedido=numero_interno,
+                            numero_pedido_cliente=None,
+                            cliente_id=orcamento.cliente_id,
+                            unidade_entrega_id=unidade.id,
+                            item_id=it.item_id,
+                            nome_item=None,
+                            quantidade=int(qtd),
+                            data_entrada=datetime.now().date(),
+                            previsao_entrega=None,
+                            descricao=f"Gerado do orçamento {orcamento.numero} - {it.descricao_display}",
+                            numero_oc=orcamento.numero
+                        )
+                        db.session.add(novo_pedido)
+                        gerados += 1
+
+                    if gerados > 0:
+                        flash(f'Pedido(s) gerado(s) para o orçamento {orcamento.numero}: {numero_interno} ({gerados} item(ns)).', 'success')
+                    else:
+                        flash('Orçamento aprovado, mas não foi possível gerar Pedido: nenhum item válido encontrado.', 'warning')
     
     db.session.commit()
     
