@@ -223,6 +223,17 @@
                         <i class="fas fa-boxes me-2"></i>Gerar Lista de Retirada
                     </button>
                 </form>
+
+                {% if pedidos_enviados %}
+                <span class="badge bg-success ms-2">Já enviado para Pedidos</span>
+                {% else %}
+                <form method="POST" action="{{ url_for('orcamentos.enviar_para_pedidos', orcamento_id=orcamento.id) }}" class="d-inline"
+                      onsubmit="return confirm('Gerar pedidos a partir deste orçamento?');">
+                    <button type="submit" class="btn btn-outline-primary">
+                        <i class="fas fa-paper-plane me-2"></i>Enviar para Pedidos
+                    </button>
+                </form>
+                {% endif %}
                 {% endif %}
                 
                 {% if orcamento.status in ['rascunho', 'rejeitado'] %}

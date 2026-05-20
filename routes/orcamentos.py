@@ -43,6 +43,56 @@ def _generate_next_pedido_code():
     return "PED-00001"
 
 
+def _orcamento_ja_enviado_para_pedidos(orcamento: Orcamento) -> bool:
+    if not orcamento or not getattr(orcamento, 'numero', None):
+        return False
+    return Pedido.query.filter_by(numero_oc=orcamento.numero).first() is not None
+
+
+def _gerar_pedidos_do_orcamento(orcamento: Orcamento):
+    """Gera pedidos (um Pedido por item), retornando (ok, mensagem, numero_pedido)."""
+    if not orcamento.cliente_id:
+        return False, 'Selecione um cliente cadastrado no orçamento.', None
+
+    unidade = UnidadeEntrega.query.filter_by(cliente_id=orcamento.cliente_id).order_by(UnidadeEntrega.id.asc()).first()
+    if not unidade:
+        return False, 'Cadastre uma Unidade de Entrega para este cliente.', None
+
+    if _orcamento_ja_enviado_para_pedidos(orcamento):
+        return False, 'Este orçamento já foi enviado para Pedidos.', None
+
+    numero_interno = _generate_next_pedido_code()
+    gerados = 0
+    for it in (orcamento.itens or []):
+        try:
+            qtd = Decimal(str(it.quantidade or 0))
+        except Exception:
+            qtd = Decimal('0')
+        if qtd <= 0:
+            continue
+
+        novo_pedido = Pedido(
+            numero_pedido=numero_interno,
+            numero_pedido_cliente=None,
+            cliente_id=orcamento.cliente_id,
+            unidade_entrega_id=unidade.id,
+            item_id=it.item_id,
+            nome_item=None,
+            quantidade=int(qtd),
+            data_entrada=datetime.now().date(),
+            previsao_entrega=None,
+            descricao=f"RETIRADA ESTOQUE - Gerado do orçamento {orcamento.numero} - {it.descricao_display}",
+            numero_oc=orcamento.numero
+        )
+        db.session.add(novo_pedido)
+        gerados += 1
+
+    if gerados <= 0:
+        return False, 'Nenhum item válido encontrado para gerar pedido.', None
+
+    return True, f'Pedido(s) gerado(s) com sucesso ({gerados} item(ns)).', numero_interno
+
+
 def _usuario_pode_aprovar():
     """Verifica se usuário pode aprovar orçamentos (apenas admin master)"""
     if 'usuario_id' not in session:
@@ -275,13 +325,45 @@ def visualizar(orcamento_id):
     ).get_or_404(orcamento_id)
     
     pode_aprovar = _usuario_pode_aprovar()
+
+    pedidos_enviados = _orcamento_ja_enviado_para_pedidos(orcamento)
     
     return render_template(
         'orcamentos/visualizar.html',
         orcamento=orcamento,
         pode_ver_valores=pode_ver_valores,
-        pode_aprovar=pode_aprovar
+        pode_aprovar=pode_aprovar,
+        pedidos_enviados=pedidos_enviados
     )
+
+
+@orcamentos_bp.route('/orcamentos/<int:orcamento_id>/enviar-para-pedidos', methods=['POST'])
+def enviar_para_pedidos(orcamento_id):
+    """Gera pedidos a partir do orçamento aprovado (sob demanda)."""
+    pode_ver_valores = _usuario_pode_ver_valores()
+    if not pode_ver_valores:
+        flash('Sem permissão.', 'danger')
+        return redirect(url_for('orcamentos.index'))
+
+    orcamento = Orcamento.query.options(
+        selectinload(Orcamento.itens)
+    ).get_or_404(orcamento_id)
+
+    if orcamento.status != 'aprovado':
+        flash('Somente orçamentos aprovados podem ser enviados para Pedidos.', 'warning')
+        return redirect(url_for('orcamentos.visualizar', orcamento_id=orcamento_id))
+
+    ok, msg, numero_interno = _gerar_pedidos_do_orcamento(orcamento)
+    if not ok:
+        flash(f'Orçamento aprovado, mas não foi possível enviar para Pedidos: {msg}', 'warning')
+        return redirect(url_for('orcamentos.visualizar', orcamento_id=orcamento_id))
+
+    db.session.commit()
+    if numero_interno:
+        flash(f'Enviado para Pedidos: {numero_interno}. {msg}', 'success')
+    else:
+        flash(f'Enviado para Pedidos. {msg}', 'success')
+    return redirect(url_for('orcamentos.visualizar', orcamento_id=orcamento_id))
 
 
 @orcamentos_bp.route('/orcamentos/<int:orcamento_id>/adicionar-item', methods=['POST'])
@@ -506,51 +588,6 @@ def mudar_status(orcamento_id):
     if novo_status == 'aprovado':
         orcamento.aprovado_em = datetime.now()
         orcamento.aprovado_por_id = session.get('usuario_id')
-
-        # Ao aprovar, gerar pedidos automaticamente (1 pedido por item do orçamento)
-        # Requisitos: cliente cadastrado e ao menos uma unidade de entrega
-        if not orcamento.cliente_id:
-            flash('Orçamento aprovado, mas não foi possível gerar Pedido: selecione um cliente cadastrado no orçamento.', 'warning')
-        else:
-            unidade = UnidadeEntrega.query.filter_by(cliente_id=orcamento.cliente_id).order_by(UnidadeEntrega.id.asc()).first()
-            if not unidade:
-                flash('Orçamento aprovado, mas não foi possível gerar Pedido: cadastre uma Unidade de Entrega para este cliente.', 'warning')
-            else:
-                # Evitar duplicidade: se já existir pedido com número_oc = número do orçamento, não recria
-                ja_existe = Pedido.query.filter_by(numero_oc=orcamento.numero).first()
-                if ja_existe:
-                    flash('Pedidos já foram gerados anteriormente para este orçamento.', 'info')
-                else:
-                    numero_interno = _generate_next_pedido_code()
-                    gerados = 0
-                    for it in (orcamento.itens or []):
-                        try:
-                            qtd = Decimal(str(it.quantidade or 0))
-                        except Exception:
-                            qtd = Decimal('0')
-                        if qtd <= 0:
-                            continue
-
-                        novo_pedido = Pedido(
-                            numero_pedido=numero_interno,
-                            numero_pedido_cliente=None,
-                            cliente_id=orcamento.cliente_id,
-                            unidade_entrega_id=unidade.id,
-                            item_id=it.item_id,
-                            nome_item=None,
-                            quantidade=int(qtd),
-                            data_entrada=datetime.now().date(),
-                            previsao_entrega=None,
-                            descricao=f"Gerado do orçamento {orcamento.numero} - {it.descricao_display}",
-                            numero_oc=orcamento.numero
-                        )
-                        db.session.add(novo_pedido)
-                        gerados += 1
-
-                    if gerados > 0:
-                        flash(f'Pedido(s) gerado(s) para o orçamento {orcamento.numero}: {numero_interno} ({gerados} item(ns)).', 'success')
-                    else:
-                        flash('Orçamento aprovado, mas não foi possível gerar Pedido: nenhum item válido encontrado.', 'warning')
     
     db.session.commit()
     
