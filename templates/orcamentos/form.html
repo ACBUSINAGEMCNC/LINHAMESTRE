@@ -704,7 +704,17 @@ if (window.jQuery) {
 function editarValor(element) {
     {% if orcamento %}
     var field = element.getAttribute('data-field');
-    var itemId = element.closest('.item-row').getAttribute('data-item-id');
+    var itemRow = element.closest('.item-row');
+    var itemId = itemRow ? itemRow.getAttribute('data-item-id') : null;
+    
+    if (!itemId) {
+        alert('Erro: Não foi possível identificar o item');
+        return;
+    }
+    
+    // Montar URL corretamente
+    var baseUrl = '{{ url_for("orcamentos.atualizar_item", orcamento_id=orcamento.id, item_id=0) }}';
+    var url = baseUrl.replace('item_id=0', 'item_id=' + itemId).replace('/0/', '/' + itemId + '/');
     
     var htmlContent = element.innerHTML;
     var valorAtual = htmlContent.replace(/<i[^>]*>.*<\/i>/, '').replace('R$', '').replace('%', '').trim();
@@ -723,12 +733,23 @@ function editarValor(element) {
     var data = {};
     data[field] = parseFloat(novoValor);
     
-    fetch('{{ url_for("orcamentos.atualizar_item", orcamento_id=orcamento.id, item_id=0) }}'.replace('/0', '/' + itemId), {
+    console.log('[EDITAR] URL:', url);
+    console.log('[EDITAR] Dados:', data);
+    
+    fetch(url, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', 'X-Requested-With': 'XMLHttpRequest' },
         body: JSON.stringify(data)
     })
-    .then(function(response) { return response.json(); })
+    .then(function(response) {
+        console.log('[EDITAR] Status:', response.status);
+        if (!response.ok) {
+            return response.text().then(function(text) {
+                throw new Error('Erro ' + response.status + ': ' + (text.substring(0, 100) || 'Sem detalhes'));
+            });
+        }
+        return response.json();
+    })
     .then(function(response) {
         if (response.success) {
             location.reload();
@@ -737,7 +758,8 @@ function editarValor(element) {
         }
     })
     .catch(function(err) {
-        alert('Erro: ' + err.message);
+        console.error('[EDITAR] Erro:', err);
+        alert('Erro ao atualizar: ' + err.message);
     });
     {% endif %}
 }
