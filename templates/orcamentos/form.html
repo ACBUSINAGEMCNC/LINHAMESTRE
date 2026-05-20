@@ -115,17 +115,18 @@
     {% endwith %}
 
     <form method="POST" id="formOrcamento">
-        <div class="row g-4">
-            <!-- Coluna 1: Cliente -->
-            <div class="col-lg-4">
-                <div class="card mb-4">
-                    <div class="card-header">
-                        <h5 class="mb-0"><i class="fas fa-user me-2"></i>Cliente</h5>
+        <!-- LINHA 1: Cliente e Dados do Orçamento -->
+        <div class="row g-4 mb-4">
+            <!-- Cliente -->
+            <div class="col-lg-6">
+                <div class="card h-100">
+                    <div class="card-header bg-primary text-white">
+                        <h5 class="mb-0"><i class="fas fa-user me-2"></i>Informações do Cliente</h5>
                     </div>
                     <div class="card-body">
                         <div class="mb-3">
-                            <label class="form-label">Nome do Cliente *</label>
-                            <input type="text" name="cliente_nome" class="form-control" 
+                            <label class="form-label fw-bold">Nome do Cliente *</label>
+                            <input type="text" name="cliente_nome" class="form-control form-control-lg" 
                                    value="{{ orcamento.nome_cliente_display if orcamento else '' }}" 
                                    placeholder="Digite o nome do cliente" required>
                             <small class="text-muted">Pode ser cliente cadastrado ou novo</small>
@@ -146,76 +147,71 @@
                         </div>
                     </div>
                 </div>
+            </div>
 
-                <!-- Dados do Orçamento -->
-                <div class="card">
-                    <div class="card-header">
+            <!-- Dados do Orçamento -->
+            <div class="col-lg-6">
+                <div class="card h-100">
+                    <div class="card-header bg-secondary text-white">
                         <h5 class="mb-0"><i class="fas fa-file-alt me-2"></i>Dados do Orçamento</h5>
                     </div>
                     <div class="card-body">
-                        <div class="mb-3">
-                            <label class="form-label">Validade (dias)</label>
-                            <input type="number" name="validade_dias" class="form-control" 
-                                   value="{{ orcamento.validade_dias if orcamento else 30 }}" min="1">
+                        <div class="row">
+                            <div class="col-md-6 mb-3">
+                                <label class="form-label">Validade (dias)</label>
+                                <input type="number" name="validade_dias" class="form-control" 
+                                       value="{{ orcamento.validade_dias if orcamento else 30 }}" min="1">
+                            </div>
+                            <div class="col-md-6 mb-3">
+                                <label class="form-label">Prazo de Entrega</label>
+                                <input type="text" name="prazo_entrega" class="form-control" 
+                                       value="{{ orcamento.prazo_entrega if orcamento else '' }}" 
+                                       placeholder="Ex: 15 dias úteis">
+                            </div>
                         </div>
                         <div class="mb-3">
                             <label class="form-label">Condições de Pagamento</label>
                             <textarea name="condicoes_pagamento" class="form-control" rows="2">{{ orcamento.condicoes_pagamento if orcamento else '' }}</textarea>
                         </div>
                         <div class="mb-3">
-                            <label class="form-label">Prazo de Entrega</label>
-                            <input type="text" name="prazo_entrega" class="form-control" 
-                                   value="{{ orcamento.prazo_entrega if orcamento else '' }}" 
-                                   placeholder="Ex: 15 dias úteis">
-                        </div>
-                        <div class="mb-3">
                             <label class="form-label">Observações</label>
-                            <textarea name="observacoes" class="form-control" rows="3">{{ orcamento.observacoes if orcamento else '' }}</textarea>
+                            <textarea name="observacoes" class="form-control" rows="2">{{ orcamento.observacoes if orcamento else '' }}</textarea>
                         </div>
-                        <button type="submit" class="btn btn-primary w-100">
-                            <i class="fas fa-save me-2"></i>Salvar Dados
+                        <button type="submit" class="btn btn-success w-100">
+                            <i class="fas fa-save me-2"></i>Salvar Orçamento
                         </button>
                     </div>
                 </div>
             </div>
+        </div>
 
-            <!-- Coluna 2: Adicionar Itens -->
-            {% if orcamento %}
-            <div class="col-lg-4">
+        {% if orcamento %}
+        <!-- LINHA 2: Botão Adicionar Item -->
+        <div class="row mb-4">
+            <div class="col-12">
                 <div class="card">
-                    <div class="card-header">
-                        <h5 class="mb-0"><i class="fas fa-plus-circle me-2"></i>Adicionar Itens</h5>
-                    </div>
-                    <div class="card-body">
-                        <button type="button" class="btn btn-primary w-100 mb-3" data-bs-toggle="modal" data-bs-target="#modalBuscarItem">
+                    <div class="card-body d-flex justify-content-between align-items-center py-3">
+                        <div>
+                            <h5 class="mb-1"><i class="fas fa-plus-circle me-2 text-success"></i>Adicionar Itens ao Orçamento</h5>
+                            <small class="text-muted">Busque itens no estoque para adicionar a este orçamento</small>
+                        </div>
+                        <button type="button" class="btn btn-success btn-lg" data-bs-toggle="modal" data-bs-target="#modalBuscarItem">
                             <i class="fas fa-search me-2"></i>Buscar e Adicionar Item
                         </button>
-
-                        <div class="mb-3">
-                            <div class="form-check form-switch">
-                                <input class="form-check-input" type="checkbox" id="filtroEstoque">
-                                <label class="form-check-label" for="filtroEstoque">
-                                    <i class="fas fa-filter me-1"></i>Apenas itens com estoque
-                                </label>
-                            </div>
-                        </div>
-                        
-                        <div class="alert alert-info small">
-                            <i class="fas fa-info-circle me-2"></i>
-                            Use o botão acima para buscar itens com filtros avançados
-                        </div>
                     </div>
                 </div>
             </div>
+        </div>
 
-            <!-- Coluna 3: Itens do Orçamento -->
-            <div class="col-lg-4">
+        <!-- LINHA 3: Lista de Itens (largura total) -->
+        <div class="row">
+            <div class="col-12">
                 <div class="card">
-                    <div class="card-header d-flex justify-content-between align-items-center">
-                        <h5 class="mb-0"><i class="fas fa-list me-2"></i>Itens</h5>
-                        <span class="badge bg-primary">{{ orcamento.itens|length }}</span>
+                    <div class="card-header bg-info text-white d-flex justify-content-between align-items-center">
+                        <h5 class="mb-0"><i class="fas fa-list me-2"></i>Itens do Orçamento</h5>
+                        <span class="badge bg-white text-info fs-6">{{ orcamento.itens|length }} item(s)</span>
                     </div>
-                    <div class="card-body p-0" style="max-height: 600px; overflow-y: auto;">
+                    <div class="card-body p-0" style="max-height: 500px; overflow-y: auto;">
                         <div id="listaItens">
                             {% if orcamento.itens %}
                                 {% for item in orcamento.itens %}
