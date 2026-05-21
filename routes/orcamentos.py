@@ -46,7 +46,13 @@ def _generate_next_pedido_code():
 def _orcamento_ja_enviado_para_pedidos(orcamento: Orcamento) -> bool:
     if not orcamento or not getattr(orcamento, 'numero', None):
         return False
-    return Pedido.query.filter_by(numero_oc=orcamento.numero).first() is not None
+    # Compatibilidade:
+    # - versão antiga: salvava orcamento.numero em Pedido.numero_oc (aparece como Nº OS na tela de pedidos)
+    # - versão nova: salva orcamento.numero em Pedido.numero_pedido_cliente
+    return (
+        Pedido.query.filter_by(numero_oc=orcamento.numero).first() is not None
+        or Pedido.query.filter_by(numero_pedido_cliente=orcamento.numero).first() is not None
+    )
 
 
 def _gerar_pedidos_do_orcamento(orcamento: Orcamento):
@@ -73,7 +79,8 @@ def _gerar_pedidos_do_orcamento(orcamento: Orcamento):
 
         novo_pedido = Pedido(
             numero_pedido=numero_interno,
-            numero_pedido_cliente=None,
+            # Usar o campo "Nº Pedido Cliente" para rastrear o orçamento, sem poluir o campo de Nº OS
+            numero_pedido_cliente=orcamento.numero,
             cliente_id=orcamento.cliente_id,
             unidade_entrega_id=unidade.id,
             item_id=it.item_id,
@@ -82,7 +89,7 @@ def _gerar_pedidos_do_orcamento(orcamento: Orcamento):
             data_entrada=datetime.now().date(),
             previsao_entrega=None,
             descricao=f"RETIRADA ESTOQUE - Gerado do orçamento {orcamento.numero} - {it.descricao_display}",
-            numero_oc=orcamento.numero
+            numero_oc=None
         )
         db.session.add(novo_pedido)
         gerados += 1
