@@ -71,6 +71,27 @@
                             A categoria é usada para cálculos de tempo no Kanban.
                         </div>
                     </div>
+                    <div class="mb-3">
+                        <label for="obs" class="form-label">OBS</label>
+                        <textarea class="form-control" id="obs" name="obs" rows="3">{{ trabalho.obs or '' }}</textarea>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Proteções (EPI/EPC)</label>
+                        <div class="border rounded p-2" style="max-height: 220px; overflow: auto;">
+                            {% for protecao in (protecoes or []) %}
+                            <div class="form-check">
+                                <input class="form-check-input" type="checkbox" name="protecoes" id="protecao_{{ protecao.id }}" value="{{ protecao.id }}"
+                                    {% if protecao.id in (protecoes_selecionadas or []) %}checked{% endif %}>
+                                <label class="form-check-label" for="protecao_{{ protecao.id }}">
+                                    {{ protecao.tipo }} - {{ protecao.nome }}
+                                </label>
+                            </div>
+                            {% endfor %}
+                            {% if not (protecoes or []) %}
+                            <div class="text-muted small">Nenhuma proteção cadastrada.</div>
+                            {% endif %}
+                        </div>
+                    </div>
                     <button type="submit" class="btn btn-primary">
                         <i class="fas fa-save"></i> Salvar Alterações
                     </button>

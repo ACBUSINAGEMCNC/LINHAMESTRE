@@ -66,9 +66,36 @@ class Trabalho(db.Model):
     nome = db.Column(db.String(100), nullable=False, unique=True)
     categoria = db.Column(db.String(50))  # Serra, Torno CNC, Centro de Usinagem, etc.
     descricao = db.Column(db.Text)  # Descrição detalhada do tipo de trabalho
+    obs = db.Column(db.Text)  # Observação padrão do serviço para impressão/OS
     
     def __repr__(self):
         return f'<Trabalho {self.nome}>'
+
+
+class Protecao(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    nome = db.Column(db.String(120), nullable=False, unique=True)
+    tipo = db.Column(db.String(10), nullable=False)  # EPI | EPC
+    descricao = db.Column(db.Text)
+
+    def __repr__(self):
+        return f'<Protecao {self.nome}>'
+
+
+class TrabalhoProtecao(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    trabalho_id = db.Column(db.Integer, db.ForeignKey('trabalho.id'), nullable=False)
+    protecao_id = db.Column(db.Integer, db.ForeignKey('protecao.id'), nullable=False)
+
+    trabalho = relationship('Trabalho', backref='trabalhos_protecao', lazy=True)
+    protecao = relationship('Protecao', backref='trabalhos_protecao', lazy=True)
+
+    __table_args__ = (
+        db.UniqueConstraint('trabalho_id', 'protecao_id', name='uq_trabalho_protecao'),
+    )
+
+    def __repr__(self):
+        return f'<TrabalhoProtecao {self.trabalho_id}->{self.protecao_id}>'
 
 class Maquina(db.Model):
     id = db.Column(db.Integer, primary_key=True)
@@ -189,6 +216,22 @@ class ItemTrabalho(db.Model):
             segundos = self.tempo_real % 60
             return f"{minutos}:{segundos:02d}"
         return "0:00"
+
+
+class ItemTrabalhoProtecao(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    item_trabalho_id = db.Column(db.Integer, db.ForeignKey('item_trabalho.id'), nullable=False)
+    protecao_id = db.Column(db.Integer, db.ForeignKey('protecao.id'), nullable=False)
+
+    item_trabalho = relationship('ItemTrabalho', backref='protecoes_rel', lazy=True)
+    protecao = relationship('Protecao', backref='itens_trabalho_protecao', lazy=True)
+
+    __table_args__ = (
+        db.UniqueConstraint('item_trabalho_id', 'protecao_id', name='uq_item_trabalho_protecao'),
+    )
+
+    def __repr__(self):
+        return f'<ItemTrabalhoProtecao {self.item_trabalho_id}->{self.protecao_id}>'
     
 class ItemMaterial(db.Model):
     id = db.Column(db.Integer, primary_key=True)

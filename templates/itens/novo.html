@@ -228,7 +228,7 @@
                                     <select class="form-select" id="trabalho_select">
                                         <option value="">Selecione um trabalho</option>
                                         {% for trabalho in trabalhos %}
-                                        <option value="{{ trabalho.id }}" data-nome="{{ trabalho.nome }}">
+                                        <option value="{{ trabalho.id }}" data-nome="{{ trabalho.nome }}" data-obs="{{ trabalho.obs or '' }}">
                                             {{ trabalho.nome }}
                                         </option>
                                         {% endfor %}
@@ -255,6 +255,8 @@
                                     <thead>
                                         <tr>
                                             <th>Tipo de Trabalho</th>
+                                            <th>Proteções</th>
+                                            <th>OBS</th>
                                             <th>Tempo de Setup</th>
                                             <th>Tempo por Peça</th>
                                             <th>Ações</th>
@@ -756,6 +758,9 @@
         });
     });
     </script>
+    <script type="application/json" id="trabalho_protecoes_data">{{ (trabalho_protecoes or {})|tojson }}</script>
+    <script type="application/json" id="protecoes_data">{{ (protecoes or [])|tojson }}</script>
+    <script type="application/json" id="classes_item_data">{{ classes_item_payload|default([])|tojson }}</script>
     <script>
         $(document).ready(function() {
             // Arrays para armazenar materiais e trabalhos
@@ -821,6 +826,9 @@
                 }
                 
                 const trabalhoNome = $('#trabalho_select option:selected').data('nome');
+                const trabalhoObs = $('#trabalho_select option:selected').data('obs') || '';
+                const defaults = trabalhoProtecoesMap[String(trabalhoId)] || trabalhoProtecoesMap[parseInt(trabalhoId, 10)] || [];
+                const protecoes = (defaults || []).map(v => parseInt(v, 10)).filter(v => Number.isFinite(v));
                 const tempoSetup = $('#tempo_setup').val();
                 const tempoPeca = $('#tempo_peca').val();
                 
@@ -838,6 +846,8 @@
                 const trabalho = {
                     id: trabalhoId,
                     nome: trabalhoNome,
+                    protecoes: protecoes,
+                    obs: trabalhoObs,
                     tempo_setup: tempoSetup,
                     tempo_peca: tempoPeca
                 };
@@ -882,11 +892,19 @@
             function atualizarTabelaTrabalhos() {
                 const tbody = $('#tabela_trabalhos tbody');
                 tbody.empty();
+
+                const protecoesMap = (window.__protecaoIdToLabel || {});
                 
                 trabalhos.forEach((trabalho, index) => {
+                    const protecoesTexto = (trabalho.protecoes || []).map(pid => {
+                        const k = String(pid);
+                        return protecoesMap[k] || String(pid);
+                    }).join(', ');
                     tbody.append(`
                         <tr>
                             <td>${trabalho.nome}</td>
+                            <td>${protecoesTexto || ''}</td>
+                            <td>${(trabalho.obs || '')}</td>
                             <td>${trabalho.tempo_setup} segundos</td>
                             <td>${trabalho.tempo_peca} segundos</td>
                             <td>
@@ -900,6 +918,31 @@
                 
                 // Atualizar campo hidden
                 $('#trabalhos_json').val(JSON.stringify(trabalhos));
+            }
+
+            // Auto-preencher proteções com base no tipo de trabalho selecionado
+            let trabalhoProtecoesMap = {};
+            try {
+                const tpText = document.getElementById('trabalho_protecoes_data')?.textContent || '{}';
+                trabalhoProtecoesMap = JSON.parse(tpText);
+            } catch (e) {
+                trabalhoProtecoesMap = {};
+            }
+
+            // Mapa id -> "EPI - Nome" para renderização na tabela
+            try {
+                const protText = document.getElementById('protecoes_data')?.textContent || '[]';
+                const protList = JSON.parse(protText);
+                const map = {};
+                (protList || []).forEach(function(p) {
+                    if (!p) return;
+                    const id = (p.id !== undefined && p.id !== null) ? String(p.id) : null;
+                    if (!id) return;
+                    map[id] = `${p.tipo} - ${p.nome}`;
+                });
+                window.__protecaoIdToLabel = map;
+            } catch (e) {
+                window.__protecaoIdToLabel = {};
             }
             
             // Remover material
@@ -986,7 +1029,16 @@
             };
 
 
-            const classesItem = {{ classes_item_payload|default([])|tojson }};
+            let classesItem = [];
+            try {
+                const classesText = document.getElementById('classes_item_data')?.textContent || '[]';
+                const classesJson = JSON.parse(classesText);
+                if (Array.isArray(classesJson)) {
+                    classesItem = classesJson;
+                }
+            } catch (e) {
+                classesItem = [];
+            }
             const classeContainer = document.getElementById('itemClasseProgressivo');
             const classeHidden = document.getElementById('item_classe_id');
 

@@ -27,6 +27,11 @@
             .footer { margin-top: 15px; padding-top: 6px; font-size: 9px; }
             .item-breakdown { padding: 6px; }
             .item-breakdown-title { margin-bottom: 4px; font-size: 10px; }
+
+            /* Evitar páginas extras: esconder detalhamentos longos e permitir quebra normal */
+            .item-breakdown { display: none !important; }
+            .ordem-info { page-break-inside: auto !important; }
+            .item-group { page-break-inside: auto !important; }
         }
     </style>
     {% else %}
@@ -70,6 +75,11 @@
             .item-group-header { border-bottom-color: #dee2e6 !important; }
             .trabalho-info { border-color: #ddd !important; }
             .footer { border-top-color: #ddd !important; }
+
+            /* Evitar páginas extras: esconder detalhamentos longos e permitir quebra normal */
+            .item-breakdown { display: none !important; }
+            .ordem-info { page-break-inside: auto !important; }
+            .item-group { page-break-inside: auto !important; }
         }
     </style>
     {% endif %}
@@ -675,27 +685,46 @@
 
                 {% if item_base and item_base.trabalhos %}
                 <div class="trabalho-info mt-3">
-                    <h5>Trabalhos</h5>
+                    <h5>Controle de EPI/EPC por Serviço</h5>
                     <table class="table table-sm table-bordered">
                         <thead>
                             <tr>
-                                <th>Trabalho</th>
-                                <th>Tempo de Setup</th>
-                                <th>Tempo por Peça</th>
-                                <th>Tempo Total Estimado</th>
+                                <th style="width: 180px;">Serviço</th>
+                                <th>EPI / EPC</th>
+                                <th>OBS</th>
+                                <th style="width: 260px;">Assinaturas</th>
                             </tr>
                         </thead>
                         <tbody>
                             {% for item_trabalho in item_base.trabalhos %}
                             <tr>
                                 <td>{{ item_trabalho.trabalho.nome }}</td>
-                                <td>{{ item_trabalho.tempo_setup // 60 }} minutos</td>
-                                <td>{{ item_trabalho.tempo_peca // 60 }} minutos</td>
-                                <td>{{ (item_trabalho.tempo_setup + (item_trabalho.tempo_peca * item_data.total_qty)) // 60 }} minutos</td>
+                                <td>
+                                    {% set protecoes_list = [] %}
+                                    {% for tp in (item_trabalho.trabalho.trabalhos_protecao or []) %}
+                                        {% if tp %}
+                                            {% set prot = tp.protecao if tp.protecao else Protecao.query.get(tp.protecao_id) %}
+                                            {% if prot %}
+                                                {% set protecoes_list = protecoes_list + [prot.tipo ~ ' - ' ~ prot.nome] %}
+                                            {% endif %}
+                                        {% endif %}
+                                    {% endfor %}
+                                    {{ protecoes_list|join(', ') if protecoes_list else '-' }}
+                                </td>
+                                <td>{{ item_trabalho.trabalho.obs or '' }}</td>
+                                <td>
+                                    {% for i in range(8) %}
+                                        <div style="height: 18px; border-bottom: 1px solid #333;"></div>
+                                    {% endfor %}
+                                </td>
                             </tr>
                             {% endfor %}
                         </tbody>
                     </table>
+                    <div class="mt-2">
+                        <div style="font-size: 11px; font-weight: 600; margin-bottom: 4px;">OBS (Geral):</div>
+                        <div style="height: 70px; border: 1px solid #333;"></div>
+                    </div>
                 </div>
                 {% endif %}
 

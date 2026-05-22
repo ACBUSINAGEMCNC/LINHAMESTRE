@@ -8,7 +8,7 @@ import uuid
 from datetime import datetime
 from decimal import Decimal, InvalidOperation
 import requests
-from models import db, Item, Material, Trabalho, ItemMaterial, ItemTrabalho, Pedido, ArquivoCNC, ItemComposto, EstoquePecas, ItemClasse
+from models import db, Item, Material, Trabalho, ItemMaterial, ItemTrabalho, Pedido, ArquivoCNC, ItemComposto, EstoquePecas, ItemClasse, Protecao, TrabalhoProtecao, ItemTrabalhoProtecao
 from utils import validate_form_data, save_file, generate_next_code, parse_json_field
 from flask import current_app, g
 from sqlalchemy import func
@@ -1108,6 +1108,23 @@ def novo_item():
                         tempo_peca=int(trab.get('tempo_peca', 0) or 0)
                     )
                     db.session.add(item_trabalho)
+                    db.session.flush()
+
+                    protecoes_ids = trab.get('protecoes') or []
+                    if isinstance(protecoes_ids, str):
+                        try:
+                            protecoes_ids = json.loads(protecoes_ids)
+                        except Exception:
+                            protecoes_ids = []
+                    if not isinstance(protecoes_ids, list):
+                        protecoes_ids = []
+
+                    for pid in protecoes_ids:
+                        try:
+                            pid_int = int(pid)
+                        except Exception:
+                            continue
+                        db.session.add(ItemTrabalhoProtecao(item_trabalho_id=item_trabalho.id, protecao_id=pid_int))
                 except (ValueError, KeyError) as e:
                     flash(f'Erro ao processar trabalho: {str(e)}', 'danger')
         
@@ -1137,11 +1154,19 @@ def novo_item():
     
     materiais = Material.query.all()
     trabalhos = Trabalho.query.all()
+    protecoes = Protecao.query.order_by(Protecao.tipo.asc(), Protecao.nome.asc()).all()
+    protecoes_payload = [
+        {'id': p.id, 'tipo': p.tipo, 'nome': p.nome}
+        for p in (protecoes or [])
+    ]
+    trabalho_protecoes = {}
+    for rel in TrabalhoProtecao.query.all():
+        trabalho_protecoes.setdefault(rel.trabalho_id, []).append(rel.protecao_id)
     classes_item = _classes_item_ordenadas()
     tipo_item_default = (request.args.get('tipo_item') or 'producao').strip().lower()
     if tipo_item_default not in ('producao', 'montagem'):
         tipo_item_default = 'producao'
-    return render_template('itens/novo.html', materiais=materiais, trabalhos=trabalhos, item=None, classes_item=classes_item, classes_item_payload=_classes_item_payload(classes_item), tipo_item_default=tipo_item_default, pode_ver_valores=_usuario_pode_ver_valores())
+    return render_template('itens/novo.html', materiais=materiais, trabalhos=trabalhos, protecoes=protecoes_payload, trabalho_protecoes=trabalho_protecoes, item=None, classes_item=classes_item, classes_item_payload=_classes_item_payload(classes_item), tipo_item_default=tipo_item_default, pode_ver_valores=_usuario_pode_ver_valores())
 
 @itens.route('/itens/editar/<int:item_id>', methods=['GET', 'POST'])
 def editar_item(item_id):
@@ -1149,6 +1174,14 @@ def editar_item(item_id):
     item = Item.query.get_or_404(item_id)
     materiais = Material.query.all()
     trabalhos = Trabalho.query.all()
+    protecoes = Protecao.query.order_by(Protecao.tipo.asc(), Protecao.nome.asc()).all()
+    protecoes_payload = [
+        {'id': p.id, 'tipo': p.tipo, 'nome': p.nome}
+        for p in (protecoes or [])
+    ]
+    trabalho_protecoes = {}
+    for rel in TrabalhoProtecao.query.all():
+        trabalho_protecoes.setdefault(rel.trabalho_id, []).append(rel.protecao_id)
     classes_item = _classes_item_ordenadas()
     pode_ver_valores = _usuario_pode_ver_valores()
 
@@ -1166,11 +1199,14 @@ def editar_item(item_id):
     item_trabalhos = []
     for it in item.trabalhos:
         trabalho = Trabalho.query.get(it.trabalho_id)
+        protecoes_ids = [rel.protecao_id for rel in (it.protecoes_rel or [])]
         item_trabalhos.append({
             'id': it.trabalho_id,
             'nome': trabalho.nome,
+            'obs': (trabalho.obs if trabalho else ''),
             'tempo_setup': it.tempo_setup,
-            'tempo_peca': it.tempo_peca
+            'tempo_peca': it.tempo_peca,
+            'protecoes': protecoes_ids
         })
     
     if request.method == 'POST':
@@ -1179,7 +1215,7 @@ def editar_item(item_id):
         if errors:
             for error in errors:
                 flash(error, 'danger')
-            return render_template('itens/editar.html', item=item, materiais=materiais, trabalhos=trabalhos, classes_item=classes_item, classes_item_payload=_classes_item_payload(classes_item), pode_ver_valores=pode_ver_valores, item_materiais=item_materiais, item_trabalhos=item_trabalhos)
+            return render_template('itens/editar.html', item=item, materiais=materiais, trabalhos=trabalhos, protecoes=protecoes_payload, trabalho_protecoes=trabalho_protecoes, classes_item=classes_item, classes_item_payload=_classes_item_payload(classes_item), pode_ver_valores=pode_ver_valores, item_materiais=item_materiais, item_trabalhos=item_trabalhos)
         
         nome = request.form['nome']
         
@@ -1187,7 +1223,7 @@ def editar_item(item_id):
         item_existente = Item.query.filter(Item.nome == nome, Item.id != item_id).first()
         if item_existente:
             flash('Já existe um item com este nome!', 'danger')
-            return render_template('itens/editar.html', item=item, materiais=materiais, trabalhos=trabalhos, classes_item=classes_item, classes_item_payload=_classes_item_payload(classes_item), pode_ver_valores=pode_ver_valores, item_materiais=item_materiais, item_trabalhos=item_trabalhos)
+            return render_template('itens/editar.html', item=item, materiais=materiais, trabalhos=trabalhos, protecoes=protecoes_payload, trabalho_protecoes=trabalho_protecoes, classes_item=classes_item, classes_item_payload=_classes_item_payload(classes_item), pode_ver_valores=pode_ver_valores, item_materiais=item_materiais, item_trabalhos=item_trabalhos)
         
         tipo_item = (request.form.get('tipo_item', item.tipo_item or 'producao') or 'producao').strip().lower()
         categoria_montagem = (request.form.get('categoria_montagem') or '').strip() or None
@@ -1218,7 +1254,7 @@ def editar_item(item_id):
                 _apply_campos_financeiros(item, request.form)
             except ValueError as e:
                 flash(str(e), 'danger')
-                return render_template('itens/editar.html', item=item, materiais=materiais, trabalhos=trabalhos, classes_item=classes_item, classes_item_payload=_classes_item_payload(classes_item), pode_ver_valores=pode_ver_valores, item_materiais=item_materiais, item_trabalhos=item_trabalhos)
+                return render_template('itens/editar.html', item=item, materiais=materiais, trabalhos=trabalhos, protecoes=protecoes_payload, trabalho_protecoes=trabalho_protecoes, classes_item=classes_item, classes_item_payload=_classes_item_payload(classes_item), pode_ver_valores=pode_ver_valores, item_materiais=item_materiais, item_trabalhos=item_trabalhos)
         
         # Validar e converter o peso
         try:
@@ -1226,7 +1262,7 @@ def editar_item(item_id):
             item.peso = float(peso) if peso else 0
         except ValueError:
             flash('O peso deve ser um número válido', 'danger')
-            return render_template('itens/editar.html', item=item, materiais=materiais, trabalhos=trabalhos, classes_item=classes_item, classes_item_payload=_classes_item_payload(classes_item), pode_ver_valores=pode_ver_valores, item_materiais=item_materiais, item_trabalhos=item_trabalhos)
+            return render_template('itens/editar.html', item=item, materiais=materiais, trabalhos=trabalhos, protecoes=protecoes_payload, trabalho_protecoes=trabalho_protecoes, classes_item=classes_item, classes_item_payload=_classes_item_payload(classes_item), pode_ver_valores=pode_ver_valores, item_materiais=item_materiais, item_trabalhos=item_trabalhos)
         
         # Upload de arquivos
         if 'desenho_tecnico' in request.files and request.files['desenho_tecnico'].filename:
@@ -1246,7 +1282,7 @@ def editar_item(item_id):
                 item.blank_laser = save_file(blank_laser_file, 'blank_laser')
             else:
                 flash('O arquivo de blank de laser deve estar no formato DXF', 'danger')
-                return render_template('itens/editar.html', item=item, materiais=materiais, trabalhos=trabalhos, classes_item=classes_item, classes_item_payload=_classes_item_payload(classes_item), pode_ver_valores=pode_ver_valores, item_materiais=item_materiais, item_trabalhos=item_trabalhos)
+                return render_template('itens/editar.html', item=item, materiais=materiais, trabalhos=trabalhos, protecoes=protecoes_payload, trabalho_protecoes=trabalho_protecoes, classes_item=classes_item, classes_item_payload=_classes_item_payload(classes_item), pode_ver_valores=pode_ver_valores, item_materiais=item_materiais, item_trabalhos=item_trabalhos)
 
         if getattr(item, 'criado_via_importacao_estoque', False):
             item.criado_via_importacao_estoque = False
@@ -1280,6 +1316,10 @@ def editar_item(item_id):
 
             # Remover trabalhos existentes
             ItemTrabalho.query.filter_by(item_id=item.id).delete()
+            # Remover proteções existentes (dependem do item_trabalho)
+            ItemTrabalhoProtecao.query.filter(ItemTrabalhoProtecao.item_trabalho_id.in_(
+                db.session.query(ItemTrabalho.id).filter_by(item_id=item.id)
+            )).delete(synchronize_session=False)
 
             # Adicionar novos trabalhos
             for trab in trabalhos_json:
@@ -1291,6 +1331,23 @@ def editar_item(item_id):
                         tempo_peca=int(trab.get('tempo_peca', 0) or 0)
                     )
                     db.session.add(item_trabalho)
+                    db.session.flush()
+
+                    protecoes_ids = trab.get('protecoes') or []
+                    if isinstance(protecoes_ids, str):
+                        try:
+                            protecoes_ids = json.loads(protecoes_ids)
+                        except Exception:
+                            protecoes_ids = []
+                    if not isinstance(protecoes_ids, list):
+                        protecoes_ids = []
+
+                    for pid in protecoes_ids:
+                        try:
+                            pid_int = int(pid)
+                        except Exception:
+                            continue
+                        db.session.add(ItemTrabalhoProtecao(item_trabalho_id=item_trabalho.id, protecao_id=pid_int))
                 except (ValueError, KeyError) as e:
                     flash(f'Erro ao processar trabalho: {str(e)}', 'danger')
         
@@ -1322,6 +1379,8 @@ def editar_item(item_id):
                           item=item, 
                           materiais=materiais, 
                           trabalhos=trabalhos,
+                          protecoes=protecoes_payload,
+                          trabalho_protecoes=trabalho_protecoes,
                           classes_item=classes_item, classes_item_payload=_classes_item_payload(classes_item),
                           pode_ver_valores=pode_ver_valores,
                           item_materiais=item_materiais,
@@ -1894,7 +1953,11 @@ def editar_item_composto(item_id):
                 item.blank_laser = save_file(blank_laser_file, 'blank_laser')
             else:
                 flash('O arquivo de blank de laser deve estar no formato DXF', 'danger')
-                return render_template('itens/editar.html', item=item, materiais=materiais, trabalhos=trabalhos, pode_ver_valores=pode_ver_valores, item_materiais=item_materiais, item_trabalhos=item_trabalhos)
+                protecoes = Protecao.query.order_by(Protecao.tipo.asc(), Protecao.nome.asc()).all()
+                trabalho_protecoes = {}
+                for rel in TrabalhoProtecao.query.all():
+                    trabalho_protecoes.setdefault(rel.trabalho_id, []).append(rel.protecao_id)
+                return render_template('itens/editar.html', item=item, materiais=materiais, trabalhos=trabalhos, protecoes=protecoes_payload, trabalho_protecoes=trabalho_protecoes, pode_ver_valores=pode_ver_valores, item_materiais=item_materiais, item_trabalhos=item_trabalhos)
         
         # Remover componentes existentes
         ItemComposto.query.filter_by(item_pai_id=item.id).delete()

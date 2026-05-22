@@ -37,7 +37,7 @@
         </div>
 
         <!-- Módulos de Trabalho Navegação -->
-        <div class="row row-cols-1 row-cols-sm-2 row-cols-md-5 g-3 mb-4">
+        <div class="row row-cols-1 row-cols-sm-2 row-cols-md-6 g-3 mb-4">
             <div class="col">
                 <div class="card h-100 shadow-sm">
                     <div class="card-body text-center p-3">
@@ -93,6 +93,18 @@
                         <h6 class="card-title">Tipos de Trabalho</h6>
                         <p class="card-text small">Gerenciar tipos de trabalho</p>
                         <a href="{{ url_for('trabalhos.listar_tipos_trabalho') }}" class="btn btn-sm btn-outline-primary">
+                            <i class="fas fa-arrow-right"></i> Acessar
+                        </a>
+                    </div>
+                </div>
+            </div>
+            <div class="col">
+                <div class="card h-100 shadow-sm">
+                    <div class="card-body text-center p-3">
+                        <i class="fas fa-shield-halved fa-2x mb-2 text-secondary"></i>
+                        <h6 class="card-title">Proteções</h6>
+                        <p class="card-text small">EPI/EPC por tipo de trabalho</p>
+                        <a href="{{ url_for('trabalhos.listar_protecoes') }}" class="btn btn-sm btn-outline-primary">
                             <i class="fas fa-arrow-right"></i> Acessar
                         </a>
                     </div>

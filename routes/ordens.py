@@ -1,5 +1,5 @@
 from flask import Blueprint, render_template, request, redirect, url_for, flash, jsonify, send_file
-from models import db, OrdemServico, Pedido, PedidoOrdemServico, Item
+from models import db, OrdemServico, Pedido, PedidoOrdemServico, Item, ItemTrabalhoProtecao, Protecao
 from utils import validate_form_data, generate_next_code
 from datetime import datetime
 from sqlalchemy.exc import IntegrityError
@@ -243,7 +243,15 @@ def imprimir_ordem_servico(ordem_id):
                 flash(f'Falha ao reconciliar OS: {str(e)}', 'danger')
     # Modo bonito preserva o layout de tela e cores na impressão
     modo_bonito = request.args.get('bonito') == '1' or request.args.get('modo') == 'bonito'
-    return render_template('ordens/imprimir.html', ordem=ordem, Item=Item, Pedido=Pedido, modo_bonito=modo_bonito)
+    return render_template(
+        'ordens/imprimir.html',
+        ordem=ordem,
+        Item=Item,
+        Pedido=Pedido,
+        ItemTrabalhoProtecao=ItemTrabalhoProtecao,
+        Protecao=Protecao,
+        modo_bonito=modo_bonito,
+    )
 
 
 @ordens.route('/ordens-servico/aprovar/<int:ordem_id>', methods=['POST'])

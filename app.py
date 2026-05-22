@@ -269,6 +269,24 @@ def verificar_inicializar_banco():
             logger.warning(f"Erro ao migrar coluna ordem_servico.data_atualizacao: {str(col_err)}")
 
         try:
+            from migrations.add_protecao_epi_epc_tables import migrate_postgres as migrate_protecao_pg
+            if migrate_protecao_pg():
+                logger.info("Tabelas de Proteção (EPI/EPC) verificadas/criadas (Supabase).")
+            else:
+                logger.warning("Falha ao migrar tabelas de Proteção (EPI/EPC).")
+        except Exception as col_err:
+            logger.warning(f"Erro ao migrar tabelas de Proteção (EPI/EPC): {str(col_err)}")
+
+        try:
+            from migrations.add_trabalho_obs import migrate_postgres as migrate_trabalho_obs_pg
+            if migrate_trabalho_obs_pg():
+                logger.info("Coluna trabalho.obs verificada/adicionada com sucesso (Supabase).")
+            else:
+                logger.warning("Falha ao verificar/adicionar coluna trabalho.obs (Supabase).")
+        except Exception as col_err:
+            logger.warning(f"Erro ao migrar coluna trabalho.obs: {str(col_err)}")
+
+        try:
             from migrations.alter_pedido_nome_item_length import migrate_postgres as migrate_pedido_nome_item_len
             if migrate_pedido_nome_item_len():
                 logger.info("Coluna pedido.nome_item verificada/alterada para VARCHAR(255) (Supabase).")
