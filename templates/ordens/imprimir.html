@@ -8,45 +8,64 @@
     {% if not modo_bonito %}
     <style>
         @media print {
-            @page { size: A4; margin: 8mm; }
-            body { padding: 0; margin: 0; font-size: 11px; line-height: 1.2; }
+            @page { size: A4; margin: 6mm; }
+            body { padding: 0; margin: 0; font-size: 9px; line-height: 1.15; }
             .no-print { display: none !important; }
             .container { width: 100%; max-width: 100%; padding: 0; margin: 0; }
-            h1, h2, h3 { margin: 0 0 8px 0; font-size: 14px; }
-            h1 { font-size: 16px; }
-            h2 { font-size: 15px; }
-            .table { margin-bottom: 8px; }
-            .table th, .table td { padding: 3px 6px; font-size: 10px; line-height: 1.1; }
-            .item-group { margin-bottom: 12px; padding: 8px; }
-            .item-group-header { margin-bottom: 4px; padding-bottom: 4px; font-size: 12px; }
-            .item-group-total { margin-bottom: 6px; font-size: 11px; }
-            .trabalho-info { margin-top: 8px; padding: 6px; }
-            .trabalho-info h5 { font-size: 11px; margin-bottom: 4px; }
-            .header { margin-bottom: 12px; padding-bottom: 6px; }
-            .ordem-info { padding: 8px; margin-bottom: 12px; }
-            .footer { margin-top: 15px; padding-top: 6px; font-size: 9px; }
-            .item-breakdown { padding: 6px; }
-            .item-breakdown-title { margin-bottom: 4px; font-size: 10px; }
+            h3, h4, h5, h6 { margin: 0 0 3px 0; font-size: 9px; }
+            .table { margin-bottom: 4px; }
+            .table th, .table td { padding: 2px 4px; font-size: 8px; line-height: 1.1; }
 
-            /* Evitar páginas extras: esconder detalhamentos longos e permitir quebra normal */
+            /* Ocultar blocos desnecessários no print */
             .item-breakdown { display: none !important; }
-            .ordem-info { page-break-inside: auto !important; }
-            .item-group { page-break-inside: auto !important; }
-
-            /* Encurtar impressão: esconder blocos de listagem/detalhamento */
-            h3 { display: none !important; }
             .item-group-total { display: none !important; }
-            .item-group-header-row { margin-bottom: 0 !important; }
+            .resumo-thumb-box { display: none !important; }
+            .ordem-info-resumo-extra { display: none !important; }
+            .bloco-composicao { display: none !important; }
 
-            /* Compactar seção de serviços */
-            .servicos-lista { column-count: 2; column-gap: 10px; }
-            .servico-linha { break-inside: avoid; page-break-inside: avoid; margin-bottom: 4px !important; }
-            .servico-linha .servico-titulo { font-size: 10px !important; }
-            .servico-linha .servico-detalhe { font-size: 9px !important; line-height: 1.1 !important; }
+            /* Cabeçalho ultra-compacto */
+            .header { padding-bottom: 3px; margin-bottom: 4px; border-bottom: 1px solid #000; }
+            .logo { max-height: 28px !important; }
+            .company-name { font-size: 10px !important; font-weight: 700; }
+            .company-sub { font-size: 7.5px !important; line-height: 1.1; }
 
-            /* Compactar grade de preenchimento */
-            .grade-operadores td { height: 36px !important; padding: 4px !important; }
-            .obs-geral-box { height: 48px !important; }
+            /* Resumo geral compacto */
+            .ordem-info { padding: 3px 6px; margin-bottom: 4px; border: 1px solid #ccc; border-radius: 3px; }
+            .resumo-top { gap: 6px; margin-bottom: 0; }
+            .resumo-box { padding: 4px 6px; }
+            .resumo-box .label { font-size: 7px; }
+            .resumo-item-text { font-size: 10px !important; font-weight: 700; }
+            .resumo-total-value { font-size: 18px !important; }
+
+            /* Itens agrupados */
+            h3 { font-size: 9px !important; margin: 3px 0 2px 0 !important; }
+            .item-group { padding: 4px 6px; margin-bottom: 4px; border-radius: 3px; }
+            .item-group-header { font-size: 9px; margin-bottom: 2px; padding-bottom: 2px; }
+            .item-group-header-row { margin-bottom: 0; }
+
+            /* Trabalhos / Material */
+            .trabalho-info { margin-top: 4px; padding: 4px; border-radius: 3px; }
+            .trabalho-info h5 { font-size: 8px; margin-bottom: 2px; }
+
+            /* Lista de serviços em 2 colunas */
+            .servicos-lista { column-count: 2; column-gap: 8px; }
+            .servico-linha { break-inside: avoid; margin-bottom: 2px !important; }
+            .servico-titulo { font-size: 8px !important; font-weight: 700; }
+            .servico-detalhe { font-size: 7px !important; line-height: 1.1 !important; }
+
+            /* Grade de assinaturas compacta */
+            .grade-operadores td { height: 32px !important; padding: 3px !important; }
+            .grade-operadores .sq-box { width: 18px !important; height: 18px !important; }
+            .grade-operadores .sign-line { height: 13px !important; margin-bottom: 3px !important; }
+
+            /* OBS geral menor */
+            .obs-geral-box { height: 36px !important; }
+
+            /* Instrução de preenchimento compacta */
+            .instrucao-box { font-size: 7.5px !important; padding: 3px !important; margin-bottom: 4px !important; }
+
+            /* Footer */
+            .footer { margin-top: 6px; padding-top: 3px; font-size: 7px; }
         }
     </style>
     {% else %}
@@ -91,25 +110,40 @@
             .trabalho-info { border-color: #ddd !important; }
             .footer { border-top-color: #ddd !important; }
 
-            /* Evitar páginas extras: esconder detalhamentos longos e permitir quebra normal */
+            /* Ocultar blocos desnecessários no print */
             .item-breakdown { display: none !important; }
-            .ordem-info { page-break-inside: auto !important; }
-            .item-group { page-break-inside: auto !important; }
-
-            /* Encurtar impressão: esconder blocos de listagem/detalhamento */
-            h3 { display: none !important; }
             .item-group-total { display: none !important; }
-            .item-group-header-row { margin-bottom: 0 !important; }
+            .resumo-thumb-box { display: none !important; }
+            .bloco-composicao { display: none !important; }
 
-            /* Compactar seção de serviços */
-            .servicos-lista { column-count: 2; column-gap: 10px; }
-            .servico-linha { break-inside: avoid; page-break-inside: avoid; margin-bottom: 4px !important; }
-            .servico-linha .servico-titulo { font-size: 10px !important; }
-            .servico-linha .servico-detalhe { font-size: 9px !important; line-height: 1.1 !important; }
+            /* Cabeçalho ultra-compacto */
+            .header { padding-bottom: 3px; margin-bottom: 4px; }
+            .logo { max-height: 28px !important; }
+            .company-name { font-size: 10px !important; }
+            .company-sub { font-size: 7.5px !important; line-height: 1.1; }
 
-            /* Compactar grade de preenchimento */
-            .grade-operadores td { height: 36px !important; padding: 4px !important; }
-            .obs-geral-box { height: 48px !important; }
+            /* Resumo compacto */
+            .ordem-info { padding: 3px 6px; margin-bottom: 4px; }
+            .resumo-item-text { font-size: 10px !important; }
+            .resumo-total-value { font-size: 18px !important; }
+
+            /* Itens agrupados */
+            h3 { font-size: 9px !important; margin: 3px 0 !important; }
+            .item-group { padding: 4px 6px; margin-bottom: 4px; }
+            .item-group-header { font-size: 9px; margin-bottom: 2px; padding-bottom: 2px; }
+
+            /* Lista de serviços em 2 colunas */
+            .servicos-lista { column-count: 2; column-gap: 8px; }
+            .servico-linha { break-inside: avoid; margin-bottom: 2px !important; }
+            .servico-titulo { font-size: 8px !important; font-weight: 700; }
+            .servico-detalhe { font-size: 7px !important; line-height: 1.1 !important; }
+
+            /* Grade de assinaturas */
+            .grade-operadores td { height: 32px !important; padding: 3px !important; }
+            .grade-operadores .sq-box { width: 18px !important; height: 18px !important; }
+            .grade-operadores .sign-line { height: 12px !important; margin-bottom: 3px !important; }
+            .obs-geral-box { height: 36px !important; }
+            .instrucao-box { font-size: 7.5px !important; padding: 3px !important; margin-bottom: 4px !important; }
         }
     </style>
     {% endif %}
@@ -279,13 +313,13 @@
             margin-bottom: 8px;
         }
         .resumo-box .value.resumo-total-value {
-            font-size: 72px !important;
+            font-size: 48px !important;
             font-weight: 900;
             line-height: 1;
             margin-top: 0;
         }
         .resumo-item-text {
-            font-size: 22px;
+            font-size: 16px;
             font-weight: 900;
             line-height: 1.1;
             color: #0d6efd;
@@ -490,7 +524,7 @@
         {% endfor %}
         
         {% if compostos_map or itens_sem_composto %}
-        <div class="ordem-info" style="margin-top: 12px;">
+        <div class="ordem-info bloco-composicao" style="margin-top: 12px;">
             <h6 class="mb-2">Análise de Composição (Item Composto)</h6>
             {% if compostos_map %}
                 {% for pai_id, comp_data in compostos_map.items() %}
@@ -741,25 +775,21 @@
                         {% endfor %}
                     </div>
 
-                    <div style="font-size: 10px; line-height: 1.2; border: 1px solid #333; padding: 6px; margin-bottom: 8px;">
-                        <div style="font-weight: 700; margin-bottom: 4px;">Instrução de preenchimento:</div>
-                        <div>
-                            Cada operador deve preencher no quadro abaixo o <strong>número do serviço</strong> executado (ex.: 1, 2, 3...) e <strong>assinar</strong>,
-                            declarando que <strong>realizou o serviço</strong> e que está <strong>ciente e orientado</strong> quanto aos EPI/EPC e observações do serviço.
-                        </div>
+                    <div class="instrucao-box" style="font-size: 10px; line-height: 1.2; border: 1px solid #333; padding: 5px; margin-bottom: 6px;">
+                        <strong>Instrução:</strong> Preencha o <strong>Nº do serviço</strong> no quadrado e <strong>assine</strong> ao lado, declarando que realizou o serviço e está ciente/orientado quanto aos EPI/EPC.
                     </div>
 
-                    <table class="table table-sm table-bordered grade-operadores" style="margin-bottom: 8px;">
+                    <table class="table table-sm table-bordered grade-operadores" style="margin-bottom: 6px; table-layout: fixed; width: 100%;">
                         <tbody>
                             {% for r in range(4) %}
                             <tr>
                                 {% for c in range(4) %}
-                                <td style="height: 50px; vertical-align: top; padding: 6px;">
-                                    <div style="display: flex; gap: 8px; align-items: flex-start;">
-                                        <div style="width: 24px; height: 24px; border: 1px solid #000;"></div>
-                                        <div style="flex: 1;">
-                                            <div style="border-bottom: 1px solid #000; height: 18px; margin-bottom: 6px;"></div>
-                                            <div style="border-bottom: 1px solid #000; height: 18px;"></div>
+                                <td style="height: 44px; vertical-align: top; padding: 4px; width: 25%;">
+                                    <div style="display: flex; gap: 5px; align-items: flex-start; height: 100%;">
+                                        <div class="sq-box" style="width: 22px; height: 22px; border: 1.5px solid #000; flex-shrink: 0;"></div>
+                                        <div style="flex: 1; display: flex; flex-direction: column; justify-content: flex-end; height: 100%;">
+                                            <div class="sign-line" style="border-bottom: 1px solid #555; height: 14px; margin-bottom: 4px;"></div>
+                                            <div class="sign-line" style="border-bottom: 1px solid #555; height: 14px;"></div>
                                         </div>
                                     </div>
                                 </td>
