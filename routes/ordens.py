@@ -218,10 +218,10 @@ def nova_ordem_servico():
 @ordens.route('/ordens-servico/imprimir/<int:ordem_id>')
 def imprimir_ordem_servico(ordem_id):
     """Rota para imprimir uma ordem de serviço"""
-    from sqlalchemy.orm import joinedload
+    from sqlalchemy.orm import joinedload, subqueryload
     # Eager load para evitar lazy loading de protecoes e trabalhos
     ordem = OrdemServico.query.options(
-        joinedload(OrdemServico.pedidos).joinedload(PedidoOrdemServico.pedido).joinedload(Pedido.item).joinedload(Item.trabalhos).joinedload(ItemTrabalho.trabalho).joinedload(Trabalho.trabalhos_protecao).joinedload(TrabalhoProtecao.protecao)
+        joinedload(OrdemServico.pedidos).joinedload(PedidoOrdemServico.pedido).joinedload(Pedido.item).joinedload(Item.trabalhos).joinedload(ItemTrabalho.trabalho).subqueryload(Trabalho.trabalhos_protecao).joinedload(TrabalhoProtecao.protecao)
     ).get_or_404(ordem_id)
     deve_reconciliar = request.args.get('reconciliar') == '1'
     if not deve_reconciliar:
