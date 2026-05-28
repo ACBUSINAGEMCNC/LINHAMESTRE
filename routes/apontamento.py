@@ -2630,6 +2630,21 @@ def registrar_apontamento():
         
         db.session.add(apontamento)
         db.session.commit()
+
+        try:
+            from notificacoes.eventos import registrar_evento_apontamento
+            registrar_evento_apontamento(
+                tipo_acao,
+                usuario=usuario,
+                item=item,
+                trabalho=trabalho,
+                ordem=ordem,
+                lista=status_os.status_atual,
+                quantidade=apontamento.quantidade,
+                motivo=apontamento.motivo_parada,
+            )
+        except Exception as e:
+            logger.warning(f"Falha ao registrar evento de notificacao do apontamento: {e}")
         
         # Preparar mensagem de sucesso
         acao_nome = {

@@ -1142,6 +1142,12 @@ def create_app():
     app.register_blueprint(diagnostico_bp)
     app.register_blueprint(dashboard_apontamentos_bp)
 
+    try:
+        from notificacoes import init_notificacoes
+        init_notificacoes(app)
+    except Exception as e:
+        app.logger.warning("Falha ao inicializar modulo de notificacoes: %s", e)
+
     # Guard global de autenticação/autorização
     @app.before_request
     def _global_auth_guard():

@@ -597,6 +597,18 @@ def enviar_para_lista():
             card.data_atualizacao = local_now_naive()
     
     db.session.commit()
+
+    try:
+        from notificacoes.eventos import registrar_evento
+        registrar_evento(
+            'kanban_movido',
+            os=ordem.numero,
+            item=(ordem.pedidos[0].pedido.item.codigo_acb if ordem.pedidos and ordem.pedidos[0].pedido and ordem.pedidos[0].pedido.item else '-'),
+            lista_origem=old_status,
+            lista_destino=lista_destino,
+        )
+    except Exception as e:
+        current_app.logger.warning(f"Falha ao registrar evento de notificacao do Kanban: {e}")
     
     return jsonify({
         'success': True, 
