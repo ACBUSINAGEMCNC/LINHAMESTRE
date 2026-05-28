@@ -252,13 +252,15 @@
                                         <input type="number" class="form-control form-control-sm" id="tempo_setup_min" min="0" step="0.01">
                                     </div>
                                 </div>
+                                <div class="col-md-2">
+                                    <label for="tempo_peca" class="form-label">Tempo Peça (seg)</label>
+                                    <input type="number" class="form-control form-control-sm" id="tempo_peca" min="0">
+                                    <input type="number" class="form-control form-control-sm mt-1" id="tempo_peca_min" min="0" step="0.01" placeholder="min">
+                                </div>
                                 <div class="col-md-3">
-                                    <label for="tempo_peca" class="form-label">Tempo por Peça (segundos)</label>
-                                    <input type="number" class="form-control" id="tempo_peca" min="0">
-                                    <div class="mt-1">
-                                        <label for="tempo_peca_min" class="form-label small mb-0">Tempo por Peça (minutos)</label>
-                                        <input type="number" class="form-control form-control-sm" id="tempo_peca_min" min="0" step="0.01">
-                                    </div>
+                                    <label for="trabalho_obs" class="form-label">OBS (edição)</label>
+                                    <input type="text" class="form-control" id="trabalho_obs" placeholder="OBS do trabalho">
+                                    <small class="text-muted">Padrão: <span id="obs_padrao"></span></small>
                                 </div>
                                 <div class="col-md-2">
                                     <label class="form-label d-block">&nbsp;</label>
@@ -844,7 +846,8 @@
                 }
                 
                 const trabalhoNome = $('#trabalho_select option:selected').data('nome');
-                const trabalhoObs = $('#trabalho_select option:selected').data('obs') || '';
+                // OBS pode ser editada no campo (ou usa o padrão do tipo de trabalho)
+                const trabalhoObs = $('#trabalho_obs').val() || '';
                 const defaults = trabalhoProtecoesMap[String(trabalhoId)] || trabalhoProtecoesMap[parseInt(trabalhoId, 10)] || [];
                 const protecoes = (defaults || []).map(v => parseInt(v, 10)).filter(v => Number.isFinite(v));
                 const tempoSetupRaw = $('#tempo_setup').val();
@@ -894,6 +897,8 @@
                 $('#tempo_setup').val('');
                 $('#tempo_peca').val('');
                 $('#tempo_setup_min').val('');
+                $('#trabalho_obs').val('');
+                $('#obs_padrao').text('');
                 $('#tempo_peca_min').val('');
             });
             
@@ -970,6 +975,9 @@
                                 </div>
                             </td>
                             <td>
+                                <button type="button" class="btn btn-sm btn-primary btn-editar-trabalho" data-index="${index}" title="Editar OBS">
+                                    <i class="fas fa-edit"></i>
+                                </button>
                                 <button type="button" class="btn btn-sm btn-danger btn-remover-trabalho" data-index="${index}">
                                     <i class="fas fa-trash"></i>
                                 </button>
@@ -1095,6 +1103,26 @@
                 const index = $(this).data('index');
                 trabalhos.splice(index, 1);
                 atualizarTabelaTrabalhos();
+            });
+
+            // Editar OBS do trabalho
+            $(document).on('click', '.btn-editar-trabalho', function() {
+                const index = $(this).data('index');
+                const trabalho = trabalhos[index];
+                if (!trabalho) return;
+                
+                const novaObs = prompt('Editar OBS do trabalho:', trabalho.obs || '');
+                if (novaObs !== null) { // null = cancelado
+                    trabalho.obs = novaObs;
+                    atualizarTabelaTrabalhos();
+                }
+            });
+
+            // Auto-preencher OBS quando seleciona trabalho
+            $('#trabalho_select').on('change', function() {
+                const obsPadrao = $(this).find('option:selected').data('obs') || '';
+                $('#trabalho_obs').val(obsPadrao);
+                $('#obs_padrao').text(obsPadrao || '(vazio)');
             });
             
             // Habilitar/desabilitar campos de têmpera

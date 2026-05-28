@@ -185,6 +185,7 @@ class ItemTrabalho(db.Model):
     tempo_setup = db.Column(db.Integer)  # em segundos
     tempo_peca = db.Column(db.Integer)  # em segundos
     tempo_real = db.Column(db.Integer, nullable=True)  # tempo real registrado na produção
+    obs = db.Column(db.Text, nullable=True)  # OBS específica para este item/trabalho
     trabalho = relationship('Trabalho', backref='itens_trabalho', lazy=True)
     
     def __repr__(self):

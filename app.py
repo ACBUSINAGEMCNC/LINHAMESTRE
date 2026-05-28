@@ -282,9 +282,18 @@ def verificar_inicializar_banco():
             if migrate_trabalho_obs_pg():
                 logger.info("Coluna trabalho.obs verificada/adicionada com sucesso (Supabase).")
             else:
-                logger.warning("Falha ao verificar/adicionar coluna trabalho.obs (Supabase).")
+                logger.warning("Falha ao migrar coluna trabalho.obs.")
         except Exception as col_err:
             logger.warning(f"Erro ao migrar coluna trabalho.obs: {str(col_err)}")
+
+        try:
+            from migrations.add_item_trabalho_obs import run_migration as migrate_item_trabalho_obs
+            if migrate_item_trabalho_obs():
+                logger.info("Coluna item_trabalho.obs verificada/adicionada com sucesso (Supabase).")
+            else:
+                logger.warning("Falha ao verificar/adicionar coluna item_trabalho.obs (Supabase).")
+        except Exception as col_err:
+            logger.warning(f"Erro ao migrar coluna item_trabalho.obs: {str(col_err)}")
 
         try:
             from migrations.alter_pedido_nome_item_length import migrate_postgres as migrate_pedido_nome_item_len

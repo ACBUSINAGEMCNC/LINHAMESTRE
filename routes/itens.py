@@ -1105,7 +1105,8 @@ def novo_item():
                         item_id=item.id,
                         trabalho_id=trab['id'],
                         tempo_setup=int(trab.get('tempo_setup', 0) or 0),
-                        tempo_peca=int(trab.get('tempo_peca', 0) or 0)
+                        tempo_peca=int(trab.get('tempo_peca', 0) or 0),
+                        obs=trab.get('obs', '') or ''
                     )
                     db.session.add(item_trabalho)
                     db.session.flush()
@@ -1203,7 +1204,7 @@ def editar_item(item_id):
         item_trabalhos.append({
             'id': it.trabalho_id,
             'nome': trabalho.nome,
-            'obs': (trabalho.obs if trabalho else ''),
+            'obs': (it.obs or trabalho.obs if trabalho else ''),  # Prioriza obs do ItemTrabalho, senão usa do Trabalho
             'tempo_setup': it.tempo_setup,
             'tempo_peca': it.tempo_peca,
             'protecoes': protecoes_ids
@@ -1328,7 +1329,8 @@ def editar_item(item_id):
                         item_id=item.id,
                         trabalho_id=trab['id'],
                         tempo_setup=int(trab.get('tempo_setup', 0) or 0),
-                        tempo_peca=int(trab.get('tempo_peca', 0) or 0)
+                        tempo_peca=int(trab.get('tempo_peca', 0) or 0),
+                        obs=trab.get('obs', '') or ''
                     )
                     db.session.add(item_trabalho)
                     db.session.flush()
