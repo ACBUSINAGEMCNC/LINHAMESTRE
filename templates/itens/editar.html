@@ -848,8 +848,16 @@
                 const trabalhoNome = $('#trabalho_select option:selected').data('nome');
                 // OBS pode ser editada no campo (ou usa o padrão do tipo de trabalho)
                 const trabalhoObs = $('#trabalho_obs').val() || '';
-                const defaults = trabalhoProtecoesMap[String(trabalhoId)] || trabalhoProtecoesMap[parseInt(trabalhoId, 10)] || [];
-                const protecoes = (defaults || []).map(v => parseInt(v, 10)).filter(v => Number.isFinite(v));
+                
+                // Pegar proteções MARCADAS nos checkboxes
+                const protecoes = [];
+                $('input[name="protecoes"]:checked').each(function() {
+                    const pid = parseInt($(this).val(), 10);
+                    if (Number.isFinite(pid)) {
+                        protecoes.push(pid);
+                    }
+                });
+                
                 const tempoSetupRaw = $('#tempo_setup').val();
                 const tempoSetupMinRaw = $('#tempo_setup_min').val();
                 const tempoPecaRaw = $('#tempo_peca').val();
