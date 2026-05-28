@@ -748,17 +748,11 @@
                 {% if item_base and item_base.trabalhos %}
                 <div class="trabalho-info mt-3">
                     <h5>Controle de EPI/EPC por Serviço</h5>
-                    <div style="color: purple; font-size: 8px;">DEBUG MAP: {{ trabalho_protecoes_map }}</div>
 
                     <div class="servicos-lista" style="border: 1px solid #333; padding: 8px; margin-bottom: 8px;">
                         {% for item_trabalho in item_base.trabalhos %}
                             {# Buscar proteções do mapa carregado no backend #}
-                            {% set protecoes_list = [] %}
-                            {% if item_trabalho.trabalho_id and trabalho_protecoes_map.get(item_trabalho.trabalho_id) %}
-                                {% for prot in trabalho_protecoes_map[item_trabalho.trabalho_id] %}
-                                    {% set protecoes_list = protecoes_list + [prot.tipo ~ ' - ' ~ prot.nome] %}
-                                {% endfor %}
-                            {% endif %}
+                            {% set protecoes_trabalho = trabalho_protecoes_map.get(item_trabalho.trabalho_id, []) %}
 
                             {# OBS: prioriza item_trabalho.obs, senão trabalho.obs #}
                             {% set obs_final = item_trabalho.obs if item_trabalho.obs else (item_trabalho.trabalho.obs if item_trabalho.trabalho else '') %}
@@ -768,7 +762,13 @@
                                     {{ loop.index }} - {{ item_trabalho.trabalho.nome if item_trabalho.trabalho else 'Sem nome' }}
                                 </div>
                                 <div class="servico-detalhe" style="font-size: 10px; line-height: 1.15;">
-                                    <div><strong>EPI/EPC:</strong> {{ protecoes_list|join(', ') if protecoes_list else '-' }}</div>
+                                    <div><strong>EPI/EPC:</strong>
+                                        {% if protecoes_trabalho %}
+                                            {% for prot in protecoes_trabalho %}{{ prot.tipo }} - {{ prot.nome }}{% if not loop.last %}, {% endif %}{% endfor %}
+                                        {% else %}
+                                            -
+                                        {% endif %}
+                                    </div>
                                     <div><strong>OBS:</strong> {{ obs_final }}</div>
                                 </div>
                             </div>
