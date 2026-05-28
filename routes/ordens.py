@@ -1,5 +1,5 @@
 from flask import Blueprint, render_template, request, redirect, url_for, flash, jsonify, send_file
-from models import db, OrdemServico, Pedido, PedidoOrdemServico, Item, ItemTrabalhoProtecao, Protecao
+from models import db, OrdemServico, Pedido, PedidoOrdemServico, Item, ItemTrabalho, ItemTrabalhoProtecao, Protecao
 from utils import validate_form_data, generate_next_code
 from datetime import datetime
 from sqlalchemy.exc import IntegrityError
@@ -221,8 +221,8 @@ def imprimir_ordem_servico(ordem_id):
     from sqlalchemy.orm import joinedload
     # Eager load para evitar lazy loading de protecoes e trabalhos
     ordem = OrdemServico.query.options(
-        joinedload('pedidos_os').joinedload('pedido').joinedload('item').joinedload('trabalhos').joinedload('protecoes_rel').joinedload('protecao'),
-        joinedload('pedidos_os').joinedload('pedido').joinedload('item').joinedload('trabalhos').joinedload('trabalho')
+        joinedload(OrdemServico.pedidos_os).joinedload(PedidoOrdemServico.pedido).joinedload(Pedido.item).joinedload(Item.trabalhos).joinedload(ItemTrabalho.protecoes_rel).joinedload(ItemTrabalhoProtecao.protecao),
+        joinedload(OrdemServico.pedidos_os).joinedload(PedidoOrdemServico.pedido).joinedload(Pedido.item).joinedload(Item.trabalhos).joinedload(ItemTrabalho.trabalho)
     ).get_or_404(ordem_id)
     deve_reconciliar = request.args.get('reconciliar') == '1'
     if not deve_reconciliar:
