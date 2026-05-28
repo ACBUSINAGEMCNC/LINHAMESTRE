@@ -221,8 +221,8 @@ def imprimir_ordem_servico(ordem_id):
     from sqlalchemy.orm import joinedload
     # Eager load para evitar lazy loading de protecoes e trabalhos
     ordem = OrdemServico.query.options(
-        joinedload(OrdemServico.pedidos_os).joinedload(PedidoOrdemServico.pedido).joinedload(Pedido.item).joinedload(Item.trabalhos).joinedload(ItemTrabalho.protecoes_rel).joinedload(ItemTrabalhoProtecao.protecao),
-        joinedload(OrdemServico.pedidos_os).joinedload(PedidoOrdemServico.pedido).joinedload(Pedido.item).joinedload(Item.trabalhos).joinedload(ItemTrabalho.trabalho)
+        joinedload(OrdemServico.pedidos).joinedload(PedidoOrdemServico.pedido).joinedload(Pedido.item).joinedload(Item.trabalhos).joinedload(ItemTrabalho.protecoes_rel).joinedload(ItemTrabalhoProtecao.protecao),
+        joinedload(OrdemServico.pedidos).joinedload(PedidoOrdemServico.pedido).joinedload(Pedido.item).joinedload(Item.trabalhos).joinedload(ItemTrabalho.trabalho)
     ).get_or_404(ordem_id)
     deve_reconciliar = request.args.get('reconciliar') == '1'
     if not deve_reconciliar:
