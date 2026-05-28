@@ -936,13 +936,16 @@
             try {
                 const tpText = document.getElementById('trabalho_protecoes_data')?.textContent || '{}';
                 trabalhoProtecoesMap = JSON.parse(tpText);
+                console.log('[DEBUG] trabalhoProtecoesMap carregado:', trabalhoProtecoesMap);
             } catch (e) {
+                console.error('[DEBUG] Erro ao carregar trabalhoProtecoesMap:', e);
                 trabalhoProtecoesMap = {};
             }
 
             // Auto-preencher OBS e EPI/EPC quando seleciona trabalho (DEPOIS de carregar o mapa)
             $('#trabalho_select').on('change', function() {
                 const trabalhoId = $(this).val();
+                console.log('[DEBUG] Trabalho selecionado ID:', trabalhoId);
                 const obsPadrao = $(this).find('option:selected').data('obs') || '';
                 $('#trabalho_obs').val(obsPadrao);
                 $('#obs_padrao').text(obsPadrao || '(vazio)');
@@ -951,7 +954,9 @@
                 $('input[name="protecoes"]').prop('checked', false); // Limpa primeiro
                 if (trabalhoId) {
                     const defaults = trabalhoProtecoesMap[String(trabalhoId)] || trabalhoProtecoesMap[parseInt(trabalhoId, 10)] || [];
+                    console.log('[DEBUG] Protecoes padrão para trabalho', trabalhoId, ':', defaults);
                     defaults.forEach(function(pid) {
+                        console.log('[DEBUG] Marcando proteção ID:', pid, 'elemento:', $('#protecao_' + pid).length);
                         $('#protecao_' + pid).prop('checked', true);
                     });
                 }
