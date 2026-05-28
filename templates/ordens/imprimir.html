@@ -751,22 +751,12 @@
 
                     <div class="servicos-lista" style="border: 1px solid #333; padding: 8px; margin-bottom: 8px;">
                         {% for item_trabalho in item_base.trabalhos %}
-                            {# Buscar proteções do ItemTrabalho (protecoes_rel) ou fallback para TrabalhoProtecao #}
+                            {# Buscar proteções do Trabalho (tipo de trabalho cadastrado) #}
                             {% set protecoes_list = [] %}
-                            {% if item_trabalho.protecoes_rel %}
-                                {% for tp in item_trabalho.protecoes_rel %}
+                            {% if item_trabalho.trabalho and item_trabalho.trabalho.trabalhos_protecao %}
+                                {% for tp in item_trabalho.trabalho.trabalhos_protecao %}
                                     {% if tp and tp.protecao %}
                                         {% set protecoes_list = protecoes_list + [tp.protecao.tipo ~ ' - ' ~ tp.protecao.nome] %}
-                                    {% endif %}
-                                {% endfor %}
-                            {% else %}
-                                {# Fallback: buscar do Trabalho diretamente #}
-                                {% for tp in (item_trabalho.trabalho.trabalhos_protecao or []) %}
-                                    {% if tp %}
-                                        {% set prot = tp.protecao if tp.protecao else Protecao.query.get(tp.protecao_id) %}
-                                        {% if prot %}
-                                            {% set protecoes_list = protecoes_list + [prot.tipo ~ ' - ' ~ prot.nome] %}
-                                        {% endif %}
                                     {% endif %}
                                 {% endfor %}
                             {% endif %}
