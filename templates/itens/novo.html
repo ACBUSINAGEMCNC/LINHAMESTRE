@@ -822,23 +822,6 @@
                 $('#material_quantidade').val('1');
             });
             
-            // Auto-preencher OBS e EPI/EPC quando seleciona trabalho
-            $('#trabalho_select').on('change', function() {
-                const trabalhoId = $(this).val();
-                const obsPadrao = $(this).find('option:selected').data('obs') || '';
-                $('#trabalho_obs').val(obsPadrao);
-                $('#obs_padrao').text(obsPadrao || '(vazio)');
-
-                // Marcar checkboxes de proteções (EPI/EPC) do tipo de trabalho
-                $('input[name="protecoes"]').prop('checked', false); // Limpa primeiro
-                if (trabalhoId) {
-                    const defaults = trabalhoProtecoesMap[String(trabalhoId)] || trabalhoProtecoesMap[parseInt(trabalhoId, 10)] || [];
-                    defaults.forEach(function(pid) {
-                        $('#protecao_' + pid).prop('checked', true);
-                    });
-                }
-            });
-
             // Adicionar trabalho à tabela
             $('#btn_adicionar_trabalho').click(function() {
                 const trabalhoId = $('#trabalho_select').val();
@@ -956,6 +939,23 @@
             } catch (e) {
                 trabalhoProtecoesMap = {};
             }
+
+            // Auto-preencher OBS e EPI/EPC quando seleciona trabalho (DEPOIS de carregar o mapa)
+            $('#trabalho_select').on('change', function() {
+                const trabalhoId = $(this).val();
+                const obsPadrao = $(this).find('option:selected').data('obs') || '';
+                $('#trabalho_obs').val(obsPadrao);
+                $('#obs_padrao').text(obsPadrao || '(vazio)');
+
+                // Marcar checkboxes de proteções (EPI/EPC) do tipo de trabalho
+                $('input[name="protecoes"]').prop('checked', false); // Limpa primeiro
+                if (trabalhoId) {
+                    const defaults = trabalhoProtecoesMap[String(trabalhoId)] || trabalhoProtecoesMap[parseInt(trabalhoId, 10)] || [];
+                    defaults.forEach(function(pid) {
+                        $('#protecao_' + pid).prop('checked', true);
+                    });
+                }
+            });
 
             // Mapa id -> "EPI - Nome" para renderização na tabela
             try {

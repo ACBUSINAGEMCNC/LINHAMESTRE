@@ -999,6 +999,23 @@
                 trabalhoProtecoesMap = {};
             }
 
+            // Auto-preencher OBS e EPI/EPC quando seleciona trabalho (DEPOIS de carregar o mapa)
+            $('#trabalho_select').on('change', function() {
+                const trabalhoId = $(this).val();
+                const obsPadrao = $(this).find('option:selected').data('obs') || '';
+                $('#trabalho_obs').val(obsPadrao);
+                $('#obs_padrao').text(obsPadrao || '(vazio)');
+
+                // Marcar checkboxes de proteções (EPI/EPC) do tipo de trabalho
+                $('input[name="protecoes"]').prop('checked', false); // Limpa primeiro
+                if (trabalhoId) {
+                    const defaults = trabalhoProtecoesMap[String(trabalhoId)] || trabalhoProtecoesMap[parseInt(trabalhoId, 10)] || [];
+                    defaults.forEach(function(pid) {
+                        $('#protecao_' + pid).prop('checked', true);
+                    });
+                }
+            });
+
             // Mapa id -> "EPI - Nome" para renderização na tabela
             try {
                 const protText = document.getElementById('protecoes_data')?.textContent || '[]';
@@ -1118,23 +1135,6 @@
                 }
             });
 
-            // Auto-preencher OBS e EPI/EPC quando seleciona trabalho
-            $('#trabalho_select').on('change', function() {
-                const trabalhoId = $(this).val();
-                const obsPadrao = $(this).find('option:selected').data('obs') || '';
-                $('#trabalho_obs').val(obsPadrao);
-                $('#obs_padrao').text(obsPadrao || '(vazio)');
-
-                // Marcar checkboxes de proteções (EPI/EPC) do tipo de trabalho
-                $('input[name="protecoes"]').prop('checked', false); // Limpa primeiro
-                if (trabalhoId) {
-                    const defaults = trabalhoProtecoesMap[String(trabalhoId)] || trabalhoProtecoesMap[parseInt(trabalhoId, 10)] || [];
-                    defaults.forEach(function(pid) {
-                        $('#protecao_' + pid).prop('checked', true);
-                    });
-                }
-            });
-            
             // Habilitar/desabilitar campos de têmpera
             $('#tempera').change(function() {
                 $('#tipo_tempera').prop('disabled', !this.checked);
