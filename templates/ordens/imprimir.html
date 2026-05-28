@@ -758,8 +758,10 @@
                             
                             {# Buscar proteções do Trabalho (tipo de trabalho cadastrado) #}
                             {% set protecoes_list = [] %}
+                            {% set debug_protecoes = [] %}
                             {% if item_trabalho.trabalho and item_trabalho.trabalho.trabalhos_protecao %}
                                 {% for tp in item_trabalho.trabalho.trabalhos_protecao %}
+                                    {% set debug_protecoes = debug_protecoes + ['TP_ID:' ~ tp.id ~ ',PROT_ID:' ~ (tp.protecao_id if tp.protecao_id else 'None') ~ ',PROT_OBJ:' ~ ('OK' if tp.protecao else 'None')] %}
                                     {% if tp and tp.protecao %}
                                         {% set protecoes_list = protecoes_list + [tp.protecao.tipo ~ ' - ' ~ tp.protecao.nome] %}
                                     {% endif %}
@@ -777,6 +779,7 @@
                                     <div><strong>EPI/EPC:</strong> {{ protecoes_list|join(', ') if protecoes_list else '-' }}</div>
                                     <div><strong>OBS:</strong> {{ obs_final }}</div>
                                     <div style="color: red; font-size: 8px;">DEBUG: {{ debug_info }}</div>
+                                    <div style="color: blue; font-size: 8px;">DEBUG PROT: {{ debug_protecoes|join(' | ') if debug_protecoes else 'Nenhuma' }}</div>
                                 </div>
                             </div>
                         {% endfor %}
