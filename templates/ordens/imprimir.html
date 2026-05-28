@@ -751,6 +751,11 @@
 
                     <div class="servicos-lista" style="border: 1px solid #333; padding: 8px; margin-bottom: 8px;">
                         {% for item_trabalho in item_base.trabalhos %}
+                            {# DEBUG #}
+                            {% set debug_info = 'Trabalho ID: ' ~ (item_trabalho.trabalho_id if item_trabalho.trabalho_id else 'None') %}
+                            {% set debug_info = debug_info ~ ' | Trabalho obj: ' ~ ('OK' if item_trabalho.trabalho else 'None') %}
+                            {% set debug_info = debug_info ~ ' | trabalhos_protecao: ' ~ (item_trabalho.trabalho.trabalhos_protecao|length if item_trabalho.trabalho and item_trabalho.trabalho.trabalhos_protecao else '0') %}
+                            
                             {# Buscar proteções do Trabalho (tipo de trabalho cadastrado) #}
                             {% set protecoes_list = [] %}
                             {% if item_trabalho.trabalho and item_trabalho.trabalho.trabalhos_protecao %}
@@ -771,6 +776,7 @@
                                 <div class="servico-detalhe" style="font-size: 10px; line-height: 1.15;">
                                     <div><strong>EPI/EPC:</strong> {{ protecoes_list|join(', ') if protecoes_list else '-' }}</div>
                                     <div><strong>OBS:</strong> {{ obs_final }}</div>
+                                    <div style="color: red; font-size: 8px;">DEBUG: {{ debug_info }}</div>
                                 </div>
                             </div>
                         {% endfor %}
