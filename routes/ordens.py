@@ -245,6 +245,19 @@ def imprimir_ordem_servico(ordem_id):
             db.session.rollback()
             if request.args.get('reconciliar') == '1':
                 flash(f'Falha ao reconciliar OS: {str(e)}', 'danger')
+    # Carregar proteções manualmente para cada trabalho
+    trabalho_protecoes_map = {}
+    for pedido_os in ordem.pedidos:
+        if pedido_os.pedido and pedido_os.pedido.item:
+            for item_trabalho in pedido_os.pedido.item.trabalhos:
+                if item_trabalho.trabalho_id and item_trabalho.trabalho_id not in trabalho_protecoes_map:
+                    protecoes = db.session.query(TrabalhoProtecao, Protecao).join(
+                        Protecao, TrabalhoProtecao.protecao_id == Protecao.id
+                    ).filter(TrabalhoProtecao.trabalho_id == item_trabalho.trabalho_id).all()
+                    trabalho_protecoes_map[item_trabalho.trabalho_id] = [
+                        {'tipo': p.tipo, 'nome': p.nome} for tp, p in protecoes
+                    ]
+    
     # Modo bonito preserva o layout de tela e cores na impressão
     modo_bonito = request.args.get('bonito') == '1' or request.args.get('modo') == 'bonito'
     return render_template(
@@ -254,6 +267,7 @@ def imprimir_ordem_servico(ordem_id):
         Pedido=Pedido,
         ItemTrabalhoProtecao=ItemTrabalhoProtecao,
         Protecao=Protecao,
+        trabalho_protecoes_map=trabalho_protecoes_map,
         modo_bonito=modo_bonito,
     )
 

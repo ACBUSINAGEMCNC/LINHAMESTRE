@@ -751,20 +751,11 @@
 
                     <div class="servicos-lista" style="border: 1px solid #333; padding: 8px; margin-bottom: 8px;">
                         {% for item_trabalho in item_base.trabalhos %}
-                            {# DEBUG #}
-                            {% set debug_info = 'Trabalho ID: ' ~ (item_trabalho.trabalho_id if item_trabalho.trabalho_id else 'None') %}
-                            {% set debug_info = debug_info ~ ' | Trabalho obj: ' ~ ('OK' if item_trabalho.trabalho else 'None') %}
-                            {% set debug_info = debug_info ~ ' | trabalhos_protecao: ' ~ (item_trabalho.trabalho.trabalhos_protecao|length if item_trabalho.trabalho and item_trabalho.trabalho.trabalhos_protecao else '0') %}
-                            
-                            {# Buscar proteções do Trabalho (tipo de trabalho cadastrado) #}
+                            {# Buscar proteções do mapa carregado no backend #}
                             {% set protecoes_list = [] %}
-                            {% set debug_protecoes = [] %}
-                            {% if item_trabalho.trabalho and item_trabalho.trabalho.trabalhos_protecao %}
-                                {% for tp in item_trabalho.trabalho.trabalhos_protecao %}
-                                    {% set debug_protecoes = debug_protecoes + ['TP_ID:' ~ tp.id ~ ',PROT_ID:' ~ (tp.protecao_id if tp.protecao_id else 'None') ~ ',PROT_OBJ:' ~ ('OK' if tp.protecao else 'None')] %}
-                                    {% if tp and tp.protecao %}
-                                        {% set protecoes_list = protecoes_list + [tp.protecao.tipo ~ ' - ' ~ tp.protecao.nome] %}
-                                    {% endif %}
+                            {% if item_trabalho.trabalho_id and trabalho_protecoes_map.get(item_trabalho.trabalho_id) %}
+                                {% for prot in trabalho_protecoes_map[item_trabalho.trabalho_id] %}
+                                    {% set protecoes_list = protecoes_list + [prot.tipo ~ ' - ' ~ prot.nome] %}
                                 {% endfor %}
                             {% endif %}
 
@@ -778,8 +769,6 @@
                                 <div class="servico-detalhe" style="font-size: 10px; line-height: 1.15;">
                                     <div><strong>EPI/EPC:</strong> {{ protecoes_list|join(', ') if protecoes_list else '-' }}</div>
                                     <div><strong>OBS:</strong> {{ obs_final }}</div>
-                                    <div style="color: red; font-size: 8px;">DEBUG: {{ debug_info }}</div>
-                                    <div style="color: blue; font-size: 8px;">DEBUG PROT: {{ debug_protecoes|join(' | ') if debug_protecoes else 'Nenhuma' }}</div>
                                 </div>
                             </div>
                         {% endfor %}
