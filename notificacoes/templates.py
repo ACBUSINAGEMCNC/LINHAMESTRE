@@ -86,14 +86,20 @@ def mensagem_servico_parado(dados):
 
 
 def _mensagem_operacao(titulo, dados):
-    return (
+    msg = (
         f'{titulo}\n\n'
         f"👤 Operador: {dados.get('operador', '-')}\n"
         f"📦 Item: {dados.get('item', '-')}\n"
-        f"🛠 Serviço: {dados.get('servico', '-')}\n"
+        f"🛠️ Serviço: {dados.get('servico', '-')}\n"
         f"📋 Lista: {dados.get('lista', '-')}\n"
-        f"⏰ Horário: {_hora(dados.get('horario'))}"
     )
+    
+    quantidade = dados.get('quantidade')
+    if quantidade is not None and quantidade > 0:
+        msg += f"🔢 Quantidade: {quantidade} peças\n"
+    
+    msg += f"⏰ Horário: {_hora(dados.get('horario'))}"
+    return msg
 
 
 def _mensagem_alerta(titulo, dados):

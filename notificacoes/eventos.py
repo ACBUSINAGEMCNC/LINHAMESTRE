@@ -64,7 +64,7 @@ def registrar_evento_apontamento(tipo_acao, usuario=None, item=None, trabalho=No
     return registrar_evento(
         tipo,
         operador=getattr(usuario, 'nome', None) or getattr(usuario, 'codigo_operador', None) or '-',
-        item=getattr(item, 'codigo_acb', None) or getattr(item, 'nome', None) or '-',
+        item=getattr(item, 'nome', None) or getattr(item, 'codigo_acb', None) or '-',
         servico=getattr(trabalho, 'nome', None) or '-',
         os=getattr(ordem, 'numero', None) or '-',
         lista=lista or getattr(ordem, 'status', None) or '-',
