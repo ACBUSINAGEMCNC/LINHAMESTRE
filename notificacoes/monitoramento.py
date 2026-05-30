@@ -35,6 +35,26 @@ def monitorar_producao():
             }, status='ignorado')
             continue
         
+        # VERIFICAÇÃO CRÍTICA: Confirmar que este serviço está REALMENTE em setup agora
+        # Verificar se não há produção ou pausa mais recente para o mesmo OS/Item/Trabalho
+        apontamento_mais_recente = ApontamentoProducao.query.filter(
+            ApontamentoProducao.ordem_servico_id == ap.ordem_servico_id,
+            ApontamentoProducao.item_id == ap.item_id,
+            ApontamentoProducao.trabalho_id == ap.trabalho_id,
+            ApontamentoProducao.data_hora > ap.data_hora,
+            ApontamentoProducao.tipo_acao.in_(['inicio_producao', 'pausa', 'stop'])
+        ).first()
+        
+        if apontamento_mais_recente:
+            setups_ignorados += 1
+            log_evento('monitoramento_setup_ignorado', {
+                'id': ap.id,
+                'motivo': 'serviço não está mais em setup (já iniciou produção/pausa/stop)',
+                'acao_posterior': apontamento_mais_recente.tipo_acao,
+                'data_posterior': str(apontamento_mais_recente.data_hora)
+            }, status='ignorado')
+            continue
+        
         minutos = int((agora - ap.data_hora).total_seconds() // 60) if ap.data_hora else 0
         
         # Verificar se minutos é negativo (horário futuro - bug de timezone)
