@@ -11,10 +11,14 @@ def monitorar_producao():
 
     agora = datetime.now()
     
-    # IMPORTANTE: Buscar APENAS setups que estão ABERTOS (data_fim = NULL)
+    # Limite de tempo: apenas setups das últimas 12 horas
+    limite_tempo = agora - timedelta(hours=12)
+    
+    # IMPORTANTE: Buscar APENAS setups que estão ABERTOS (data_fim = NULL) e recentes
     abertos = ApontamentoProducao.query.filter(
         ApontamentoProducao.data_fim.is_(None),
-        ApontamentoProducao.tipo_acao == 'inicio_setup'
+        ApontamentoProducao.tipo_acao == 'inicio_setup',
+        ApontamentoProducao.data_hora >= limite_tempo
     ).all()
 
     total_alertas = 0

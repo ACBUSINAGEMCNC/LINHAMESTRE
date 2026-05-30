@@ -116,21 +116,21 @@ def _calcular_metricas_stop_completo(os_id, item_id, trab_id, quantidade_final):
     # Métricas do serviço atual
     metricas_servico_atual = _calcular_metricas_stop(os_id, item_id, trab_id, quantidade_final)
     
-    # Buscar todos os trabalhos (serviços) desta OS/Item nas últimas 24h
-    limite_tempo = datetime.now() - timedelta(hours=24)
+    # Buscar TODOS os trabalhos vinculados a esta OS/Item (da tabela ItemTrabalho)
+    from models import ItemTrabalho, Trabalho
     todos_trabalhos = db.session.query(
-        ApontamentoProducao.trabalho_id,
+        ItemTrabalho.trabalho_id,
         Trabalho.nome
     ).join(
-        Trabalho, ApontamentoProducao.trabalho_id == Trabalho.id
+        Trabalho, ItemTrabalho.trabalho_id == Trabalho.id
     ).filter(
-        ApontamentoProducao.ordem_servico_id == os_id,
-        ApontamentoProducao.item_id == item_id,
-        ApontamentoProducao.data_hora >= limite_tempo
-    ).distinct().all()
+        ItemTrabalho.item_id == item_id
+    ).all()
     
     # Calcular métricas de cada serviço
+    limite_tempo = datetime.now() - timedelta(hours=24)
     outros_servicos = []
+    
     for trabalho_id_loop, trabalho_nome in todos_trabalhos:
         if trabalho_id_loop == trab_id:
             continue  # Pular o serviço atual
@@ -143,21 +143,22 @@ def _calcular_metricas_stop_completo(os_id, item_id, trab_id, quantidade_final):
             ApontamentoProducao.data_hora >= limite_tempo
         ).order_by(ApontamentoProducao.data_hora.desc()).all()
         
+        ultima_qtd = None
+        tempo_total = 0
+        
         if aps:
-            ultima_qtd = None
-            tempo_total = 0
-            
             for ap in aps:
                 if ultima_qtd is None and ap.quantidade is not None:
                     ultima_qtd = ap.quantidade
                 if ap.tempo_decorrido:
                     tempo_total += ap.tempo_decorrido // 60
-            
-            outros_servicos.append({
-                'nome': trabalho_nome,
-                'ultima_quantidade': ultima_qtd or 0,
-                'tempo_total_minutos': tempo_total
-            })
+        
+        # Adicionar serviço mesmo sem apontamento
+        outros_servicos.append({
+            'nome': trabalho_nome,
+            'ultima_quantidade': ultima_qtd or 0,
+            'tempo_total_minutos': tempo_total
+        })
     
     if metricas_servico_atual:
         metricas_servico_atual['outros_servicos'] = outros_servicos
@@ -2772,7 +2773,7 @@ def registrar_apontamento():
                 item=item,
                 trabalho=trabalho,
                 ordem=ordem,
-                lista=status_os.status_atual,
+                lista=ordem.status,  # Status do Kanban, não status_os.status_atual
                 quantidade=apontamento.quantidade,
                 motivo=apontamento.motivo_parada,
                 metricas=metricas,
