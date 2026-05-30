@@ -59,16 +59,22 @@ def processar_evento(evento):
     return resultado
 
 
-def registrar_evento_apontamento(tipo_acao, usuario=None, item=None, trabalho=None, ordem=None, lista=None, quantidade=None, motivo=None):
+def registrar_evento_apontamento(tipo_acao, usuario=None, item=None, trabalho=None, ordem=None, lista=None, quantidade=None, motivo=None, metricas=None):
     tipo = TIPO_ACAO_EVENTO.get(tipo_acao, tipo_acao)
-    return registrar_evento(
-        tipo,
-        operador=getattr(usuario, 'nome', None) or getattr(usuario, 'codigo_operador', None) or '-',
-        item=getattr(item, 'nome', None) or getattr(item, 'codigo_acb', None) or '-',
-        servico=getattr(trabalho, 'nome', None) or '-',
-        os=getattr(ordem, 'numero', None) or '-',
-        lista=lista or getattr(ordem, 'status', None) or '-',
-        quantidade=quantidade,
-        motivo=motivo,
-        horario=datetime.now(),
-    )
+    
+    dados_evento = {
+        'operador': getattr(usuario, 'nome', None) or getattr(usuario, 'codigo_operador', None) or '-',
+        'item': getattr(item, 'nome', None) or getattr(item, 'codigo_acb', None) or '-',
+        'servico': getattr(trabalho, 'nome', None) or '-',
+        'os': getattr(ordem, 'numero', None) or '-',
+        'lista': lista or getattr(ordem, 'status', None) or '-',
+        'quantidade': quantidade,
+        'motivo': motivo,
+        'horario': datetime.now(),
+    }
+    
+    # Adicionar métricas se fornecidas (para Stop)
+    if metricas:
+        dados_evento['metricas'] = metricas
+    
+    return registrar_evento(tipo, **dados_evento)

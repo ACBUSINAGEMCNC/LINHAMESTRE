@@ -1,10 +1,17 @@
 from datetime import datetime
+import pytz
 
 
 def _hora(valor=None):
     if valor is None:
         valor = datetime.now()
     try:
+        # Converter para timezone de São Paulo
+        if valor.tzinfo is None:
+            tz = pytz.timezone('America/Sao_Paulo')
+            valor = tz.localize(valor)
+        else:
+            valor = valor.astimezone(pytz.timezone('America/Sao_Paulo'))
         return valor.strftime('%H:%M')
     except Exception:
         return str(valor)
@@ -51,6 +58,9 @@ def mensagem_pausa_iniciada(dados):
 
 
 def mensagem_pausa_finalizada(dados):
+    # Stop tem métricas especiais
+    if dados.get('metricas'):
+        return _mensagem_stop_com_metricas(dados)
     return _mensagem_operacao('▶️ PAUSA FINALIZADA', dados)
 
 
@@ -99,6 +109,68 @@ def _mensagem_operacao(titulo, dados):
         msg += f"🔢 Quantidade: {quantidade} peças\n"
     
     msg += f"⏰ Horário: {_hora(dados.get('horario'))}"
+    return msg
+
+
+def _mensagem_stop_com_metricas(dados):
+    metricas = dados.get('metricas', {})
+    
+    msg = (
+        f"🛑 STOP - APONTAMENTO FINALIZADO\n\n"
+        f"👤 Operador: {dados.get('operador', '-')}\n"
+        f"📦 Item: {dados.get('item', '-')}\n"
+        f"🛠️ Serviço: {dados.get('servico', '-')}\n"
+        f"📋 Lista: {dados.get('lista', '-')}\n\n"
+        f"📊 MÉTRICAS:\n"
+    )
+    
+    # Quantidade inicial e final
+    qtd_inicial = metricas.get('quantidade_inicial', 0)
+    qtd_final = dados.get('quantidade', 0)
+    qtd_produzida = qtd_final - qtd_inicial
+    
+    if qtd_inicial > 0 or qtd_final > 0:
+        msg += f"🔢 Quantidade: {qtd_inicial} → {qtd_final} peças"
+        if qtd_produzida > 0:
+            msg += f" (+{qtd_produzida})"
+        msg += "\n"
+    
+    # Tempo total
+    tempo_total = metricas.get('tempo_total_minutos', 0)
+    if tempo_total > 0:
+        horas = tempo_total // 60
+        minutos = tempo_total % 60
+        if horas > 0:
+            msg += f"⏱️ Tempo total: {horas}h {minutos}min\n"
+        else:
+            msg += f"⏱️ Tempo total: {minutos}min\n"
+    
+    # Tempo de setup
+    tempo_setup = metricas.get('tempo_setup_minutos', 0)
+    if tempo_setup > 0:
+        horas = tempo_setup // 60
+        minutos = tempo_setup % 60
+        if horas > 0:
+            msg += f"🔧 Tempo de setup: {horas}h {minutos}min\n"
+        else:
+            msg += f"🔧 Tempo de setup: {minutos}min\n"
+    
+    # Tempo de produção
+    tempo_producao = metricas.get('tempo_producao_minutos', 0)
+    if tempo_producao > 0:
+        horas = tempo_producao // 60
+        minutos = tempo_producao % 60
+        if horas > 0:
+            msg += f"⚙️ Tempo de produção: {horas}h {minutos}min\n"
+        else:
+            msg += f"⚙️ Tempo de produção: {minutos}min\n"
+    
+    msg += f"\n⏰ Finalizado: {_hora(dados.get('horario'))}"
+    
+    motivo = dados.get('motivo')
+    if motivo:
+        msg += f"\n💬 Motivo: {motivo}"
+    
     return msg
 
 
