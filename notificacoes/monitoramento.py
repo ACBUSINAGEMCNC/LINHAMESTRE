@@ -21,7 +21,18 @@ def monitorar_producao():
         
         if ap.tipo_acao == 'inicio_setup' and minutos >= ConfiguracaoNotificacoes.ALERTA_SETUP_LONGO_MINUTOS:
             chave_alerta = f"setup_{ap.id}"
-            if chave_alerta not in _alertas_enviados:
+            ultimo_envio = _alertas_enviados.get(chave_alerta)
+            
+            # Enviar se nunca foi enviado OU se já passaram 10 minutos desde o último envio
+            deve_enviar = False
+            if ultimo_envio is None:
+                deve_enviar = True
+            else:
+                minutos_desde_ultimo = int((agora - ultimo_envio).total_seconds() // 60)
+                if minutos_desde_ultimo >= 10:
+                    deve_enviar = True
+            
+            if deve_enviar:
                 _alertar_setup_longo(ap, minutos)
                 _alertas_enviados[chave_alerta] = agora
                 total_alertas += 1

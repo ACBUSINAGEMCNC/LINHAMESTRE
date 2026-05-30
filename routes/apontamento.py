@@ -64,49 +64,40 @@ def _calcular_metricas_stop(os_id, item_id, trab_id, quantidade_final):
     """
     Calcula métricas para o Stop: quantidade inicial/final, tempo total, tempo de setup, tempo de produção.
     """
-    from datetime import datetime
+    from datetime import datetime, timedelta
     
-    # Buscar todos os apontamentos deste serviço
+    # Buscar apontamentos recentes (últimas 24h) para evitar pegar dados muito antigos
+    limite_tempo = datetime.now() - timedelta(hours=24)
     apontamentos = ApontamentoProducao.query.filter(
         ApontamentoProducao.ordem_servico_id == os_id,
         ApontamentoProducao.item_id == item_id,
-        ApontamentoProducao.trabalho_id == trab_id
+        ApontamentoProducao.trabalho_id == trab_id,
+        ApontamentoProducao.data_hora >= limite_tempo
     ).order_by(ApontamentoProducao.data_hora.asc()).all()
     
     if not apontamentos:
         return None
     
-    # Quantidade inicial (primeiro apontamento com quantidade)
+    # Quantidade inicial (primeiro apontamento com quantidade da sessão atual)
     quantidade_inicial = 0
     for ap in apontamentos:
         if ap.quantidade is not None and ap.tipo_acao in ['inicio_producao', 'inicio_setup']:
             quantidade_inicial = ap.quantidade
             break
     
-    # Tempo total (do primeiro setup/produção até agora)
-    primeiro_inicio = None
-    for ap in apontamentos:
-        if ap.tipo_acao in ['inicio_setup', 'inicio_producao']:
-            primeiro_inicio = ap.data_hora
-            break
-    
-    tempo_total_minutos = 0
-    if primeiro_inicio:
-        tempo_total_minutos = int((datetime.now() - primeiro_inicio).total_seconds() // 60)
-    
-    # Tempo de setup (soma de todos os setups)
+    # Tempo total (soma dos tempos decorridos de setup e produção)
     tempo_setup_minutos = 0
-    for ap in apontamentos:
-        if ap.tipo_acao == 'inicio_setup' and ap.tempo_decorrido:
-            tempo_setup_minutos += ap.tempo_decorrido // 60
-        elif ap.tipo_acao == 'fim_setup' and ap.tempo_decorrido:
-            tempo_setup_minutos += ap.tempo_decorrido // 60
-    
-    # Tempo de produção (soma de todos os períodos de produção)
     tempo_producao_minutos = 0
+    
     for ap in apontamentos:
-        if ap.tipo_acao == 'inicio_producao' and ap.tempo_decorrido:
-            tempo_producao_minutos += ap.tempo_decorrido // 60
+        if ap.tempo_decorrido:
+            tempo_min = ap.tempo_decorrido // 60
+            if ap.tipo_acao in ['inicio_setup', 'fim_setup']:
+                tempo_setup_minutos += tempo_min
+            elif ap.tipo_acao in ['inicio_producao', 'fim_producao']:
+                tempo_producao_minutos += tempo_min
+    
+    tempo_total_minutos = tempo_setup_minutos + tempo_producao_minutos
     
     return {
         'quantidade_inicial': quantidade_inicial,
@@ -114,6 +105,64 @@ def _calcular_metricas_stop(os_id, item_id, trab_id, quantidade_final):
         'tempo_setup_minutos': tempo_setup_minutos,
         'tempo_producao_minutos': tempo_producao_minutos,
     }
+
+
+def _calcular_metricas_stop_completo(os_id, item_id, trab_id, quantidade_final):
+    """
+    Calcula métricas completas do Stop incluindo informações de todos os serviços da OS.
+    """
+    from datetime import datetime, timedelta
+    
+    # Métricas do serviço atual
+    metricas_servico_atual = _calcular_metricas_stop(os_id, item_id, trab_id, quantidade_final)
+    
+    # Buscar todos os trabalhos (serviços) desta OS/Item nas últimas 24h
+    limite_tempo = datetime.now() - timedelta(hours=24)
+    todos_trabalhos = db.session.query(
+        ApontamentoProducao.trabalho_id,
+        Trabalho.nome
+    ).join(
+        Trabalho, ApontamentoProducao.trabalho_id == Trabalho.id
+    ).filter(
+        ApontamentoProducao.ordem_servico_id == os_id,
+        ApontamentoProducao.item_id == item_id,
+        ApontamentoProducao.data_hora >= limite_tempo
+    ).distinct().all()
+    
+    # Calcular métricas de cada serviço
+    outros_servicos = []
+    for trabalho_id_loop, trabalho_nome in todos_trabalhos:
+        if trabalho_id_loop == trab_id:
+            continue  # Pular o serviço atual
+        
+        # Buscar última quantidade e tempo deste serviço
+        aps = ApontamentoProducao.query.filter(
+            ApontamentoProducao.ordem_servico_id == os_id,
+            ApontamentoProducao.item_id == item_id,
+            ApontamentoProducao.trabalho_id == trabalho_id_loop,
+            ApontamentoProducao.data_hora >= limite_tempo
+        ).order_by(ApontamentoProducao.data_hora.desc()).all()
+        
+        if aps:
+            ultima_qtd = None
+            tempo_total = 0
+            
+            for ap in aps:
+                if ultima_qtd is None and ap.quantidade is not None:
+                    ultima_qtd = ap.quantidade
+                if ap.tempo_decorrido:
+                    tempo_total += ap.tempo_decorrido // 60
+            
+            outros_servicos.append({
+                'nome': trabalho_nome,
+                'ultima_quantidade': ultima_qtd or 0,
+                'tempo_total_minutos': tempo_total
+            })
+    
+    if metricas_servico_atual:
+        metricas_servico_atual['outros_servicos'] = outros_servicos
+    
+    return metricas_servico_atual
 
 
 def _buscar_ultima_quantidade(os_id, item_id, trab_id):
@@ -2690,10 +2739,18 @@ def registrar_apontamento():
         try:
             from notificacoes.eventos import registrar_evento_apontamento
             
-            # Calcular métricas para Stop
+            # Calcular métricas para Stop e Fim Setup
             metricas = None
+            metricas_setup = None
+            
             if tipo_acao == 'stop':
-                metricas = _calcular_metricas_stop(ordem_servico_id, item_id, trabalho_id, apontamento.quantidade)
+                metricas = _calcular_metricas_stop_completo(ordem_servico_id, item_id, trabalho_id, apontamento.quantidade)
+            elif tipo_acao == 'fim_setup' and apontamento_inicio:
+                metricas_setup = {
+                    'tempo_setup_minutos': int(apontamento_inicio.tempo_decorrido // 60) if apontamento_inicio.tempo_decorrido else 0,
+                    'hora_inicio': apontamento_inicio.data_hora,
+                    'hora_fim': agora
+                }
             
             registrar_evento_apontamento(
                 tipo_acao,
@@ -2705,6 +2762,7 @@ def registrar_apontamento():
                 quantidade=apontamento.quantidade,
                 motivo=apontamento.motivo_parada,
                 metricas=metricas,
+                metricas_setup=metricas_setup,
             )
         except Exception as e:
             logger.warning(f"Falha ao registrar evento de notificacao do apontamento: {e}")

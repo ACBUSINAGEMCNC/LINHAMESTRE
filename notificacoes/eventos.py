@@ -59,7 +59,7 @@ def processar_evento(evento):
     return resultado
 
 
-def registrar_evento_apontamento(tipo_acao, usuario=None, item=None, trabalho=None, ordem=None, lista=None, quantidade=None, motivo=None, metricas=None):
+def registrar_evento_apontamento(tipo_acao, usuario=None, item=None, trabalho=None, ordem=None, lista=None, quantidade=None, motivo=None, metricas=None, metricas_setup=None):
     tipo = TIPO_ACAO_EVENTO.get(tipo_acao, tipo_acao)
     
     dados_evento = {
@@ -76,5 +76,9 @@ def registrar_evento_apontamento(tipo_acao, usuario=None, item=None, trabalho=No
     # Adicionar métricas se fornecidas (para Stop)
     if metricas:
         dados_evento['metricas'] = metricas
+    
+    # Adicionar métricas de setup se fornecidas (para Fim Setup)
+    if metricas_setup:
+        dados_evento['metricas_setup'] = metricas_setup
     
     return registrar_evento(tipo, **dados_evento)

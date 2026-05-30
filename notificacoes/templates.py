@@ -69,6 +69,9 @@ def mensagem_setup_iniciado(dados):
 
 
 def mensagem_setup_finalizado(dados):
+    # Se tiver métricas, mostrar detalhes
+    if dados.get('metricas_setup'):
+        return _mensagem_setup_finalizado_com_metricas(dados)
     return _mensagem_operacao('✅ SETUP FINALIZADO', dados)
 
 
@@ -112,6 +115,36 @@ def _mensagem_operacao(titulo, dados):
     return msg
 
 
+def _mensagem_setup_finalizado_com_metricas(dados):
+    metricas = dados.get('metricas_setup', {})
+    
+    msg = (
+        f"✅ SETUP FINALIZADO\n\n"
+        f"👤 Operador: {dados.get('operador', '-')}\n"
+        f"📦 Item: {dados.get('item', '-')}\n"
+        f"🛠️ Serviço: {dados.get('servico', '-')}\n"
+        f"📋 Lista: {dados.get('lista', '-')}\n\n"
+    )
+    
+    # Tempo de setup
+    tempo_setup = metricas.get('tempo_setup_minutos', 0)
+    if tempo_setup > 0:
+        horas = tempo_setup // 60
+        minutos = tempo_setup % 60
+        if horas > 0:
+            msg += f"⏱️ Tempo de setup: {horas}h {minutos}min\n"
+        else:
+            msg += f"⏱️ Tempo de setup: {minutos}min\n"
+    
+    # Horários
+    hora_inicio = metricas.get('hora_inicio')
+    hora_fim = metricas.get('hora_fim')
+    if hora_inicio and hora_fim:
+        msg += f"🕐 Início: {_hora(hora_inicio)} | Fim: {_hora(hora_fim)}\n"
+    
+    return msg
+
+
 def _mensagem_stop_com_metricas(dados):
     metricas = dados.get('metricas', {})
     
@@ -119,9 +152,9 @@ def _mensagem_stop_com_metricas(dados):
         f"🛑 STOP - APONTAMENTO FINALIZADO\n\n"
         f"👤 Operador: {dados.get('operador', '-')}\n"
         f"📦 Item: {dados.get('item', '-')}\n"
-        f"🛠️ Serviço: {dados.get('servico', '-')}\n"
+        f"🛠️ Serviço: {dados.get('servico', '-')} ⭐\n"
         f"📋 Lista: {dados.get('lista', '-')}\n\n"
-        f"📊 MÉTRICAS:\n"
+        f"📊 MÉTRICAS DO SERVIÇO ATUAL:\n"
     )
     
     # Quantidade inicial e final
@@ -164,6 +197,27 @@ def _mensagem_stop_com_metricas(dados):
             msg += f"⚙️ Tempo de produção: {horas}h {minutos}min\n"
         else:
             msg += f"⚙️ Tempo de produção: {minutos}min\n"
+    
+    # Outros serviços da mesma OS
+    outros_servicos = metricas.get('outros_servicos', [])
+    if outros_servicos:
+        msg += f"\n📋 OUTROS SERVIÇOS DESTA OS:\n"
+        for servico in outros_servicos:
+            nome = servico.get('nome', '-')
+            qtd = servico.get('ultima_quantidade', 0)
+            tempo = servico.get('tempo_total_minutos', 0)
+            
+            msg += f"• {nome}"
+            if qtd > 0:
+                msg += f" - {qtd} peças"
+            if tempo > 0:
+                h = tempo // 60
+                m = tempo % 60
+                if h > 0:
+                    msg += f" - {h}h {m}min"
+                else:
+                    msg += f" - {m}min"
+            msg += "\n"
     
     msg += f"\n⏰ Finalizado: {_hora(dados.get('horario'))}"
     
