@@ -144,20 +144,27 @@ def _calcular_metricas_stop_completo(os_id, item_id, trab_id, quantidade_final):
         ).order_by(ApontamentoProducao.data_hora.desc()).all()
         
         ultima_qtd = None
-        tempo_total = 0
+        tempo_setup = 0
+        tempo_producao = 0
         
         if aps:
             for ap in aps:
                 if ultima_qtd is None and ap.quantidade is not None:
                     ultima_qtd = ap.quantidade
                 if ap.tempo_decorrido:
-                    tempo_total += ap.tempo_decorrido // 60
+                    tempo_min = ap.tempo_decorrido // 60
+                    if ap.tipo_acao in ['inicio_setup', 'fim_setup']:
+                        tempo_setup += tempo_min
+                    elif ap.tipo_acao in ['inicio_producao', 'fim_producao']:
+                        tempo_producao += tempo_min
         
         # Adicionar serviço mesmo sem apontamento
         outros_servicos.append({
             'nome': trabalho_nome,
             'ultima_quantidade': ultima_qtd or 0,
-            'tempo_total_minutos': tempo_total
+            'tempo_setup_minutos': tempo_setup,
+            'tempo_producao_minutos': tempo_producao,
+            'tempo_total_minutos': tempo_setup + tempo_producao
         })
     
     if metricas_servico_atual:

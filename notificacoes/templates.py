@@ -205,18 +205,31 @@ def _mensagem_stop_com_metricas(dados):
         for servico in outros_servicos:
             nome = servico.get('nome', '-')
             qtd = servico.get('ultima_quantidade', 0)
-            tempo = servico.get('tempo_total_minutos', 0)
+            tempo_setup = servico.get('tempo_setup_minutos', 0)
+            tempo_producao = servico.get('tempo_producao_minutos', 0)
             
             msg += f"• {nome}"
             if qtd > 0:
                 msg += f" - {qtd} peças"
-            if tempo > 0:
-                h = tempo // 60
-                m = tempo % 60
+            
+            # Tempo de setup
+            if tempo_setup > 0:
+                h = tempo_setup // 60
+                m = tempo_setup % 60
                 if h > 0:
-                    msg += f" - {h}h {m}min"
+                    msg += f"\n  🔧 Setup: {h}h {m}min"
                 else:
-                    msg += f" - {m}min"
+                    msg += f"\n  🔧 Setup: {m}min"
+            
+            # Tempo de produção
+            if tempo_producao > 0:
+                h = tempo_producao // 60
+                m = tempo_producao % 60
+                if h > 0:
+                    msg += f"\n  ⚙️ Produção: {h}h {m}min"
+                else:
+                    msg += f"\n  ⚙️ Produção: {m}min"
+            
             msg += "\n"
     
     msg += f"\n⏰ Finalizado: {_hora(dados.get('horario'))}"
