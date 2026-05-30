@@ -10,16 +10,41 @@ def monitorar_producao():
     from models import ApontamentoProducao
 
     agora = datetime.now()
+    
+    # IMPORTANTE: Buscar APENAS setups que estão ABERTOS (data_fim = NULL)
     abertos = ApontamentoProducao.query.filter(
         ApontamentoProducao.data_fim.is_(None),
         ApontamentoProducao.tipo_acao == 'inicio_setup'
     ).all()
 
     total_alertas = 0
+    setups_ignorados = 0
+    
     for ap in abertos:
+        # VERIFICAÇÃO EXTRA: Confirmar que data_fim é realmente NULL
+        if ap.data_fim is not None:
+            setups_ignorados += 1
+            log_evento('monitoramento_setup_ignorado', {
+                'id': ap.id,
+                'motivo': 'data_fim não é NULL',
+                'data_fim': str(ap.data_fim)
+            }, status='ignorado')
+            continue
+        
         minutos = int((agora - ap.data_hora).total_seconds() // 60) if ap.data_hora else 0
         
-        if ap.tipo_acao == 'inicio_setup' and minutos >= ConfiguracaoNotificacoes.ALERTA_SETUP_LONGO_MINUTOS:
+        # Verificar se minutos é negativo (horário futuro - bug de timezone)
+        if minutos < 0:
+            setups_ignorados += 1
+            log_evento('monitoramento_setup_ignorado', {
+                'id': ap.id,
+                'motivo': 'horário no futuro',
+                'minutos': minutos,
+                'data_hora': str(ap.data_hora)
+            }, status='ignorado')
+            continue
+        
+        if minutos >= ConfiguracaoNotificacoes.ALERTA_SETUP_LONGO_MINUTOS:
             chave_alerta = f"setup_{ap.id}"
             ultimo_envio = _alertas_enviados.get(chave_alerta)
             
@@ -38,8 +63,12 @@ def monitorar_producao():
                 total_alertas += 1
 
     _limpar_alertas_antigos(agora)
-    log_evento('monitoramento_producao', {'abertos': len(abertos), 'alertas': total_alertas}, status='executado')
-    return {'abertos': len(abertos), 'alertas': total_alertas}
+    log_evento('monitoramento_producao', {
+        'abertos': len(abertos),
+        'alertas': total_alertas,
+        'ignorados': setups_ignorados
+    }, status='executado')
+    return {'abertos': len(abertos), 'alertas': total_alertas, 'ignorados': setups_ignorados}
 
 
 def _limpar_alertas_antigos(agora):
@@ -47,6 +76,17 @@ def _limpar_alertas_antigos(agora):
     chaves_antigas = [k for k, v in _alertas_enviados.items() if v < limite]
     for chave in chaves_antigas:
         del _alertas_enviados[chave]
+
+
+def limpar_alerta_setup(apontamento_id):
+    """
+    Limpa o cache de alertas quando um setup é fechado.
+    Deve ser chamado ao finalizar um setup.
+    """
+    chave = f"setup_{apontamento_id}"
+    if chave in _alertas_enviados:
+        del _alertas_enviados[chave]
+        log_evento('alerta_setup_limpo', {'apontamento_id': apontamento_id}, status='limpo')
 
 
 def _alertar_servico_parado(ap, minutos):

@@ -2679,6 +2679,14 @@ def registrar_apontamento():
                 # Atualizar o apontamento de início com a data_fim
                 apontamento_inicio.data_fim = data_fim
                 apontamento_inicio.tempo_decorrido = tempo_decorrido
+                
+                # Limpar cache de alertas se for fim de setup
+                if tipo_acao == 'fim_setup':
+                    try:
+                        from notificacoes.monitoramento import limpar_alerta_setup
+                        limpar_alerta_setup(apontamento_inicio.id)
+                    except Exception:
+                        pass
 
             # Se for STOP, também encerrar pausa e setup abertos para o mesmo par
             if tipo_acao == 'stop':
@@ -2693,6 +2701,12 @@ def registrar_apontamento():
                         delta_setup = agora - setup_aberto.data_hora
                         setup_aberto.data_fim = agora
                         setup_aberto.tempo_decorrido = int(delta_setup.total_seconds())
+                        # Limpar cache de alertas do setup fechado
+                        try:
+                            from notificacoes.monitoramento import limpar_alerta_setup
+                            limpar_alerta_setup(setup_aberto.id)
+                        except Exception:
+                            pass
                 except Exception:
                     pass
         

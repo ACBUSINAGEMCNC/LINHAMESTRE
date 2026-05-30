@@ -1,4 +1,5 @@
 from datetime import datetime
+import pytz
 from .configuracao import ConfiguracaoNotificacoes
 from .logs import log_evento
 from .templates import mensagem_evento
@@ -62,6 +63,10 @@ def processar_evento(evento):
 def registrar_evento_apontamento(tipo_acao, usuario=None, item=None, trabalho=None, ordem=None, lista=None, quantidade=None, motivo=None, metricas=None, metricas_setup=None):
     tipo = TIPO_ACAO_EVENTO.get(tipo_acao, tipo_acao)
     
+    # Usar timezone de São Paulo
+    tz = pytz.timezone('America/Sao_Paulo')
+    agora = datetime.now(tz)
+    
     dados_evento = {
         'operador': getattr(usuario, 'nome', None) or getattr(usuario, 'codigo_operador', None) or '-',
         'item': getattr(item, 'nome', None) or getattr(item, 'codigo_acb', None) or '-',
@@ -70,7 +75,7 @@ def registrar_evento_apontamento(tipo_acao, usuario=None, item=None, trabalho=No
         'lista': lista or getattr(ordem, 'status', None) or '-',
         'quantidade': quantidade,
         'motivo': motivo,
-        'horario': datetime.now(),
+        'horario': agora,
     }
     
     # Adicionar métricas se fornecidas (para Stop)
