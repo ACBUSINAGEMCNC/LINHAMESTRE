@@ -89,10 +89,19 @@ def _calcular_metricas_stop(os_id, item_id, trab_id, quantidade_final):
     # Tempo total (soma dos tempos decorridos de setup e produção)
     tempo_setup_minutos = 0
     tempo_producao_minutos = 0
+    agora = local_now_naive()
     
     for ap in apontamentos:
+        tempo_min = 0
+        
         if ap.tempo_decorrido:
+            # Apontamento já finalizado - usar tempo gravado
             tempo_min = ap.tempo_decorrido // 60
+        elif ap.data_fim is None and ap.data_hora:
+            # Apontamento ABERTO (em andamento) - calcular tempo até agora
+            tempo_min = int((agora - ap.data_hora).total_seconds() // 60)
+        
+        if tempo_min > 0:
             # O tempo decorrido é gravado no apontamento de INÍCIO quando ele é encerrado.
             # Contabilizar apenas os eventos de início evita dupla contagem (ex.: fim_setup/stop).
             if ap.tipo_acao == 'inicio_setup':
@@ -150,13 +159,22 @@ def _calcular_metricas_stop_completo(os_id, item_id, trab_id, quantidade_final):
         ultima_qtd = None
         tempo_setup = 0
         tempo_producao = 0
+        agora = local_now_naive()
         
         if aps:
             for ap in aps:
                 if ultima_qtd is None and ap.quantidade is not None:
                     ultima_qtd = ap.quantidade
+                
+                tempo_min = 0
                 if ap.tempo_decorrido:
+                    # Apontamento já finalizado
                     tempo_min = ap.tempo_decorrido // 60
+                elif ap.data_fim is None and ap.data_hora:
+                    # Apontamento ABERTO (em andamento)
+                    tempo_min = int((agora - ap.data_hora).total_seconds() // 60)
+                
+                if tempo_min > 0:
                     if ap.tipo_acao == 'inicio_setup':
                         tempo_setup += tempo_min
                     elif ap.tipo_acao == 'inicio_producao':
