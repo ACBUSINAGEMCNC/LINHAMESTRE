@@ -64,10 +64,11 @@ def _calcular_metricas_stop(os_id, item_id, trab_id, quantidade_final):
     """
     Calcula métricas para o Stop: quantidade inicial/final, tempo total, tempo de setup, tempo de produção.
     """
-    from datetime import datetime, timedelta
+    from datetime import timedelta
+    from models import local_now_naive
     
     # Buscar apontamentos recentes (últimas 24h) para evitar pegar dados muito antigos
-    limite_tempo = datetime.now() - timedelta(hours=24)
+    limite_tempo = local_now_naive() - timedelta(hours=24)
     apontamentos = ApontamentoProducao.query.filter(
         ApontamentoProducao.ordem_servico_id == os_id,
         ApontamentoProducao.item_id == item_id,
@@ -92,9 +93,11 @@ def _calcular_metricas_stop(os_id, item_id, trab_id, quantidade_final):
     for ap in apontamentos:
         if ap.tempo_decorrido:
             tempo_min = ap.tempo_decorrido // 60
-            if ap.tipo_acao in ['inicio_setup', 'fim_setup']:
+            # O tempo decorrido é gravado no apontamento de INÍCIO quando ele é encerrado.
+            # Contabilizar apenas os eventos de início evita dupla contagem (ex.: fim_setup/stop).
+            if ap.tipo_acao == 'inicio_setup':
                 tempo_setup_minutos += tempo_min
-            elif ap.tipo_acao in ['inicio_producao', 'fim_producao']:
+            elif ap.tipo_acao == 'inicio_producao':
                 tempo_producao_minutos += tempo_min
     
     tempo_total_minutos = tempo_setup_minutos + tempo_producao_minutos
@@ -111,7 +114,8 @@ def _calcular_metricas_stop_completo(os_id, item_id, trab_id, quantidade_final):
     """
     Calcula métricas completas do Stop incluindo informações de todos os serviços da OS.
     """
-    from datetime import datetime, timedelta
+    from datetime import timedelta
+    from models import local_now_naive
     
     # Métricas do serviço atual
     metricas_servico_atual = _calcular_metricas_stop(os_id, item_id, trab_id, quantidade_final)
@@ -128,7 +132,7 @@ def _calcular_metricas_stop_completo(os_id, item_id, trab_id, quantidade_final):
     ).all()
     
     # Calcular métricas de cada serviço
-    limite_tempo = datetime.now() - timedelta(hours=24)
+    limite_tempo = local_now_naive() - timedelta(hours=24)
     outros_servicos = []
     
     for trabalho_id_loop, trabalho_nome in todos_trabalhos:
@@ -153,9 +157,9 @@ def _calcular_metricas_stop_completo(os_id, item_id, trab_id, quantidade_final):
                     ultima_qtd = ap.quantidade
                 if ap.tempo_decorrido:
                     tempo_min = ap.tempo_decorrido // 60
-                    if ap.tipo_acao in ['inicio_setup', 'fim_setup']:
+                    if ap.tipo_acao == 'inicio_setup':
                         tempo_setup += tempo_min
-                    elif ap.tipo_acao in ['inicio_producao', 'fim_producao']:
+                    elif ap.tipo_acao == 'inicio_producao':
                         tempo_producao += tempo_min
         
         # Adicionar serviço mesmo sem apontamento

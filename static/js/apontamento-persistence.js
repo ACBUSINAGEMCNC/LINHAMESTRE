@@ -822,6 +822,21 @@ function renderizarChipsStatus(ordemId, ativosLista) {
         const motivoLine = chipClass === 'chip-pausa' && (ap.motivo_pausa || ap.motivo_parada)
             ? `<span class="chip-motivo small">Motivo: ${ap.motivo_pausa || ap.motivo_parada}</span>`
             : '';
+
+        // Tempo total acumulado (histórico + atual) se vier do backend via analytics
+        let totalLine = '';
+        try {
+            const an = ap.analytics || {};
+            const totalSec = (Number(an.tempo_setup_utilizado) || 0)
+                + (Number(an.tempo_producao_utilizado) || 0)
+                + (Number(an.tempo_pausas_utilizado) || 0);
+            if (totalSec > 0) {
+                const hTot = Math.floor(totalSec / 3600).toString().padStart(2, '0');
+                const mTot = Math.floor((totalSec % 3600) / 60).toString().padStart(2, '0');
+                const sTot = Math.floor(totalSec % 60).toString().padStart(2, '0');
+                totalLine = `<span class="chip-total small text-muted">Total: ${hTot}:${mTot}:${sTot}</span>`;
+            }
+        } catch (e) {}
         // Pré-calcular tempo decorrido para evitar flash de 00:00:00
         let timerText = '00:00:00';
         if (inicio) {
@@ -839,6 +854,7 @@ function renderizarChipsStatus(ordemId, ativosLista) {
           +       `<span class="chip-title small fw-semibold">${trabNome}</span>`
           +        opLine
           +        motivoLine
+          +        totalLine
           +     `</div>`
           +     `<span class="apontamento-timer" id="timer-${ordemId}-${itemId}-${trabId}">${timerText}</span>`
           +   `</div>`
