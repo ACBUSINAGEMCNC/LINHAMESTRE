@@ -1,4 +1,4 @@
-from datetime import datetime, timedelta
+from datetime import timedelta
 from .configuracao import ConfiguracaoNotificacoes
 from .eventos import registrar_evento
 from .logs import log_evento
@@ -8,8 +8,11 @@ _alertas_enviados = {}
 
 def monitorar_producao():
     from models import ApontamentoProducao
+    from models import local_now_naive
 
-    agora = datetime.now()
+    # Usar horário local naive (America/Sao_Paulo) para casar com o padrão do sistema.
+    # Isso evita alertas incorretos (ex.: +180min) quando o servidor está em UTC.
+    agora = local_now_naive()
     
     # Limite de tempo: apenas setups das últimas 12 horas
     limite_tempo = agora - timedelta(hours=12)
@@ -68,22 +71,20 @@ def monitorar_producao():
             }, status='ignorado')
             continue
         
-        if minutos >= ConfiguracaoNotificacoes.ALERTA_SETUP_LONGO_MINUTOS:
+        limite_alerta = ConfiguracaoNotificacoes.ALERTA_SETUP_LONGO_MINUTOS
+        intervalo_alerta = getattr(ConfiguracaoNotificacoes, 'ALERTA_SETUP_LONGO_INTERVALO_MINUTOS', 15)
+
+        if minutos >= limite_alerta:
             chave_alerta = f"setup_{ap.id}"
-            ultimo_envio = _alertas_enviados.get(chave_alerta)
-            
-            # Enviar se nunca foi enviado OU se já passaram 10 minutos desde o último envio
-            deve_enviar = False
-            if ultimo_envio is None:
-                deve_enviar = True
-            else:
-                minutos_desde_ultimo = int((agora - ultimo_envio).total_seconds() // 60)
-                if minutos_desde_ultimo >= 10:
-                    deve_enviar = True
-            
-            if deve_enviar:
+            # Bucketiza em janelas: 30, 45, 60, 75... (configurável)
+            # Envia ao entrar em um novo bucket.
+            bucket_atual = int((minutos - limite_alerta) // max(1, intervalo_alerta))
+            ultimo = _alertas_enviados.get(chave_alerta)
+            ultimo_bucket = ultimo.get('bucket') if isinstance(ultimo, dict) else None
+
+            if ultimo_bucket is None or bucket_atual > int(ultimo_bucket):
                 _alertar_setup_longo(ap, minutos)
-                _alertas_enviados[chave_alerta] = agora
+                _alertas_enviados[chave_alerta] = {'bucket': bucket_atual, 'sent_at': agora}
                 total_alertas += 1
 
     _limpar_alertas_antigos(agora)
@@ -97,7 +98,16 @@ def monitorar_producao():
 
 def _limpar_alertas_antigos(agora):
     limite = agora - timedelta(hours=2)
-    chaves_antigas = [k for k, v in _alertas_enviados.items() if v < limite]
+    chaves_antigas = []
+    for k, v in _alertas_enviados.items():
+        if isinstance(v, dict):
+            sent_at = v.get('sent_at')
+            if sent_at and sent_at < limite:
+                chaves_antigas.append(k)
+        # Compatibilidade com versões antigas que salvavam datetime diretamente
+        elif hasattr(v, 'strftime'):
+            if v < limite:
+                chaves_antigas.append(k)
     for chave in chaves_antigas:
         del _alertas_enviados[chave]
 
