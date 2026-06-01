@@ -82,10 +82,26 @@ def monitorar_producao():
             ultimo = _alertas_enviados.get(chave_alerta)
             ultimo_bucket = ultimo.get('bucket') if isinstance(ultimo, dict) else None
 
-            if ultimo_bucket is None or bucket_atual > int(ultimo_bucket):
+            # IMPORTANTE: Só enviar se for um bucket DIFERENTE (maior)
+            # Isso evita enviar múltiplos alertas no mesmo intervalo
+            if ultimo_bucket is None or bucket_atual > ultimo_bucket:
                 _alertar_setup_longo(ap, minutos)
                 _alertas_enviados[chave_alerta] = {'bucket': bucket_atual, 'sent_at': agora}
                 total_alertas += 1
+                log_evento('alerta_setup_enviado', {
+                    'id': ap.id,
+                    'minutos': minutos,
+                    'bucket_atual': bucket_atual,
+                    'bucket_anterior': ultimo_bucket
+                }, status='enviado')
+            else:
+                log_evento('alerta_setup_ignorado_bucket', {
+                    'id': ap.id,
+                    'minutos': minutos,
+                    'bucket_atual': bucket_atual,
+                    'bucket_anterior': ultimo_bucket,
+                    'motivo': 'mesmo bucket'
+                }, status='ignorado')
 
     _limpar_alertas_antigos(agora)
     log_evento('monitoramento_producao', {
