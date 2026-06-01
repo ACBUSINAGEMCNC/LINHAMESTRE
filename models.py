@@ -1648,3 +1648,19 @@ class OrcamentoItem(db.Model):
             estoque_total = sum((e.quantidade or 0) for e in self.item.estoque_pecas)
             self.quantidade_estoque = estoque_total
             self.tem_estoque = estoque_total >= (self.quantidade or 0)
+
+
+# ============================================================================
+# CACHE DE ALERTAS (para evitar spam entre workers/processos)
+# ============================================================================
+
+class CacheAlerta(db.Model):
+    """Cache persistente de alertas enviados para evitar duplicatas entre workers"""
+    __tablename__ = 'cache_alerta'
+    
+    id = db.Column(db.Integer, primary_key=True)
+    chave = db.Column(db.String(100), unique=True, nullable=False, index=True)
+    data_envio = db.Column(db.DateTime, nullable=False)
+    
+    def __repr__(self):
+        return f'<CacheAlerta {self.chave}>'

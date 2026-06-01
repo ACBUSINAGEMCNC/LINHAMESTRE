@@ -4,7 +4,41 @@ from .eventos import registrar_evento
 from .logs import log_evento
 
 
+# Cache de alertas em memória (fallback)
 _alertas_enviados = {}
+
+
+def _get_ultimo_alerta_db(chave):
+    """Busca último alerta enviado do banco de dados"""
+    try:
+        from models import db, CacheAlerta
+        from models import local_now_naive
+        
+        cache = CacheAlerta.query.filter_by(chave=chave).first()
+        if cache:
+            # Verificar se não expirou (2 horas)
+            agora = local_now_naive()
+            if (agora - cache.data_envio).total_seconds() < 7200:  # 2 horas
+                return cache.data_envio
+        return None
+    except Exception:
+        return None
+
+
+def _salvar_alerta_db(chave, data_envio):
+    """Salva alerta no banco de dados"""
+    try:
+        from models import db, CacheAlerta
+        
+        cache = CacheAlerta.query.filter_by(chave=chave).first()
+        if cache:
+            cache.data_envio = data_envio
+        else:
+            cache = CacheAlerta(chave=chave, data_envio=data_envio)
+            db.session.add(cache)
+        db.session.commit()
+    except Exception as e:
+        log_evento('erro_salvar_cache_alerta', {'chave': chave, 'erro': str(e)}, status='erro')
 
 def monitorar_producao():
     from models import ApontamentoProducao
@@ -77,7 +111,12 @@ def monitorar_producao():
         # Cada setup tem seu próprio controle de alerta
         if minutos >= limite_alerta:
             chave_alerta = f"setup_{ap.id}"
-            ultimo_envio = _alertas_enviados.get(chave_alerta)
+            
+            # Buscar do banco de dados (persistente entre workers)
+            ultimo_envio = _get_ultimo_alerta_db(chave_alerta)
+            if ultimo_envio is None:
+                # Fallback para memória
+                ultimo_envio = _alertas_enviados.get(chave_alerta)
             
             # Verificar se já passaram 15min desde o último alerta DESTE setup
             deve_enviar = False
@@ -91,7 +130,9 @@ def monitorar_producao():
             
             if deve_enviar:
                 _alertar_setup_longo(ap, minutos)
+                # Salvar em ambos (memória e banco)
                 _alertas_enviados[chave_alerta] = agora
+                _salvar_alerta_db(chave_alerta, agora)
                 total_alertas += 1
                 log_evento('alerta_setup_enviado', {
                     'id': ap.id,
