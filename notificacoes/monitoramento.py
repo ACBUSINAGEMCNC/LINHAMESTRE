@@ -26,7 +26,6 @@ def monitorar_producao():
 
     total_alertas = 0
     setups_ignorados = 0
-    setups_em_atraso = []  # Lista de setups que precisam alerta
     
     for ap in abertos:
         # VERIFICAÇÃO EXTRA: Confirmar que data_fim é realmente NULL
@@ -73,44 +72,39 @@ def monitorar_producao():
             continue
         
         limite_alerta = ConfiguracaoNotificacoes.ALERTA_SETUP_LONGO_MINUTOS
-        
-        # Se passou do limite, adicionar à lista de setups em atraso
-        if minutos >= limite_alerta:
-            setups_em_atraso.append({
-                'apontamento': ap,
-                'minutos': minutos
-            })
-    
-    # NOVO: Enviar 1 alerta único a cada 15min com TODOS os setups em atraso
-    if setups_em_atraso:
         intervalo_alerta = getattr(ConfiguracaoNotificacoes, 'ALERTA_SETUP_LONGO_INTERVALO_MINUTOS', 15)
-        chave_alerta_global = "alertas_setup_global"
-        ultimo_envio = _alertas_enviados.get(chave_alerta_global)
         
-        # Verificar se já passaram 15min desde o último alerta
-        deve_enviar = False
-        if ultimo_envio is None:
-            deve_enviar = True
-        else:
-            minutos_desde_ultimo = int((agora - ultimo_envio).total_seconds() // 60)
-            if minutos_desde_ultimo >= intervalo_alerta:
+        # Cada setup tem seu próprio controle de alerta
+        if minutos >= limite_alerta:
+            chave_alerta = f"setup_{ap.id}"
+            ultimo_envio = _alertas_enviados.get(chave_alerta)
+            
+            # Verificar se já passaram 15min desde o último alerta DESTE setup
+            deve_enviar = False
+            if ultimo_envio is None:
+                # Primeiro alerta deste setup
                 deve_enviar = True
-        
-        if deve_enviar:
-            # Enviar alerta consolidado com todos os setups
-            _alertar_setup_longo_consolidado(setups_em_atraso)
-            _alertas_enviados[chave_alerta_global] = agora
-            total_alertas = 1
-            log_evento('alerta_setup_consolidado_enviado', {
-                'total_setups': len(setups_em_atraso),
-                'minutos_desde_ultimo': minutos_desde_ultimo if ultimo_envio else None
-            }, status='enviado')
-        else:
-            log_evento('alerta_setup_consolidado_ignorado', {
-                'total_setups': len(setups_em_atraso),
-                'minutos_desde_ultimo': int((agora - ultimo_envio).total_seconds() // 60),
-                'motivo': 'aguardando intervalo de 15min'
-            }, status='ignorado')
+            else:
+                minutos_desde_ultimo = int((agora - ultimo_envio).total_seconds() // 60)
+                if minutos_desde_ultimo >= intervalo_alerta:
+                    deve_enviar = True
+            
+            if deve_enviar:
+                _alertar_setup_longo(ap, minutos)
+                _alertas_enviados[chave_alerta] = agora
+                total_alertas += 1
+                log_evento('alerta_setup_enviado', {
+                    'id': ap.id,
+                    'minutos': minutos,
+                    'minutos_desde_ultimo': int((agora - ultimo_envio).total_seconds() // 60) if ultimo_envio else None
+                }, status='enviado')
+            else:
+                log_evento('alerta_setup_ignorado', {
+                    'id': ap.id,
+                    'minutos': minutos,
+                    'minutos_desde_ultimo': int((agora - ultimo_envio).total_seconds() // 60),
+                    'motivo': f'aguardando {intervalo_alerta}min desde último alerta'
+                }, status='ignorado')
 
     _limpar_alertas_antigos(agora)
     log_evento('monitoramento_producao', {
