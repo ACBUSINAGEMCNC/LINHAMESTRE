@@ -51,8 +51,11 @@ def monitorar_producao():
     # Isso evita alertas incorretos (ex.: +180min) quando o servidor está em UTC.
     agora = local_now_naive()
     
-    # Limite de tempo: apenas setups das últimas 12 horas
+    # Limite de tempo: apenas setups das últimas 12 horas (para não pegar setups antigos/bugados)
     limite_tempo = agora - timedelta(hours=12)
+
+    # Janela para somatória (setup acumulado) - última 24h
+    limite_somatoria = agora - timedelta(hours=24)
     
     # IMPORTANTE: Buscar APENAS setups que estão ABERTOS (data_fim = NULL) e recentes
     abertos = ApontamentoProducao.query.filter(
@@ -71,7 +74,16 @@ def monitorar_producao():
         'intervalo_alerta_min': getattr(ConfiguracaoNotificacoes, 'ALERTA_SETUP_LONGO_INTERVALO_MINUTOS', 15)
     }, status='debug')
     
+    # Se existir mais de 1 setup aberto para a MESMA OS/Item/Trabalho,
+    # vamos considerar apenas o MAIS RECENTE para monitoramento.
+    abertos_por_chave = {}
     for ap in abertos:
+        chave_combo = (ap.ordem_servico_id, ap.item_id, ap.trabalho_id)
+        atual = abertos_por_chave.get(chave_combo)
+        if atual is None or (ap.data_hora and atual.data_hora and ap.data_hora > atual.data_hora) or (atual.data_hora is None and ap.data_hora is not None):
+            abertos_por_chave[chave_combo] = ap
+
+    for ap in abertos_por_chave.values():
         # VERIFICAÇÃO EXTRA: Confirmar que data_fim é realmente NULL
         if ap.data_fim is not None:
             setups_ignorados += 1
@@ -102,25 +114,52 @@ def monitorar_producao():
             }, status='ignorado')
             continue
         
-        minutos = int((agora - ap.data_hora).total_seconds() // 60) if ap.data_hora else 0
+        minutos_aberto = int((agora - ap.data_hora).total_seconds() // 60) if ap.data_hora else 0
         
         # Verificar se minutos é negativo (horário futuro - bug de timezone)
-        if minutos < 0:
+        if minutos_aberto < 0:
             setups_ignorados += 1
             log_evento('monitoramento_setup_ignorado', {
                 'id': ap.id,
                 'motivo': 'horário no futuro',
-                'minutos': minutos,
+                'minutos': minutos_aberto,
                 'data_hora': str(ap.data_hora)
             }, status='ignorado')
             continue
+
+        # Calcular setup acumulado (últimas 24h) para este OS/Item/Trabalho
+        # - soma tempo_decorrido de ciclos já encerrados (inicio_setup com tempo_decorrido)
+        # - soma o tempo do setup em andamento
+        soma_setup_min = 0
+        try:
+            ciclos = ApontamentoProducao.query.filter(
+                ApontamentoProducao.ordem_servico_id == ap.ordem_servico_id,
+                ApontamentoProducao.item_id == ap.item_id,
+                ApontamentoProducao.trabalho_id == ap.trabalho_id,
+                ApontamentoProducao.tipo_acao == 'inicio_setup',
+                ApontamentoProducao.data_hora >= limite_somatoria,
+            ).all()
+            for c in ciclos:
+                if c.id == ap.id:
+                    continue
+                if c.tempo_decorrido:
+                    soma_setup_min += int(c.tempo_decorrido // 60)
+        except Exception as exc:
+            log_evento('monitoramento_setup_soma_erro', {
+                'id': ap.id,
+                'erro': str(exc),
+            }, status='aviso')
+
+        minutos = max(0, soma_setup_min + minutos_aberto)
         
         limite_alerta = ConfiguracaoNotificacoes.ALERTA_SETUP_LONGO_MINUTOS
         intervalo_alerta = getattr(ConfiguracaoNotificacoes, 'ALERTA_SETUP_LONGO_INTERVALO_MINUTOS', 15)
         
         # Cada setup tem seu próprio controle de alerta
         if minutos >= limite_alerta:
-            chave_alerta = f"setup_{ap.id}"
+            # Deduplicação por OS/Item/Trabalho (e não por id do apontamento)
+            # Isso evita spam quando existirem múltiplos inicio_setup abertos por bug.
+            chave_alerta = f"setup_{ap.ordem_servico_id}_{ap.item_id}_{ap.trabalho_id}"
             
             # Log de debug
             log_evento('setup_passou_limite', {

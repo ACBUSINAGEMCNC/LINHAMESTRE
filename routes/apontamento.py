@@ -2744,6 +2744,22 @@ def registrar_apontamento():
         # Para 'pausa', criar como registro ABERTO (data_fim=None); para outros, manter padrão
         criar_data_fim = data_fim
         criar_tempo = tempo_decorrido
+        if tipo_acao == 'inicio_setup':
+            # Garantir que não existam múltiplos inicio_setup abertos para a mesma OS/Item/Trabalho.
+            # Se existir, encerrar o anterior antes de abrir um novo.
+            try:
+                setup_aberto_anterior = ap_setup_aberto or _query_apontamento_aberto(ordem_servico_id, item_id, trabalho_id, 'inicio_setup')
+                if setup_aberto_anterior:
+                    delta_setup = agora - setup_aberto_anterior.data_hora
+                    setup_aberto_anterior.data_fim = agora
+                    setup_aberto_anterior.tempo_decorrido = int(max(delta_setup.total_seconds(), 0))
+                    try:
+                        from notificacoes.monitoramento import limpar_alerta_setup
+                        limpar_alerta_setup(setup_aberto_anterior.id)
+                    except Exception:
+                        pass
+            except Exception:
+                pass
         if tipo_acao == 'pausa':
             # Encerrar o início de produção vigente (se ainda não encerrado acima)
             try:
