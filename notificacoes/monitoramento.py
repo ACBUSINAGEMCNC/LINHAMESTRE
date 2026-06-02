@@ -8,40 +8,104 @@ from .logs import log_evento
 _alertas_enviados = {}
 
 
-def _get_ultimo_alerta_db(chave):
-    """Busca último alerta enviado do banco de dados"""
+def _garantir_tabela_cache_alerta():
     try:
-        from models import db, CacheAlerta
-        from models import local_now_naive
-        
-        cache = CacheAlerta.query.filter_by(chave=chave).first()
-        if cache:
-            # Verificar se não expirou (2 horas)
-            agora = local_now_naive()
-            if (agora - cache.data_envio).total_seconds() < 7200:  # 2 horas
-                return cache.data_envio
-        return None
-    except Exception as e:
-        # Se tabela não existe ou outro erro, apenas usar memória
-        log_evento('cache_db_erro_leitura', {'chave': chave, 'erro': str(e)}, status='aviso')
-        return None
+        from models import db
+        from sqlalchemy import text
 
-
-def _salvar_alerta_db(chave, data_envio):
-    """Salva alerta no banco de dados"""
-    try:
-        from models import db, CacheAlerta
-        
-        cache = CacheAlerta.query.filter_by(chave=chave).first()
-        if cache:
-            cache.data_envio = data_envio
+        dialect = (db.engine.dialect.name or '').lower()
+        if dialect.startswith('postgres'):
+            db.session.execute(text(
+                """
+                CREATE TABLE IF NOT EXISTS cache_alerta (
+                    id SERIAL PRIMARY KEY,
+                    chave VARCHAR(100) UNIQUE NOT NULL,
+                    data_envio TIMESTAMP NOT NULL
+                );
+                CREATE INDEX IF NOT EXISTS ix_cache_alerta_chave ON cache_alerta(chave);
+                """
+            ))
         else:
-            cache = CacheAlerta(chave=chave, data_envio=data_envio)
-            db.session.add(cache)
+            db.session.execute(text(
+                """
+                CREATE TABLE IF NOT EXISTS cache_alerta (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    chave VARCHAR(100) UNIQUE NOT NULL,
+                    data_envio DATETIME NOT NULL
+                );
+                """
+            ))
+            try:
+                db.session.execute(text("CREATE INDEX IF NOT EXISTS ix_cache_alerta_chave ON cache_alerta(chave);"))
+            except Exception:
+                pass
         db.session.commit()
+        return True
     except Exception as e:
-        # Se tabela não existe ou outro erro, apenas usar memória
-        log_evento('cache_db_erro_gravacao', {'chave': chave, 'erro': str(e)}, status='aviso')
+        try:
+            from models import db
+            db.session.rollback()
+        except Exception:
+            pass
+        log_evento('cache_db_erro_tabela', {'erro': str(e)}, status='aviso')
+        return False
+
+
+def _deve_enviar_alerta_db(chave, agora, intervalo_minutos):
+    try:
+        from models import db
+        from sqlalchemy import text
+
+        if not _garantir_tabela_cache_alerta():
+            return None
+
+        dialect = (db.engine.dialect.name or '').lower()
+        if dialect.startswith('postgres'):
+            res = db.session.execute(
+                text(
+                    """
+                    INSERT INTO cache_alerta (chave, data_envio)
+                    VALUES (:chave, :agora)
+                    ON CONFLICT (chave)
+                    DO UPDATE SET data_envio = EXCLUDED.data_envio
+                    WHERE cache_alerta.data_envio <= (:agora - (:intervalo * INTERVAL '1 minute'))
+                    RETURNING data_envio;
+                    """
+                ),
+                {'chave': chave, 'agora': agora, 'intervalo': int(intervalo_minutos)}
+            )
+            row = res.first()
+            db.session.commit()
+            return True if row else False
+
+        # SQLite fallback (não é atômico como Postgres, mas ajuda para dev local)
+        ultimo = db.session.execute(
+            text("SELECT data_envio FROM cache_alerta WHERE chave = :chave"),
+            {'chave': chave}
+        ).first()
+        if ultimo and ultimo[0] is not None:
+            try:
+                delta_min = int((agora - ultimo[0]).total_seconds() // 60)
+                if delta_min < int(intervalo_minutos):
+                    db.session.rollback()
+                    return False
+            except Exception:
+                pass
+
+        db.session.execute(
+            text("INSERT OR REPLACE INTO cache_alerta (chave, data_envio) VALUES (:chave, :agora)"),
+            {'chave': chave, 'agora': agora}
+        )
+        db.session.commit()
+        return True
+    except Exception as e:
+        try:
+            from models import db
+            db.session.rollback()
+        except Exception:
+            pass
+        log_evento('cache_db_erro_dedup', {'chave': chave, 'erro': str(e)}, status='aviso')
+        return None
 
 def monitorar_producao():
     from models import ApontamentoProducao
@@ -170,32 +234,28 @@ def monitorar_producao():
                 'servico': getattr(ap.trabalho, 'nome', '-')
             }, status='debug')
             
-            # Buscar do banco de dados (persistente entre workers)
-            ultimo_envio = _get_ultimo_alerta_db(chave_alerta)
-            if ultimo_envio is None:
-                # Fallback para memória
+            # Deduplicação entre múltiplas instâncias (Vercel) usando banco de dados.
+            # Se DB falhar, usa fallback em memória (pode duplicar se houver múltiplas instâncias).
+            deve_enviar = _deve_enviar_alerta_db(chave_alerta, agora, intervalo_alerta)
+            ultimo_envio = None
+            if deve_enviar is None:
                 ultimo_envio = _alertas_enviados.get(chave_alerta)
-            
-            # Verificar se já passaram 15min desde o último alerta DESTE setup
-            deve_enviar = False
-            if ultimo_envio is None:
-                # Primeiro alerta deste setup
-                deve_enviar = True
-            else:
-                minutos_desde_ultimo = int((agora - ultimo_envio).total_seconds() // 60)
-                if minutos_desde_ultimo >= intervalo_alerta:
+                if ultimo_envio is None:
                     deve_enviar = True
+                else:
+                    minutos_desde_ultimo = int((agora - ultimo_envio).total_seconds() // 60)
+                    deve_enviar = minutos_desde_ultimo >= intervalo_alerta
             
             if deve_enviar:
                 _alertar_setup_longo(ap, minutos)
-                # Salvar em ambos (memória e banco)
+                # Salvar em memória (DB já foi atualizado quando disponível)
                 _alertas_enviados[chave_alerta] = agora
-                _salvar_alerta_db(chave_alerta, agora)
                 total_alertas += 1
                 log_evento('alerta_setup_enviado', {
                     'id': ap.id,
                     'minutos': minutos,
-                    'minutos_desde_ultimo': int((agora - ultimo_envio).total_seconds() // 60) if ultimo_envio else None
+                    'minutos_desde_ultimo': int((agora - ultimo_envio).total_seconds() // 60) if ultimo_envio else None,
+                    'dedup_db': True if deve_enviar is True and ultimo_envio is None else None
                 }, status='enviado')
             else:
                 log_evento('alerta_setup_ignorado', {
