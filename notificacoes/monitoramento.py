@@ -21,7 +21,9 @@ def _get_ultimo_alerta_db(chave):
             if (agora - cache.data_envio).total_seconds() < 7200:  # 2 horas
                 return cache.data_envio
         return None
-    except Exception:
+    except Exception as e:
+        # Se tabela não existe ou outro erro, apenas usar memória
+        log_evento('cache_db_erro_leitura', {'chave': chave, 'erro': str(e)}, status='aviso')
         return None
 
 
@@ -38,7 +40,8 @@ def _salvar_alerta_db(chave, data_envio):
             db.session.add(cache)
         db.session.commit()
     except Exception as e:
-        log_evento('erro_salvar_cache_alerta', {'chave': chave, 'erro': str(e)}, status='erro')
+        # Se tabela não existe ou outro erro, apenas usar memória
+        log_evento('cache_db_erro_gravacao', {'chave': chave, 'erro': str(e)}, status='aviso')
 
 def monitorar_producao():
     from models import ApontamentoProducao
@@ -60,6 +63,13 @@ def monitorar_producao():
 
     total_alertas = 0
     setups_ignorados = 0
+    
+    # Log de debug
+    log_evento('monitoramento_inicio', {
+        'total_abertos': len(abertos),
+        'limite_alerta_min': ConfiguracaoNotificacoes.ALERTA_SETUP_LONGO_MINUTOS,
+        'intervalo_alerta_min': getattr(ConfiguracaoNotificacoes, 'ALERTA_SETUP_LONGO_INTERVALO_MINUTOS', 15)
+    }, status='debug')
     
     for ap in abertos:
         # VERIFICAÇÃO EXTRA: Confirmar que data_fim é realmente NULL
@@ -111,6 +121,15 @@ def monitorar_producao():
         # Cada setup tem seu próprio controle de alerta
         if minutos >= limite_alerta:
             chave_alerta = f"setup_{ap.id}"
+            
+            # Log de debug
+            log_evento('setup_passou_limite', {
+                'id': ap.id,
+                'minutos': minutos,
+                'limite': limite_alerta,
+                'item': getattr(ap.item, 'nome', None) or getattr(ap.item, 'codigo_acb', '-'),
+                'servico': getattr(ap.trabalho, 'nome', '-')
+            }, status='debug')
             
             # Buscar do banco de dados (persistente entre workers)
             ultimo_envio = _get_ultimo_alerta_db(chave_alerta)
