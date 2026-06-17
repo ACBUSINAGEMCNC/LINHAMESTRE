@@ -1342,7 +1342,7 @@ def planilha_producao():
     
     # Verificar se é upload manual ou busca do OneDrive
     arquivo_upload = request.files.get('arquivo')
-    onedrive_url = request.form.get('onedrive_url', 'https://1drv.ms/x/c/fda73c9e84af45b1/IQDWDo1etUinT7fg13wRDrHiAdSktomCZ4pvFrFxsxCZbaE')
+    onedrive_url = request.form.get('onedrive_url', 'https://1drv.ms/x/c/fda73c9e84af45b1/IQDWDo1etUinT7fg13wRDrHiAdSktomCZ4pvFrFxsxCZbaE?e=g0srfo&download=1')
     
     try:
         from openpyxl import Workbook
