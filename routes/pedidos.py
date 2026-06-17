@@ -1340,8 +1340,7 @@ def planilha_producao():
     if request.method == 'GET':
         return render_template('pedidos/planilha_producao.html')
     
-    # Verificar se é upload manual ou busca do OneDrive
-    arquivo_upload = request.files.get('arquivo')
+    # Buscar URL do OneDrive
     onedrive_url = request.form.get('onedrive_url', 'https://1drv.ms/x/c/fda73c9e84af45b1/IQDWDo1etUinT7fg13wRDrHiAdSktomCZ4pvFrFxsxCZbaE?e=g0srfo&download=1')
     
     try:
@@ -1352,103 +1351,98 @@ def planilha_producao():
         from urllib.request import urlopen, Request
         from urllib.error import URLError, HTTPError
         
-        # Se houver upload manual, usar ele
-        if arquivo_upload and arquivo_upload.filename:
-            logger.info("Usando arquivo enviado manualmente")
-            wb = load_workbook(arquivo_upload, data_only=True)
-        else:
-            # Converter URL do OneDrive para URL de download direto
-            try:
-                # Tentar baixar do OneDrive
-                logger.info(f"Tentando baixar planilha do OneDrive: {onedrive_url}")
+        # Converter URL do OneDrive para URL de download direto
+        try:
+            # Tentar baixar do OneDrive
+            logger.info(f"Tentando baixar planilha do OneDrive: {onedrive_url}")
+            
+            # Converter para URL de download direto
+            if '1drv.ms' in onedrive_url or 'onedrive.live.com' in onedrive_url:
+                # Tentar diferentes formatos de URL de download do OneDrive
+                download_urls = []
                 
-                # Converter para URL de download direto
-                if '1drv.ms' in onedrive_url or 'onedrive.live.com' in onedrive_url:
-                    # Tentar diferentes formatos de URL de download do OneDrive
-                    download_urls = []
-                    
-                    # Limpar URL base (remover parâmetros existentes)
-                    base_url = onedrive_url.split('?')[0]
-                    
-                    # Método 1: Adicionar ?download=1 à URL original
-                    download_urls.append(f"{base_url}?download=1")
-                    
-                    # Método 2: Se tiver parâmetros, manter e adicionar download
-                    if '?' in onedrive_url:
-                        download_urls.append(f"{onedrive_url}&download=1")
-                    
-                    # Método 3: Converter 1drv.ms para onedrive.live.com/download
-                    if '1drv.ms' in onedrive_url:
-                        # Extrair o ID do compartilhamento
-                        # Formato: https://1drv.ms/x/c/ID/HASH ou https://1drv.ms/x/s!HASH
-                        try:
-                            if '/s!' in onedrive_url:
-                                # Formato curto: https://1drv.ms/x/s!HASH
-                                share_token = onedrive_url.split('/s!')[-1].split('?')[0]
-                                download_urls.append(f"https://onedrive.live.com/download?cid={share_token}")
-                            elif '/c/' in onedrive_url:
-                                # Formato longo: https://1drv.ms/x/c/ID/HASH
-                                parts = onedrive_url.split('/')
-                                if len(parts) >= 6:
-                                    cid = parts[4]  # ID
-                                    resid = parts[5].split('?')[0]  # HASH
-                                    download_urls.append(f"https://onedrive.live.com/download?cid={cid}&resid={cid}%21{resid}")
-                        except Exception as e:
-                            logger.warning(f"Erro ao extrair ID do OneDrive: {e}")
-                    
-                    # Método 4: URL embed alternativa
-                    download_urls.append(f"{base_url}?download=1&e=download")
-                    
-                    logger.info(f"URLs de download a tentar: {len(download_urls)}")
-                    
-                    excel_content = None
-                    last_error = None
-                    
-                    for download_url in download_urls:
-                        try:
-                            logger.info(f"Tentando URL: {download_url}")
+                # Limpar URL base (remover parâmetros existentes)
+                base_url = onedrive_url.split('?')[0]
+                
+                # Método 1: Adicionar ?download=1 à URL original
+                download_urls.append(f"{base_url}?download=1")
+                
+                # Método 2: Se tiver parâmetros, manter e adicionar download
+                if '?' in onedrive_url:
+                    download_urls.append(f"{onedrive_url}&download=1")
+                
+                # Método 3: Converter 1drv.ms para onedrive.live.com/download
+                if '1drv.ms' in onedrive_url:
+                    # Extrair o ID do compartilhamento
+                    # Formato: https://1drv.ms/x/c/ID/HASH ou https://1drv.ms/x/s!HASH
+                    try:
+                        if '/s!' in onedrive_url:
+                            # Formato curto: https://1drv.ms/x/s!HASH
+                            share_token = onedrive_url.split('/s!')[-1].split('?')[0]
+                            download_urls.append(f"https://onedrive.live.com/download?cid={share_token}")
+                        elif '/c/' in onedrive_url:
+                            # Formato longo: https://1drv.ms/x/c/ID/HASH
+                            parts = onedrive_url.split('/')
+                            if len(parts) >= 6:
+                                cid = parts[4]  # ID
+                                resid = parts[5].split('?')[0]  # HASH
+                                download_urls.append(f"https://onedrive.live.com/download?cid={cid}&resid={cid}%21{resid}")
+                    except Exception as e:
+                        logger.warning(f"Erro ao extrair ID do OneDrive: {e}")
+                
+                # Método 4: URL embed alternativa
+                download_urls.append(f"{base_url}?download=1&e=download")
+                
+                logger.info(f"URLs de download a tentar: {len(download_urls)}")
+                
+                excel_content = None
+                last_error = None
+                
+                for download_url in download_urls:
+                    try:
+                        logger.info(f"Tentando URL: {download_url}")
+                        
+                        # Criar requisição com headers
+                        req = Request(download_url)
+                        req.add_header('User-Agent', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36')
+                        req.add_header('Accept', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-excel,*/*')
+                        
+                        with urlopen(req, timeout=30) as response:
+                            content = response.read()
+                            logger.info(f"Resposta recebida. Tamanho: {len(content)} bytes, Content-Type: {response.headers.get('Content-Type', 'unknown')}")
                             
-                            # Criar requisição com headers
-                            req = Request(download_url)
-                            req.add_header('User-Agent', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36')
-                            req.add_header('Accept', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-excel,*/*')
-                            
-                            with urlopen(req, timeout=30) as response:
-                                content = response.read()
-                                logger.info(f"Resposta recebida. Tamanho: {len(content)} bytes, Content-Type: {response.headers.get('Content-Type', 'unknown')}")
-                                
-                                # Verificar se é realmente um arquivo Excel (começa com PK para ZIP)
-                                if len(content) > 0:
-                                    # Arquivos Excel são arquivos ZIP
-                                    if content[:2] == b'PK':
-                                        excel_content = BytesIO(content)
-                                        logger.info("Download bem-sucedido! Arquivo Excel válido detectado.")
-                                        break
-                                    else:
-                                        logger.warning(f"Conteúdo não parece ser um arquivo Excel. Primeiros bytes: {content[:10]}")
-                                        last_error = "Conteúdo baixado não é um arquivo Excel válido"
-                        except (URLError, HTTPError) as e:
-                            logger.warning(f"Falha HTTP na tentativa: {str(e)}")
-                            last_error = str(e)
-                            continue
-                        except Exception as e:
-                            logger.warning(f"Erro inesperado: {str(e)}")
-                            last_error = str(e)
-                            continue
-                    
-                    if not excel_content:
-                        error_msg = f"Não foi possível baixar a planilha do OneDrive. Último erro: {last_error}. "
-                        error_msg += "Verifique se: 1) O link está correto, 2) O arquivo está compartilhado publicamente, 3) Você tem permissão de acesso."
-                        raise Exception(error_msg)
-                    
-                    wb = load_workbook(excel_content, data_only=True)
-                else:
-                    raise Exception("URL do OneDrive inválida")
-                    
-            except Exception as e:
-                logger.exception("Erro ao baixar planilha do OneDrive")
-                flash(f'Erro ao buscar planilha do OneDrive: {str(e)}', 'danger')
-                return redirect(url_for('pedidos.planilha_producao'))
+                            # Verificar se é realmente um arquivo Excel (começa com PK para ZIP)
+                            if len(content) > 0:
+                                # Arquivos Excel são arquivos ZIP
+                                if content[:2] == b'PK':
+                                    excel_content = BytesIO(content)
+                                    logger.info("Download bem-sucedido! Arquivo Excel válido detectado.")
+                                    break
+                                else:
+                                    logger.warning(f"Conteúdo não parece ser um arquivo Excel. Primeiros bytes: {content[:10]}")
+                                    last_error = "Conteúdo baixado não é um arquivo Excel válido"
+                    except (URLError, HTTPError) as e:
+                        logger.warning(f"Falha HTTP na tentativa: {str(e)}")
+                        last_error = str(e)
+                        continue
+                    except Exception as e:
+                        logger.warning(f"Erro inesperado: {str(e)}")
+                        last_error = str(e)
+                        continue
+                
+                if not excel_content:
+                    error_msg = f"Não foi possível baixar a planilha do OneDrive. Último erro: {last_error}. "
+                    error_msg += "Verifique se: 1) O link está correto, 2) O arquivo está compartilhado publicamente, 3) Você tem permissão de acesso."
+                    raise Exception(error_msg)
+                
+                wb = load_workbook(excel_content, data_only=True)
+            else:
+                raise Exception("URL do OneDrive inválida")
+                
+        except Exception as e:
+            logger.exception("Erro ao baixar planilha do OneDrive")
+            flash(f'Erro ao buscar planilha do OneDrive: {str(e)}', 'danger')
+            return redirect(url_for('pedidos.planilha_producao'))
         
         ws = wb.active
         
