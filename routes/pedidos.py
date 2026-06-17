@@ -1332,3 +1332,174 @@ def cadastrar_item_pedido(pedido_id):
     materiais = Material.query.all()
     trabalhos = Trabalho.query.all()
     return render_template('itens/cadastrar_pedido.html', pedido=pedido, materiais=materiais, trabalhos=trabalhos)
+
+
+@pedidos.route('/pedidos/planilha-producao', methods=['GET', 'POST'])
+def planilha_producao():
+    """Módulo de Planilha de Produção - Upload, comparação e download"""
+    if request.method == 'GET':
+        return render_template('pedidos/planilha_producao.html')
+    
+    arquivo = request.files.get('arquivo')
+    if not arquivo or not arquivo.filename:
+        flash('Selecione um arquivo Excel para processar.', 'danger')
+        return redirect(url_for('pedidos.planilha_producao'))
+    
+    try:
+        from openpyxl import Workbook
+        from openpyxl.styles import Font, PatternFill, Alignment
+        from io import BytesIO
+        from flask import send_file
+        
+        wb = load_workbook(arquivo, data_only=True)
+        ws = wb.active
+        
+        # Ler cabeçalhos
+        header_row = None
+        for row in ws.iter_rows(min_row=1, max_row=1, values_only=True):
+            header_row = list(row)
+            break
+        
+        if not header_row:
+            flash('Planilha vazia ou sem cabeçalho.', 'danger')
+            return redirect(url_for('pedidos.planilha_producao'))
+        
+        # Normalizar cabeçalhos
+        headers_normalized = [_normalize_header(h) if h else '' for h in header_row]
+        
+        # Identificar colunas a remover (valor unitário e valor total)
+        colunas_remover = set()
+        for i, h in enumerate(headers_normalized):
+            if h in ['valor_unitario', 'valor_unit', 'preco_unitario', 'preco_unit', 'valor_total', 'preco_total', 'total']:
+                colunas_remover.add(i)
+        
+        # Identificar colunas importantes
+        col_item = None
+        col_pedido = None
+        
+        for i, h in enumerate(headers_normalized):
+            if h in ['item', 'codigo_acb', 'codigo', 'cod_item', 'nome_item']:
+                col_item = i
+            if h in ['numero_pedido_cliente', 'n_pedido_cliente', 'numero_pedido', 'n_pedido', 'pedido_cliente', 'oc', 'ordem_compra', 'pedido']:
+                col_pedido = i
+        
+        # Criar nova planilha
+        wb_novo = Workbook()
+        ws_novo = wb_novo.active
+        ws_novo.title = "Planilha de Produção"
+        
+        # Escrever cabeçalhos (excluindo colunas de valor)
+        novos_headers = []
+        col_mapping = {}
+        nova_col = 0
+        
+        for i, header in enumerate(header_row):
+            if i not in colunas_remover:
+                novos_headers.append(header)
+                col_mapping[i] = nova_col
+                nova_col += 1
+        
+        # Adicionar coluna "Status"
+        novos_headers.append('Status')
+        col_status = len(novos_headers) - 1
+        
+        # Estilizar cabeçalho
+        for col_idx, header in enumerate(novos_headers, start=1):
+            cell = ws_novo.cell(row=1, column=col_idx, value=header)
+            cell.font = Font(bold=True, color="FFFFFF")
+            cell.fill = PatternFill(start_color="0066CC", end_color="0066CC", fill_type="solid")
+            cell.alignment = Alignment(horizontal="center", vertical="center")
+        
+        # Processar linhas de dados
+        row_novo = 2
+        for row_idx, row_values in enumerate(ws.iter_rows(min_row=2, values_only=True), start=2):
+            # Pular linhas vazias
+            if not any(row_values):
+                continue
+            
+            # Escrever dados (excluindo colunas de valor)
+            nova_row_data = []
+            for i, value in enumerate(row_values):
+                if i not in colunas_remover:
+                    nova_row_data.append(value)
+            
+            # Escrever na nova planilha
+            for col_idx, value in enumerate(nova_row_data, start=1):
+                ws_novo.cell(row=row_novo, column=col_idx, value=value)
+            
+            # Verificar se está lançado no sistema
+            status = ''
+            item_val = row_values[col_item] if col_item is not None and col_item < len(row_values) else None
+            pedido_val = row_values[col_pedido] if col_pedido is not None and col_pedido < len(row_values) else None
+            
+            if item_val or pedido_val:
+                item_str = str(item_val).strip() if item_val else ''
+                pedido_str = str(pedido_val).strip() if pedido_val else ''
+                
+                # Buscar no banco de dados
+                query = db.session.query(Pedido).join(Item, Pedido.item_id == Item.id, isouter=True)
+                
+                filtros = []
+                if item_str:
+                    # Remover .0 se for número
+                    if item_str.endswith('.0'):
+                        try:
+                            item_str = str(int(float(item_str)))
+                        except:
+                            pass
+                    filtros.append(
+                        db.or_(
+                            Item.codigo_acb.ilike(f'%{item_str}%'),
+                            Item.nome.ilike(f'%{item_str}%'),
+                            Pedido.nome_item.ilike(f'%{item_str}%')
+                        )
+                    )
+                
+                if pedido_str:
+                    filtros.append(Pedido.numero_pedido_cliente.ilike(f'%{pedido_str}%'))
+                
+                if filtros:
+                    query = query.filter(db.and_(*filtros))
+                    pedido_encontrado = query.first()
+                    
+                    if pedido_encontrado:
+                        status = 'LANÇADO'
+            
+            # Escrever status
+            cell_status = ws_novo.cell(row=row_novo, column=col_status + 1, value=status)
+            if status == 'LANÇADO':
+                cell_status.font = Font(bold=True, color="006100")
+                cell_status.fill = PatternFill(start_color="C6EFCE", end_color="C6EFCE", fill_type="solid")
+            
+            row_novo += 1
+        
+        # Ajustar largura das colunas
+        for column in ws_novo.columns:
+            max_length = 0
+            column_letter = column[0].column_letter
+            for cell in column:
+                try:
+                    if cell.value:
+                        max_length = max(max_length, len(str(cell.value)))
+                except:
+                    pass
+            adjusted_width = min(max_length + 2, 50)
+            ws_novo.column_dimensions[column_letter].width = adjusted_width
+        
+        # Salvar em memória
+        output = BytesIO()
+        wb_novo.save(output)
+        output.seek(0)
+        
+        # Enviar arquivo para download
+        return send_file(
+            output,
+            mimetype='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+            as_attachment=True,
+            download_name=f'planilha_producao_{datetime.now().strftime("%Y%m%d_%H%M%S")}.xlsx'
+        )
+        
+    except Exception as e:
+        logger.exception('Erro ao processar planilha de produção')
+        flash(f'Erro ao processar planilha: {str(e)}', 'danger')
+        return redirect(url_for('pedidos.planilha_producao'))
