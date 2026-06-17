@@ -1340,7 +1340,8 @@ def planilha_producao():
     if request.method == 'GET':
         return render_template('pedidos/planilha_producao.html')
     
-    # URL do OneDrive (configurável)
+    # Verificar se é upload manual ou busca do OneDrive
+    arquivo_upload = request.files.get('arquivo')
     onedrive_url = request.form.get('onedrive_url', 'https://1drv.ms/x/c/fda73c9e84af45b1/IQDWDo1etUinT7fg13wRDrHiAdSktomCZ4pvFrFxsxCZbaE')
     
     try:
@@ -1351,52 +1352,89 @@ def planilha_producao():
         from urllib.request import urlopen, Request
         from urllib.error import URLError, HTTPError
         
-        # Converter URL do OneDrive para URL de download direto
-        try:
-            # Tentar baixar do OneDrive
-            logger.info(f"Tentando baixar planilha do OneDrive: {onedrive_url}")
-            
-            # Converter para URL de download direto
-            if '1drv.ms' in onedrive_url:
-                # Tentar diferentes formatos de URL de download
-                download_urls = [
-                    f"{onedrive_url}?download=1",
-                    onedrive_url.replace('1drv.ms/x/', 'onedrive.live.com/download?'),
-                ]
+        # Se houver upload manual, usar ele
+        if arquivo_upload and arquivo_upload.filename:
+            logger.info("Usando arquivo enviado manualmente")
+            wb = load_workbook(arquivo_upload, data_only=True)
+        else:
+            # Converter URL do OneDrive para URL de download direto
+            try:
+                # Tentar baixar do OneDrive
+                logger.info(f"Tentando baixar planilha do OneDrive: {onedrive_url}")
                 
-                excel_content = None
-                for download_url in download_urls:
-                    try:
-                        logger.info(f"Tentando URL: {download_url}")
-                        
-                        # Criar requisição com headers
-                        req = Request(download_url)
-                        req.add_header('User-Agent', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36')
-                        
-                        with urlopen(req, timeout=30) as response:
-                            content = response.read()
-                            if len(content) > 0:
-                                excel_content = BytesIO(content)
-                                logger.info(f"Download bem-sucedido! Tamanho: {len(content)} bytes")
-                                break
-                    except (URLError, HTTPError) as e:
-                        logger.warning(f"Falha na tentativa: {str(e)}")
-                        continue
-                    except Exception as e:
-                        logger.warning(f"Erro inesperado: {str(e)}")
-                        continue
-                
-                if not excel_content:
-                    raise Exception("Não foi possível baixar a planilha do OneDrive. Verifique se o link está correto e se o arquivo está compartilhado publicamente.")
-                
-                wb = load_workbook(excel_content, data_only=True)
-            else:
-                raise Exception("URL do OneDrive inválida")
-                
-        except Exception as e:
-            logger.exception("Erro ao baixar planilha do OneDrive")
-            flash(f'Erro ao buscar planilha do OneDrive: {str(e)}', 'danger')
-            return redirect(url_for('pedidos.planilha_producao'))
+                # Converter para URL de download direto
+                if '1drv.ms' in onedrive_url or 'onedrive.live.com' in onedrive_url:
+                    # Extrair o resid da URL se disponível
+                    # Formato: https://1drv.ms/x/c/ID/HASH
+                    
+                    # Tentar diferentes formatos de URL de download do OneDrive
+                    download_urls = []
+                    
+                    # Método 1: Adicionar ?download=1
+                    download_urls.append(f"{onedrive_url}?download=1")
+                    
+                    # Método 2: Converter para embed e depois download
+                    if 'IQD' in onedrive_url:
+                        # Extrair o hash da URL
+                        parts = onedrive_url.split('/')
+                        if len(parts) >= 2:
+                            hash_part = parts[-1].split('?')[0]
+                            # Formato embed do OneDrive
+                            embed_url = f"https://onedrive.live.com/download?resid={hash_part}"
+                            download_urls.append(embed_url)
+                    
+                    # Método 3: URL de download direto alternativa
+                    base_url = onedrive_url.split('?')[0]
+                    download_urls.append(f"{base_url}?download=1&e=download")
+                    
+                    excel_content = None
+                    last_error = None
+                    
+                    for download_url in download_urls:
+                        try:
+                            logger.info(f"Tentando URL: {download_url}")
+                            
+                            # Criar requisição com headers
+                            req = Request(download_url)
+                            req.add_header('User-Agent', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36')
+                            req.add_header('Accept', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-excel,*/*')
+                            
+                            with urlopen(req, timeout=30) as response:
+                                content = response.read()
+                                logger.info(f"Resposta recebida. Tamanho: {len(content)} bytes, Content-Type: {response.headers.get('Content-Type', 'unknown')}")
+                                
+                                # Verificar se é realmente um arquivo Excel (começa com PK para ZIP)
+                                if len(content) > 0:
+                                    # Arquivos Excel são arquivos ZIP
+                                    if content[:2] == b'PK':
+                                        excel_content = BytesIO(content)
+                                        logger.info("Download bem-sucedido! Arquivo Excel válido detectado.")
+                                        break
+                                    else:
+                                        logger.warning(f"Conteúdo não parece ser um arquivo Excel. Primeiros bytes: {content[:10]}")
+                                        last_error = "Conteúdo baixado não é um arquivo Excel válido"
+                        except (URLError, HTTPError) as e:
+                            logger.warning(f"Falha HTTP na tentativa: {str(e)}")
+                            last_error = str(e)
+                            continue
+                        except Exception as e:
+                            logger.warning(f"Erro inesperado: {str(e)}")
+                            last_error = str(e)
+                            continue
+                    
+                    if not excel_content:
+                        error_msg = f"Não foi possível baixar a planilha do OneDrive. Último erro: {last_error}. "
+                        error_msg += "Verifique se: 1) O link está correto, 2) O arquivo está compartilhado publicamente, 3) Você tem permissão de acesso."
+                        raise Exception(error_msg)
+                    
+                    wb = load_workbook(excel_content, data_only=True)
+                else:
+                    raise Exception("URL do OneDrive inválida")
+                    
+            except Exception as e:
+                logger.exception("Erro ao baixar planilha do OneDrive")
+                flash(f'Erro ao buscar planilha do OneDrive: {str(e)}', 'danger')
+                return redirect(url_for('pedidos.planilha_producao'))
         
         ws = wb.active
         

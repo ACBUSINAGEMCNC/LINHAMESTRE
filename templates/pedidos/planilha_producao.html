@@ -47,13 +47,31 @@
                         </div>
                     </div>
 
-                    <form method="POST" id="formProcessar">
+                    <form method="POST" enctype="multipart/form-data" id="formProcessar">
                         <input type="hidden" name="onedrive_url" value="https://1drv.ms/x/c/fda73c9e84af45b1/IQDWDo1etUinT7fg13wRDrHiAdSktomCZ4pvFrFxsxCZbaE">
                         
-                        <div class="d-grid gap-2">
+                        <div class="d-grid gap-2 mb-3">
                             <button type="submit" class="btn btn-success btn-lg" id="btnProcessar">
                                 <i class="fas fa-cloud-download-alt"></i> Buscar do OneDrive e Processar
                             </button>
+                        </div>
+
+                        <div class="text-center mb-2">
+                            <small class="text-muted">ou</small>
+                        </div>
+
+                        <div class="mb-3">
+                            <label for="arquivo" class="form-label">
+                                <i class="fas fa-upload"></i> Upload Manual (alternativa)
+                            </label>
+                            <input type="file" 
+                                   class="form-control" 
+                                   id="arquivo" 
+                                   name="arquivo" 
+                                   accept=".xlsx,.xls">
+                            <div class="form-text">
+                                Use esta opção se o OneDrive não estiver funcionando
+                            </div>
                         </div>
                     </form>
 
