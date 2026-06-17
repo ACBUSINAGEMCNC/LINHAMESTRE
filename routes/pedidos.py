@@ -1364,28 +1364,42 @@ def planilha_producao():
                 
                 # Converter para URL de download direto
                 if '1drv.ms' in onedrive_url or 'onedrive.live.com' in onedrive_url:
-                    # Extrair o resid da URL se disponível
-                    # Formato: https://1drv.ms/x/c/ID/HASH
-                    
                     # Tentar diferentes formatos de URL de download do OneDrive
                     download_urls = []
                     
-                    # Método 1: Adicionar ?download=1
-                    download_urls.append(f"{onedrive_url}?download=1")
-                    
-                    # Método 2: Converter para embed e depois download
-                    if 'IQD' in onedrive_url:
-                        # Extrair o hash da URL
-                        parts = onedrive_url.split('/')
-                        if len(parts) >= 2:
-                            hash_part = parts[-1].split('?')[0]
-                            # Formato embed do OneDrive
-                            embed_url = f"https://onedrive.live.com/download?resid={hash_part}"
-                            download_urls.append(embed_url)
-                    
-                    # Método 3: URL de download direto alternativa
+                    # Limpar URL base (remover parâmetros existentes)
                     base_url = onedrive_url.split('?')[0]
+                    
+                    # Método 1: Adicionar ?download=1 à URL original
+                    download_urls.append(f"{base_url}?download=1")
+                    
+                    # Método 2: Se tiver parâmetros, manter e adicionar download
+                    if '?' in onedrive_url:
+                        download_urls.append(f"{onedrive_url}&download=1")
+                    
+                    # Método 3: Converter 1drv.ms para onedrive.live.com/download
+                    if '1drv.ms' in onedrive_url:
+                        # Extrair o ID do compartilhamento
+                        # Formato: https://1drv.ms/x/c/ID/HASH ou https://1drv.ms/x/s!HASH
+                        try:
+                            if '/s!' in onedrive_url:
+                                # Formato curto: https://1drv.ms/x/s!HASH
+                                share_token = onedrive_url.split('/s!')[-1].split('?')[0]
+                                download_urls.append(f"https://onedrive.live.com/download?cid={share_token}")
+                            elif '/c/' in onedrive_url:
+                                # Formato longo: https://1drv.ms/x/c/ID/HASH
+                                parts = onedrive_url.split('/')
+                                if len(parts) >= 6:
+                                    cid = parts[4]  # ID
+                                    resid = parts[5].split('?')[0]  # HASH
+                                    download_urls.append(f"https://onedrive.live.com/download?cid={cid}&resid={cid}%21{resid}")
+                        except Exception as e:
+                            logger.warning(f"Erro ao extrair ID do OneDrive: {e}")
+                    
+                    # Método 4: URL embed alternativa
                     download_urls.append(f"{base_url}?download=1&e=download")
+                    
+                    logger.info(f"URLs de download a tentar: {len(download_urls)}")
                     
                     excel_content = None
                     last_error = None

@@ -39,16 +39,32 @@
                         </ol>
                     </div>
 
-                    <div class="alert alert-success d-flex align-items-center">
-                        <i class="fas fa-cloud text-success me-3" style="font-size: 2rem;"></i>
-                        <div>
-                            <strong>Planilha sincronizada com OneDrive</strong><br>
-                            <small class="text-muted">A planilha será buscada automaticamente do link compartilhado</small>
-                        </div>
+                    <div class="alert alert-warning">
+                        <h6 class="alert-heading"><i class="fas fa-exclamation-triangle"></i> Como obter o link de download do OneDrive:</h6>
+                        <ol class="mb-0 small">
+                            <li>Abra o arquivo no OneDrive</li>
+                            <li>Clique em <strong>Compartilhar</strong> → <strong>Copiar link</strong></li>
+                            <li>Cole o link abaixo</li>
+                            <li>O sistema tentará converter automaticamente para download</li>
+                        </ol>
                     </div>
 
                     <form method="POST" enctype="multipart/form-data" id="formProcessar">
-                        <input type="hidden" name="onedrive_url" value="https://1drv.ms/x/c/fda73c9e84af45b1/IQDWDo1etUinT7fg13wRDrHiAdSktomCZ4pvFrFxsxCZbaE">
+                        <div class="mb-3">
+                            <label for="onedrive_url" class="form-label fw-bold">
+                                <i class="fas fa-link"></i> Link do OneDrive
+                            </label>
+                            <input type="text" 
+                                   class="form-control" 
+                                   id="onedrive_url" 
+                                   name="onedrive_url" 
+                                   value="https://1drv.ms/x/c/fda73c9e84af45b1/IQDWDo1etUinT7fg13wRDrHiAdSktomCZ4pvFrFxsxCZbaE"
+                                   placeholder="Cole aqui o link compartilhado do OneDrive">
+                            <div class="form-text">
+                                <i class="fas fa-info-circle"></i> 
+                                Cole o link de compartilhamento do OneDrive (será convertido automaticamente)
+                            </div>
+                        </div>
                         
                         <div class="d-grid gap-2 mb-3">
                             <button type="submit" class="btn btn-success btn-lg" id="btnProcessar">
@@ -56,21 +72,21 @@
                             </button>
                         </div>
 
-                        <div class="text-center mb-2">
-                            <small class="text-muted">ou</small>
+                        <div class="text-center my-3">
+                            <small class="text-muted fw-bold">── OU (Mais Confiável) ──</small>
                         </div>
 
-                        <div class="mb-3">
-                            <label for="arquivo" class="form-label">
-                                <i class="fas fa-upload"></i> Upload Manual (alternativa)
-                            </label>
+                        <div class="alert alert-success">
+                            <h6 class="alert-heading"><i class="fas fa-upload"></i> Upload Manual (Recomendado)</h6>
+                            <p class="mb-2 small">Esta opção é mais confiável e rápida!</p>
                             <input type="file" 
                                    class="form-control" 
                                    id="arquivo" 
                                    name="arquivo" 
                                    accept=".xlsx,.xls">
-                            <div class="form-text">
-                                Use esta opção se o OneDrive não estiver funcionando
+                            <div class="form-text mt-2">
+                                <i class="fas fa-check-circle text-success"></i> 
+                                Baixe a planilha do OneDrive manualmente e faça upload aqui
                             </div>
                         </div>
                     </form>
