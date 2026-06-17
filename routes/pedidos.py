@@ -1336,22 +1336,68 @@ def cadastrar_item_pedido(pedido_id):
 
 @pedidos.route('/pedidos/planilha-producao', methods=['GET', 'POST'])
 def planilha_producao():
-    """Módulo de Planilha de Produção - Upload, comparação e download"""
+    """Módulo de Planilha de Produção - Busca automática do OneDrive, comparação e download"""
     if request.method == 'GET':
         return render_template('pedidos/planilha_producao.html')
     
-    arquivo = request.files.get('arquivo')
-    if not arquivo or not arquivo.filename:
-        flash('Selecione um arquivo Excel para processar.', 'danger')
-        return redirect(url_for('pedidos.planilha_producao'))
+    # URL do OneDrive (configurável)
+    onedrive_url = request.form.get('onedrive_url', 'https://1drv.ms/x/c/fda73c9e84af45b1/IQDWDo1etUinT7fg13wRDrHiAdSktomCZ4pvFrFxsxCZbaE')
     
     try:
         from openpyxl import Workbook
         from openpyxl.styles import Font, PatternFill, Alignment
         from io import BytesIO
         from flask import send_file
+        from urllib.request import urlopen, Request
+        from urllib.error import URLError, HTTPError
         
-        wb = load_workbook(arquivo, data_only=True)
+        # Converter URL do OneDrive para URL de download direto
+        try:
+            # Tentar baixar do OneDrive
+            logger.info(f"Tentando baixar planilha do OneDrive: {onedrive_url}")
+            
+            # Converter para URL de download direto
+            if '1drv.ms' in onedrive_url:
+                # Tentar diferentes formatos de URL de download
+                download_urls = [
+                    f"{onedrive_url}?download=1",
+                    onedrive_url.replace('1drv.ms/x/', 'onedrive.live.com/download?'),
+                ]
+                
+                excel_content = None
+                for download_url in download_urls:
+                    try:
+                        logger.info(f"Tentando URL: {download_url}")
+                        
+                        # Criar requisição com headers
+                        req = Request(download_url)
+                        req.add_header('User-Agent', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36')
+                        
+                        with urlopen(req, timeout=30) as response:
+                            content = response.read()
+                            if len(content) > 0:
+                                excel_content = BytesIO(content)
+                                logger.info(f"Download bem-sucedido! Tamanho: {len(content)} bytes")
+                                break
+                    except (URLError, HTTPError) as e:
+                        logger.warning(f"Falha na tentativa: {str(e)}")
+                        continue
+                    except Exception as e:
+                        logger.warning(f"Erro inesperado: {str(e)}")
+                        continue
+                
+                if not excel_content:
+                    raise Exception("Não foi possível baixar a planilha do OneDrive. Verifique se o link está correto e se o arquivo está compartilhado publicamente.")
+                
+                wb = load_workbook(excel_content, data_only=True)
+            else:
+                raise Exception("URL do OneDrive inválida")
+                
+        except Exception as e:
+            logger.exception("Erro ao baixar planilha do OneDrive")
+            flash(f'Erro ao buscar planilha do OneDrive: {str(e)}', 'danger')
+            return redirect(url_for('pedidos.planilha_producao'))
+        
         ws = wb.active
         
         # Ler cabeçalhos

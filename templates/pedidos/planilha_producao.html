@@ -26,38 +26,33 @@
                     <div class="alert alert-info">
                         <h6 class="alert-heading"><i class="fas fa-info-circle"></i> Como funciona:</h6>
                         <ol class="mb-0">
-                            <li>Faça upload da planilha de pedidos (formato Excel .xlsx)</li>
-                            <li>O sistema irá:
+                            <li>Clique no botão abaixo para buscar a planilha atualizada do OneDrive</li>
+                            <li>O sistema irá automaticamente:
                                 <ul>
+                                    <li>Baixar a planilha mais recente do OneDrive</li>
                                     <li>Remover as colunas <strong>"Valor Unitário"</strong> e <strong>"Valor Total"</strong></li>
                                     <li>Comparar cada linha com os pedidos lançados no sistema</li>
                                     <li>Adicionar uma coluna <strong>"Status"</strong> com "LANÇADO" para pedidos encontrados</li>
                                 </ul>
                             </li>
-                            <li>Baixe a nova planilha processada automaticamente</li>
+                            <li>A nova planilha processada será baixada automaticamente</li>
                         </ol>
                     </div>
 
-                    <form method="POST" enctype="multipart/form-data" id="formUpload">
-                        <div class="mb-4">
-                            <label for="arquivo" class="form-label fw-bold">
-                                <i class="fas fa-file-upload"></i> Selecione a Planilha Excel
-                            </label>
-                            <input type="file" 
-                                   class="form-control form-control-lg" 
-                                   id="arquivo" 
-                                   name="arquivo" 
-                                   accept=".xlsx,.xls"
-                                   required>
-                            <div class="form-text">
-                                <i class="fas fa-exclamation-triangle text-warning"></i> 
-                                Apenas arquivos Excel (.xlsx ou .xls)
-                            </div>
+                    <div class="alert alert-success d-flex align-items-center">
+                        <i class="fas fa-cloud text-success me-3" style="font-size: 2rem;"></i>
+                        <div>
+                            <strong>Planilha sincronizada com OneDrive</strong><br>
+                            <small class="text-muted">A planilha será buscada automaticamente do link compartilhado</small>
                         </div>
+                    </div>
 
+                    <form method="POST" id="formProcessar">
+                        <input type="hidden" name="onedrive_url" value="https://1drv.ms/x/c/fda73c9e84af45b1/IQDWDo1etUinT7fg13wRDrHiAdSktomCZ4pvFrFxsxCZbaE">
+                        
                         <div class="d-grid gap-2">
                             <button type="submit" class="btn btn-success btn-lg" id="btnProcessar">
-                                <i class="fas fa-cogs"></i> Processar e Baixar Planilha
+                                <i class="fas fa-cloud-download-alt"></i> Buscar do OneDrive e Processar
                             </button>
                         </div>
                     </form>
@@ -82,19 +77,12 @@
 </div>
 
 <script>
-document.getElementById('formUpload').addEventListener('submit', function(e) {
+document.getElementById('formProcessar').addEventListener('submit', function(e) {
     const btn = document.getElementById('btnProcessar');
-    const arquivo = document.getElementById('arquivo');
-    
-    if (!arquivo.files.length) {
-        e.preventDefault();
-        alert('Por favor, selecione um arquivo.');
-        return;
-    }
     
     // Mostrar loading
     btn.disabled = true;
-    btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Processando...';
+    btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Buscando do OneDrive e processando...';
     
     // Nota: O formulário será submetido normalmente e o arquivo será baixado
     // O botão será reabilitado quando a página recarregar
@@ -104,7 +92,7 @@ document.getElementById('formUpload').addEventListener('submit', function(e) {
 window.addEventListener('load', function() {
     const btn = document.getElementById('btnProcessar');
     btn.disabled = false;
-    btn.innerHTML = '<i class="fas fa-cogs"></i> Processar e Baixar Planilha';
+    btn.innerHTML = '<i class="fas fa-cloud-download-alt"></i> Buscar do OneDrive e Processar';
 });
 </script>
 {% endblock %}
