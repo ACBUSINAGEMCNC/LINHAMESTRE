@@ -1409,18 +1409,35 @@ def planilha_producao():
                         
                         with urlopen(req, timeout=30) as response:
                             content = response.read()
-                            logger.info(f"Resposta recebida. Tamanho: {len(content)} bytes, Content-Type: {response.headers.get('Content-Type', 'unknown')}")
+                            content_type = response.headers.get('Content-Type', 'unknown')
+                            logger.info(f"Resposta recebida. Tamanho: {len(content)} bytes, Content-Type: {content_type}")
                             
                             # Verificar se é realmente um arquivo Excel (começa com PK para ZIP)
                             if len(content) > 0:
-                                # Arquivos Excel são arquivos ZIP
+                                # Log dos primeiros bytes para debug
+                                primeiros_bytes = content[:50]
+                                logger.info(f"Primeiros 50 bytes: {primeiros_bytes}")
+                                
+                                # Tentar detectar se é HTML (página de erro)
+                                if content[:15].lower().startswith(b'<!doctype html') or content[:6].lower().startswith(b'<html'):
+                                    logger.warning("Conteúdo é HTML, não Excel. Provavelmente página de erro ou login.")
+                                    # Tentar extrair título da página para debug
+                                    try:
+                                        content_str = content[:500].decode('utf-8', errors='ignore')
+                                        logger.warning(f"Início do HTML: {content_str}")
+                                    except:
+                                        pass
+                                    last_error = "OneDrive retornou HTML ao invés do arquivo Excel. Verifique permissões de compartilhamento."
+                                    continue
+                                
+                                # Arquivos Excel são arquivos ZIP (começam com PK)
                                 if content[:2] == b'PK':
                                     excel_content = BytesIO(content)
-                                    logger.info("Download bem-sucedido! Arquivo Excel válido detectado.")
+                                    logger.info("✓ Download bem-sucedido! Arquivo Excel válido detectado.")
                                     break
                                 else:
-                                    logger.warning(f"Conteúdo não parece ser um arquivo Excel. Primeiros bytes: {content[:10]}")
-                                    last_error = "Conteúdo baixado não é um arquivo Excel válido"
+                                    logger.warning(f"Conteúdo não é arquivo Excel. Primeiros 20 bytes: {content[:20]}")
+                                    last_error = f"Conteúdo baixado não é um arquivo Excel válido (Content-Type: {content_type})"
                     except (URLError, HTTPError) as e:
                         logger.warning(f"Falha HTTP na tentativa: {str(e)}")
                         last_error = str(e)
@@ -1431,8 +1448,14 @@ def planilha_producao():
                         continue
                 
                 if not excel_content:
-                    error_msg = f"Não foi possível baixar a planilha do OneDrive. Último erro: {last_error}. "
-                    error_msg += "Verifique se: 1) O link está correto, 2) O arquivo está compartilhado publicamente, 3) Você tem permissão de acesso."
+                    error_msg = f"❌ Não foi possível baixar a planilha do OneDrive.\n\n"
+                    error_msg += f"🔍 Erro detectado: {last_error}\n\n"
+                    error_msg += "📋 Verifique:\n"
+                    error_msg += "1. O arquivo está compartilhado como 'Qualquer pessoa com o link pode VISUALIZAR'\n"
+                    error_msg += "2. O link tem o parâmetro &download=1 no final\n"
+                    error_msg += "3. O arquivo é realmente um Excel (.xlsx)\n\n"
+                    error_msg += "💡 Dica: Verifique os logs do servidor para mais detalhes técnicos."
+                    logger.error(f"Falha no download após tentar {len(download_urls)} URLs diferentes")
                     raise Exception(error_msg)
                 
                 wb = load_workbook(excel_content, data_only=True)
