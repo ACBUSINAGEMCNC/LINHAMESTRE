@@ -80,30 +80,32 @@ def _calcular_metricas_stop(os_id, item_id, trab_id, quantidade_final):
         return None
     
     # Quantidade inicial: buscar a quantidade no início da sessão atual
+    # Sessão atual = do último inicio_producao/inicio_setup até agora
     # Se o operador não informou quantidade no início, usar a última quantidade antes do início
     quantidade_inicial = 0
     
-    # Primeiro, encontrar o início da sessão atual (último inicio_setup ou inicio_producao)
+    # Encontrar o ÚLTIMO (mais recente) inicio_setup ou inicio_producao para identificar início da sessão atual
     indice_inicio_sessao = None
-    for i, ap in enumerate(apontamentos):
+    for i in range(len(apontamentos) - 1, -1, -1):
+        ap = apontamentos[i]
         if ap.tipo_acao in ['inicio_producao', 'inicio_setup']:
             indice_inicio_sessao = i
             if ap.quantidade is not None:
                 quantidade_inicial = ap.quantidade
             break
     
-    # Se não encontrou quantidade no início da sessão, buscar a última quantidade antes do início
+    # Se não encontrou quantidade no início da sessão, buscar a última quantidade ANTES do início
     if quantidade_inicial == 0 and indice_inicio_sessao is not None and indice_inicio_sessao > 0:
         for i in range(indice_inicio_sessao - 1, -1, -1):
             if apontamentos[i].quantidade is not None:
                 quantidade_inicial = apontamentos[i].quantidade
                 break
     
-    # Se ainda não encontrou, buscar qualquer quantidade anterior (fallback)
+    # Se ainda não encontrou, buscar a última quantidade em qualquer apontamento (fallback)
     if quantidade_inicial == 0:
-        for ap in apontamentos:
-            if ap.quantidade is not None:
-                quantidade_inicial = ap.quantidade
+        for i in range(len(apontamentos) - 1, -1, -1):
+            if apontamentos[i].quantidade is not None:
+                quantidade_inicial = apontamentos[i].quantidade
                 break
     
     # Tempo total (soma dos tempos decorridos de setup e produção)
