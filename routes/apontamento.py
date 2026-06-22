@@ -109,11 +109,18 @@ def _calcular_metricas_stop(os_id, item_id, trab_id, quantidade_final):
                 break
     
     # Tempo total (soma dos tempos decorridos de setup e produção)
+    # Também capturar horário inicial (primeiro apontamento) e final (agora)
     tempo_setup_minutos = 0
     tempo_producao_minutos = 0
     agora = local_now_naive()
+    hora_inicio = None
+    hora_fim = agora
     
     for ap in apontamentos:
+        # Capturar primeiro horário (início do apontamento)
+        if hora_inicio is None:
+            hora_inicio = ap.data_hora
+        
         tempo_min = 0
         
         if ap.tempo_decorrido:
@@ -138,6 +145,8 @@ def _calcular_metricas_stop(os_id, item_id, trab_id, quantidade_final):
         'tempo_total_minutos': tempo_total_minutos,
         'tempo_setup_minutos': tempo_setup_minutos,
         'tempo_producao_minutos': tempo_producao_minutos,
+        'hora_inicio': hora_inicio,
+        'hora_fim': hora_fim,
     }
 
 

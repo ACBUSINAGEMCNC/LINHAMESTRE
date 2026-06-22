@@ -157,6 +157,12 @@ def _mensagem_stop_com_metricas(dados):
         f"📊 MÉTRICAS DO SERVIÇO ATUAL:\n"
     )
     
+    # Horário inicial e final do apontamento
+    hora_inicio = metricas.get('hora_inicio')
+    hora_fim = metricas.get('hora_fim')
+    if hora_inicio and hora_fim:
+        msg += f"🕐 Início: {_hora(hora_inicio)} | Fim: {_hora(hora_fim)}\n"
+    
     # Quantidade inicial e final
     qtd_inicial = metricas.get('quantidade_inicial', 0)
     qtd_final = dados.get('quantidade', 0)
@@ -168,15 +174,15 @@ def _mensagem_stop_com_metricas(dados):
             msg += f" (+{qtd_produzida})"
         msg += "\n"
     
-    # Tempo total
+    # Tempo total do apontamento (setup + produção)
     tempo_total = metricas.get('tempo_total_minutos', 0)
     if tempo_total > 0:
         horas = tempo_total // 60
         minutos = tempo_total % 60
         if horas > 0:
-            msg += f"⏱️ Tempo total: {horas}h {minutos}min\n"
+            msg += f"⏱️ Tempo total do apontamento: {horas}h {minutos}min\n"
         else:
-            msg += f"⏱️ Tempo total: {minutos}min\n"
+            msg += f"⏱️ Tempo total do apontamento: {minutos}min\n"
     
     # Tempo de setup
     tempo_setup = metricas.get('tempo_setup_minutos', 0)
@@ -207,10 +213,20 @@ def _mensagem_stop_com_metricas(dados):
             qtd = servico.get('ultima_quantidade', 0)
             tempo_setup = servico.get('tempo_setup_minutos', 0)
             tempo_producao = servico.get('tempo_producao_minutos', 0)
+            tempo_total_servico = servico.get('tempo_total_minutos', 0)
             
             msg += f"• {nome}"
             if qtd > 0:
                 msg += f" - {qtd} peças"
+            
+            # Tempo total do serviço (somatória)
+            if tempo_total_servico > 0:
+                h = tempo_total_servico // 60
+                m = tempo_total_servico % 60
+                if h > 0:
+                    msg += f"\n  ⏱️ Tempo total: {h}h {m}min"
+                else:
+                    msg += f"\n  ⏱️ Tempo total: {m}min"
             
             # Tempo de setup
             if tempo_setup > 0:
