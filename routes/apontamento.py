@@ -82,7 +82,7 @@ def _calcular_metricas_stop(os_id, item_id, trab_id, quantidade_final):
     # Quantidade inicial: buscar a quantidade no início da sessão atual
     # Sessão atual = do último inicio_producao/inicio_setup até agora
     # Se o operador não informou quantidade no início, usar a última quantidade antes do início
-    quantidade_inicial = 0
+    quantidade_inicial = None  # None = não encontrado, 0 = encontrado e é zero
     
     # Encontrar o ÚLTIMO (mais recente) inicio_setup ou inicio_producao para identificar início da sessão atual
     indice_inicio_sessao = None
@@ -91,22 +91,20 @@ def _calcular_metricas_stop(os_id, item_id, trab_id, quantidade_final):
         if ap.tipo_acao in ['inicio_producao', 'inicio_setup']:
             indice_inicio_sessao = i
             if ap.quantidade is not None:
-                quantidade_inicial = ap.quantidade
+                quantidade_inicial = ap.quantidade  # Pode ser 0 ou qualquer valor
             break
     
     # Se não encontrou quantidade no início da sessão, buscar a última quantidade ANTES do início
-    if quantidade_inicial == 0 and indice_inicio_sessao is not None and indice_inicio_sessao > 0:
+    if quantidade_inicial is None and indice_inicio_sessao is not None and indice_inicio_sessao > 0:
         for i in range(indice_inicio_sessao - 1, -1, -1):
             if apontamentos[i].quantidade is not None:
                 quantidade_inicial = apontamentos[i].quantidade
                 break
     
-    # Se ainda não encontrou, buscar a última quantidade em qualquer apontamento (fallback)
-    if quantidade_inicial == 0:
-        for i in range(len(apontamentos) - 1, -1, -1):
-            if apontamentos[i].quantidade is not None:
-                quantidade_inicial = apontamentos[i].quantidade
-                break
+    # Se ainda não encontrou, significa que é a primeira produção deste serviço
+    # Quantidade inicial deve ser 0
+    if quantidade_inicial is None:
+        quantidade_inicial = 0
     
     # Tempo total (soma dos tempos decorridos de setup e produção)
     # Também capturar horário inicial (primeiro apontamento) e final (agora)
