@@ -21,6 +21,53 @@ def _ensure_item_pedido_material_laser_schema():
         return False
 
 
+def _build_material_detalhes_map(pedido_material):
+    """Retorna dict: material_id -> lista de {pedido_numero, cliente, quantidade, lista_kanban}"""
+    out = {}
+    if not pedido_material or not pedido_material.numero:
+        return out
+
+    pedidos_origem = Pedido.query.filter_by(numero_pedido_material=pedido_material.numero).all()
+
+    for p in pedidos_origem:
+        if not p.item_id:
+            continue
+        item = Item.query.get(p.item_id)
+        if not item:
+            continue
+
+        itens_alvo = []
+        if getattr(item, 'eh_composto', False):
+            for comp_rel in getattr(item, 'componentes', []) or []:
+                comp_item = getattr(comp_rel, 'item_componente', None)
+                if comp_item:
+                    itens_alvo.append(comp_item)
+        else:
+            itens_alvo.append(item)
+
+        try:
+            from models import Cliente
+            cliente_obj = Cliente.query.get(p.cliente_id)
+            cliente_nome = cliente_obj.nome if cliente_obj else '-'
+        except Exception:
+            cliente_nome = '-'
+
+        detalhe = {
+            'pedido_numero': p.numero_pedido or f'#{p.id}',
+            'cliente': cliente_nome,
+            'quantidade': p.quantidade or 0,
+            'item_codigo': item.codigo_acb or '',
+            'item_nome': item.nome or '',
+        }
+
+        for it_alvo in itens_alvo:
+            itemmateriais = ItemMaterial.query.filter_by(item_id=it_alvo.id).all()
+            for im in itemmateriais:
+                out.setdefault(im.material_id, []).append(detalhe)
+
+    return out
+
+
 def _build_material_item_map(pedido_material):
     pedidos_origem = []
     if pedido_material and pedido_material.numero:
@@ -111,8 +158,9 @@ def visualizar_pedido_material(pedido_id):
             itens_barra.append(item)
 
     material_item_map = _build_material_item_map(pedido)
+    material_detalhes_map = _build_material_detalhes_map(pedido)
 
-    return render_template('pedidos_material/visualizar.html', pedido=pedido, itens_especificos=itens_especificos, itens_barra=itens_barra, material_item_map=material_item_map)
+    return render_template('pedidos_material/visualizar.html', pedido=pedido, itens_especificos=itens_especificos, itens_barra=itens_barra, material_item_map=material_item_map, material_detalhes_map=material_detalhes_map)
 
 
 @pedidos_material.route('/pedidos-material/numero/<string:numero>')

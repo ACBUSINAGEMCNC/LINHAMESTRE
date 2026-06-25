@@ -126,6 +126,7 @@
                                     <th>Arquivo DXF</th>
                                     <th style="width: 120px;">Download</th>
                                     <th class="pm-item-col">Item</th>
+                                    <th class="pm-detalhes-col" style="display:none;">Pedidos / Clientes</th>
                                 </tr>
                             </thead>
                             <tbody>
@@ -166,11 +167,26 @@
                                                 <span class="text-muted" style="font-size: 12px;">-</span>
                                             {% endif %}
                                         </td>
+                                        <td class="pm-detalhes-col" style="display:none;">
+                                            {% set item_map_key = item.material_id if item.material_id else item.id %}
+                                            {% set detalhes = material_detalhes_map.get(item_map_key) if material_detalhes_map is defined else None %}
+                                            {% if detalhes %}
+                                                {% for d in detalhes %}
+                                                <div class="mb-1 p-1 rounded" style="background:#f8f9fa; font-size:11px; line-height:1.3;">
+                                                    <div><span class="badge bg-primary" style="font-size:10px;">{{ d.pedido_numero }}</span> <strong>{{ d.cliente }}</strong></div>
+                                                    <div class="text-muted">{{ d.item_codigo }} — {{ d.item_nome }}</div>
+                                                    <div>Qtd: <strong>{{ d.quantidade }}</strong> pç</div>
+                                                </div>
+                                                {% endfor %}
+                                            {% else %}
+                                                <span class="text-muted" style="font-size:12px;">-</span>
+                                            {% endif %}
+                                        </td>
                                     </tr>
                                     {% endfor %}
                                 {% else %}
                                     <tr>
-                                        <td colspan="6" class="text-muted">Nenhum material específico.</td>
+                                        <td colspan="7" class="text-muted">Nenhum material específico.</td>
                                     </tr>
                                 {% endif %}
                             </tbody>
@@ -186,6 +202,7 @@
                                     <th>Material</th>
                                     <th style="width: 140px;">Tipo</th>
                                     <th class="pm-item-col">Item</th>
+                                    <th class="pm-detalhes-col" style="display:none;">Pedidos / Clientes</th>
                                 </tr>
                             </thead>
                             <tbody>
@@ -216,11 +233,26 @@
                                                 <span class="text-muted" style="font-size: 12px;">-</span>
                                             {% endif %}
                                         </td>
+                                        <td class="pm-detalhes-col" style="display:none;">
+                                            {% set item_map_key = item.material_id if item.material_id else item.id %}
+                                            {% set detalhes = material_detalhes_map.get(item_map_key) if material_detalhes_map is defined else None %}
+                                            {% if detalhes %}
+                                                {% for d in detalhes %}
+                                                <div class="mb-1 p-1 rounded" style="background:#f8f9fa; font-size:11px; line-height:1.3;">
+                                                    <div><span class="badge bg-primary" style="font-size:10px;">{{ d.pedido_numero }}</span> <strong>{{ d.cliente }}</strong></div>
+                                                    <div class="text-muted">{{ d.item_codigo }} — {{ d.item_nome }}</div>
+                                                    <div>Qtd: <strong>{{ d.quantidade }}</strong> pç</div>
+                                                </div>
+                                                {% endfor %}
+                                            {% else %}
+                                                <span class="text-muted" style="font-size:12px;">-</span>
+                                            {% endif %}
+                                        </td>
                                     </tr>
                                     {% endfor %}
                                 {% else %}
                                     <tr>
-                                        <td colspan="4" class="text-muted">Nenhum material em barra.</td>
+                                        <td colspan="5" class="text-muted">Nenhum material em barra.</td>
                                     </tr>
                                 {% endif %}
                             </tbody>
@@ -235,29 +267,39 @@
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
     <script>
         (function () {
+            // Toggle: Mostrar item / imagem
             const toggle = document.getElementById('toggleItemInfo');
-            const cols = document.querySelectorAll('.pm-item-col');
-
-            if (!toggle || !cols || cols.length === 0) return;
-
-            const key = 'pm_show_item_info';
-            const saved = localStorage.getItem(key);
-            const enabled = saved === '1';
-
-            function apply(v) {
-                cols.forEach(el => {
-                    el.style.display = v ? '' : 'none';
+            const colsItem = document.querySelectorAll('.pm-item-col');
+            if (toggle && colsItem.length > 0) {
+                const key = 'pm_show_item_info';
+                function applyItem(v) {
+                    colsItem.forEach(el => { el.style.display = v ? '' : 'none'; });
+                    toggle.checked = v;
+                }
+                applyItem(localStorage.getItem(key) === '1');
+                toggle.addEventListener('change', function () {
+                    const v = !!toggle.checked;
+                    localStorage.setItem(key, v ? '1' : '0');
+                    applyItem(v);
                 });
-                toggle.checked = v;
             }
 
-            apply(enabled);
-
-            toggle.addEventListener('change', function () {
-                const v = !!toggle.checked;
-                localStorage.setItem(key, v ? '1' : '0');
-                apply(v);
-            });
+            // Toggle: Mostrar detalhes (Pedido, Cliente, Qtd)
+            const toggleDet = document.getElementById('toggleDetalhes');
+            const colsDet = document.querySelectorAll('.pm-detalhes-col');
+            if (toggleDet && colsDet.length > 0) {
+                const keyDet = 'pm_show_detalhes';
+                function applyDet(v) {
+                    colsDet.forEach(el => { el.style.display = v ? '' : 'none'; });
+                    toggleDet.checked = v;
+                }
+                applyDet(localStorage.getItem(keyDet) === '1');
+                toggleDet.addEventListener('change', function () {
+                    const v = !!toggleDet.checked;
+                    localStorage.setItem(keyDet, v ? '1' : '0');
+                    applyDet(v);
+                });
+            }
         })();
     </script>
 </body>
