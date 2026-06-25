@@ -4,312 +4,434 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Orçamento de Material {{ pedido.numero }} - ACB Usinagem CNC</title>
-    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css">
     <style>
-        @media print {
-            body {
-                padding: 0;
-                margin: 0;
-            }
-            .no-print {
-                display: none;
-            }
-            .page-break {
-                page-break-after: always;
-            }
-            .container {
-                width: 100%;
-                max-width: 100%;
-                padding: 0;
-                margin: 0;
-            }
-        }
-        .header {
-            border-bottom: 2px solid #000;
-            padding-bottom: 10px;
-            margin-bottom: 20px;
-        }
-        .logo {
-            max-height: 80px;
-        }
-        .company-name {
-            font-weight: 700;
-            font-size: 14px;
-        }
-        .company-sub {
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+
+        body {
+            font-family: Arial, Helvetica, sans-serif;
             font-size: 11px;
-            line-height: 1.25;
-        }
-        .pedido-info {
-            border: 1px solid #ddd;
-            padding: 15px;
-            margin-bottom: 20px;
-            border-radius: 5px;
-        }
-        .item-table {
-            margin-top: 20px;
-        }
-        .footer {
-            margin-top: 50px;
-            border-top: 1px solid #ddd;
-            padding-top: 10px;
-            font-size: 0.8rem;
+            color: #111;
+            background: #fff;
         }
 
+        /* ── Tela: simula folha A4 ── */
+        @media screen {
+            body { background: #ccc; padding: 20px; }
+            .page {
+                width: 210mm;
+                min-height: 297mm;
+                background: #fff;
+                margin: 0 auto;
+                padding: 14mm 14mm 12mm 14mm;
+                box-shadow: 0 2px 12px rgba(0,0,0,.3);
+            }
+        }
+
+        /* ── Impressão A4 ── */
+        @media print {
+            @page { size: A4 portrait; margin: 10mm 12mm; }
+            body { background: #fff; }
+            .page { padding: 0; width: 100%; }
+            .no-print { display: none !important; }
+            table { page-break-inside: auto; }
+            tr { page-break-inside: avoid; }
+        }
+
+        /* ── Cabeçalho ── */
+        .header {
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-start;
+            border-bottom: 2px solid #1a3a6c;
+            padding-bottom: 8px;
+            margin-bottom: 10px;
+        }
+        .header-left .company-name { font-size: 13px; font-weight: 700; color: #1a3a6c; }
+        .header-left .company-sub  { font-size: 9.5px; color: #444; line-height: 1.4; }
+        .header-right { text-align: right; }
+        .header-right img { max-height: 52px; margin-bottom: 4px; display: block; margin-left: auto; }
+        .doc-title { font-size: 12px; font-weight: 700; color: #1a3a6c; }
+        .doc-num   { font-size: 11px; color: #333; }
+
+        /* ── Stamp aprovado ── */
         .stamp-approved {
             position: fixed;
-            top: 14mm;
-            right: 14mm;
+            top: 14mm; right: 14mm;
             border: 3px solid #198754;
             color: #198754;
-            padding: 8px 10px;
+            padding: 6px 10px;
             border-radius: 8px;
             transform: rotate(6deg);
             text-align: center;
             font-weight: 800;
-            background: rgba(255, 255, 255, 0.85);
+            background: rgba(255,255,255,.88);
             z-index: 9999;
-            min-width: 180px;
-        }
-        .stamp-approved .stamp-title {
-            font-size: 16px;
-            letter-spacing: 1px;
-        }
-        .stamp-approved .stamp-meta {
-            font-weight: 600;
+            min-width: 160px;
             font-size: 11px;
-            line-height: 1.2;
-            margin-top: 3px;
         }
+        .stamp-approved .stamp-title { font-size: 15px; letter-spacing: 2px; }
+
+        /* ── Info do pedido ── */
+        .info-box {
+            background: #f5f7fb;
+            border: 1px solid #d0d8e8;
+            border-radius: 5px;
+            padding: 7px 12px;
+            margin-bottom: 10px;
+            display: flex;
+            flex-wrap: wrap;
+            gap: 6px 24px;
+        }
+        .info-box .ib { font-size: 10.5px; }
+        .info-box .ib span { font-weight: 700; }
+
+        /* ── Seções ── */
+        .section-title {
+            font-size: 11px;
+            font-weight: 700;
+            color: #1a3a6c;
+            text-transform: uppercase;
+            letter-spacing: .5px;
+            border-left: 3px solid #1a3a6c;
+            padding-left: 6px;
+            margin: 10px 0 5px 0;
+        }
+
+        /* ── Tabelas ── */
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 10.5px;
+            margin-bottom: 10px;
+        }
+        thead th {
+            background: #1a3a6c;
+            color: #fff;
+            padding: 5px 6px;
+            font-weight: 600;
+            font-size: 10px;
+            text-transform: uppercase;
+            letter-spacing: .3px;
+        }
+        tbody tr:nth-child(even) { background: #f5f7fb; }
+        tbody tr:nth-child(odd)  { background: #fff; }
+        tbody td {
+            padding: 5px 6px;
+            border-bottom: 1px solid #e0e4ef;
+            vertical-align: top;
+        }
+
+        /* ── Coluna Item ── */
+        .pm-item-col { display: none; }
+
+        /* ── Coluna Detalhes ── */
+        .detalhe-bloco {
+            background: #eef2fb;
+            border-radius: 3px;
+            padding: 3px 5px;
+            margin-bottom: 3px;
+            font-size: 10px;
+            line-height: 1.4;
+        }
+        .detalhe-bloco .ped-badge {
+            display: inline-block;
+            background: #1a3a6c;
+            color: #fff;
+            border-radius: 3px;
+            padding: 1px 4px;
+            font-size: 9px;
+            font-weight: 700;
+            margin-right: 3px;
+        }
+
+        /* ── Rodapé ── */
+        .footer {
+            margin-top: 16px;
+            border-top: 1px solid #ccc;
+            padding-top: 6px;
+            font-size: 9px;
+            color: #666;
+            display: flex;
+            justify-content: space-between;
+        }
+        .assinaturas {
+            display: flex;
+            gap: 40px;
+            margin-top: 30px;
+        }
+        .assinatura-linha {
+            flex: 1;
+            text-align: center;
+            font-size: 10px;
+        }
+        .assinatura-linha .linha {
+            border-top: 1px solid #555;
+            margin-bottom: 4px;
+            margin-top: 28px;
+        }
+
+        /* ── Botões no-print ── */
+        .no-print {
+            display: flex;
+            gap: 8px;
+            margin-bottom: 14px;
+            align-items: center;
+            flex-wrap: wrap;
+        }
+        .btn {
+            padding: 6px 14px;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 12px;
+            font-weight: 600;
+            text-decoration: none;
+            display: inline-block;
+        }
+        .btn-primary { background: #1a3a6c; color: #fff; }
+        .btn-secondary { background: #6c757d; color: #fff; }
+        .toggle-label { font-size: 12px; display: flex; align-items: center; gap: 6px; cursor: pointer; }
+        .toggle-label input { width: 36px; height: 20px; cursor: pointer; }
     </style>
 </head>
 <body>
-    <div class="container mt-4">
-        {% if pedido.aprovado_em %}
-        <div class="stamp-approved">
-            <div class="stamp-title">APROVADO</div>
-            <div class="stamp-meta">
-                {% if pedido.aprovado_por_nome %}{{ pedido.aprovado_por_nome }}{% endif %}
-                {% if pedido.aprovado_em %}<div>{{ pedido.aprovado_em.strftime('%d/%m/%Y %H:%M') }}</div>{% endif %}
-            </div>
-        </div>
-        {% endif %}
-        <div class="no-print mb-3">
-            <button class="btn btn-primary" onclick="window.print()">Imprimir</button>
-            <a href="/pedidos-material" class="btn btn-secondary">Voltar</a>
-        </div>
+<div class="page">
 
+    {% if pedido.aprovado_em %}
+    <div class="stamp-approved">
+        <div class="stamp-title">APROVADO</div>
+        <div style="font-size:10px; font-weight:600; margin-top:2px;">
+            {% if pedido.aprovado_por_nome %}{{ pedido.aprovado_por_nome }}{% endif %}
+            {% if pedido.aprovado_em %}<div>{{ pedido.aprovado_em.strftime('%d/%m/%Y %H:%M') }}</div>{% endif %}
+        </div>
+    </div>
+    {% endif %}
+
+    <!-- Controles (não imprime) -->
+    <div class="no-print">
+        <button class="btn btn-primary" onclick="window.print()">🖨️ Imprimir</button>
+        <a href="/pedidos-material/visualizar/{{ pedido.id }}" class="btn btn-secondary">← Voltar</a>
         {% if usuario_nivel == 'admin' or usuario_nome == 'ARTCOMPANY' %}
-        <div class="no-print form-check form-switch mb-3">
-            <input class="form-check-input" type="checkbox" role="switch" id="toggleItemInfo">
-            <label class="form-check-label" for="toggleItemInfo">Mostrar item / imagem</label>
-        </div>
+        <label class="toggle-label">
+            <input type="checkbox" role="switch" id="toggleItemInfo"> Mostrar item / imagem
+        </label>
+        <label class="toggle-label">
+            <input type="checkbox" role="switch" id="toggleDetalhes"> Mostrar Pedido / Cliente
+        </label>
         {% endif %}
-        
-        <div class="header">
-            <div class="row g-2 align-items-center">
-                <div class="col-7">
-                    <div class="company-name">A C B USINAGEM CNC LTDA</div>
-                    <div class="company-sub">Nome Fantasia: ARTCOMPANY</div>
-                    <div class="company-sub">Av. Piquiri, 3146 Brasmadeira - Cascavel/PR - CEP 85.814-040</div>
-                    <div class="company-sub">CNPJ: 17.328.208/0001-37 | I.E.: 90.627.001-38 | Tel: (45) 3096-5902</div>
-                </div>
-                <div class="col-5 text-end">
-                    <img src="/static/logo_acb.png" alt="ACB" class="logo" onerror="this.onerror=null;this.src='/static/logo.svg';">
-                    <div class="mt-1">
-                        <div><strong>Orçamento de Material</strong></div>
-                        <div><strong>{{ pedido.numero }}</strong></div>
-                    </div>
-                </div>
-            </div>
-        </div>
-        
-        <div class="pedido-info">
-            <div class="row">
-                <div class="col-md-6">
-                    <p><strong>Data de Criação:</strong> {{ pedido.data_criacao.strftime('%d/%m/%Y') }}</p>
-                </div>
-                <div class="col-md-6">
-                    <p><strong>Código de Barras:</strong> *{{ pedido.numero }}*</p>
-                </div>
-            </div>
-        </div>
-        
-        <h3>Materiais</h3>
+    </div>
 
-        <h5 class="mt-3">Materiais Específicos (peças)</h5>
-        <div class="table-responsive">
-            <table class="table table-striped table-bordered">
-                <thead>
-                    <tr>
-                        <th style="width: 120px;">Quantidade</th>
-                        <th>Material</th>
-                        <th style="width: 120px;">Espessura</th>
-                        <th>Arquivo DXF</th>
-                        <th style="width: 120px;">Download</th>
-                        <th class="pm-item-col">Item</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    {% set tem_especificos = false %}
-                    {% for item in pedido.itens %}
-                        {% set material = item.material %}
-                        {% if item.usa_quantidade and (item.quantidade or 0) > 0 %}
-                            {% set tem_especificos = true %}
-                            <tr>
-                                <td>{{ item.quantidade or 0 }}</td>
-                                <td>{{ item.material_laser_exibicao if item.eh_item_laser else item.descricao_exibicao_material }}</td>
-                                <td>{{ item.espessura_laser_exibicao if item.eh_item_laser else '-' }}</td>
-                                <td>{{ item.dxf_laser_nome_arquivo if item.eh_item_laser and item.dxf_laser_nome_arquivo else '-' }}</td>
-                                <td>
-                                    {% if item.eh_item_laser and item.dxf_laser_url %}
-                                        <a href="{{ item.dxf_laser_url }}" target="_blank" download>Baixar DXF</a>
-                                    {% else %}
-                                        -
-                                    {% endif %}
-                                </td>
-                                <td class="pm-item-col">
-                                    {% set item_map_key = item.material_id if item.material_id else item.id %}
-                                    {% set itens_rel = material_item_map.get(item_map_key) if material_item_map is defined else None %}
-                                    {% if itens_rel %}
-                                        {% for it in itens_rel %}
-                                            <div class="d-flex align-items-center gap-2 mb-1">
-                                                {% if it.imagem_url %}
-                                                    <img src="{{ it.imagem_url }}" alt="" style="height: 28px; width: 28px; object-fit: cover; border-radius: 4px;" onerror="this.style.display='none'">
-                                                {% endif %}
-                                                <div style="line-height: 1.1;">
-                                                    <div class="fw-semibold" style="font-size: 12px;">{{ it.codigo_acb }}</div>
-                                                    <div class="text-muted" style="font-size: 11px;">{{ it.nome }}</div>
-                                                </div>
-                                            </div>
-                                        {% endfor %}
-                                    {% else %}
-                                        <span class="text-muted" style="font-size: 12px;">-</span>
-                                    {% endif %}
-                                </td>
-                            </tr>
-                        {% endif %}
-                    {% endfor %}
-                    {% if not tem_especificos %}
-                        <tr>
-                            <td colspan="6">Nenhum material específico.</td>
-                        </tr>
-                    {% endif %}
-                </tbody>
-            </table>
+    <!-- Cabeçalho -->
+    <div class="header">
+        <div class="header-left">
+            <div class="company-name">A C B USINAGEM CNC LTDA</div>
+            <div class="company-sub">Nome Fantasia: ARTCOMPANY</div>
+            <div class="company-sub">Av. Piquiri, 3146 Brasmadeira — Cascavel/PR — CEP 85.814-040</div>
+            <div class="company-sub">CNPJ: 17.328.208/0001-37 | I.E.: 90.627.001-38 | Tel: (45) 3096-5902</div>
         </div>
-
-        <h5 class="mt-4">Materiais em Barra (metros)</h5>
-        <div class="table-responsive">
-            <table class="table table-striped table-bordered">
-                <thead>
-                    <tr>
-                        <th>Material</th>
-                        <th>Tipo</th>
-                        <th>Dimensões</th>
-                        <th style="width: 140px;">Comprimento (m)</th>
-                        <th class="pm-item-col">Item</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    {% set tem_barra = false %}
-                    {% for item in pedido.itens %}
-                        {% set material = item.material %}
-                        {% if (not item.usa_quantidade) and ((item.comprimento or 0) / 1000.0) > 0 %}
-                            {% set tem_barra = true %}
-                            <tr>
-                                <td>{{ item.descricao_exibicao_material }}</td>
-                                <td>{{ item.tipo_exibicao_material }}</td>
-                                <td>
-                                    {% if material and material.tipo == 'redondo' %}
-                                        Ø {{ material.diametro }}mm
-                                    {% elif material and material.tipo == 'quadrado' %}
-                                        {{ material.lado }}mm
-                                    {% elif material and material.tipo == 'retangulo' %}
-                                        {{ material.largura }}x{{ material.altura }}mm
-                                    {% else %}
-                                        -
-                                    {% endif %}
-                                </td>
-                                <td>{{ ((item.comprimento or 0) / 1000.0) | round(2) }}</td>
-                                <td class="pm-item-col">
-                                    {% set item_map_key = item.material_id if item.material_id else item.id %}
-                                    {% set itens_rel = material_item_map.get(item_map_key) if material_item_map is defined else None %}
-                                    {% if itens_rel %}
-                                        {% for it in itens_rel %}
-                                            <div class="d-flex align-items-center gap-2 mb-1">
-                                                {% if it.imagem_url %}
-                                                    <img src="{{ it.imagem_url }}" alt="" style="height: 28px; width: 28px; object-fit: cover; border-radius: 4px;" onerror="this.style.display='none'">
-                                                {% endif %}
-                                                <div style="line-height: 1.1;">
-                                                    <div class="fw-semibold" style="font-size: 12px;">{{ it.codigo_acb }}</div>
-                                                    <div class="text-muted" style="font-size: 11px;">{{ it.nome }}</div>
-                                                </div>
-                                            </div>
-                                        {% endfor %}
-                                    {% else %}
-                                        <span class="text-muted" style="font-size: 12px;">-</span>
-                                    {% endif %}
-                                </td>
-                            </tr>
-                        {% endif %}
-                    {% endfor %}
-                    {% if not tem_barra %}
-                        <tr>
-                            <td colspan="5">Nenhum material em barra.</td>
-                        </tr>
-                    {% endif %}
-                </tbody>
-            </table>
-        </div>
-        
-        <div class="mt-5">
-            <div class="row">
-                <div class="col-md-6">
-                    <div class="border-top pt-3 mt-5">
-                        <p>Solicitado por: ___________________________</p>
-                    </div>
-                </div>
-                <div class="col-md-6">
-                    <div class="border-top pt-3 mt-5">
-                        <p>Aprovado por: ___________________________</p>
-                    </div>
-                </div>
-            </div>
-        </div>
-        
-        <div class="footer text-center">
-            <p>Documento gerado em {{ now().strftime('%d/%m/%Y %H:%M:%S') }}</p>
-            <p>ACB Usinagem CNC - Todos os direitos reservados</p>
+        <div class="header-right">
+            <img src="/static/logo_acb.png" alt="ACB" onerror="this.onerror=null;this.src='/static/logo.svg';">
+            <div class="doc-title">Orçamento de Material</div>
+            <div class="doc-num">{{ pedido.numero }}</div>
         </div>
     </div>
 
-    <script>
-        (function () {
-            const toggle = document.getElementById('toggleItemInfo');
-            const cols = document.querySelectorAll('.pm-item-col');
+    <!-- Info do orçamento -->
+    <div class="info-box">
+        <div class="ib"><span>Número:</span> {{ pedido.numero }}</div>
+        <div class="ib"><span>Data:</span> {{ pedido.data_criacao.strftime('%d/%m/%Y') }}</div>
+        <div class="ib"><span>Total de Itens:</span> {{ (itens_especificos|length) + (itens_barra|length) }}</div>
+        {% if pedido.aprovado_em %}
+        <div class="ib"><span>Aprovado em:</span> {{ pedido.aprovado_em.strftime('%d/%m/%Y %H:%M') }}</div>
+        {% endif %}
+    </div>
 
-            if (!toggle || !cols || cols.length === 0) return;
+    <!-- ===== MATERIAIS ESPECÍFICOS ===== -->
+    {% if itens_especificos and itens_especificos|length > 0 %}
+    <div class="section-title">Materiais Específicos (peças)</div>
+    <table>
+        <thead>
+            <tr>
+                <th style="width:70px;">Qtd</th>
+                <th>Material</th>
+                <th style="width:80px;">Espessura</th>
+                <th style="width:110px;">Arquivo DXF</th>
+                <th class="pm-item-col" style="width:110px;">Item</th>
+                <th class="pm-detalhes-col" style="width:140px;">Pedido Cliente / Cliente</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for item in itens_especificos %}
+            <tr>
+                <td style="font-weight:700; font-size:12px;">{{ item.quantidade or 0 }}</td>
+                <td>{{ item.material_laser_exibicao if item.eh_item_laser else item.descricao_exibicao_material }}</td>
+                <td>{{ item.espessura_laser_exibicao if item.eh_item_laser else '-' }}</td>
+                <td>
+                    {% if item.eh_item_laser and item.dxf_laser_url %}
+                        <a href="{{ item.dxf_laser_url }}" target="_blank" download style="color:#1a3a6c;">
+                            {{ item.dxf_laser_nome_arquivo or 'Baixar DXF' }}
+                        </a>
+                    {% else %}
+                        {{ item.dxf_laser_nome_arquivo if item.eh_item_laser and item.dxf_laser_nome_arquivo else '-' }}
+                    {% endif %}
+                </td>
+                <td class="pm-item-col">
+                    {% set item_map_key = item.material_id if item.material_id else item.id %}
+                    {% set itens_rel = material_item_map.get(item_map_key) if material_item_map is defined else None %}
+                    {% if itens_rel %}
+                        {% for it in itens_rel %}
+                        <div style="display:flex; align-items:center; gap:4px; margin-bottom:2px;">
+                            {% if it.imagem_url %}
+                                <img src="{{ it.imagem_url }}" alt="" style="height:24px;width:24px;object-fit:cover;border-radius:3px;" onerror="this.style.display='none'">
+                            {% endif %}
+                            <div style="line-height:1.2;">
+                                <div style="font-weight:700; font-size:10px;">{{ it.codigo_acb }}</div>
+                                <div style="color:#555; font-size:9.5px;">{{ it.nome }}</div>
+                            </div>
+                        </div>
+                        {% endfor %}
+                    {% else %}-{% endif %}
+                </td>
+                <td class="pm-detalhes-col">
+                    {% set item_map_key = item.material_id if item.material_id else item.id %}
+                    {% set detalhes = material_detalhes_map.get(item_map_key) if material_detalhes_map is defined else None %}
+                    {% if detalhes %}
+                        {% for d in detalhes %}
+                        <div class="detalhe-bloco">
+                            <span class="ped-badge">{{ d.pedido_numero }}</span><strong>{{ d.cliente }}</strong>
+                            <div style="color:#444; font-size:9.5px;">{{ d.item_codigo }} — {{ d.item_nome }}</div>
+                            <div>Qtd: <strong>{{ d.quantidade }}</strong> pç</div>
+                        </div>
+                        {% endfor %}
+                    {% else %}-{% endif %}
+                </td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+    {% endif %}
 
-            const key = 'pm_show_item_info';
-            const saved = localStorage.getItem(key);
-            const enabled = saved === '1';
+    <!-- ===== MATERIAIS EM BARRA ===== -->
+    {% if itens_barra and itens_barra|length > 0 %}
+    <div class="section-title">Materiais em Barra (metros)</div>
+    <table>
+        <thead>
+            <tr>
+                <th style="width:70px;">Comp. (m)</th>
+                <th>Material</th>
+                <th style="width:80px;">Tipo</th>
+                <th style="width:90px;">Dimensões</th>
+                <th class="pm-item-col" style="width:110px;">Item</th>
+                <th class="pm-detalhes-col" style="width:140px;">Pedido Cliente / Cliente</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for item in itens_barra %}
+            {% set material = item.material %}
+            <tr>
+                <td style="font-weight:700; font-size:12px;">{{ ((item.comprimento or 0) / 1000.0) | round(2) }}</td>
+                <td>{{ item.descricao_exibicao_material }}</td>
+                <td>{{ item.tipo_exibicao_material }}</td>
+                <td>
+                    {% if material and material.tipo == 'redondo' %}Ø {{ material.diametro }}mm
+                    {% elif material and material.tipo == 'quadrado' %}{{ material.lado }}mm
+                    {% elif material and material.tipo == 'retangulo' %}{{ material.largura }}×{{ material.altura }}mm
+                    {% else %}-{% endif %}
+                </td>
+                <td class="pm-item-col">
+                    {% set item_map_key = item.material_id if item.material_id else item.id %}
+                    {% set itens_rel = material_item_map.get(item_map_key) if material_item_map is defined else None %}
+                    {% if itens_rel %}
+                        {% for it in itens_rel %}
+                        <div style="display:flex; align-items:center; gap:4px; margin-bottom:2px;">
+                            {% if it.imagem_url %}
+                                <img src="{{ it.imagem_url }}" alt="" style="height:24px;width:24px;object-fit:cover;border-radius:3px;" onerror="this.style.display='none'">
+                            {% endif %}
+                            <div style="line-height:1.2;">
+                                <div style="font-weight:700; font-size:10px;">{{ it.codigo_acb }}</div>
+                                <div style="color:#555; font-size:9.5px;">{{ it.nome }}</div>
+                            </div>
+                        </div>
+                        {% endfor %}
+                    {% else %}-{% endif %}
+                </td>
+                <td class="pm-detalhes-col">
+                    {% set item_map_key = item.material_id if item.material_id else item.id %}
+                    {% set detalhes = material_detalhes_map.get(item_map_key) if material_detalhes_map is defined else None %}
+                    {% if detalhes %}
+                        {% for d in detalhes %}
+                        <div class="detalhe-bloco">
+                            <span class="ped-badge">{{ d.pedido_numero }}</span><strong>{{ d.cliente }}</strong>
+                            <div style="color:#444; font-size:9.5px;">{{ d.item_codigo }} — {{ d.item_nome }}</div>
+                            <div>Qtd: <strong>{{ d.quantidade }}</strong> pç</div>
+                        </div>
+                        {% endfor %}
+                    {% else %}-{% endif %}
+                </td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+    {% endif %}
 
-            function apply(v) {
-                cols.forEach(el => {
-                    el.style.display = v ? '' : 'none';
-                });
-                toggle.checked = v;
-            }
+    <!-- Assinaturas -->
+    <div class="assinaturas">
+        <div class="assinatura-linha">
+            <div class="linha"></div>
+            Solicitado por
+        </div>
+        <div class="assinatura-linha">
+            <div class="linha"></div>
+            Aprovado por
+        </div>
+        <div class="assinatura-linha">
+            <div class="linha"></div>
+            Fornecedor
+        </div>
+    </div>
 
-            apply(enabled);
+    <!-- Rodapé -->
+    <div class="footer">
+        <span>Documento gerado em {{ now().strftime('%d/%m/%Y %H:%M') }}</span>
+        <span>ACB Usinagem CNC — Todos os direitos reservados</span>
+    </div>
 
-            toggle.addEventListener('change', function () {
-                const v = !!toggle.checked;
-                localStorage.setItem(key, v ? '1' : '0');
-                apply(v);
-            });
-        })();
-    </script>
+</div>
+
+<script>
+(function () {
+    // Toggle Item/Imagem
+    const toggleItem = document.getElementById('toggleItemInfo');
+    const colsItem = document.querySelectorAll('.pm-item-col');
+    if (toggleItem && colsItem.length > 0) {
+        function applyItem(v) {
+            colsItem.forEach(el => { el.style.display = v ? '' : 'none'; });
+            toggleItem.checked = v;
+        }
+        applyItem(localStorage.getItem('pm_show_item_info') === '1');
+        toggleItem.addEventListener('change', function () {
+            const v = !!toggleItem.checked;
+            localStorage.setItem('pm_show_item_info', v ? '1' : '0');
+            applyItem(v);
+        });
+    }
+
+    // Toggle Detalhes (Pedido/Cliente)
+    const toggleDet = document.getElementById('toggleDetalhes');
+    const colsDet = document.querySelectorAll('.pm-detalhes-col');
+    if (toggleDet && colsDet.length > 0) {
+        function applyDet(v) {
+            colsDet.forEach(el => { el.style.display = v ? '' : 'none'; });
+            toggleDet.checked = v;
+        }
+        applyDet(localStorage.getItem('pm_show_detalhes') === '1');
+        toggleDet.addEventListener('change', function () {
+            const v = !!toggleDet.checked;
+            localStorage.setItem('pm_show_detalhes', v ? '1' : '0');
+            applyDet(v);
+        });
+    }
+})();
+</script>
 </body>
 </html>
