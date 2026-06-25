@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Novo Pedido de Material - ACB Usinagem CNC</title>
+    <title>Novo Orçamento de Material - ACB Usinagem CNC</title>
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css">
     <link rel="stylesheet" href="https://cdn.datatables.net/1.11.5/css/dataTables.bootstrap5.min.css">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
@@ -27,7 +27,7 @@
                         <a class="nav-link" href="/pedidos"><i class="fas fa-clipboard-list"></i> Pedidos</a>
                     </li>
                     <li class="nav-item">
-                        <a class="nav-link" href="/pedidos-material"><i class="fas fa-box"></i> Pedidos de Material</a>
+                        <a class="nav-link" href="/pedidos-material"><i class="fas fa-box"></i> Orçamentos de Material</a>
                     </li>
                 </ul>
             </div>
@@ -36,7 +36,7 @@
 
     <div class="container py-4">
         <div class="d-flex justify-content-between align-items-center mb-4">
-            <h1>Novo Pedido de Material</h1>
+            <h1>Novo Orçamento de Material</h1>
             <a href="/pedidos-material" class="btn btn-secondary">
                 <i class="fas fa-arrow-left"></i> Voltar
             </a>
@@ -45,7 +45,7 @@
         <div class="card mb-4">
             <div class="card-body">
                 <h5 class="card-title">Selecione os Pedidos</h5>
-                <p class="card-text">Selecione um ou mais pedidos para gerar um Pedido de Material.</p>
+                <p class="card-text">Selecione um ou mais pedidos para gerar um Orçamento de Material.</p>
                 
                 <div class="table-responsive">
                     <table id="pedidosTable" class="table table-striped table-hover">
@@ -94,7 +94,7 @@
             <div id="pedidosSelecionados"></div>
             <div class="d-grid">
                 <button type="submit" class="btn btn-primary" id="btnGerarPedido" disabled>
-                    <i class="fas fa-box"></i> Gerar Pedido de Material
+                    <i class="fas fa-box"></i> Gerar Orçamento de Material
                 </button>
             </div>
         </form>
@@ -143,7 +143,7 @@
                 // If no pedidos selected, prevent submission
                 if ($('#pedidosSelecionados').children().length === 0) {
                     e.preventDefault();
-                    alert('Selecione pelo menos um pedido para gerar o Pedido de Material.');
+                    alert('Selecione pelo menos um pedido para gerar o Orçamento de Material.');
                 }
             });
         });

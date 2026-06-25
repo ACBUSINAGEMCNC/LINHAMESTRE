@@ -92,14 +92,14 @@ def listar_pedidos_material():
 
 @pedidos_material.route('/pedidos-material/novo', methods=['GET', 'POST'])
 def novo_pedido_material():
-    """Rota para criar um novo pedido de material"""
+    """Rota para criar um novo orçamento de material"""
     # Redirecionar para a página de pedidos onde o usuário pode usar o botão unificado de 'Gerar Material'
-    flash('Utilize a página de Pedidos para gerar Pedidos de Material. Selecione os pedidos desejados e clique no botão "Gerar Material".', 'info')
+    flash('Utilize a página de Pedidos para gerar Orçamentos de Material. Selecione os pedidos desejados e clique no botão "Gerar Material".', 'info')
     return redirect(url_for('pedidos.listar_pedidos'))
 
 @pedidos_material.route('/pedidos-material/visualizar/<int:pedido_id>')
 def visualizar_pedido_material(pedido_id):
-    """Rota para visualizar um pedido de material"""
+    """Rota para visualizar um orçamento de material"""
     _ensure_item_pedido_material_laser_schema()
     pedido = PedidoMaterial.query.get_or_404(pedido_id)
     itens_especificos = []
@@ -124,7 +124,7 @@ def visualizar_pedido_material_por_numero(numero):
 
 @pedidos_material.route('/pedidos-material/atualizar/<int:pedido_id>', methods=['POST'])
 def atualizar_pedido_material(pedido_id):
-    """Atualiza manualmente as quantidades/comprimentos dos itens de um pedido de material"""
+    """Atualiza manualmente as quantidades/comprimentos dos itens de um orçamento de material"""
     _ensure_item_pedido_material_laser_schema()
     pedido = PedidoMaterial.query.get_or_404(pedido_id)
 
@@ -149,12 +149,12 @@ def atualizar_pedido_material(pedido_id):
                     pass
 
     db.session.commit()
-    flash('Pedido de material atualizado.', 'success')
+    flash('Orçamento de material atualizado.', 'success')
     return redirect(url_for('pedidos_material.visualizar_pedido_material', pedido_id=pedido.id))
 
 @pedidos_material.route('/pedidos-material/imprimir/<int:pedido_id>')
 def imprimir_pedido_material(pedido_id):
-    """Rota para imprimir um pedido de material"""
+    """Rota para imprimir um orçamento de material"""
     _ensure_item_pedido_material_laser_schema()
     pedido = PedidoMaterial.query.get_or_404(pedido_id)
     material_item_map = _build_material_item_map(pedido)
@@ -173,7 +173,7 @@ def aprovar_pedido_material(pedido_id):
     pedido.aprovado_por_id = usuario.id
     pedido.aprovado_por_nome = getattr(usuario, 'nome', None)
     db.session.commit()
-    flash('Pedido de material aprovado.', 'success')
+    flash('Orçamento de material aprovado.', 'success')
     return redirect(url_for('pedidos_material.visualizar_pedido_material', pedido_id=pedido.id))
 
 

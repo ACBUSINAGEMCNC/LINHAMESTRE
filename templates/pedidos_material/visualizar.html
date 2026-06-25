@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Visualizar Pedido de Material - ACB Usinagem CNC</title>
+    <title>Visualizar Orçamento de Material - ACB Usinagem CNC</title>
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
     <link rel="stylesheet" href="/static/css/custom.css">
@@ -25,7 +25,7 @@
                         <a class="nav-link" href="/"><i class="fas fa-home"></i> Home</a>
                     </li>
                     <li class="nav-item">
-                        <a class="nav-link" href="/pedidos-material"><i class="fas fa-box"></i> Pedidos de Material</a>
+                        <a class="nav-link" href="/pedidos-material"><i class="fas fa-box"></i> Orçamentos de Material</a>
                     </li>
                 </ul>
             </div>
@@ -34,7 +34,7 @@
 
     <div class="container py-4">
         <div class="d-flex justify-content-between align-items-center mb-4">
-            <h1>Pedido de Material: {{ pedido.numero }}</h1>
+            <h1>Orçamento de Material: {{ pedido.numero }}</h1>
             <div>
                 {% if usuario_nivel == 'admin' %}
                     {% if pedido.aprovado_em %}
@@ -64,15 +64,21 @@
         </div>
 
         {% if usuario_nivel == 'admin' or usuario_nome == 'ARTCOMPANY' %}
-        <div class="form-check form-switch mb-3">
-            <input class="form-check-input" type="checkbox" role="switch" id="toggleItemInfo">
-            <label class="form-check-label" for="toggleItemInfo">Mostrar item / imagem</label>
+        <div class="d-flex gap-3 mb-3">
+            <div class="form-check form-switch">
+                <input class="form-check-input" type="checkbox" role="switch" id="toggleItemInfo">
+                <label class="form-check-label" for="toggleItemInfo">Mostrar item / imagem</label>
+            </div>
+            <div class="form-check form-switch">
+                <input class="form-check-input" type="checkbox" role="switch" id="toggleDetalhes">
+                <label class="form-check-label" for="toggleDetalhes">Mostrar detalhes (Lista, Qtd, Pedido, Cliente)</label>
+            </div>
         </div>
         {% endif %}
 
         <div class="card mb-4">
             <div class="card-header">
-                <h5 class="mb-0">Informações do Pedido</h5>
+                <h5 class="mb-0">Informações do Orçamento</h5>
             </div>
             <div class="card-body">
                 <div class="row">
@@ -103,7 +109,7 @@
         <form method="POST" action="/pedidos-material/atualizar/{{ pedido.id }}">
             <div class="card">
                 <div class="card-header d-flex justify-content-between align-items-center">
-                    <h5 class="mb-0">Itens do Pedido</h5>
+                    <h5 class="mb-0">Itens do Orçamento</h5>
                     <button type="submit" class="btn btn-sm btn-primary">
                         <i class="fas fa-save"></i> Salvar Ajustes
                     </button>
