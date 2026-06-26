@@ -31,6 +31,22 @@ def _next_numero():
     return f'UC-{n:05d}'
 
 
+def _next_codigo_item():
+    """Gera o próximo código automático para ItemConsumo: IC-001, IC-002, ..."""
+    from sqlalchemy import func
+    last = db.session.query(func.max(ItemConsumo.codigo)).filter(
+        ItemConsumo.codigo.like('IC-%')
+    ).scalar()
+    if last:
+        try:
+            n = int(last.split('-')[1]) + 1
+        except Exception:
+            n = 1
+    else:
+        n = 1
+    return f'IC-{n:03d}'
+
+
 # ── Itens de consumo (cadastro) ──────────────────────────────────────────────
 
 @pedidos_consumo.route('/consumo/itens')
@@ -44,15 +60,12 @@ def listar_itens_consumo():
 def novo_item_consumo():
     _ensure_consumo_schema()
     if request.method == 'POST':
-        codigo = request.form.get('codigo', '').strip()
         nome = request.form.get('nome', '').strip()
-        if not codigo or not nome:
-            flash('Código e Nome são obrigatórios.', 'danger')
+        if not nome:
+            flash('Nome é obrigatório.', 'danger')
             return redirect(request.url)
 
-        if ItemConsumo.query.filter_by(codigo=codigo).first():
-            flash('Já existe um item com esse código.', 'danger')
-            return redirect(request.url)
+        codigo = _next_codigo_item()
 
         item = ItemConsumo(
             codigo=codigo,
@@ -64,10 +77,11 @@ def novo_item_consumo():
         )
         db.session.add(item)
         db.session.commit()
-        flash('Item de consumo cadastrado.', 'success')
+        flash(f'Item {codigo} cadastrado com sucesso.', 'success')
         return redirect(url_for('pedidos_consumo.listar_itens_consumo'))
 
-    return render_template('consumo/novo_item_consumo.html')
+    proximo_codigo = _next_codigo_item()
+    return render_template('consumo/novo_item_consumo.html', proximo_codigo=proximo_codigo)
 
 
 @pedidos_consumo.route('/consumo/itens/editar/<int:item_id>', methods=['GET', 'POST'])
@@ -75,7 +89,6 @@ def editar_item_consumo(item_id):
     _ensure_consumo_schema()
     item = ItemConsumo.query.get_or_404(item_id)
     if request.method == 'POST':
-        item.codigo = request.form.get('codigo', item.codigo).strip()
         item.nome = request.form.get('nome', item.nome).strip()
         item.descricao = request.form.get('descricao', '').strip() or None
         item.unidade = request.form.get('unidade', 'un').strip()

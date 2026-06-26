@@ -31,8 +31,12 @@
         <div class="card-body">
             <form method="POST">
                 <div class="mb-3">
-                    <label class="form-label fw-bold">Código <span class="text-danger">*</span></label>
-                    <input type="text" name="codigo" class="form-control" value="{{ item.codigo }}" required>
+                    <label class="form-label fw-bold">Código</label>
+                    <div class="input-group">
+                        <span class="input-group-text bg-light"><i class="fas fa-tag text-primary"></i></span>
+                        <input type="text" class="form-control bg-light fw-bold text-primary" value="{{ item.codigo }}" readonly>
+                    </div>
+                    <small class="text-muted">Código gerado pelo sistema — não pode ser alterado.</small>
                 </div>
                 <div class="mb-3">
                     <label class="form-label fw-bold">Nome <span class="text-danger">*</span></label>

@@ -31,12 +31,16 @@
         <div class="card-body">
             <form method="POST">
                 <div class="mb-3">
-                    <label class="form-label fw-bold">Código <span class="text-danger">*</span></label>
-                    <input type="text" name="codigo" class="form-control" placeholder="Ex: OLEO-68, EPI-001" required>
+                    <label class="form-label fw-bold">Código</label>
+                    <div class="input-group">
+                        <span class="input-group-text bg-light"><i class="fas fa-tag text-primary"></i></span>
+                        <input type="text" class="form-control bg-light fw-bold text-primary" value="{{ proximo_codigo }}" readonly>
+                    </div>
+                    <small class="text-muted">Gerado automaticamente pelo sistema.</small>
                 </div>
                 <div class="mb-3">
                     <label class="form-label fw-bold">Nome <span class="text-danger">*</span></label>
-                    <input type="text" name="nome" class="form-control" placeholder="Ex: Óleo hidráulico ISO 68" required>
+                    <input type="text" name="nome" class="form-control" placeholder="Ex: Óleo hidráulico ISO 68" required autofocus>
                 </div>
                 <div class="mb-3">
                     <label class="form-label fw-bold">Descrição</label>
