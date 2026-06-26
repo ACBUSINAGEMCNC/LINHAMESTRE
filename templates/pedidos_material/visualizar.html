@@ -292,6 +292,31 @@
                     applyDet(v);
                 });
             }
+
+            // Ocultar linhas com quantidade/comprimento zero
+            function aplicarFiltroZero() {
+                // Materiais específicos (input name="qtd_*")
+                document.querySelectorAll('input[name^="qtd_"]').forEach(function(input) {
+                    const tr = input.closest('tr');
+                    if (!tr) return;
+                    tr.style.display = (parseFloat(input.value) || 0) > 0 ? '' : 'none';
+                });
+                // Materiais em barra (input name="m_*")
+                document.querySelectorAll('input[name^="m_"]').forEach(function(input) {
+                    const tr = input.closest('tr');
+                    if (!tr) return;
+                    tr.style.display = (parseFloat(input.value) || 0) > 0 ? '' : 'none';
+                });
+            }
+
+            // Aplicar ao carregar
+            aplicarFiltroZero();
+
+            // Aplicar ao mudar qualquer campo
+            document.querySelectorAll('input[name^="qtd_"], input[name^="m_"]').forEach(function(input) {
+                input.addEventListener('input', aplicarFiltroZero);
+                input.addEventListener('change', aplicarFiltroZero);
+            });
         })();
     </script>
 </body>

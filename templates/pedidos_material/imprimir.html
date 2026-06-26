@@ -35,6 +35,9 @@
             .no-print { display: none !important; }
             table { page-break-inside: auto; }
             tr { page-break-inside: avoid; }
+            /* Garantir que imagens apareçam na impressão */
+            img { -webkit-print-color-adjust: exact; print-color-adjust: exact; display: inline-block !important; visibility: visible !important; }
+            * { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
         }
 
         /* ── Cabeçalho ── */
@@ -123,6 +126,9 @@
 
         /* ── Coluna Item ── */
         .pm-item-col { display: none; }
+
+        /* Imagens sempre visíveis */
+        img { max-width: 100%; }
 
         /* ── Coluna Detalhes ── */
         .detalhe-bloco {
@@ -262,8 +268,9 @@
         </thead>
         <tbody>
             {% for item in itens_especificos %}
+            {% if (item.quantidade or 0) > 0 %}
             <tr>
-                <td style="font-weight:700; font-size:12px;">{{ item.quantidade or 0 }}</td>
+                <td style="font-weight:700; font-size:12px;">{{ item.quantidade }}</td>
                 <td>{{ item.material_laser_exibicao if item.eh_item_laser else item.descricao_exibicao_material }}</td>
                 <td>{{ item.espessura_laser_exibicao if item.eh_item_laser else '-' }}</td>
                 <td>
@@ -306,6 +313,7 @@
                     {% else %}-{% endif %}
                 </td>
             </tr>
+            {% endif %}
             {% endfor %}
         </tbody>
     </table>
@@ -328,6 +336,7 @@
         <tbody>
             {% for item in itens_barra %}
             {% set material = item.material %}
+            {% if ((item.comprimento or 0) / 1000.0) > 0 %}
             <tr>
                 <td style="font-weight:700; font-size:12px;">{{ ((item.comprimento or 0) / 1000.0) | round(2) }}</td>
                 <td>{{ item.descricao_exibicao_material }}</td>
@@ -369,6 +378,7 @@
                     {% else %}-{% endif %}
                 </td>
             </tr>
+            {% endif %}
             {% endfor %}
         </tbody>
     </table>
