@@ -51,38 +51,23 @@ def _next_codigo_item():
 
 @pedidos_consumo.route('/consumo/itens/corrigir-codigos', methods=['POST'])
 def corrigir_codigos_item_consumo():
-    """Renumera itens cujo código não segue o padrão IC-NNN."""
+    """Renumera todos os itens cujo código não segue o padrão IC-NNN."""
     import re
     padrao = re.compile(r'^IC-\d+$')
-    itens_errados = ItemConsumo.query.filter(
-        ~ItemConsumo.codigo.op('~*')(r'^IC-[0-9]+$') if db.engine.url.drivername.startswith('postgresql')
-        else db.literal(True)
-    ).order_by(ItemConsumo.id).all()
 
-    if not db.engine.url.drivername.startswith('postgresql'):
-        itens_errados = [i for i in ItemConsumo.query.order_by(ItemConsumo.id).all()
-                         if not padrao.match(i.codigo or '')]
+    todos = ItemConsumo.query.order_by(ItemConsumo.id).all()
+    itens_errados = [i for i in todos if not padrao.match(i.codigo or '')]
 
     if not itens_errados:
         flash('Nenhum item com código fora do padrão encontrado.', 'info')
         return redirect(url_for('pedidos_consumo.listar_itens_consumo'))
 
-    from sqlalchemy import func
-    max_ok = db.session.query(func.max(ItemConsumo.codigo)).filter(
-        ItemConsumo.codigo.like('IC-%')
-    ).scalar()
-    if max_ok:
-        try:
-            proximo = int(max_ok.split('-')[1]) + 1
-        except Exception:
-            proximo = 1
-    else:
-        proximo = 1
+    proximo = 1
 
     corrigidos = []
     for item in itens_errados:
         novo = f'IC-{proximo:03d}'
-        corrigidos.append(f'{item.codigo} → {novo}')
+        corrigidos.append(f'"{item.codigo}" → {novo}')
         item.codigo = novo
         proximo += 1
 
