@@ -31,12 +31,7 @@
             <h1 class="mb-0">Itens de Uso e Consumo</h1>
             <small class="text-muted">Óleos, lubrificantes, EPI, materiais de limpeza...</small>
         </div>
-        <div class="d-flex gap-2">
-            <form method="POST" action="/consumo/itens/corrigir-codigos" onsubmit="return confirm('Isso irá renumerar todos os itens com código fora do padrão IC-XXX. Confirmar?')">
-                <button type="submit" class="btn btn-outline-warning btn-sm" title="Corrigir itens cadastrados com código manual"><i class="fas fa-wrench"></i> Corrigir Códigos</button>
-            </form>
-            <a href="/consumo/itens/novo" class="btn btn-primary"><i class="fas fa-plus"></i> Novo Item</a>
-        </div>
+        <a href="/consumo/itens/novo" class="btn btn-primary"><i class="fas fa-plus"></i> Novo Item</a>
     </div>
 
     {% with messages = get_flashed_messages(with_categories=true) %}
@@ -54,14 +49,14 @@
         <div class="card-body p-0">
             <div class="table-responsive">
                 <table class="table table-hover mb-0" id="tabelaItens">
-                    <thead class="table-dark">
+                    <thead style="background:#1a3a6c;">
                         <tr>
-                            <th>Código</th>
-                            <th>Nome</th>
-                            <th>Categoria</th>
-                            <th>Unidade</th>
-                            <th class="text-center">Status</th>
-                            <th class="text-center">Ações</th>
+                            <th style="color:#fff;">Código</th>
+                            <th style="color:#fff;">Nome</th>
+                            <th style="color:#fff;">Categoria</th>
+                            <th style="color:#fff;">Unidade</th>
+                            <th class="text-center" style="color:#fff;">Status</th>
+                            <th class="text-center" style="color:#fff;">Ações</th>
                         </tr>
                     </thead>
                     <tbody>
