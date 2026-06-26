@@ -1664,3 +1664,92 @@ class CacheAlerta(db.Model):
     
     def __repr__(self):
         return f'<CacheAlerta {self.chave}>'
+
+
+# ============================================================================
+# MÓDULO DE USO E CONSUMO
+# ============================================================================
+
+class ItemConsumo(db.Model):
+    """Cadastro de itens de uso e consumo (óleos, EPI, limpeza, etc.)"""
+    __tablename__ = 'item_consumo'
+
+    id = db.Column(db.Integer, primary_key=True)
+    codigo = db.Column(db.String(30), unique=True, nullable=False)
+    nome = db.Column(db.String(150), nullable=False)
+    descricao = db.Column(db.Text, nullable=True)
+    unidade = db.Column(db.String(20), default='un')
+    categoria = db.Column(db.String(60), nullable=True)
+    ativo = db.Column(db.Boolean, default=True)
+    data_criacao = db.Column(db.DateTime, default=local_now_naive)
+
+    def __repr__(self):
+        return f'<ItemConsumo {self.codigo} - {self.nome}>'
+
+
+class PedidoConsumo(db.Model):
+    """Orçamento / Pedido de itens de uso e consumo"""
+    __tablename__ = 'pedido_consumo'
+
+    id = db.Column(db.Integer, primary_key=True)
+    numero = db.Column(db.String(20), unique=True, nullable=False)
+    titulo = db.Column(db.String(150), nullable=True)
+    data_criacao = db.Column(db.DateTime, default=local_now_naive)
+    observacoes = db.Column(db.Text, nullable=True)
+    aprovado_em = db.Column(db.DateTime, nullable=True)
+    aprovado_por_id = db.Column(db.Integer, db.ForeignKey('usuario.id'), nullable=True)
+    aprovado_por_nome = db.Column(db.String(120), nullable=True)
+
+    itens = db.relationship('ItemPedidoConsumo', backref='pedido_consumo', lazy=True, cascade='all, delete-orphan')
+
+    def __repr__(self):
+        return f'<PedidoConsumo {self.numero}>'
+
+
+class ItemPedidoConsumo(db.Model):
+    """Linha de item dentro de um PedidoConsumo"""
+    __tablename__ = 'item_pedido_consumo'
+
+    id = db.Column(db.Integer, primary_key=True)
+    pedido_consumo_id = db.Column(db.Integer, db.ForeignKey('pedido_consumo.id'), nullable=False)
+
+    # Pode referenciar ItemConsumo cadastrado...
+    item_consumo_id = db.Column(db.Integer, db.ForeignKey('item_consumo.id'), nullable=True)
+    # ...ou Item do sistema (produção/montagem)...
+    item_id = db.Column(db.Integer, db.ForeignKey('item.id'), nullable=True)
+    # ...ou descrição livre (para qualquer item não cadastrado)
+    descricao_livre = db.Column(db.String(255), nullable=True)
+
+    quantidade = db.Column(db.Float, default=1)
+    unidade = db.Column(db.String(20), default='un')
+    observacao = db.Column(db.String(255), nullable=True)
+
+    item_consumo = db.relationship('ItemConsumo', lazy=True)
+    item_sistema = db.relationship('Item', foreign_keys=[item_id], lazy=True)
+
+    def __repr__(self):
+        return f'<ItemPedidoConsumo {self.id}>'
+
+    @property
+    def descricao_exibicao(self):
+        if self.item_consumo:
+            return self.item_consumo.nome
+        if self.item_sistema:
+            return self.item_sistema.nome
+        return self.descricao_livre or ''
+
+    @property
+    def codigo_exibicao(self):
+        if self.item_consumo:
+            return self.item_consumo.codigo
+        if self.item_sistema:
+            return self.item_sistema.codigo_acb or ''
+        return ''
+
+    @property
+    def unidade_exibicao(self):
+        if self.unidade:
+            return self.unidade
+        if self.item_consumo:
+            return self.item_consumo.unidade
+        return 'un'

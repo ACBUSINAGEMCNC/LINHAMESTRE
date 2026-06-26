@@ -210,6 +210,17 @@ def verificar_inicializar_banco():
                 logger.warning("Supabase sem conexões disponíveis (Max client connections reached). Pulando migração orcamento.")
                 return
             logger.warning(f"Erro ao criar tabelas orcamento: {str(col_err)}")
+
+        # Criar tabelas de uso e consumo
+        try:
+            from migrations.add_consumo_tables import migrate_postgres as migrate_consumo_pg
+            migrate_consumo_pg()
+            logger.info("Tabelas consumo criadas/verificadas (Supabase).")
+        except Exception as col_err:
+            if _is_max_connections_error(col_err):
+                logger.warning("Supabase sem conexões disponíveis (Max client connections reached). Pulando migração consumo.")
+                return
+            logger.warning(f"Erro ao criar tabelas consumo: {str(col_err)}")
         
         # Criar índices na tabela Item para melhorar performance
         try:
@@ -730,6 +741,18 @@ def verificar_inicializar_banco():
                             logger.info("Tabelas de orçamento criadas com sucesso.")
                     except Exception as e:
                         logger.warning(f"Erro ao verificar/criar tabelas de orçamento: {str(e)}")
+
+                    # Criar tabelas de uso e consumo
+                    try:
+                        cursor.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='item_consumo';")
+                        has_consumo = cursor.fetchone() is not None
+                        if not has_consumo:
+                            logger.info("Tabelas de consumo não encontradas. Executando migração...")
+                            from migrations.add_consumo_tables import migrate_sqlite as migrate_consumo_sqlite
+                            migrate_consumo_sqlite()
+                            logger.info("Tabelas de consumo criadas com sucesso.")
+                    except Exception as e:
+                        logger.warning(f"Erro ao verificar/criar tabelas de consumo: {str(e)}")
                 except Exception as col_err:
                     logger.warning(f"Erro ao verificar/adicionar coluna tipo_bruto na tabela item: {str(col_err)}")
             except Exception as col_err:
@@ -1114,6 +1137,7 @@ def create_app():
     from routes.diagnostico import diagnostico_bp
     from routes.dashboard_apontamentos import dashboard_apontamentos_bp
     from routes.orcamentos import orcamentos_bp
+    from routes.pedidos_consumo import pedidos_consumo
     
     app.register_blueprint(clientes)
     app.register_blueprint(materiais)
@@ -1141,6 +1165,7 @@ def create_app():
     app.register_blueprint(auditoria)
     app.register_blueprint(diagnostico_bp)
     app.register_blueprint(dashboard_apontamentos_bp)
+    app.register_blueprint(pedidos_consumo)
 
     try:
         from notificacoes import init_notificacoes

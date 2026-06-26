@@ -1,0 +1,224 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Editar Pedido de Consumo - ACB</title>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+    <link rel="stylesheet" href="/static/css/custom.css">
+    <style>
+        .linha-item { background:#f8f9fa; border-radius:6px; padding:10px 12px; margin-bottom:8px; border:1px solid #dee2e6; }
+        .linha-item:hover { border-color:#0d6efd44; }
+        #modal-busca .item-resultado { cursor:pointer; padding:8px 10px; border-bottom:1px solid #eee; }
+        #modal-busca .item-resultado:hover { background:#f0f4ff; }
+    </style>
+</head>
+<body>
+<nav class="navbar navbar-expand-lg navbar-dark bg-primary">
+    <div class="container">
+        <a class="navbar-brand d-flex align-items-center gap-2" href="/">
+            <img src="/static/logo_acb.png" alt="ACB" style="height:28px;" onerror="this.onerror=null;this.src='/static/logo.svg';">
+            <span>ARTCOMPANY</span>
+        </a>
+        <div class="collapse navbar-collapse">
+            <ul class="navbar-nav">
+                <li class="nav-item"><a class="nav-link" href="/consumo/pedidos/visualizar/{{ pedido.id }}"><i class="fas fa-arrow-left"></i> Voltar</a></li>
+            </ul>
+        </div>
+    </div>
+</nav>
+
+<div class="container py-4">
+    <h1 class="mb-1">Editar Pedido <strong>{{ pedido.numero }}</strong></h1>
+    <p class="text-muted mb-4">Altere os itens e salve.</p>
+
+    {% with messages = get_flashed_messages(with_categories=true) %}
+        {% for cat, msg in messages %}
+        <div class="alert alert-{{ cat }} alert-dismissible fade show">{{ msg }}<button type="button" class="btn-close" data-bs-dismiss="alert"></button></div>
+        {% endfor %}
+    {% endwith %}
+
+    <form method="POST" id="form-pedido">
+        <div class="row g-3 mb-4">
+            <div class="col-md-8">
+                <label class="form-label fw-bold">Título do Pedido</label>
+                <input type="text" name="titulo" class="form-control" value="{{ pedido.titulo or '' }}">
+            </div>
+        </div>
+        <div class="mb-4">
+            <label class="form-label fw-bold">Observações</label>
+            <textarea name="observacoes" class="form-control" rows="2">{{ pedido.observacoes or '' }}</textarea>
+        </div>
+
+        <div class="d-flex justify-content-between align-items-center mb-2">
+            <h5 class="mb-0">Itens do Pedido</h5>
+            <div class="d-flex gap-2">
+                <button type="button" class="btn btn-sm btn-outline-primary" onclick="abrirModal('consumo')">
+                    <i class="fas fa-search"></i> Buscar Item de Consumo
+                </button>
+                <button type="button" class="btn btn-sm btn-outline-success" onclick="abrirModal('sistema')">
+                    <i class="fas fa-search"></i> Buscar Item do Sistema
+                </button>
+                <button type="button" class="btn btn-sm btn-outline-secondary" onclick="adicionarLivre()">
+                    <i class="fas fa-plus"></i> Descrição Livre
+                </button>
+            </div>
+        </div>
+
+        <div id="lista-itens">
+            {% for ln in pedido.itens %}
+            {% set tipo = 'consumo' if ln.item_consumo_id else ('sistema' if ln.item_id else 'livre') %}
+            {% set rid  = ln.item_consumo_id or ln.item_id or '' %}
+            {% set corBadge = '#1a3a6c' if tipo=='consumo' else ('#198754' if tipo=='sistema' else '#6c757d') %}
+            {% set labelTipo = 'Consumo' if tipo=='consumo' else ('Sistema' if tipo=='sistema' else 'Livre') %}
+            <div class="linha-item d-flex align-items-center gap-2 flex-wrap" id="linha-e-{{ ln.id }}">
+                <input type="hidden" name="linha_tipo[]" value="{{ tipo }}">
+                <input type="hidden" name="linha_id[]"   value="{{ rid }}">
+                <span class="badge" style="background:{{ corBadge }}; min-width:68px; text-align:center;">{{ labelTipo }}</span>
+                <div style="flex:1; min-width:180px;">
+                    <input type="text" name="linha_descricao[]" class="form-control form-control-sm"
+                           value="{{ ln.descricao_exibicao }}" placeholder="Descrição" {{ 'readonly' if tipo != 'livre' else '' }}>
+                </div>
+                <div style="width:80px;">
+                    <input type="number" name="linha_quantidade[]" class="form-control form-control-sm text-center"
+                           value="{{ ln.quantidade }}" min="0.01" step="0.01">
+                </div>
+                <div style="width:80px;">
+                    <select name="linha_unidade[]" class="form-select form-select-sm">
+                        {% for u in ['un','L','kg','m','cx','pc','par','rolo'] %}
+                        <option value="{{ u }}" {{ 'selected' if ln.unidade_exibicao == u else '' }}>{{ u }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div style="flex:1; min-width:120px;">
+                    <input type="text" name="linha_observacao[]" class="form-control form-control-sm"
+                           value="{{ ln.observacao or '' }}" placeholder="Observação (opcional)">
+                </div>
+                <button type="button" class="btn btn-sm btn-outline-danger" onclick="this.closest('.linha-item').remove(); atualizarEmptyMsg();">
+                    <i class="fas fa-trash"></i>
+                </button>
+            </div>
+            {% endfor %}
+        </div>
+
+        <div id="empty-msg" class="text-center text-muted py-4 border rounded" style="{{ '' if not pedido.itens else 'display:none;' }}">
+            <i class="fas fa-box-open fa-2x mb-2"></i><br>Nenhum item. Use os botões acima.
+        </div>
+
+        <div class="mt-4 d-flex gap-2">
+            <button type="submit" class="btn btn-primary btn-lg"><i class="fas fa-save"></i> Salvar</button>
+            <a href="/consumo/pedidos/visualizar/{{ pedido.id }}" class="btn btn-secondary btn-lg">Cancelar</a>
+        </div>
+    </form>
+</div>
+
+<!-- Modal de busca -->
+<div class="modal fade" id="modal-busca" tabindex="-1">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="modal-titulo">Buscar Item</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <input type="text" id="modal-input" class="form-control mb-3" placeholder="Digite para buscar...">
+                <div id="modal-resultados" style="max-height:360px; overflow-y:auto;"></div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+<script>
+let tipoModalAtual = 'consumo';
+const modalEl = document.getElementById('modal-busca');
+const modal = new bootstrap.Modal(modalEl);
+let debounceTimer = null;
+
+function abrirModal(tipo) {
+    tipoModalAtual = tipo;
+    document.getElementById('modal-titulo').textContent =
+        tipo === 'consumo' ? 'Buscar Item de Consumo' : 'Buscar Item do Sistema';
+    document.getElementById('modal-input').value = '';
+    document.getElementById('modal-resultados').innerHTML = '';
+    modal.show();
+    setTimeout(() => document.getElementById('modal-input').focus(), 400);
+    buscarItens('');
+}
+
+document.getElementById('modal-input').addEventListener('input', function () {
+    clearTimeout(debounceTimer);
+    debounceTimer = setTimeout(() => buscarItens(this.value), 280);
+});
+
+function buscarItens(q) {
+    fetch(`/consumo/api/buscar-itens?q=${encodeURIComponent(q)}&tipo=${tipoModalAtual}`)
+        .then(r => r.json())
+        .then(data => {
+            const div = document.getElementById('modal-resultados');
+            if (!data.length) { div.innerHTML = '<p class="text-muted text-center py-3">Nenhum resultado.</p>'; return; }
+            const corMap = {consumo:'#1a3a6c', sistema:'#198754', livre:'#6c757d'};
+            div.innerHTML = data.map(it => `
+                <div class="item-resultado d-flex justify-content-between align-items-center"
+                     onclick='selecionarItem(${JSON.stringify(it)})'>
+                    <div>
+                        <strong>${it.nome}</strong>
+                        <span class="badge ms-2" style="background:${corMap[it.tipo]}">${it.codigo}</span>
+                        ${it.categoria ? `<small class="text-muted ms-1">${it.categoria}</small>` : ''}
+                    </div>
+                    <span class="badge bg-light text-dark">${it.unidade}</span>
+                </div>`).join('');
+        });
+}
+
+function selecionarItem(it) {
+    modal.hide();
+    adicionarLinha(it.tipo, it.id, it.codigo, it.nome, it.unidade);
+}
+
+function adicionarLivre() { adicionarLinha('livre', '', '', '', 'un'); }
+
+let linhaCount = 1000;
+function adicionarLinha(tipo, id, codigo, nome, unidade) {
+    linhaCount++;
+    const n = linhaCount;
+    const corBadge = tipo==='consumo' ? '#1a3a6c' : tipo==='sistema' ? '#198754' : '#6c757d';
+    const labelTipo = tipo==='consumo' ? 'Consumo' : tipo==='sistema' ? 'Sistema' : 'Livre';
+    const div = document.createElement('div');
+    div.className = 'linha-item d-flex align-items-center gap-2 flex-wrap';
+    div.id = `linha-${n}`;
+    div.innerHTML = `
+        <input type="hidden" name="linha_tipo[]" value="${tipo}">
+        <input type="hidden" name="linha_id[]"   value="${id}">
+        <span class="badge" style="background:${corBadge}; min-width:68px; text-align:center;">${labelTipo}</span>
+        <div style="flex:1; min-width:180px;">
+            <input type="text" name="linha_descricao[]" class="form-control form-control-sm"
+                   value="${nome}" placeholder="Descrição" ${tipo!=='livre'?'readonly':''}>
+        </div>
+        <div style="width:80px;">
+            <input type="number" name="linha_quantidade[]" class="form-control form-control-sm text-center"
+                   value="1" min="0.01" step="0.01">
+        </div>
+        <div style="width:80px;">
+            <select name="linha_unidade[]" class="form-select form-select-sm">
+                ${['un','L','kg','m','cx','pc','par','rolo'].map(u=>`<option value="${u}" ${u===unidade?'selected':''}>${u}</option>`).join('')}
+            </select>
+        </div>
+        <div style="flex:1; min-width:120px;">
+            <input type="text" name="linha_observacao[]" class="form-control form-control-sm" placeholder="Observação (opcional)">
+        </div>
+        <button type="button" class="btn btn-sm btn-outline-danger" onclick="this.closest('.linha-item').remove(); atualizarEmptyMsg();">
+            <i class="fas fa-trash"></i>
+        </button>`;
+    document.getElementById('lista-itens').appendChild(div);
+    atualizarEmptyMsg();
+}
+
+function atualizarEmptyMsg() {
+    const tem = document.getElementById('lista-itens').children.length > 0;
+    document.getElementById('empty-msg').style.display = tem ? 'none' : '';
+}
+</script>
+</body>
+</html>

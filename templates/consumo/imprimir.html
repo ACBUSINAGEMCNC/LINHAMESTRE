@@ -1,0 +1,292 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{{ pedido.numero }} - Pedido de Uso e Consumo</title>
+    <style>
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+
+        body {
+            font-family: Arial, Helvetica, sans-serif;
+            font-size: 11px;
+            color: #111;
+            background: #fff;
+        }
+
+        @media screen {
+            body { background: #ccc; padding: 20px; }
+            .page {
+                width: 210mm;
+                min-height: 297mm;
+                background: #fff;
+                margin: 0 auto;
+                padding: 14mm 14mm 12mm 14mm;
+                box-shadow: 0 2px 12px rgba(0,0,0,.3);
+            }
+        }
+
+        @media print {
+            @page { size: A4 portrait; margin: 10mm 12mm; }
+            body { background: #fff; }
+            .page { padding: 0; width: 100%; }
+            .no-print { display: none !important; }
+            table { page-break-inside: auto; }
+            tr { page-break-inside: avoid; }
+            * { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+        }
+
+        /* Cabeçalho */
+        .header {
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-start;
+            border-bottom: 2px solid #1a3a6c;
+            padding-bottom: 8px;
+            margin-bottom: 10px;
+        }
+        .header-left .company-name { font-size: 13px; font-weight: 700; color: #1a3a6c; }
+        .header-left .company-sub  { font-size: 9.5px; color: #444; line-height: 1.4; }
+        .header-right { text-align: right; }
+        .header-right img { max-height: 52px; margin-bottom: 4px; display: block; margin-left: auto; }
+        .doc-title { font-size: 12px; font-weight: 700; color: #1a3a6c; }
+        .doc-num   { font-size: 11px; color: #333; }
+
+        /* Stamp */
+        .stamp-approved {
+            position: fixed;
+            top: 14mm; right: 14mm;
+            border: 3px solid #198754;
+            color: #198754;
+            padding: 6px 10px;
+            border-radius: 8px;
+            transform: rotate(6deg);
+            text-align: center;
+            font-weight: 800;
+            background: rgba(255,255,255,.88);
+            z-index: 9999;
+            min-width: 160px;
+        }
+        .stamp-approved .stamp-title { font-size: 15px; letter-spacing: 2px; }
+
+        /* Info box */
+        .info-box {
+            background: #f5f7fb;
+            border: 1px solid #d0d8e8;
+            border-radius: 5px;
+            padding: 7px 12px;
+            margin-bottom: 10px;
+            display: flex;
+            flex-wrap: wrap;
+            gap: 6px 24px;
+        }
+        .info-box .ib { font-size: 10.5px; }
+        .info-box .ib span { font-weight: 700; }
+
+        /* Obs */
+        .obs-box {
+            background: #fffbe6;
+            border: 1px solid #ffe082;
+            border-radius: 4px;
+            padding: 6px 10px;
+            margin-bottom: 10px;
+            font-size: 10.5px;
+        }
+
+        /* Tabela */
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 10.5px;
+            margin-bottom: 10px;
+        }
+        thead th {
+            background: #1a3a6c;
+            color: #fff;
+            padding: 5px 6px;
+            font-weight: 600;
+            font-size: 10px;
+            text-transform: uppercase;
+            letter-spacing: .3px;
+        }
+        tbody tr:nth-child(even) { background: #f5f7fb; }
+        tbody tr:nth-child(odd)  { background: #fff; }
+        tbody td {
+            padding: 5px 6px;
+            border-bottom: 1px solid #e0e4ef;
+            vertical-align: middle;
+        }
+        .badge-tipo {
+            display: inline-block;
+            border-radius: 3px;
+            padding: 2px 5px;
+            font-size: 9px;
+            font-weight: 700;
+            color: #fff;
+        }
+        .badge-consumo { background: #1a3a6c; }
+        .badge-sistema { background: #198754; }
+        .badge-livre   { background: #6c757d; }
+
+        /* Assinaturas */
+        .assinaturas {
+            display: flex;
+            gap: 40px;
+            margin-top: 30px;
+        }
+        .assinatura-linha {
+            flex: 1;
+            text-align: center;
+            font-size: 10px;
+        }
+        .assinatura-linha .linha {
+            border-top: 1px solid #555;
+            margin-bottom: 4px;
+            margin-top: 28px;
+        }
+
+        /* Rodapé */
+        .footer {
+            margin-top: 16px;
+            border-top: 1px solid #ccc;
+            padding-top: 6px;
+            font-size: 9px;
+            color: #666;
+            display: flex;
+            justify-content: space-between;
+        }
+
+        /* Botões no-print */
+        .no-print {
+            display: flex;
+            gap: 8px;
+            margin-bottom: 14px;
+            align-items: center;
+            flex-wrap: wrap;
+        }
+        .btn {
+            padding: 6px 14px;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 12px;
+            font-weight: 600;
+            text-decoration: none;
+            display: inline-block;
+        }
+        .btn-primary   { background: #1a3a6c; color: #fff; }
+        .btn-secondary { background: #6c757d; color: #fff; }
+    </style>
+</head>
+<body>
+<div class="page">
+
+    {% if pedido.aprovado_em %}
+    <div class="stamp-approved">
+        <div class="stamp-title">APROVADO</div>
+        <div style="font-size:10px; font-weight:600; margin-top:2px;">
+            {% if pedido.aprovado_por_nome %}{{ pedido.aprovado_por_nome }}{% endif %}
+            <div>{{ pedido.aprovado_em.strftime('%d/%m/%Y %H:%M') }}</div>
+        </div>
+    </div>
+    {% endif %}
+
+    <!-- Controles -->
+    <div class="no-print">
+        <button class="btn btn-primary" onclick="window.print()">🖨️ Imprimir</button>
+        <a href="/consumo/pedidos/visualizar/{{ pedido.id }}" class="btn btn-secondary">← Voltar</a>
+    </div>
+
+    <!-- Cabeçalho -->
+    <div class="header">
+        <div class="header-left">
+            <div class="company-name">A C B USINAGEM CNC LTDA</div>
+            <div class="company-sub">Nome Fantasia: ARTCOMPANY</div>
+            <div class="company-sub">Av. Piquiri, 3146 Brasmadeira — Cascavel/PR — CEP 85.814-040</div>
+            <div class="company-sub">CNPJ: 17.328.208/0001-37 | I.E.: 90.627.001-38 | Tel: (45) 3096-5902</div>
+        </div>
+        <div class="header-right">
+            <img src="/static/logo_acb.png" alt="ACB" onerror="this.onerror=null;this.src='/static/logo.svg';">
+            <div class="doc-title">Pedido de Uso e Consumo</div>
+            <div class="doc-num">{{ pedido.numero }}</div>
+        </div>
+    </div>
+
+    <!-- Info -->
+    <div class="info-box">
+        <div class="ib"><span>Número:</span> {{ pedido.numero }}</div>
+        <div class="ib"><span>Data:</span> {{ pedido.data_criacao.strftime('%d/%m/%Y') }}</div>
+        {% if pedido.titulo %}<div class="ib"><span>Título:</span> {{ pedido.titulo }}</div>{% endif %}
+        <div class="ib"><span>Total de Itens:</span> {{ pedido.itens|length }}</div>
+        {% if pedido.aprovado_em %}
+        <div class="ib"><span>Aprovado em:</span> {{ pedido.aprovado_em.strftime('%d/%m/%Y %H:%M') }}</div>
+        {% endif %}
+    </div>
+
+    {% if pedido.observacoes %}
+    <div class="obs-box"><strong>Observações:</strong> {{ pedido.observacoes }}</div>
+    {% endif %}
+
+    <!-- Tabela de itens -->
+    <table>
+        <thead>
+            <tr>
+                <th style="width:30px;">#</th>
+                <th style="width:90px;">Código</th>
+                <th>Descrição</th>
+                <th style="width:55px;" class="text-center">Qtd</th>
+                <th style="width:45px;" class="text-center">Un</th>
+                <th>Observação</th>
+                <th style="width:65px;" class="text-center">Tipo</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for ln in pedido.itens %}
+            <tr>
+                <td style="color:#888;">{{ loop.index }}</td>
+                <td style="font-family:monospace; font-size:10px;">{{ ln.codigo_exibicao or '—' }}</td>
+                <td><strong>{{ ln.descricao_exibicao }}</strong></td>
+                <td style="text-align:center; font-weight:700; font-size:12px;">
+                    {{ ln.quantidade | int if ln.quantidade == (ln.quantidade | int) else ln.quantidade }}
+                </td>
+                <td style="text-align:center;">{{ ln.unidade_exibicao }}</td>
+                <td style="color:#555;">{{ ln.observacao or '' }}</td>
+                <td style="text-align:center;">
+                    {% if ln.item_consumo_id %}
+                        <span class="badge-tipo badge-consumo">Consumo</span>
+                    {% elif ln.item_id %}
+                        <span class="badge-tipo badge-sistema">Sistema</span>
+                    {% else %}
+                        <span class="badge-tipo badge-livre">Livre</span>
+                    {% endif %}
+                </td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+
+    <!-- Assinaturas -->
+    <div class="assinaturas">
+        <div class="assinatura-linha">
+            <div class="linha"></div>
+            Solicitado por
+        </div>
+        <div class="assinatura-linha">
+            <div class="linha"></div>
+            Aprovado por
+        </div>
+        <div class="assinatura-linha">
+            <div class="linha"></div>
+            Fornecedor
+        </div>
+    </div>
+
+    <!-- Rodapé -->
+    <div class="footer">
+        <span>Documento gerado em {{ now().strftime('%d/%m/%Y %H:%M') }}</span>
+        <span>ACB Usinagem CNC — Todos os direitos reservados</span>
+    </div>
+
+</div>
+</body>
+</html>

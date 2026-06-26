@@ -1,0 +1,98 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Pedidos de Uso e Consumo - ACB Usinagem CNC</title>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+    <link rel="stylesheet" href="/static/css/custom.css">
+</head>
+<body>
+<nav class="navbar navbar-expand-lg navbar-dark bg-primary">
+    <div class="container">
+        <a class="navbar-brand d-flex align-items-center gap-2" href="/">
+            <img src="/static/logo_acb.png" alt="ACB" style="height:28px;" onerror="this.onerror=null;this.src='/static/logo.svg';">
+            <span>ARTCOMPANY</span>
+        </a>
+        <div class="collapse navbar-collapse">
+            <ul class="navbar-nav">
+                <li class="nav-item"><a class="nav-link" href="/"><i class="fas fa-home"></i> Home</a></li>
+                <li class="nav-item"><a class="nav-link active" href="/consumo/pedidos"><i class="fas fa-shopping-cart"></i> Uso e Consumo</a></li>
+            </ul>
+        </div>
+    </div>
+</nav>
+
+<div class="container py-4">
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <div>
+            <h1 class="mb-0">Pedidos de Uso e Consumo</h1>
+            <small class="text-muted">Óleos, EPI, itens de montagem e compras avulsas</small>
+        </div>
+        <div class="d-flex gap-2">
+            <a href="/consumo/itens" class="btn btn-outline-secondary">
+                <i class="fas fa-list"></i> Cadastro de Itens
+            </a>
+            <a href="/consumo/pedidos/novo" class="btn btn-primary">
+                <i class="fas fa-plus"></i> Novo Pedido
+            </a>
+        </div>
+    </div>
+
+    {% with messages = get_flashed_messages(with_categories=true) %}
+        {% for cat, msg in messages %}
+        <div class="alert alert-{{ cat }} alert-dismissible fade show">{{ msg }}<button type="button" class="btn-close" data-bs-dismiss="alert"></button></div>
+        {% endfor %}
+    {% endwith %}
+
+    <div class="card">
+        <div class="card-body p-0">
+            <div class="table-responsive">
+                <table class="table table-hover mb-0">
+                    <thead class="table-dark">
+                        <tr>
+                            <th>Número</th>
+                            <th>Título</th>
+                            <th>Data</th>
+                            <th class="text-center">Itens</th>
+                            <th class="text-center">Status</th>
+                            <th class="text-center">Ações</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for p in pedidos %}
+                        <tr>
+                            <td><strong>{{ p.numero }}</strong></td>
+                            <td>{{ p.titulo or '—' }}</td>
+                            <td>{{ p.data_criacao.strftime('%d/%m/%Y') }}</td>
+                            <td class="text-center">{{ p.itens|length }}</td>
+                            <td class="text-center">
+                                {% if p.aprovado_em %}
+                                    <span class="badge bg-success">Aprovado</span>
+                                {% else %}
+                                    <span class="badge bg-secondary">Rascunho</span>
+                                {% endif %}
+                            </td>
+                            <td class="text-center">
+                                <a href="/consumo/pedidos/visualizar/{{ p.id }}" class="btn btn-sm btn-info" title="Visualizar"><i class="fas fa-eye"></i></a>
+                                <a href="/consumo/pedidos/imprimir/{{ p.id }}" class="btn btn-sm btn-secondary" target="_blank" title="Imprimir"><i class="fas fa-print"></i></a>
+                                <a href="/consumo/pedidos/editar/{{ p.id }}" class="btn btn-sm btn-warning" title="Editar"><i class="fas fa-edit"></i></a>
+                                <form method="POST" action="/consumo/pedidos/excluir/{{ p.id }}" style="display:inline;" onsubmit="return confirm('Excluir pedido {{ p.numero }}?')">
+                                    <button type="submit" class="btn btn-sm btn-danger" title="Excluir"><i class="fas fa-trash"></i></button>
+                                </form>
+                            </td>
+                        </tr>
+                        {% else %}
+                        <tr><td colspan="6" class="text-center text-muted py-4">Nenhum pedido criado ainda.</td></tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+</body>
+</html>
