@@ -31,7 +31,12 @@
             <h1 class="mb-0">Itens de Uso e Consumo</h1>
             <small class="text-muted">Óleos, lubrificantes, EPI, materiais de limpeza...</small>
         </div>
-        <a href="/consumo/itens/novo" class="btn btn-primary"><i class="fas fa-plus"></i> Novo Item</a>
+        <div class="d-flex gap-2">
+            <form method="POST" action="/consumo/itens/corrigir-codigos" onsubmit="return confirm('Isso irá renumerar todos os itens com código fora do padrão IC-XXX. Confirmar?')">
+                <button type="submit" class="btn btn-outline-warning btn-sm" title="Corrigir itens cadastrados com código manual"><i class="fas fa-wrench"></i> Corrigir Códigos</button>
+            </form>
+            <a href="/consumo/itens/novo" class="btn btn-primary"><i class="fas fa-plus"></i> Novo Item</a>
+        </div>
     </div>
 
     {% with messages = get_flashed_messages(with_categories=true) %}
