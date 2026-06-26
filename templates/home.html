@@ -14,38 +14,46 @@
     <link rel="stylesheet" href="{{ url_for('static', filename='css/custom.css') }}">
     <style>
         .hero-section {
-            background: linear-gradient(135deg, #0d6efd 0%, #0b5ed7 100%);
+            background: linear-gradient(135deg, #0d3b8e 0%, #0d6efd 100%);
             color: white;
-            padding: 3rem 0;
+            padding: 2.5rem 0;
             margin-bottom: 2rem;
-            border-radius: var(--border-radius);
+            border-radius: 12px;
         }
-        
-        .hero-title {
-            font-weight: 700;
-            margin-bottom: 1rem;
-        }
-        
-        .hero-subtitle {
-            font-weight: 300;
-            margin-bottom: 2rem;
-            opacity: 0.9;
-        }
-        
+        .hero-title { font-weight: 700; margin-bottom: .5rem; }
+        .hero-subtitle { font-weight: 300; opacity: .9; margin-bottom: 0; }
+
         .feature-card {
             height: 100%;
-            transition: transform 0.3s, box-shadow 0.3s;
+            border: none;
+            border-radius: 12px;
+            box-shadow: 0 2px 10px rgba(0,0,0,.08);
+            transition: transform .25s, box-shadow .25s;
         }
-        
         .feature-card:hover {
-            transform: translateY(-10px);
+            transform: translateY(-6px);
+            box-shadow: 0 8px 24px rgba(0,0,0,.14);
         }
-        
         .feature-icon {
-            font-size: 2.5rem;
-            margin-bottom: 1.25rem;
-            color: var(--primary-color);
+            font-size: 2.2rem;
+            margin-bottom: 1rem;
         }
+        .section-label {
+            font-size: .72rem;
+            font-weight: 700;
+            letter-spacing: 1.2px;
+            text-transform: uppercase;
+            color: #888;
+            margin-bottom: .75rem;
+            margin-top: 1.75rem;
+        }
+        .card-accent-blue   { border-top: 4px solid #0d6efd !important; }
+        .card-accent-green  { border-top: 4px solid #198754 !important; }
+        .card-accent-orange { border-top: 4px solid #fd7e14 !important; }
+        .card-accent-purple { border-top: 4px solid #6f42c1 !important; }
+        .card-accent-teal   { border-top: 4px solid #0dcaf0 !important; }
+        .card-accent-yellow { border-top: 4px solid #ffc107 !important; }
+        .card-accent-red    { border-top: 4px solid #dc3545 !important; }
     </style>
 </head>
 <body>
@@ -69,108 +77,138 @@
 
     <!-- Main Features -->
     <div class="container">
-        <div class="row g-4">
-            <div class="col-md-4">
-                <div class="card feature-card h-100 text-center">
-                    <div class="card-body">
-                        <i class="fas fa-clipboard-list feature-icon"></i>
-                        <h5 class="card-title">Pedidos</h5>
-                        <p class="card-text">Gerenciamento completo de pedidos de produção, desde a entrada até a entrega.</p>
-                        <a href="/pedidos" class="btn btn-primary btn-icon">
-                            <i class="fas fa-arrow-right"></i> Acessar Pedidos
-                        </a>
-                    </div>
-                </div>
-            </div>
-            
-            <div class="col-md-4">
-                <div class="card feature-card h-100 text-center">
-                    <div class="card-body">
-                        <i class="fas fa-database feature-icon"></i>
-                        <h5 class="card-title">Cadastros</h5>
-                        <p class="card-text">Cadastros de itens, materiais, trabalhos e clientes para sua operação.</p>
-                        <div class="d-grid gap-2">
-                            <a href="/itens" class="btn btn-outline-primary btn-sm btn-icon">
-                                <i class="fas fa-boxes"></i> Itens
-                            </a>
-                            <a href="/materiais" class="btn btn-outline-primary btn-sm btn-icon">
-                                <i class="fas fa-tools"></i> Materiais
-                            </a>
-                            <a href="/trabalhos" class="btn btn-outline-primary btn-sm btn-icon">
-                                <i class="fas fa-tasks"></i> Trabalhos
-                            </a>
-                            <a href="/clientes" class="btn btn-outline-primary btn-sm btn-icon">
-                                <i class="fas fa-users"></i> Clientes
-                            </a>
-                        </div>
-                    </div>
-                </div>
-            </div>
-            
-            <div class="col-md-4">
-                <div class="card feature-card h-100 text-center">
-                    <div class="card-body">
-                        <i class="fas fa-box feature-icon"></i>
-                        <h5 class="card-title">Pedidos de Materiais</h5>
-                        <p class="card-text">Geração e controle de pedidos de materiais para sua produção.</p>
-                        <div class="d-grid gap-2">
-                            <a href="/pedidos-material" class="btn btn-primary btn-icon">
-                                <i class="fas fa-arrow-right"></i> Acessar Pedidos de Materiais
-                            </a>
-                            <a href="/pedidos-montagem" class="btn btn-primary btn-icon">
-                                <i class="fas fa-arrow-right"></i> Acessar Pedidos de Montagem
-                            </a>
-                        </div>
-                    </div>
-                </div>
-            </div>
 
+        <!-- Produção -->
+        <p class="section-label"><i class="fas fa-industry"></i> Produção</p>
+        <div class="row g-3">
             <div class="col-md-4">
-                <div class="card feature-card h-100 text-center">
-                    <div class="card-body">
-                        <i class="fas fa-shopping-cart feature-icon"></i>
-                        <h5 class="card-title">Uso e Consumo</h5>
-                        <p class="card-text">Pedidos de compra de itens de uso e consumo: óleos, EPI, montagem e avulsos.</p>
+                <div class="card feature-card card-accent-blue text-center">
+                    <div class="card-body py-4">
+                        <i class="fas fa-clipboard-list feature-icon text-primary"></i>
+                        <h5 class="card-title fw-bold">Pedidos</h5>
+                        <p class="card-text text-muted small mb-3">Gerencie pedidos de produção do início à entrega.</p>
                         <div class="d-grid gap-2">
-                            <a href="/consumo/pedidos" class="btn btn-primary btn-icon">
-                                <i class="fas fa-arrow-right"></i> Pedidos de Consumo
-                            </a>
-                            <a href="/consumo/itens" class="btn btn-outline-primary btn-sm btn-icon">
-                                <i class="fas fa-list"></i> Cadastro de Itens
-                            </a>
+                            <a href="/pedidos" class="btn btn-primary btn-sm"><i class="fas fa-arrow-right me-1"></i> Listar Pedidos</a>
+                            <a href="/pedidos/novo" class="btn btn-outline-primary btn-sm"><i class="fas fa-plus me-1"></i> Novo Pedido</a>
                         </div>
                     </div>
                 </div>
             </div>
-            
-            <div class="col-md-6">
-                <div class="card feature-card h-100 text-center">
-                    <div class="card-body">
-                        <i class="fas fa-columns feature-icon"></i>
-                        <h5 class="card-title">Kanban ACB</h5>
-                        <p class="card-text">Visualize e gerencie o fluxo de produção com o quadro Kanban interativo.</p>
-                        <p class="card-text text-muted small">Acompanhe o status de cada ordem de serviço, movimente entre etapas e visualize tempos estimados.</p>
-                        <a href="/kanban" class="btn btn-primary btn-icon">
-                            <i class="fas fa-arrow-right"></i> Acessar Kanban
-                        </a>
+            <div class="col-md-4">
+                <div class="card feature-card card-accent-purple text-center">
+                    <div class="card-body py-4">
+                        <i class="fas fa-columns feature-icon text-purple" style="color:#6f42c1;"></i>
+                        <h5 class="card-title fw-bold">Kanban ACB</h5>
+                        <p class="card-text text-muted small mb-3">Visualize o fluxo de produção com o quadro Kanban interativo.</p>
+                        <a href="/kanban" class="btn btn-sm btn-icon" style="background:#6f42c1; color:#fff;"><i class="fas fa-arrow-right me-1"></i> Acessar Kanban</a>
                     </div>
                 </div>
             </div>
-            
-            <div class="col-md-6">
-                <div class="card feature-card h-100 text-center">
-                    <div class="card-body">
-                        <i class="fas fa-warehouse feature-icon"></i>
-                        <h5 class="card-title">Estoque</h5>
-                        <p class="card-text">Controle completo do estoque de materiais com entradas, saídas e histórico.</p>
-                        <p class="card-text text-muted small">Registre movimentações, consulte saldos atuais e acompanhe o histórico de cada material.</p>
-                        <a href="/estoque" class="btn btn-primary btn-icon">
-                            <i class="fas fa-arrow-right"></i> Acessar Estoque
-                        </a>
+            <div class="col-md-4">
+                <div class="card feature-card card-accent-teal text-center">
+                    <div class="card-body py-4">
+                        <i class="fas fa-warehouse feature-icon" style="color:#0dcaf0;"></i>
+                        <h5 class="card-title fw-bold">Estoque</h5>
+                        <p class="card-text text-muted small mb-3">Controle de estoque de materiais e peças com histórico completo.</p>
+                        <div class="d-grid gap-2">
+                            <a href="/estoque" class="btn btn-sm" style="background:#0dcaf0; color:#000;"><i class="fas fa-boxes me-1"></i> Estoque de Materiais</a>
+                            <a href="/estoque-pecas" class="btn btn-outline-secondary btn-sm"><i class="fas fa-box me-1"></i> Estoque de Peças</a>
+                        </div>
                     </div>
                 </div>
             </div>
         </div>
+
+        <!-- Compras / Materiais -->
+        <p class="section-label"><i class="fas fa-truck"></i> Compras &amp; Materiais</p>
+        <div class="row g-3">
+            <div class="col-md-4">
+                <div class="card feature-card card-accent-orange text-center">
+                    <div class="card-body py-4">
+                        <i class="fas fa-box feature-icon text-warning"></i>
+                        <h5 class="card-title fw-bold">Pedidos de Materiais</h5>
+                        <p class="card-text text-muted small mb-3">Orçamentos de materiais de produção e montagem.</p>
+                        <div class="d-grid gap-2">
+                            <a href="/pedidos-material" class="btn btn-warning btn-sm text-dark"><i class="fas fa-arrow-right me-1"></i> Material de Produção</a>
+                            <a href="/pedidos-montagem" class="btn btn-outline-warning btn-sm text-dark"><i class="fas fa-arrow-right me-1"></i> Material de Montagem</a>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-4">
+                <div class="card feature-card card-accent-yellow text-center">
+                    <div class="card-body py-4">
+                        <i class="fas fa-shopping-cart feature-icon" style="color:#ffc107;"></i>
+                        <h5 class="card-title fw-bold">Uso e Consumo</h5>
+                        <p class="card-text text-muted small mb-3">Pedidos de óleos, EPI, itens de montagem e compras avulsas.</p>
+                        <div class="d-grid gap-2">
+                            <a href="/consumo/pedidos" class="btn btn-sm" style="background:#ffc107; color:#000;"><i class="fas fa-arrow-right me-1"></i> Pedidos de Consumo</a>
+                            <a href="/consumo/itens" class="btn btn-outline-secondary btn-sm"><i class="fas fa-list me-1"></i> Cadastro de Itens</a>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-4">
+                <div class="card feature-card card-accent-green text-center">
+                    <div class="card-body py-4">
+                        <i class="fas fa-file-invoice-dollar feature-icon text-success"></i>
+                        <h5 class="card-title fw-bold">Orçamentos</h5>
+                        <p class="card-text text-muted small mb-3">Elaboração e controle de orçamentos para clientes.</p>
+                        <a href="{{ url_for('orcamentos.index') }}" class="btn btn-success btn-sm"><i class="fas fa-arrow-right me-1"></i> Acessar Orçamentos</a>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Cadastros -->
+        <p class="section-label"><i class="fas fa-database"></i> Cadastros</p>
+        <div class="row g-3">
+            <div class="col-md-3 col-6">
+                <a href="/itens" class="text-decoration-none">
+                    <div class="card feature-card card-accent-blue text-center py-3">
+                        <div class="card-body py-2">
+                            <i class="fas fa-cubes fa-2x text-primary mb-2"></i>
+                            <div class="fw-bold">Itens</div>
+                            <small class="text-muted">Peças e produtos</small>
+                        </div>
+                    </div>
+                </a>
+            </div>
+            <div class="col-md-3 col-6">
+                <a href="/materiais" class="text-decoration-none">
+                    <div class="card feature-card card-accent-orange text-center py-3">
+                        <div class="card-body py-2">
+                            <i class="fas fa-tools fa-2x text-warning mb-2"></i>
+                            <div class="fw-bold">Materiais</div>
+                            <small class="text-muted">Matéria-prima</small>
+                        </div>
+                    </div>
+                </a>
+            </div>
+            <div class="col-md-3 col-6">
+                <a href="/trabalhos" class="text-decoration-none">
+                    <div class="card feature-card card-accent-purple text-center py-3">
+                        <div class="card-body py-2">
+                            <i class="fas fa-tasks fa-2x mb-2" style="color:#6f42c1;"></i>
+                            <div class="fw-bold">Trabalhos</div>
+                            <small class="text-muted">Tipos de operação</small>
+                        </div>
+                    </div>
+                </a>
+            </div>
+            <div class="col-md-3 col-6">
+                <a href="/clientes" class="text-decoration-none">
+                    <div class="card feature-card card-accent-teal text-center py-3">
+                        <div class="card-body py-2">
+                            <i class="fas fa-users fa-2x mb-2" style="color:#0dcaf0;"></i>
+                            <div class="fw-bold">Clientes</div>
+                            <small class="text-muted">Cadastro de clientes</small>
+                        </div>
+                    </div>
+                </a>
+            </div>
+        </div>
+
     </div>
     {% endblock %}
 
