@@ -400,6 +400,16 @@ def verificar_inicializar_banco():
                 logger.warning("Supabase sem conexões disponíveis (Max client connections reached). Pulando demais migrações de startup.")
                 return
             logger.warning(f"Erro ao migrar coluna status de pedido_montagem: {str(col_err)}")
+
+        try:
+            from migrations.add_status_nome_pedido_material import migrate_postgres as migrate_status_pm_mat_pg
+            migrate_status_pm_mat_pg()
+            logger.info("Colunas status/nome de pedido_material verificadas/adicionadas com sucesso.")
+        except Exception as col_err:
+            if _is_max_connections_error(col_err):
+                logger.warning("Supabase sem conexões disponíveis (Max client connections reached). Pulando demais migrações de startup.")
+                return
+            logger.warning(f"Erro ao migrar colunas status/nome de pedido_material: {str(col_err)}")
             
         # Executar migração para adicionar coluna tamanho_peca em Item
         try:
@@ -633,6 +643,16 @@ def verificar_inicializar_banco():
                             logger.info("Coluna status adicionada com sucesso à tabela pedido_montagem.")
                         else:
                             logger.warning("Falha ao adicionar coluna status à tabela pedido_montagem.")
+
+                    cursor.execute("PRAGMA table_info(pedido_material)")
+                    pedido_material_columns = [column[1] for column in cursor.fetchall()]
+                    if 'status' not in pedido_material_columns or 'nome' not in pedido_material_columns:
+                        logger.info("Colunas status/nome não encontradas em pedido_material. Executando migração...")
+                        from migrations.add_status_nome_pedido_material import migrate_sqlite as migrate_status_pm_mat_sqlite
+                        if migrate_status_pm_mat_sqlite():
+                            logger.info("Colunas status/nome adicionadas com sucesso à tabela pedido_material.")
+                        else:
+                            logger.warning("Falha ao adicionar colunas status/nome à tabela pedido_material.")
 
                     if 'tamanho_peca' not in item_columns:
                         logger.info("Coluna tamanho_peca não encontrada na tabela item. Executando migração...")

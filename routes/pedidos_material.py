@@ -172,9 +172,12 @@ def visualizar_pedido_material_por_numero(numero):
 
 @pedidos_material.route('/pedidos-material/atualizar/<int:pedido_id>', methods=['POST'])
 def atualizar_pedido_material(pedido_id):
-    """Atualiza manualmente as quantidades/comprimentos dos itens de um orçamento de material"""
+    """Atualiza nome e quantidades/comprimentos dos itens de um orçamento de material"""
     _ensure_item_pedido_material_laser_schema()
     pedido = PedidoMaterial.query.get_or_404(pedido_id)
+
+    if 'nome' in request.form:
+        pedido.nome = request.form.get('nome', '').strip() or None
 
     itens = ItemPedidoMaterial.query.filter_by(pedido_material_id=pedido.id).all()
     for item in itens:
@@ -199,6 +202,17 @@ def atualizar_pedido_material(pedido_id):
     db.session.commit()
     flash('Orçamento de material atualizado.', 'success')
     return redirect(url_for('pedidos_material.visualizar_pedido_material', pedido_id=pedido.id))
+
+@pedidos_material.route('/pedidos-material/toggle-status/<int:pedido_id>', methods=['POST'])
+def toggle_status_pedido_material(pedido_id):
+    pedido = PedidoMaterial.query.get_or_404(pedido_id)
+    status_ciclo = ['aberto', 'enviado_aguardando', 'concluido']
+    idx = status_ciclo.index(pedido.status) if pedido.status in status_ciclo else 0
+    pedido.status = status_ciclo[(idx + 1) % len(status_ciclo)]
+    db.session.commit()
+    flash(f'Orçamento {pedido.numero} marcado como {pedido.status}.', 'success')
+    return redirect(url_for('pedidos_material.listar_pedidos_material'))
+
 
 @pedidos_material.route('/pedidos-material/imprimir/<int:pedido_id>')
 def imprimir_pedido_material(pedido_id):

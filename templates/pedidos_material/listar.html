@@ -49,24 +49,41 @@
                         <thead>
                             <tr>
                                 <th>Número</th>
+                                <th>Nome</th>
                                 <th>Data de Criação</th>
                                 <th>Itens</th>
+                                <th>Status</th>
                                 <th>Ações</th>
                             </tr>
                         </thead>
                         <tbody>
                             {% for pedido in pedidos %}
-                            <tr>
+                            <tr class="{% if pedido.status == 'concluido' %}table-success{% endif %}{% if pedido.status == 'enviado_aguardando' %}table-warning{% endif %}">
                                 <td>{{ pedido.numero }}</td>
+                                <td>{{ pedido.nome or '' }}</td>
                                 <td>{{ pedido.data_criacao.strftime('%d/%m/%Y') }}</td>
                                 <td>{{ pedido.itens|length }}</td>
                                 <td>
-                                    <a href="/pedidos-material/visualizar/{{ pedido.id }}" class="btn btn-sm btn-info">
+                                    {% if pedido.status == 'concluido' %}
+                                        <span class="badge bg-success">Concluído</span>
+                                    {% elif pedido.status == 'enviado_aguardando' %}
+                                        <span class="badge bg-info">Enviado - Aguardando Retorno</span>
+                                    {% else %}
+                                        <span class="badge bg-warning text-dark">Aberto</span>
+                                    {% endif %}
+                                </td>
+                                <td>
+                                    <a href="/pedidos-material/visualizar/{{ pedido.id }}" class="btn btn-sm btn-info" title="Visualizar">
                                         <i class="fas fa-eye"></i>
                                     </a>
-                                    <a href="/pedidos-material/imprimir/{{ pedido.id }}" class="btn btn-sm btn-secondary" target="_blank">
+                                    <a href="/pedidos-material/imprimir/{{ pedido.id }}" class="btn btn-sm btn-secondary" target="_blank" title="Imprimir">
                                         <i class="fas fa-print"></i>
                                     </a>
+                                    <form method="POST" action="/pedidos-material/toggle-status/{{ pedido.id }}" style="display:inline-block;">
+                                        <button type="submit" class="btn btn-sm btn-outline-secondary" title="Alterar status">
+                                            <i class="fas fa-sync-alt"></i>
+                                        </button>
+                                    </form>
                                 </td>
                             </tr>
                             {% endfor %}
