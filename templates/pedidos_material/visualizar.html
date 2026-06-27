@@ -61,6 +61,11 @@
                 <a href="/pedidos-material/imprimir/{{ pedido.id }}" class="btn btn-secondary" target="_blank">
                     <i class="fas fa-print"></i> Imprimir
                 </a>
+                <form method="POST" action="/pedidos-material/duplicar/{{ pedido.id }}" style="display:inline-block;" onsubmit="return confirm('Duplicar este orçamento?')">
+                    <button type="submit" class="btn btn-outline-primary">
+                        <i class="fas fa-clone"></i> Duplicar
+                    </button>
+                </form>
                 <form method="POST" action="/pedidos-material/toggle-status/{{ pedido.id }}" style="display:inline-block;">
                     <button type="submit" class="btn btn-outline-secondary" title="Alterar status">
                         <i class="fas fa-sync-alt"></i> Alterar Status

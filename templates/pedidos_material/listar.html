@@ -79,6 +79,11 @@
                                     <a href="/pedidos-material/imprimir/{{ pedido.id }}" class="btn btn-sm btn-secondary" target="_blank" title="Imprimir">
                                         <i class="fas fa-print"></i>
                                     </a>
+                                    <form method="POST" action="/pedidos-material/duplicar/{{ pedido.id }}" style="display:inline-block;" onsubmit="return confirm('Duplicar este orçamento?')">
+                                        <button type="submit" class="btn btn-sm btn-outline-primary" title="Duplicar">
+                                            <i class="fas fa-clone"></i>
+                                        </button>
+                                    </form>
                                     <form method="POST" action="/pedidos-material/toggle-status/{{ pedido.id }}" style="display:inline-block;">
                                         <button type="submit" class="btn btn-sm btn-outline-secondary" title="Alterar status">
                                             <i class="fas fa-sync-alt"></i>

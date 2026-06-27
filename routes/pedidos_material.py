@@ -214,6 +214,35 @@ def toggle_status_pedido_material(pedido_id):
     return redirect(url_for('pedidos_material.listar_pedidos_material'))
 
 
+@pedidos_material.route('/pedidos-material/duplicar/<int:pedido_id>', methods=['POST'])
+def duplicar_pedido_material(pedido_id):
+    """Duplica um orçamento de material gerando um novo número PM."""
+    pedido = PedidoMaterial.query.get_or_404(pedido_id)
+    novo_numero = generate_next_code(PedidoMaterial, 'PM', 'numero', padding=5)
+    novo = PedidoMaterial(
+        numero=novo_numero,
+        data_criacao=datetime.now().date(),
+        status='aberto'
+    )
+    db.session.add(novo)
+    db.session.flush()
+
+    for row in pedido.itens:
+        db.session.add(ItemPedidoMaterial(
+            pedido_material_id=novo.id,
+            material_id=row.material_id,
+            comprimento=row.comprimento,
+            quantidade=row.quantidade or 0,
+            sufixo=row.sufixo or '',
+            descricao_material=row.descricao_material,
+            item_origem_id=row.item_origem_id
+        ))
+
+    db.session.commit()
+    flash(f'Orçamento de material duplicado: {novo_numero}.', 'success')
+    return redirect(url_for('pedidos_material.visualizar_pedido_material', pedido_id=novo.id))
+
+
 @pedidos_material.route('/pedidos-material/imprimir/<int:pedido_id>')
 def imprimir_pedido_material(pedido_id):
     """Rota para imprimir um orçamento de material"""
