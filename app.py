@@ -390,6 +390,16 @@ def verificar_inicializar_banco():
                 logger.warning("Supabase sem conexões disponíveis (Max client connections reached). Pulando demais migrações de startup.")
                 return
             logger.warning(f"Erro ao migrar estrutura de item_pedido_material para laser: {str(col_err)}")
+
+        try:
+            from migrations.add_status_pedido_montagem import migrate_postgres as migrate_status_pm_pg
+            migrate_status_pm_pg()
+            logger.info("Coluna status de pedido_montagem verificada/adicionada com sucesso.")
+        except Exception as col_err:
+            if _is_max_connections_error(col_err):
+                logger.warning("Supabase sem conexões disponíveis (Max client connections reached). Pulando demais migrações de startup.")
+                return
+            logger.warning(f"Erro ao migrar coluna status de pedido_montagem: {str(col_err)}")
             
         # Executar migração para adicionar coluna tamanho_peca em Item
         try:
@@ -613,6 +623,17 @@ def verificar_inicializar_banco():
                             logger.info("Estrutura de item_pedido_material para laser ajustada com sucesso.")
                         else:
                             logger.warning("Falha ao ajustar estrutura de item_pedido_material para laser.")
+
+                    cursor.execute("PRAGMA table_info(pedido_montagem)")
+                    pedido_montagem_columns = [column[1] for column in cursor.fetchall()]
+                    if 'status' not in pedido_montagem_columns:
+                        logger.info("Coluna status não encontrada em pedido_montagem. Executando migração...")
+                        from migrations.add_status_pedido_montagem import migrate_sqlite as migrate_status_pm_sqlite
+                        if migrate_status_pm_sqlite():
+                            logger.info("Coluna status adicionada com sucesso à tabela pedido_montagem.")
+                        else:
+                            logger.warning("Falha ao adicionar coluna status à tabela pedido_montagem.")
+
                     if 'tamanho_peca' not in item_columns:
                         logger.info("Coluna tamanho_peca não encontrada na tabela item. Executando migração...")
                         from migrations.add_tamanho_peca_item import migrate_sqlite as migrate_tamanho_peca_sqlite

@@ -1,6 +1,7 @@
 from flask import Blueprint, render_template, redirect, url_for, request, flash
 from datetime import datetime
 from flask import g
+from utils import generate_next_code
 from models import (
     db,
     PedidoMontagem,
@@ -38,8 +39,42 @@ def visualizar_pedido_montagem_por_numero(numero):
 @pedidos_montagem.route('/pedidos-montagem/imprimir/<int:pedido_id>')
 def imprimir_pedido_montagem(pedido_id):
     pedido = PedidoMontagem.query.get_or_404(pedido_id)
-    itens = ItemPedidoMontagem.query.filter_by(pedido_montagem_id=pedido.id).all()
+    itens = [i for i in ItemPedidoMontagem.query.filter_by(pedido_montagem_id=pedido.id).all() if (i.quantidade or 0) > 0]
     return render_template('pedidos_montagem/imprimir.html', pedido=pedido, itens=itens)
+
+
+@pedidos_montagem.route('/pedidos-montagem/duplicar/<int:pedido_id>', methods=['POST'])
+def duplicar_pedido_montagem(pedido_id):
+    """Duplica um orçamento de montagem gerando um novo número PMT."""
+    pedido = PedidoMontagem.query.get_or_404(pedido_id)
+    novo_numero = generate_next_code(PedidoMontagem, 'PMT', 'numero', padding=5)
+    novo = PedidoMontagem(
+        numero=novo_numero,
+        data_criacao=datetime.now().date(),
+        status='aberto'
+    )
+    db.session.add(novo)
+    db.session.flush()
+
+    for row in pedido.itens:
+        db.session.add(ItemPedidoMontagem(
+            pedido_montagem_id=novo.id,
+            item_id=row.item_id,
+            quantidade=row.quantidade or 0
+        ))
+
+    db.session.commit()
+    flash(f'Orçamento de montagem duplicado: {novo_numero}.', 'success')
+    return redirect(url_for('pedidos_montagem.visualizar_pedido_montagem', pedido_id=novo.id))
+
+
+@pedidos_montagem.route('/pedidos-montagem/toggle-status/<int:pedido_id>', methods=['POST'])
+def toggle_status_pedido_montagem(pedido_id):
+    pedido = PedidoMontagem.query.get_or_404(pedido_id)
+    pedido.status = 'concluido' if pedido.status != 'concluido' else 'aberto'
+    db.session.commit()
+    flash(f'Orçamento {pedido.numero} marcado como {pedido.status}.', 'success')
+    return redirect(url_for('pedidos_montagem.listar_pedidos_montagem'))
 
 
 @pedidos_montagem.route('/pedidos-montagem/aprovar/<int:pedido_id>', methods=['POST'])
@@ -54,7 +89,7 @@ def aprovar_pedido_montagem(pedido_id):
     pedido.aprovado_por_id = usuario.id
     pedido.aprovado_por_nome = getattr(usuario, 'nome', None)
     db.session.commit()
-    flash('Pedido de montagem aprovado.', 'success')
+    flash('Orçamento de montagem aprovado.', 'success')
     return redirect(url_for('pedidos_montagem.visualizar_pedido_montagem', pedido_id=pedido.id))
 
 
@@ -76,7 +111,7 @@ def desaprovar_pedido_montagem(pedido_id):
 
 @pedidos_montagem.route('/pedidos-montagem/atualizar/<int:pedido_id>', methods=['POST'])
 def atualizar_pedido_montagem(pedido_id):
-    """Atualiza manualmente as quantidades dos itens de um pedido de montagem"""
+    """Atualiza manualmente as quantidades dos itens de um orçamento de montagem"""
     pedido = PedidoMontagem.query.get_or_404(pedido_id)
 
     itens = ItemPedidoMontagem.query.filter_by(pedido_montagem_id=pedido.id).all()
@@ -90,7 +125,7 @@ def atualizar_pedido_montagem(pedido_id):
                 pass
 
     db.session.commit()
-    flash('Pedido de montagem atualizado.', 'success')
+    flash('Orçamento de montagem atualizado.', 'success')
     return redirect(url_for('pedidos_montagem.visualizar_pedido_montagem', pedido_id=pedido.id))
 
 
@@ -128,7 +163,7 @@ def adicionar_item_pedido_montagem(pedido_id):
         db.session.add(novo)
 
     db.session.commit()
-    flash('Item adicionado ao pedido de montagem.', 'success')
+    flash('Item adicionado ao orçamento de montagem.', 'success')
     return redirect(url_for('pedidos_montagem.visualizar_pedido_montagem', pedido_id=pedido.id))
 
 
@@ -139,7 +174,7 @@ def remover_item_pedido_montagem(item_pedido_id):
 
     db.session.delete(item_pedido)
     db.session.commit()
-    flash('Item removido do pedido de montagem.', 'success')
+    flash('Item removido do orçamento de montagem.', 'success')
     return redirect(url_for('pedidos_montagem.visualizar_pedido_montagem', pedido_id=pedido_id))
 
 

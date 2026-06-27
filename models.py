@@ -785,6 +785,7 @@ class PedidoMontagem(db.Model):
     aprovado_em = db.Column(db.DateTime, nullable=True)
     aprovado_por_id = db.Column(db.Integer, db.ForeignKey('usuario.id'), nullable=True)
     aprovado_por_nome = db.Column(db.String(120), nullable=True)
+    status = db.Column(db.String(20), default='aberto')
     itens = db.relationship('ItemPedidoMontagem', backref='pedido_montagem', lazy=True, cascade="all, delete-orphan")
 
     def __repr__(self):
