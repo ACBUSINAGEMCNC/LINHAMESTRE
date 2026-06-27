@@ -1700,6 +1700,7 @@ class PedidoConsumo(db.Model):
     titulo = db.Column(db.String(150), nullable=True)
     data_criacao = db.Column(db.DateTime, default=local_now_naive)
     observacoes = db.Column(db.Text, nullable=True)
+    status = db.Column(db.String(25), default='aberto')
     aprovado_em = db.Column(db.DateTime, nullable=True)
     aprovado_por_id = db.Column(db.Integer, db.ForeignKey('usuario.id'), nullable=True)
     aprovado_por_nome = db.Column(db.String(120), nullable=True)

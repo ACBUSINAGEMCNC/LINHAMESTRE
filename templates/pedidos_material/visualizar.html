@@ -67,9 +67,13 @@
                     </button>
                 </form>
                 <form method="POST" action="/pedidos-material/toggle-status/{{ pedido.id }}" style="display:inline-block;">
-                    <button type="submit" class="btn btn-outline-secondary" title="Alterar status">
-                        <i class="fas fa-sync-alt"></i> Alterar Status
-                    </button>
+                    <select name="status" class="form-select d-inline-block w-auto" style="width: 200px !important;" onchange="this.form.submit()">
+                        <option value="aberto" {% if pedido.status == 'aberto' %}selected{% endif %}>Aberto</option>
+                        <option value="enviado_aguardando" {% if pedido.status == 'enviado_aguardando' %}selected{% endif %}>Enviado - Aguardando</option>
+                        <option value="concluido" {% if pedido.status == 'concluido' %}selected{% endif %}>Concluído</option>
+                        <option value="cancelado" {% if pedido.status == 'cancelado' %}selected{% endif %}>Cancelado</option>
+                        <option value="nao_comprado" {% if pedido.status == 'nao_comprado' %}selected{% endif %}>Não Comprado</option>
+                    </select>
                 </form>
                 <a href="/pedidos-material" class="btn btn-primary">
                     <i class="fas fa-arrow-left"></i> Voltar

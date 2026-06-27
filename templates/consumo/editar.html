@@ -41,9 +41,19 @@
 
     <form method="POST" id="form-pedido">
         <div class="row g-3 mb-4">
-            <div class="col-md-8">
+            <div class="col-md-6">
                 <label class="form-label fw-bold">Título do Pedido</label>
                 <input type="text" name="titulo" class="form-control" value="{{ pedido.titulo or '' }}">
+            </div>
+            <div class="col-md-3">
+                <label class="form-label fw-bold">Status</label>
+                <select name="status" class="form-select">
+                    <option value="aberto" {% if pedido.status == 'aberto' %}selected{% endif %}>Aberto</option>
+                    <option value="enviado_aguardando" {% if pedido.status == 'enviado_aguardando' %}selected{% endif %}>Enviado - Aguardando</option>
+                    <option value="concluido" {% if pedido.status == 'concluido' %}selected{% endif %}>Concluído</option>
+                    <option value="cancelado" {% if pedido.status == 'cancelado' %}selected{% endif %}>Cancelado</option>
+                    <option value="nao_comprado" {% if pedido.status == 'nao_comprado' %}selected{% endif %}>Não Comprado</option>
+                </select>
             </div>
         </div>
         <div class="mb-4">

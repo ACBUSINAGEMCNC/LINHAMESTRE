@@ -43,6 +43,15 @@
             {% endif %}
             <a href="/consumo/pedidos/imprimir/{{ pedido.id }}" class="btn btn-secondary" target="_blank"><i class="fas fa-print"></i> Imprimir PDF</a>
             <a href="/consumo/pedidos/editar/{{ pedido.id }}" class="btn btn-warning"><i class="fas fa-edit"></i> Editar</a>
+            <form method="POST" action="/consumo/pedidos/atualizar-status/{{ pedido.id }}" style="display:inline;">
+                <select name="status" class="form-select d-inline-block w-auto" style="width: 200px !important;" onchange="this.form.submit()">
+                    <option value="aberto" {% if pedido.status == 'aberto' %}selected{% endif %}>Aberto</option>
+                    <option value="enviado_aguardando" {% if pedido.status == 'enviado_aguardando' %}selected{% endif %}>Enviado - Aguardando</option>
+                    <option value="concluido" {% if pedido.status == 'concluido' %}selected{% endif %}>Concluído</option>
+                    <option value="cancelado" {% if pedido.status == 'cancelado' %}selected{% endif %}>Cancelado</option>
+                    <option value="nao_comprado" {% if pedido.status == 'nao_comprado' %}selected{% endif %}>Não Comprado</option>
+                </select>
+            </form>
         </div>
     </div>
 
@@ -60,10 +69,25 @@
                 <div class="col-md-3"><strong>Data:</strong> {{ pedido.data_criacao.strftime('%d/%m/%Y') }}</div>
                 <div class="col-md-3"><strong>Total de Itens:</strong> {{ pedido.itens|length }}</div>
                 <div class="col-md-3">
-                    {% if pedido.aprovado_em %}
-                    <span class="badge bg-success fs-6">Aprovado</span>
+                    <strong>Status:</strong>
+                    {% if pedido.status == 'concluido' %}
+                        <span class="badge bg-success">Concluído</span>
+                    {% elif pedido.status == 'enviado_aguardando' %}
+                        <span class="badge bg-info">Enviado - Aguardando</span>
+                    {% elif pedido.status == 'cancelado' %}
+                        <span class="badge bg-danger">Cancelado</span>
+                    {% elif pedido.status == 'nao_comprado' %}
+                        <span class="badge bg-secondary">Não Comprado</span>
                     {% else %}
-                    <span class="badge bg-secondary fs-6">Rascunho</span>
+                        <span class="badge bg-warning text-dark">Aberto</span>
+                    {% endif %}
+                </div>
+                <div class="col-md-3">
+                    <strong>Aprovação:</strong>
+                    {% if pedido.aprovado_em %}
+                    <span class="badge bg-success">Aprovado</span>
+                    {% else %}
+                    <span class="badge bg-secondary">Rascunho</span>
                     {% endif %}
                 </div>
             </div>

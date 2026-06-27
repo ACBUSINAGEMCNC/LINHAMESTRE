@@ -203,11 +203,14 @@ def novo_pedido_consumo():
     if request.method == 'POST':
         titulo = request.form.get('titulo', '').strip() or None
         observacoes = request.form.get('observacoes', '').strip() or None
+        status = request.form.get('status', 'aberto').strip()
+        status_validos = ['aberto', 'enviado_aguardando', 'concluido', 'cancelado', 'nao_comprado']
 
         pedido = PedidoConsumo(
             numero=_next_numero(),
             titulo=titulo,
             observacoes=observacoes,
+            status=status if status in status_validos else 'aberto'
         )
         db.session.add(pedido)
         db.session.flush()
@@ -237,6 +240,7 @@ def editar_pedido_consumo(pedido_id):
     if request.method == 'POST':
         pedido.titulo = request.form.get('titulo', '').strip() or None
         pedido.observacoes = request.form.get('observacoes', '').strip() or None
+        pedido.status = request.form.get('status', 'aberto').strip() or 'aberto'
 
         # Remove linhas existentes e recria
         for linha in list(pedido.itens):
@@ -286,6 +290,17 @@ def desaprovar_pedido_consumo(pedido_id):
     pedido.aprovado_por_nome = None
     db.session.commit()
     flash('Aprovação removida.', 'warning')
+    return redirect(url_for('pedidos_consumo.visualizar_pedido_consumo', pedido_id=pedido.id))
+
+
+@pedidos_consumo.route('/consumo/pedidos/atualizar-status/<int:pedido_id>', methods=['POST'])
+def atualizar_status_pedido_consumo(pedido_id):
+    pedido = PedidoConsumo.query.get_or_404(pedido_id)
+    novo_status = request.form.get('status', 'aberto').strip()
+    status_validos = ['aberto', 'enviado_aguardando', 'concluido', 'cancelado', 'nao_comprado']
+    pedido.status = novo_status if novo_status in status_validos else 'aberto'
+    db.session.commit()
+    flash(f'Pedido {pedido.numero} atualizado para {pedido.status}.', 'success')
     return redirect(url_for('pedidos_consumo.visualizar_pedido_consumo', pedido_id=pedido.id))
 
 

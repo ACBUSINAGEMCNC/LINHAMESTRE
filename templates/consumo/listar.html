@@ -57,16 +57,30 @@
                             <th>Data</th>
                             <th class="text-center">Itens</th>
                             <th class="text-center">Status</th>
+                            <th class="text-center">Aprovação</th>
                             <th class="text-center">Ações</th>
                         </tr>
                     </thead>
                     <tbody>
                         {% for p in pedidos %}
-                        <tr>
+                        <tr class="{% if p.status == 'concluido' %}table-success{% endif %}{% if p.status == 'enviado_aguardando' %}table-warning{% endif %}{% if p.status == 'cancelado' %}table-danger{% endif %}{% if p.status == 'nao_comprado' %}table-secondary{% endif %}">
                             <td><strong>{{ p.numero }}</strong></td>
                             <td>{{ p.titulo or '—' }}</td>
                             <td>{{ p.data_criacao.strftime('%d/%m/%Y') }}</td>
                             <td class="text-center">{{ p.itens|length }}</td>
+                            <td class="text-center">
+                                {% if p.status == 'concluido' %}
+                                    <span class="badge bg-success">Concluído</span>
+                                {% elif p.status == 'enviado_aguardando' %}
+                                    <span class="badge bg-info">Enviado - Aguardando</span>
+                                {% elif p.status == 'cancelado' %}
+                                    <span class="badge bg-danger">Cancelado</span>
+                                {% elif p.status == 'nao_comprado' %}
+                                    <span class="badge bg-secondary">Não Comprado</span>
+                                {% else %}
+                                    <span class="badge bg-warning text-dark">Aberto</span>
+                                {% endif %}
+                            </td>
                             <td class="text-center">
                                 {% if p.aprovado_em %}
                                     <span class="badge bg-success">Aprovado</span>
@@ -78,13 +92,22 @@
                                 <a href="/consumo/pedidos/visualizar/{{ p.id }}" class="btn btn-sm btn-info" title="Visualizar"><i class="fas fa-eye"></i></a>
                                 <a href="/consumo/pedidos/imprimir/{{ p.id }}" class="btn btn-sm btn-secondary" target="_blank" title="Imprimir"><i class="fas fa-print"></i></a>
                                 <a href="/consumo/pedidos/editar/{{ p.id }}" class="btn btn-sm btn-warning" title="Editar"><i class="fas fa-edit"></i></a>
+                                <form method="POST" action="/consumo/pedidos/atualizar-status/{{ p.id }}" style="display:inline;">
+                                    <select name="status" class="form-select form-select-sm d-inline-block" style="width: 140px;" onchange="this.form.submit()">
+                                        <option value="aberto" {% if p.status == 'aberto' %}selected{% endif %}>Aberto</option>
+                                        <option value="enviado_aguardando" {% if p.status == 'enviado_aguardando' %}selected{% endif %}>Enviado - Aguardando</option>
+                                        <option value="concluido" {% if p.status == 'concluido' %}selected{% endif %}>Concluído</option>
+                                        <option value="cancelado" {% if p.status == 'cancelado' %}selected{% endif %}>Cancelado</option>
+                                        <option value="nao_comprado" {% if p.status == 'nao_comprado' %}selected{% endif %}>Não Comprado</option>
+                                    </select>
+                                </form>
                                 <form method="POST" action="/consumo/pedidos/excluir/{{ p.id }}" style="display:inline;" onsubmit="return confirm('Excluir pedido {{ p.numero }}?')">
                                     <button type="submit" class="btn btn-sm btn-danger" title="Excluir"><i class="fas fa-trash"></i></button>
                                 </form>
                             </td>
                         </tr>
                         {% else %}
-                        <tr><td colspan="6" class="text-center text-muted py-4">Nenhum pedido criado ainda.</td></tr>
+                        <tr><td colspan="7" class="text-center text-muted py-4">Nenhum pedido criado ainda.</td></tr>
                         {% endfor %}
                     </tbody>
                 </table>

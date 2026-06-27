@@ -71,12 +71,17 @@ def duplicar_pedido_montagem(pedido_id):
 @pedidos_montagem.route('/pedidos-montagem/toggle-status/<int:pedido_id>', methods=['POST'])
 def toggle_status_pedido_montagem(pedido_id):
     pedido = PedidoMontagem.query.get_or_404(pedido_id)
-    status_ciclo = ['aberto', 'enviado_aguardando', 'concluido', 'cancelado', 'nao_comprado']
-    idx = status_ciclo.index(pedido.status) if pedido.status in status_ciclo else 0
-    pedido.status = status_ciclo[(idx + 1) % len(status_ciclo)]
+    status_validos = ['aberto', 'enviado_aguardando', 'concluido', 'cancelado', 'nao_comprado']
+    novo_status = request.form.get('status', '').strip()
+    if novo_status in status_validos:
+        pedido.status = novo_status
+    else:
+        status_ciclo = ['aberto', 'enviado_aguardando', 'concluido', 'cancelado', 'nao_comprado']
+        idx = status_ciclo.index(pedido.status) if pedido.status in status_ciclo else 0
+        pedido.status = status_ciclo[(idx + 1) % len(status_ciclo)]
     db.session.commit()
     flash(f'Orçamento {pedido.numero} marcado como {pedido.status}.', 'success')
-    return redirect(url_for('pedidos_montagem.listar_pedidos_montagem'))
+    return redirect(request.referrer or url_for('pedidos_montagem.listar_pedidos_montagem'))
 
 
 @pedidos_montagem.route('/pedidos-montagem/aprovar/<int:pedido_id>', methods=['POST'])
