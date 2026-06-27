@@ -8,6 +8,10 @@
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
     <link rel="stylesheet" href="/static/css/custom.css">
     <link rel="stylesheet" href="/static/css/apontamento.css">
+    <style>
+        .pm-item-zero { background-color: #fff3cd !important; }
+        .pm-item-zero td { border-left: 4px solid #ffc107; }
+    </style>
 </head>
 <body>
     <nav class="navbar navbar-expand-lg navbar-dark bg-primary">
@@ -54,7 +58,7 @@
                 <a href="/pedidos-material/comparativo/{{ pedido.id }}" class="btn btn-info">
                     <i class="fas fa-balance-scale"></i> Comparativo
                 </a>
-                <a href="/pedidos-material/imprimir/{{ pedido.id }}" class="btn btn-secondary" target="_blank">
+                <a href="/pedidos-material/imprimir/{{ pedido.id }}" id="btnImprimir" class="btn btn-secondary" target="_blank">
                     <i class="fas fa-print"></i> Imprimir
                 </a>
                 <a href="/pedidos-material" class="btn btn-primary">
@@ -132,7 +136,7 @@
                             </thead>
                             <tbody>
                                     {% for item in itens_especificos %}
-                                    <tr>
+                                    <tr class="{% if (item.quantidade or 0) == 0 %}pm-item-zero{% endif %}">
                                         <td>
                                             <input type="number" class="form-control" min="0" step="1" name="qtd_{{ item.id }}" value="{{ item.quantidade or 0 }}">
                                         </td>
@@ -204,7 +208,7 @@
                             </thead>
                             <tbody>
                                     {% for item in itens_barra %}
-                                    <tr>
+                                    <tr class="{% if ((item.comprimento or 0) / 1000.0) == 0 %}pm-item-zero{% endif %}">
                                         <td>
                                             <input type="number" class="form-control" min="0" step="0.01" name="m_{{ item.id }}" value="{{ ((item.comprimento or 0) / 1000.0) | round(2) }}">
                                         </td>
@@ -293,29 +297,38 @@
                 });
             }
 
-            // Ocultar linhas com quantidade/comprimento zero
-            function aplicarFiltroZero() {
-                // Materiais específicos (input name="qtd_*")
-                document.querySelectorAll('input[name^="qtd_"]').forEach(function(input) {
-                    const tr = input.closest('tr');
-                    if (!tr) return;
-                    tr.style.display = (parseFloat(input.value) || 0) > 0 ? '' : 'none';
+            // Verificar se ainda existe algum item com valor zero e bloquear impressão
+            const btnImprimir = document.getElementById('btnImprimir');
+            function verificarZeros() {
+                let temZero = false;
+                document.querySelectorAll('input[name^="qtd_"], input[name^="m_"]').forEach(function(input) {
+                    if ((parseFloat(input.value) || 0) === 0) temZero = true;
                 });
-                // Materiais em barra (input name="m_*")
-                document.querySelectorAll('input[name^="m_"]').forEach(function(input) {
-                    const tr = input.closest('tr');
-                    if (!tr) return;
-                    tr.style.display = (parseFloat(input.value) || 0) > 0 ? '' : 'none';
-                });
+
+                if (btnImprimir) {
+                    btnImprimir.classList.toggle('disabled', temZero);
+                    btnImprimir.style.pointerEvents = temZero ? 'none' : 'auto';
+                    btnImprimir.title = temZero ? 'Ajuste todos os itens com valor 0 antes de imprimir' : '';
+                }
+
+                let aviso = document.getElementById('aviso-itens-zero');
+                if (temZero) {
+                    if (!aviso) {
+                        aviso = document.createElement('div');
+                        aviso.id = 'aviso-itens-zero';
+                        aviso.className = 'alert alert-warning mt-3';
+                        aviso.innerHTML = '<i class="fas fa-exclamation-triangle"></i> Existem itens com valor 0. Ajuste todos para poder imprimir.';
+                        btnImprimir.parentElement.appendChild(aviso);
+                    }
+                } else if (aviso) {
+                    aviso.remove();
+                }
             }
 
-            // Aplicar ao carregar
-            aplicarFiltroZero();
-
-            // Aplicar ao mudar qualquer campo
+            verificarZeros();
             document.querySelectorAll('input[name^="qtd_"], input[name^="m_"]').forEach(function(input) {
-                input.addEventListener('input', aplicarFiltroZero);
-                input.addEventListener('change', aplicarFiltroZero);
+                input.addEventListener('input', verificarZeros);
+                input.addEventListener('change', verificarZeros);
             });
         })();
     </script>

@@ -214,9 +214,12 @@ def imprimir_pedido_material(pedido_id):
             itens_barra.append(item)
     material_item_map = _build_material_item_map(pedido)
     material_detalhes_map = _build_material_detalhes_map(pedido)
+    itens_especificos_imp = [i for i in itens_especificos if (i.quantidade or 0) > 0]
+    itens_barra_imp = [i for i in itens_barra if ((i.comprimento or 0) / 1000.0) > 0]
+
     return render_template('pedidos_material/imprimir.html', pedido=pedido, Material=Material,
                            material_item_map=material_item_map, material_detalhes_map=material_detalhes_map,
-                           itens_especificos=itens_especificos, itens_barra=itens_barra)
+                           itens_especificos=itens_especificos_imp, itens_barra=itens_barra_imp)
 
 
 @pedidos_material.route('/pedidos-material/aprovar/<int:pedido_id>', methods=['POST'])
