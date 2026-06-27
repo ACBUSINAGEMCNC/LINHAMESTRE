@@ -1,39 +1,94 @@
 """Migration para adicionar coluna status na tabela pedido_montagem."""
-from sqlalchemy import text
+import os
+import sqlite3
+import logging
+from dotenv import load_dotenv
+
+try:
+    import psycopg2
+except Exception:
+    psycopg2 = None
+
+try:
+    import psycopg
+except Exception:
+    psycopg = None
+
+logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+logger = logging.getLogger(__name__)
+
+
+def _get_postgres_conn():
+    load_dotenv()
+    db_url = os.getenv('DATABASE_URL')
+    if not db_url:
+        return None
+    if db_url.startswith('postgresql+psycopg://'):
+        db_url = 'postgresql://' + db_url[len('postgresql+psycopg://'):]
+    elif db_url.startswith('postgres://'):
+        db_url = 'postgresql://' + db_url[len('postgres://'):]
+
+    if psycopg is not None:
+        return psycopg.connect(db_url)
+    if psycopg2 is not None:
+        return psycopg2.connect(db_url)
+    return None
 
 
 def migrate_postgres():
+    conn = None
     try:
-        from app import app
-        from models import db
-        with app.app_context():
-            with db.engine.connect() as conn:
-                result = conn.execute(text(
-                    "SELECT column_name FROM information_schema.columns WHERE table_name='pedido_montagem' AND column_name='status'"
-                ))
-                if not result.fetchone():
-                    conn.execute(text("ALTER TABLE pedido_montagem ADD COLUMN status VARCHAR(20) DEFAULT 'aberto'"))
-                    conn.commit()
-                    print("[migration] Coluna status adicionada em pedido_montagem (PostgreSQL).")
-                else:
-                    print("[migration] Coluna status já existe em pedido_montagem (PostgreSQL).")
+        conn = _get_postgres_conn()
+        if not conn:
+            logger.warning("DATABASE_URL não encontrada ou driver PostgreSQL indisponível, pulando migração.")
+            return False
+
+        cur = conn.cursor()
+        cur.execute("""
+            SELECT column_name
+            FROM information_schema.columns
+            WHERE table_name = 'pedido_montagem' AND column_name = 'status'
+        """)
+        if not cur.fetchone():
+            cur.execute("ALTER TABLE pedido_montagem ADD COLUMN status VARCHAR(20) DEFAULT 'aberto'")
+            conn.commit()
+            logger.info("Coluna status adicionada em pedido_montagem (PostgreSQL).")
+        else:
+            logger.info("Coluna status já existe em pedido_montagem (PostgreSQL).")
+        cur.close()
+        return True
     except Exception as e:
-        print(f"[migration] Erro ao adicionar status em pedido_montagem (PostgreSQL): {e}")
+        logger.error(f"Erro ao adicionar status em pedido_montagem (PostgreSQL): {e}")
+        return False
+    finally:
+        if conn:
+            try:
+                conn.close()
+            except Exception:
+                pass
 
 
 def migrate_sqlite():
     try:
-        from app import app
-        from models import db
-        with app.app_context():
-            with db.engine.connect() as conn:
-                result = conn.execute(text("PRAGMA table_info(pedido_montagem)"))
-                cols = [row[1] for row in result.fetchall()]
-                if 'status' not in cols:
-                    conn.execute(text("ALTER TABLE pedido_montagem ADD COLUMN status VARCHAR(20) DEFAULT 'aberto'"))
-                    conn.commit()
-                    print("[migration] Coluna status adicionada em pedido_montagem (SQLite).")
-                else:
-                    print("[migration] Coluna status já existe em pedido_montagem (SQLite).")
+        load_dotenv()
+        db_path = os.getenv('SQLITE_DB_PATH', 'instance/linhamestre.db')
+        if not os.path.exists(db_path):
+            logger.warning(f"Banco SQLite não encontrado em {db_path}, pulando migração.")
+            return False
+
+        conn = sqlite3.connect(db_path)
+        cur = conn.cursor()
+        cur.execute("PRAGMA table_info(pedido_montagem)")
+        cols = [row[1] for row in cur.fetchall()]
+        if 'status' not in cols:
+            cur.execute("ALTER TABLE pedido_montagem ADD COLUMN status VARCHAR(20) DEFAULT 'aberto'")
+            conn.commit()
+            logger.info("Coluna status adicionada em pedido_montagem (SQLite).")
+        else:
+            logger.info("Coluna status já existe em pedido_montagem (SQLite).")
+        cur.close()
+        conn.close()
+        return True
     except Exception as e:
-        print(f"[migration] Erro ao adicionar status em pedido_montagem (SQLite): {e}")
+        logger.error(f"Erro ao adicionar status em pedido_montagem (SQLite): {e}")
+        return False
