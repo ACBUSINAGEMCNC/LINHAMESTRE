@@ -58,7 +58,7 @@
                 <a href="/pedidos-material/comparativo/{{ pedido.id }}" class="btn btn-info">
                     <i class="fas fa-balance-scale"></i> Comparativo
                 </a>
-                <a href="/pedidos-material/imprimir/{{ pedido.id }}" id="btnImprimir" class="btn btn-secondary" target="_blank">
+                <a href="/pedidos-material/imprimir/{{ pedido.id }}" class="btn btn-secondary" target="_blank">
                     <i class="fas fa-print"></i> Imprimir
                 </a>
                 <a href="/pedidos-material" class="btn btn-primary">
@@ -297,38 +297,20 @@
                 });
             }
 
-            // Verificar se ainda existe algum item com valor zero e bloquear impressão
-            const btnImprimir = document.getElementById('btnImprimir');
-            function verificarZeros() {
-                let temZero = false;
+            // Manter destaque visual apenas para itens com valor zero
+            function atualizarDestaqueZero() {
                 document.querySelectorAll('input[name^="qtd_"], input[name^="m_"]').forEach(function(input) {
-                    if ((parseFloat(input.value) || 0) === 0) temZero = true;
+                    const tr = input.closest('tr');
+                    if (!tr) return;
+                    const ehZero = (parseFloat(input.value) || 0) === 0;
+                    tr.classList.toggle('pm-item-zero', ehZero);
                 });
-
-                if (btnImprimir) {
-                    btnImprimir.classList.toggle('disabled', temZero);
-                    btnImprimir.style.pointerEvents = temZero ? 'none' : 'auto';
-                    btnImprimir.title = temZero ? 'Ajuste todos os itens com valor 0 antes de imprimir' : '';
-                }
-
-                let aviso = document.getElementById('aviso-itens-zero');
-                if (temZero) {
-                    if (!aviso) {
-                        aviso = document.createElement('div');
-                        aviso.id = 'aviso-itens-zero';
-                        aviso.className = 'alert alert-warning mt-3';
-                        aviso.innerHTML = '<i class="fas fa-exclamation-triangle"></i> Existem itens com valor 0. Ajuste todos para poder imprimir.';
-                        btnImprimir.parentElement.appendChild(aviso);
-                    }
-                } else if (aviso) {
-                    aviso.remove();
-                }
             }
 
-            verificarZeros();
+            atualizarDestaqueZero();
             document.querySelectorAll('input[name^="qtd_"], input[name^="m_"]').forEach(function(input) {
-                input.addEventListener('input', verificarZeros);
-                input.addEventListener('change', verificarZeros);
+                input.addEventListener('input', atualizarDestaqueZero);
+                input.addEventListener('change', atualizarDestaqueZero);
             });
         })();
     </script>
