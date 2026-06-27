@@ -49,6 +49,7 @@
                         <thead>
                             <tr>
                                 <th>Número</th>
+                                <th>Nome</th>
                                 <th>Data de Criação</th>
                                 <th>Itens</th>
                                 <th>Status</th>
@@ -57,13 +58,16 @@
                         </thead>
                         <tbody>
                             {% for pedido in pedidos %}
-                            <tr class="{% if pedido.status == 'concluido' %}table-success{% endif %}">
+                            <tr class="{% if pedido.status == 'concluido' %}table-success{% endif %}{% if pedido.status == 'enviado_aguardando' %}table-warning{% endif %}">
                                 <td>{{ pedido.numero }}</td>
+                                <td>{{ pedido.nome or '' }}</td>
                                 <td>{{ pedido.data_criacao.strftime('%d/%m/%Y') if pedido.data_criacao else '' }}</td>
                                 <td>{{ pedido.itens|length }}</td>
                                 <td>
                                     {% if pedido.status == 'concluido' %}
                                         <span class="badge bg-success">Concluído</span>
+                                    {% elif pedido.status == 'enviado_aguardando' %}
+                                        <span class="badge bg-info">Enviado - Aguardando Retorno</span>
                                     {% else %}
                                         <span class="badge bg-warning text-dark">Aberto</span>
                                     {% endif %}
@@ -81,8 +85,8 @@
                                         </button>
                                     </form>
                                     <form method="POST" action="/pedidos-montagem/toggle-status/{{ pedido.id }}" style="display:inline-block;">
-                                        <button type="submit" class="btn btn-sm {% if pedido.status == 'concluido' %}btn-outline-warning{% else %}btn-outline-success{% endif %}" title="{% if pedido.status == 'concluido' %}Reabrir{% else %}Concluir{% endif %}">
-                                            <i class="fas {% if pedido.status == 'concluido' %}fa-undo{% else %}fa-check{% endif %}"></i>
+                                        <button type="submit" class="btn btn-sm btn-outline-secondary" title="Alterar status">
+                                            <i class="fas fa-sync-alt"></i>
                                         </button>
                                     </form>
                                 </td>

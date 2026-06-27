@@ -67,9 +67,8 @@
                     </button>
                 </form>
                 <form method="POST" action="/pedidos-montagem/toggle-status/{{ pedido.id }}" style="display:inline-block;">
-                    <button type="submit" class="btn {% if pedido.status == 'concluido' %}btn-outline-warning{% else %}btn-outline-success{% endif %}">
-                        <i class="fas {% if pedido.status == 'concluido' %}fa-undo{% else %}fa-check{% endif %}"></i>
-                        {% if pedido.status == 'concluido' %}Reabrir{% else %}Concluir{% endif %}
+                    <button type="submit" class="btn btn-outline-secondary" title="Alterar status">
+                        <i class="fas fa-sync-alt"></i> Alterar Status
                     </button>
                 </form>
                 <a href="/pedidos-montagem" class="btn btn-primary">
@@ -97,12 +96,30 @@
                         <p><strong>Status:</strong>
                             {% if pedido.status == 'concluido' %}
                                 <span class="badge bg-success">Concluído</span>
+                            {% elif pedido.status == 'enviado_aguardando' %}
+                                <span class="badge bg-info">Enviado - Aguardando Retorno</span>
                             {% else %}
                                 <span class="badge bg-warning text-dark">Aberto</span>
                             {% endif %}
                         </p>
                     </div>
                 </div>
+                <form method="POST" action="/pedidos-montagem/atualizar/{{ pedido.id }}" class="mt-3">
+                    <div class="row g-2 align-items-center">
+                        <div class="col-md-6">
+                            <label for="nome_orcamento" class="form-label"><strong>Nome do Orçamento (controle interno):</strong></label>
+                            <input type="text" class="form-control" id="nome_orcamento" name="nome" value="{{ pedido.nome or '' }}" placeholder="Ex: orç rolamento tesouras">
+                        </div>
+                        <div class="col-md-auto">
+                            <button type="submit" class="btn btn-primary mt-4">
+                                <i class="fas fa-save"></i> Salvar Nome
+                            </button>
+                        </div>
+                        <div class="col-md-auto">
+                            <small class="text-muted">Não aparece na impressão.</small>
+                        </div>
+                    </div>
+                </form>
                 {% if pedido.aprovado_em %}
                 <div class="alert alert-success mb-0 mt-3">
                     <strong>Aprovado</strong>

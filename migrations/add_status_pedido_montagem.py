@@ -47,14 +47,23 @@ def migrate_postgres():
         cur.execute("""
             SELECT column_name
             FROM information_schema.columns
-            WHERE table_name = 'pedido_montagem' AND column_name = 'status'
+            WHERE table_name = 'pedido_montagem' AND column_name IN ('status', 'nome')
         """)
-        if not cur.fetchone():
-            cur.execute("ALTER TABLE pedido_montagem ADD COLUMN status VARCHAR(20) DEFAULT 'aberto'")
-            conn.commit()
+        colunas_existentes = {row[0] for row in cur.fetchall()}
+
+        if 'status' not in colunas_existentes:
+            cur.execute("ALTER TABLE pedido_montagem ADD COLUMN status VARCHAR(25) DEFAULT 'aberto'")
             logger.info("Coluna status adicionada em pedido_montagem (PostgreSQL).")
         else:
             logger.info("Coluna status já existe em pedido_montagem (PostgreSQL).")
+
+        if 'nome' not in colunas_existentes:
+            cur.execute("ALTER TABLE pedido_montagem ADD COLUMN nome VARCHAR(255)")
+            logger.info("Coluna nome adicionada em pedido_montagem (PostgreSQL).")
+        else:
+            logger.info("Coluna nome já existe em pedido_montagem (PostgreSQL).")
+
+        conn.commit()
         cur.close()
         return True
     except Exception as e:
@@ -80,12 +89,20 @@ def migrate_sqlite():
         cur = conn.cursor()
         cur.execute("PRAGMA table_info(pedido_montagem)")
         cols = [row[1] for row in cur.fetchall()]
+
         if 'status' not in cols:
-            cur.execute("ALTER TABLE pedido_montagem ADD COLUMN status VARCHAR(20) DEFAULT 'aberto'")
-            conn.commit()
+            cur.execute("ALTER TABLE pedido_montagem ADD COLUMN status VARCHAR(25) DEFAULT 'aberto'")
             logger.info("Coluna status adicionada em pedido_montagem (SQLite).")
         else:
             logger.info("Coluna status já existe em pedido_montagem (SQLite).")
+
+        if 'nome' not in cols:
+            cur.execute("ALTER TABLE pedido_montagem ADD COLUMN nome VARCHAR(255)")
+            logger.info("Coluna nome adicionada em pedido_montagem (SQLite).")
+        else:
+            logger.info("Coluna nome já existe em pedido_montagem (SQLite).")
+
+        conn.commit()
         cur.close()
         conn.close()
         return True

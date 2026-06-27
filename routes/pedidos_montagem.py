@@ -71,7 +71,9 @@ def duplicar_pedido_montagem(pedido_id):
 @pedidos_montagem.route('/pedidos-montagem/toggle-status/<int:pedido_id>', methods=['POST'])
 def toggle_status_pedido_montagem(pedido_id):
     pedido = PedidoMontagem.query.get_or_404(pedido_id)
-    pedido.status = 'concluido' if pedido.status != 'concluido' else 'aberto'
+    status_ciclo = ['aberto', 'enviado_aguardando', 'concluido']
+    idx = status_ciclo.index(pedido.status) if pedido.status in status_ciclo else 0
+    pedido.status = status_ciclo[(idx + 1) % len(status_ciclo)]
     db.session.commit()
     flash(f'Orçamento {pedido.numero} marcado como {pedido.status}.', 'success')
     return redirect(url_for('pedidos_montagem.listar_pedidos_montagem'))
@@ -111,8 +113,11 @@ def desaprovar_pedido_montagem(pedido_id):
 
 @pedidos_montagem.route('/pedidos-montagem/atualizar/<int:pedido_id>', methods=['POST'])
 def atualizar_pedido_montagem(pedido_id):
-    """Atualiza manualmente as quantidades dos itens de um orçamento de montagem"""
+    """Atualiza nome e quantidades dos itens de um orçamento de montagem"""
     pedido = PedidoMontagem.query.get_or_404(pedido_id)
+
+    if 'nome' in request.form:
+        pedido.nome = request.form.get('nome', '').strip() or None
 
     itens = ItemPedidoMontagem.query.filter_by(pedido_montagem_id=pedido.id).all()
     for item in itens:
