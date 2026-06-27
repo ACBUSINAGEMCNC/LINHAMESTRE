@@ -58,7 +58,7 @@
                         </thead>
                         <tbody>
                             {% for pedido in pedidos %}
-                            <tr class="{% if pedido.status == 'concluido' %}table-success{% endif %}{% if pedido.status == 'enviado_aguardando' %}table-warning{% endif %}">
+                            <tr class="{% if pedido.status == 'concluido' %}table-success{% endif %}{% if pedido.status == 'enviado_aguardando' %}table-warning{% endif %}{% if pedido.status == 'cancelado' %}table-danger{% endif %}{% if pedido.status == 'nao_comprado' %}table-secondary{% endif %}">
                                 <td>{{ pedido.numero }}</td>
                                 <td>{{ pedido.nome or '' }}</td>
                                 <td>{{ pedido.data_criacao.strftime('%d/%m/%Y') }}</td>
@@ -68,6 +68,10 @@
                                         <span class="badge bg-success">Concluído</span>
                                     {% elif pedido.status == 'enviado_aguardando' %}
                                         <span class="badge bg-info">Enviado - Aguardando Retorno</span>
+                                    {% elif pedido.status == 'cancelado' %}
+                                        <span class="badge bg-danger">Cancelado</span>
+                                    {% elif pedido.status == 'nao_comprado' %}
+                                        <span class="badge bg-secondary">Não Comprado</span>
                                     {% else %}
                                         <span class="badge bg-warning text-dark">Aberto</span>
                                     {% endif %}

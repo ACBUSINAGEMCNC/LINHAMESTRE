@@ -111,6 +111,10 @@
                                 <span class="badge bg-success">Concluído</span>
                             {% elif pedido.status == 'enviado_aguardando' %}
                                 <span class="badge bg-info">Enviado - Aguardando Retorno</span>
+                            {% elif pedido.status == 'cancelado' %}
+                                <span class="badge bg-danger">Cancelado</span>
+                            {% elif pedido.status == 'nao_comprado' %}
+                                <span class="badge bg-secondary">Não Comprado</span>
                             {% else %}
                                 <span class="badge bg-warning text-dark">Aberto</span>
                             {% endif %}

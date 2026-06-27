@@ -71,7 +71,7 @@ def duplicar_pedido_montagem(pedido_id):
 @pedidos_montagem.route('/pedidos-montagem/toggle-status/<int:pedido_id>', methods=['POST'])
 def toggle_status_pedido_montagem(pedido_id):
     pedido = PedidoMontagem.query.get_or_404(pedido_id)
-    status_ciclo = ['aberto', 'enviado_aguardando', 'concluido']
+    status_ciclo = ['aberto', 'enviado_aguardando', 'concluido', 'cancelado', 'nao_comprado']
     idx = status_ciclo.index(pedido.status) if pedido.status in status_ciclo else 0
     pedido.status = status_ciclo[(idx + 1) % len(status_ciclo)]
     db.session.commit()
